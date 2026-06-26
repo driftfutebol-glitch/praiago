@@ -1,0 +1,46 @@
+﻿@import "tailwindcss";
+
+@theme {
+  --color-brand-primary: #0ea5e9;
+  --color-brand-secondary: #22c55e;
+  --color-brand-accent: #fbbf24;
+  --font-sans: 'Poppins', 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+:root {
+  background-color: #ffffff;
+  color: #1a1a1a;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  font-family: 'Poppins', sans-serif;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+  box-sizing: border-box;
+}
+
+.ifood-shadow {
+  box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+}
+
+.beach-gradient {
+  background: linear-gradient(135deg, #0ea5e9 0%, #22c55e 100%);
+}
+
+@keyframes bounce-subtle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+.animate-bounce-subtle {
+  animation: bounce-subtle 2s infinite ease-in-out;
+}

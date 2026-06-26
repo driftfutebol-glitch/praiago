@@ -1,0 +1,28 @@
+# ───────── Fora do escopo deste repositório ─────────
+/praiago-entregador/
+/praiago/
+/.idea/
+/blackbox_mcp_settings_updated.json
+/setup_unreal_mcp.ps1
+
+# ───────── Dependências e build (reforço) ─────────
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# ───────── Segredos — NUNCA versionar ─────────
+.env
+.env.*
+!.env.example
+
+# ───────── Keystore/assinatura Android (segredo) ─────────
+*.keystore
+*.jks
+key.properties
+google-services.json
+
+# ───────── SO / editor / logs ─────────
+.DS_Store
+*.log
+npm-debug.log*
