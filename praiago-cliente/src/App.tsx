@@ -1,17 +1,18 @@
-﻿import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
-import { Home, ClipboardList, ShoppingBag, Calendar, User } from 'lucide-react'
+import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
+import { Home, ClipboardList, ShoppingBag, MapPin, User } from 'lucide-react'
 import HomePage from './pages/HomePage'
 import MeusPedidosPage from './pages/MeusPedidosPage'
 import PedirPage from './pages/PedirPage'
 import EventosPage from './pages/EventosPage'
+import AmbulantesPage from './pages/AmbulantesPage'
 import PerfilPage from './pages/PerfilPage'
 
 const navItems = [
-  { to: '/',        icon: Home,          label: 'Início'  },
-  { to: '/pedidos', icon: ClipboardList, label: 'Pedidos' },
-  { to: '/pedir',   icon: ShoppingBag,   label: 'Pedir'   },
-  { to: '/eventos', icon: Calendar,      label: 'Eventos' },
-  { to: '/perfil',  icon: User,          label: 'Perfil'  },
+  { to: '/',            icon: Home,          label: 'Início'    },
+  { to: '/pedidos',     icon: ClipboardList, label: 'Pedidos'   },
+  { to: '/pedir',       icon: ShoppingBag,   label: 'Pedir'     },
+  { to: '/ambulantes',  icon: MapPin,        label: 'Na Praia'  },
+  { to: '/perfil',      icon: User,          label: 'Perfil'    },
 ]
 
 export default function App() {
@@ -54,11 +55,12 @@ export default function App() {
 
       <main style={{ flex: 1, overflowY: 'auto', paddingBottom: '72px' }}>
         <Routes>
-          <Route path="/"        element={<HomePage />} />
-          <Route path="/pedidos" element={<MeusPedidosPage />} />
-          <Route path="/pedir"   element={<PedirPage />} />
-          <Route path="/eventos" element={<EventosPage />} />
-          <Route path="/perfil"  element={<PerfilPage />} />
+          <Route path="/"            element={<HomePage />} />
+          <Route path="/pedidos"     element={<MeusPedidosPage />} />
+          <Route path="/pedir"       element={<PedirPage />} />
+          <Route path="/ambulantes"  element={<AmbulantesPage />} />
+          <Route path="/eventos"     element={<EventosPage />} />
+          <Route path="/perfil"      element={<PerfilPage />} />
         </Routes>
       </main>
 
