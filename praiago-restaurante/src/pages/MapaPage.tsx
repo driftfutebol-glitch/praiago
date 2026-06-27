@@ -29,7 +29,8 @@ const ICONS = {
   ambulante:   mkIcon(`<div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#a855f7,#7c3aed);display:flex;align-items:center;justify-content:center;border:2px solid #1e293b;box-shadow:0 0 15px rgba(168,85,247,0.6);font-size:18px">🥥</div>`, 38),
 }
 
-const REST_POS: [number, number] = [-24.0230, -46.4320]
+// Fallback em terra (orla de Praia Grande) — usado só se o GPS for negado.
+const REST_POS: [number, number] = [-24.0100, -46.4150]
 
 type Agente = {
   id: string; tipo: 'entregador' | 'ambulante'
@@ -53,6 +54,20 @@ export default function MapaPage() {
   const [tabMapa,    setTabMapa]    = useState<'tudo' | 'praia' | 'cidade'>('tudo')
   const [mapCenter,  setMapCenter]  = useState<[number,number]>(PRAIA_GRANDE_CENTER)
   const [mapZoom,    setMapZoom]    = useState(12)
+  const [restPos,    setRestPos]    = useState<[number, number]>(REST_POS)
+
+  // Localização REAL do restaurante (GPS do dispositivo) — sem ponto fantasma fixo
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) return
+    navigator.geolocation.getCurrentPosition(
+      p => {
+        const pos: [number, number] = [p.coords.latitude, p.coords.longitude]
+        setRestPos(pos); setMapCenter(pos); setMapZoom(15)
+      },
+      () => { /* permissão negada → mantém o fallback em terra */ },
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+    )
+  }, [])
 
   // Escuta GPS real via Supabase (Realtime) e Broadcast
   useEffect(() => {
@@ -355,10 +370,10 @@ export default function MapaPage() {
             })}
 
             {/* ── Restaurante ─────────────────────────────── */}
-            <Marker position={REST_POS} icon={ICONS.restaurante}>
+            <Marker position={restPos} icon={ICONS.restaurante}>
               <Popup>
-                <b>🍽️ Restaurante Central</b><br />
-                <span style={{ fontSize: 11, color: '#94a3b8' }}>Base de Operações</span>
+                <b>🍽️ Seu restaurante</b><br />
+                <span style={{ fontSize: 11, color: '#94a3b8' }}>Sua localização atual (GPS)</span>
               </Popup>
             </Marker>
 

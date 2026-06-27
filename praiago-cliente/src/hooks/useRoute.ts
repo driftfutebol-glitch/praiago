@@ -6,6 +6,9 @@ export type RouteInfo = {
   tempo: string
 }
 
+// Rota real de rua via OSRM. Mais responsivo (debounce curto) e cancelável.
+// Origem/destino vêm do GPS real do cliente/ambulante — então a rota acompanha
+// a localização de verdade. Se o OSRM falhar, o mapa cai numa linha reta (no componente).
 export function useRoute(from: [number, number] | null, to: [number, number] | null) {
   const [route, setRoute] = useState<RouteInfo | null>(null)
   const timerRef = useRef<number | null>(null)
@@ -13,10 +16,11 @@ export function useRoute(from: [number, number] | null, to: [number, number] | n
   useEffect(() => {
     if (!from || !to) return
     if (timerRef.current) clearTimeout(timerRef.current)
+    const ctrl = new AbortController()
 
     timerRef.current = window.setTimeout(() => {
       const url = `https://router.project-osrm.org/route/v1/driving/${from[1]},${from[0]};${to[1]},${to[0]}?overview=full&geometries=geojson`
-      fetch(url)
+      fetch(url, { signal: ctrl.signal })
         .then(r => r.json())
         .then(data => {
           const r = data.routes?.[0]
@@ -30,11 +34,11 @@ export function useRoute(from: [number, number] | null, to: [number, number] | n
             tempo: `${Math.ceil(r.duration / 60)} min`,
           })
         })
-        .catch(() => {})
-    }, 2000)
+        .catch(() => { /* timeout/abort/offline → componente usa linha reta */ })
+    }, 800)
 
-    return () => { if (timerRef.current) clearTimeout(timerRef.current) }
-  }, [from?.[0].toFixed(3), from?.[1].toFixed(3), to?.[0], to?.[1]])
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); ctrl.abort() }
+  }, [from?.[0].toFixed(4), from?.[1].toFixed(4), to?.[0], to?.[1]])
 
   return route
 }

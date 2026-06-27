@@ -10,6 +10,7 @@ import UsuariosPage from './pages/UsuariosPage'
 import VerificacoesPage from './pages/VerificacoesPage'
 import AtendimentoPage from './pages/AtendimentoPage'
 import ErrorsPage from './pages/ErrorsPage'
+import EventosPage from './pages/EventosPage'
 import Sidebar from './components/Sidebar'
 
 function NotificationSystem() {
@@ -87,6 +88,7 @@ export default function App() {
             <Route path="/usuarios" element={<UsuariosPage />} />
             <Route path="/verificacoes" element={<VerificacoesPage />} />
             <Route path="/atendimento/:plataforma" element={<AtendimentoPage />} />
+            <Route path="/eventos" element={<EventosPage />} />
             <Route path="/erros" element={<ErrorsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

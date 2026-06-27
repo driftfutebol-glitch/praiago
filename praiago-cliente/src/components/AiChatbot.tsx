@@ -51,7 +51,7 @@ export default function AiChatbot({ plataforma = 'cliente' }: { plataforma?: str
     setLoading(true)
     
     try {
-      const apiKey = import.meta.env.VITE_OPENAI_API_KEY || 'sk-d4D1qn132iBB98Paa2xi8g'
+      const apiKey = import.meta.env.VITE_OPENAI_API_KEY  // configurar em .env.local (não hardcode)
       
       if (!apiKey) {
         addMessage('bot', '⚠️ A chave da IA não está configurada (VITE_OPENAI_API_KEY). Por favor, fale com o suporte técnico para configurar.')

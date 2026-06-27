@@ -4,11 +4,12 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import {
   Activity, Package, Users, AlertOctagon, LogOut, ShieldAlert,
-  ShieldCheck, Headphones, ChevronDown,
+  ShieldCheck, Headphones, ChevronDown, CalendarDays, LayoutGrid,
   Smartphone, TabletSmartphone, UtensilsCrossed, Umbrella, UserCircle
 } from 'lucide-react'
 
 const atendimentoSubItems = [
+  { to: '/atendimento/todas', icon: LayoutGrid, label: 'Todas (Global)' },
   { to: '/atendimento/iphone', icon: Smartphone, label: 'iPhone' },
   { to: '/atendimento/android', icon: TabletSmartphone, label: 'Android' },
   { to: '/atendimento/restaurante', icon: UtensilsCrossed, label: 'Restaurante' },
@@ -18,8 +19,25 @@ const atendimentoSubItems = [
 
 export default function Sidebar({ onLogout }: { onLogout: () => void }) {
   const [pendingVerificacoes, setPendingVerificacoes] = useState(0)
+  const [ticketsAbertos, setTicketsAbertos] = useState(0)
   const [atendimentoOpen, setAtendimentoOpen] = useState(false)
   const location = useLocation()
+
+  // Contador de tickets de suporte ABERTOS (tempo real)
+  useEffect(() => {
+    async function fetchTickets() {
+      const { count } = await supabase
+        .from('tickets')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'aberto')
+      setTicketsAbertos(count || 0)
+    }
+    fetchTickets()
+    const ch = supabase.channel('sidebar_tickets')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets' }, () => fetchTickets())
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [])
 
   // Auto-expand Atendimento submenu when on an atendimento route
   useEffect(() => {
@@ -117,6 +135,25 @@ export default function Sidebar({ onLogout }: { onLogout: () => void }) {
           )}
         </NavLink>
 
+        {/* Conteúdo Section */}
+        <div className="px-3 pt-4 pb-2 text-[10px] font-bold text-slate-600 uppercase tracking-[0.2em] font-mono">
+          Conteúdo
+        </div>
+
+        <NavLink
+          to="/eventos"
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all duration-200 ${
+              isActive
+                ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20 shadow-[0_0_15px_rgba(168,85,247,0.1)]'
+                : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 border border-transparent'
+            }`
+          }
+        >
+          <CalendarDays size={18} />
+          Eventos
+        </NavLink>
+
         {/* Atendimento Section */}
         <div className="px-3 pt-4 pb-2 text-[10px] font-bold text-slate-600 uppercase tracking-[0.2em] font-mono">
           Suporte
@@ -132,6 +169,15 @@ export default function Sidebar({ onLogout }: { onLogout: () => void }) {
         >
           <Headphones size={18} />
           <span className="flex-1 text-left">Atendimento</span>
+          {ticketsAbertos > 0 && (
+            <motion.span
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              className="min-w-[22px] h-[22px] flex items-center justify-center bg-red-500 text-white text-[10px] font-bold rounded-full pulse-red mr-1"
+            >
+              {ticketsAbertos}
+            </motion.span>
+          )}
           <motion.div
             animate={{ rotate: atendimentoOpen ? 180 : 0 }}
             transition={{ duration: 0.2 }}

@@ -1,5 +1,5 @@
 import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
-import { Home, ClipboardList, ShoppingBag, MapPin, User } from 'lucide-react'
+import { Home, ClipboardList, ShoppingBag, MapPin, User, Calendar } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import HomePage from './pages/HomePage'
 import MeusPedidosPage from './pages/MeusPedidosPage'
@@ -15,6 +15,7 @@ const navItems = [
   { to: '/pedidos',     icon: ClipboardList, label: 'Pedidos'   },
   { to: '/pedir',       icon: ShoppingBag,   label: 'Pedir'     },
   { to: '/ambulantes',  icon: MapPin,        label: 'Radar'     },
+  { to: '/eventos',     icon: Calendar,      label: 'Eventos'   },
   { to: '/perfil',      icon: User,          label: 'Perfil'    },
 ]
 
