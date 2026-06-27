@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Eye, EyeOff, LogIn } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
 import { login } from '../lib/auth'
 
 export default function LoginPage() {
@@ -12,13 +13,62 @@ export default function LoginPage() {
   const [erro, setErro] = useState('')
   const navigate = useNavigate()
 
-  function submit() {
+  const [loading, setLoading] = useState(false)
+
+  async function submit() {
     if (!/^\S+@\S+\.\S+$/.test(email)) { setErro('Informe um e-mail válido.'); return }
-    if (senha.length < 4) { setErro('A senha precisa ter ao menos 4 caracteres.'); return }
+    if (senha.length < 6) { setErro('A senha precisa ter ao menos 6 caracteres.'); return }
     if (tab === 'cadastro' && !nome.trim()) { setErro('Informe o nome da sua banca.'); return }
     setErro('')
-    login(email, tab === 'cadastro' ? nome : undefined)
-    navigate('/')
+    setLoading(true)
+
+    try {
+      if (tab === 'entrar') {
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password: senha })
+        if (error) {
+          if (error.status === 429) throw new Error('Limite de tentativas excedido. Aguarde alguns minutos e tente novamente.')
+          if (error.message.includes('Email not confirmed')) throw new Error('E-mail não confirmado! Verifique sua caixa de entrada.')
+          if (error.message.includes('Invalid login credentials')) throw new Error('E-mail ou senha incorretos.')
+          throw new Error('Erro ao fazer login. Verifique seus dados e sua conexão.')
+        }
+        
+        if (data.user) {
+          login(data.user.id, email);
+          navigate('/');
+        }
+
+      } else {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password: senha,
+          options: { data: { nome, role: 'ambulante' } }
+        })
+        if (error) {
+          if (error.status === 429) throw new Error('Limite de e-mails do Supabase (429). Para testar: Authentication → Providers → Email → desligue "Confirm email". Ou aumente os Rate Limits.')
+          throw new Error(error.message)
+        }
+
+        if (data.session && data.user) {
+          login(data.user.id, email);
+          navigate('/')
+          return
+        }
+
+        if (data.user && !data.session) {
+          setErro('Conta criada! Enviamos um link de confirmação para o seu e-mail.')
+          setTab('entrar')
+          setLoading(false)
+          return
+        }
+      }
+    } catch (err: any) {
+      let msg = err.message || 'Erro inesperado.'
+      if (msg.includes('Failed to fetch')) msg = 'Erro de conexão. Verifique sua internet.'
+      if (msg.includes('kfxpzjqktbcsxlqapkyv')) msg = 'Erro interno do servidor. Tente novamente mais tarde.'
+      setErro(msg)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -74,11 +124,11 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {erro && <div style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>{erro}</div>}
+          {erro && <div style={{ fontSize: 13, color: erro.includes('sucesso') ? '#22c55e' : '#ef4444', fontWeight: 600 }}>{erro}</div>}
 
-          <button onClick={submit} style={{ background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', border: 'none', borderRadius: 14, padding: '15px 0', color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 4 }}>
+          <button disabled={loading} onClick={submit} style={{ background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', border: 'none', borderRadius: 14, padding: '15px 0', color: '#fff', fontSize: 16, fontWeight: 700, cursor: loading ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 4, opacity: loading ? 0.7 : 1 }}>
             <LogIn size={18} />
-            {tab === 'entrar' ? 'Entrar' : 'Criar conta'}
+            {loading ? 'AGUARDE...' : (tab === 'entrar' ? 'Entrar' : 'Criar conta')}
           </button>
         </div>
       </div>

@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
-import { Plus, Trash2, Camera, Edit2, Check, X } from 'lucide-react'
-
-const STORAGE_KEY = 'praiago_restaurante_cardapio'
+import { Plus, Trash2, Edit2, Check, X } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { supabase } from '../lib/supabase'
+import { getSessao } from '../lib/auth'
 
 type Produto = {
-  id: number
+  id: string
+  vendedor_id?: string
   nome: string
   preco: number
   descricao: string
@@ -14,279 +16,247 @@ type Produto = {
   emoji: string
 }
 
-const defaultProdutos: Produto[] = [
-  { id: 1, nome: 'Moqueca de Camarão', preco: 65, descricao: 'Com arroz, farofa e pirão. Serve 2 pessoas.', categoria: 'Pratos', ativo: true, foto: null, emoji: '🦐' },
-  { id: 2, nome: 'Filé de Tilápia Grelhado', preco: 48, descricao: 'Com batata frita, arroz e salada.', categoria: 'Pratos', ativo: true, foto: null, emoji: '🐟' },
-  { id: 3, nome: 'Caipirinha de Limão', preco: 18, descricao: 'Cachaça artesanal, limão taiti, açúcar.', categoria: 'Bebidas', ativo: true, foto: null, emoji: '🍹' },
-  { id: 4, nome: 'Prato Executivo', preco: 35, descricao: 'Arroz, feijão, frango grelhado, salada.', categoria: 'Executivo', ativo: true, foto: null, emoji: '🍽️' },
-]
-
-function loadProdutos(): Produto[] {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    return saved ? JSON.parse(saved) : defaultProdutos
-  } catch { return defaultProdutos }
-}
-
-const categorias = ['Pratos', 'Frutos do Mar', 'Bebidas', 'Executivo', 'Sobremesas', 'Petiscos']
-const emojis = ['🦐', '🐟', '🦀', '🦑', '🍽️', '🍹', '🥤', '🍰', '🥗', '🍝', '🥩', '🍖']
+const categorias = ['Pratos', 'Frutos do Mar', 'Bebidas', 'Executivo', 'Sobremesas', 'Petiscos', 'Outros']
+const emojis = ['🦐', '🐟', '🦀', '🦑', '🍽️', '🍹', '🥤', '🍰', '🥗', '🍝', '🥩', '🍖', '🍔']
 
 type NovoForm = { nome: string; preco: string; descricao: string; categoria: string; emoji: string }
 
 export default function CardapioPage() {
-  const [produtos, setProdutos] = useState<Produto[]>(loadProdutos)
+  const [produtos, setProdutos] = useState<Produto[]>([])
   const [categoriaFiltro, setCategoriaFiltro] = useState('Todos')
-  const [editando, setEditando] = useState<number | null>(null)
+  const [editando, setEditando] = useState<string | null>(null)
   const [editNome, setEditNome] = useState('')
   const [editPreco, setEditPreco] = useState('')
   const [adicionando, setAdicionando] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [novo, setNovo] = useState<NovoForm>({ nome: '', preco: '', descricao: '', categoria: 'Pratos', emoji: '🍽️' })
-  const fileRefs = useRef<Record<number, HTMLInputElement | null>>({})
+  
+  const sessao = getSessao()
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(produtos))
-  }, [produtos])
+    fetchProdutos()
+  }, [])
 
-  function handleFoto(e: React.ChangeEvent<HTMLInputElement>, id: number) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      setProdutos(prev => prev.map(p => p.id === id ? { ...p, foto: reader.result as string } : p))
+  async function fetchProdutos() {
+    if (!sessao) return
+    setLoading(true)
+    const { data, error } = await supabase
+      .from('produtos')
+      .select('*')
+      .eq('vendedor_id', sessao.id)
+      .order('created_at', { ascending: false })
+      
+    if (data) {
+      setProdutos(data)
     }
-    reader.readAsDataURL(file)
+    setLoading(false)
   }
 
-  function toggleAtivo(id: number) {
+  async function toggleAtivo(id: string) {
+    const prod = produtos.find(p => p.id === id)
+    if (!prod) return
+    
+    // Update Optimistically
     setProdutos(prev => prev.map(p => p.id === id ? { ...p, ativo: !p.ativo } : p))
+    
+    const { error: _err } = await supabase.from('produtos').update({ ativo: !prod.ativo }).eq('id', id)
+    if (_err) {
+      // Revert on error
+      setProdutos(prev => prev.map(p => p.id === id ? { ...p, ativo: prod.ativo } : p))
+      console.error(_err)
+    }
   }
 
-  function deletar(id: number) {
+  async function deletar(id: string) {
     setProdutos(prev => prev.filter(p => p.id !== id))
+    await supabase.from('produtos').delete().eq('id', id)
   }
 
-  function salvarEdicao(id: number) {
+  async function salvarEdicao(id: string) {
+    const p = produtos.find(p => p.id === id)
+    if (!p) return
+    
+    const newNome = editNome || p.nome
+    const newPreco = parseFloat(editPreco) || p.preco
+
     setProdutos(prev => prev.map(p => p.id === id
-      ? { ...p, nome: editNome || p.nome, preco: parseFloat(editPreco) || p.preco }
+      ? { ...p, nome: newNome, preco: newPreco }
       : p
     ))
     setEditando(null)
+    
+    await supabase.from('produtos').update({ nome: newNome, preco: newPreco }).eq('id', id)
   }
 
-  function adicionarProduto() {
-    if (!novo.nome.trim()) return
-    const prod: Produto = {
-      id: Date.now(),
+  async function adicionarProduto() {
+    if (!novo.nome.trim() || !sessao) return
+    
+    const prod = {
+      vendedor_id: sessao.id,
       nome: novo.nome,
       preco: parseFloat(novo.preco) || 0,
       descricao: novo.descricao,
       categoria: novo.categoria,
       ativo: true,
-      foto: null,
       emoji: novo.emoji,
     }
-    setProdutos(prev => [...prev, prod])
-    setNovo({ nome: '', preco: '', descricao: '', categoria: 'Pratos', emoji: '🍽️' })
-    setAdicionando(false)
+    
+    const { data, error } = await supabase.from('produtos').insert(prod).select().single()
+    if (data) {
+      setProdutos(prev => [data, ...prev])
+      setNovo({ nome: '', preco: '', descricao: '', categoria: 'Pratos', emoji: '🍽️' })
+      setAdicionando(false)
+    } else {
+      console.error("Erro ao adicionar produto:", error)
+    }
   }
 
   const todasCategorias = ['Todos', ...Array.from(new Set(produtos.map(p => p.categoria)))]
   const filtrados = categoriaFiltro === 'Todos' ? produtos : produtos.filter(p => p.categoria === categoriaFiltro)
 
   return (
-    <div style={{ padding: '0 0 40px' }}>
+    <div style={{ padding: '32px 0 48px', minHeight: '100vh', position: 'relative' }}>
       {/* Header */}
-      <div style={{ padding: '24px 32px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} style={{ padding: '0 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', margin: 0 }}>Cardápio</h1>
-          <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 0' }}>
-            📸 Clique na foto de cada prato para fazer upload da imagem real
-          </p>
+          <h1 style={{ fontSize: 32, fontWeight: 900, color: '#f8fafc', letterSpacing: -1, marginBottom: 8 }}>Cardápio</h1>
+          <p style={{ color: '#94a3b8', fontSize: 16 }}>Gerencie seus pratos, bebidas e combos.</p>
         </div>
-        <button onClick={() => setAdicionando(true)} style={{
-          background: 'linear-gradient(135deg, #f97316, #ea580c)',
-          border: 'none', borderRadius: 24, padding: '12px 22px',
-          color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer',
-          display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 14px rgba(249,115,22,0.3)',
-        }}>
-          <Plus size={18} /> Novo prato
+        <button onClick={() => setAdicionando(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'linear-gradient(135deg, #f97316, #ea580c)', color: '#fff', border: 'none', padding: '12px 24px', borderRadius: 16, fontSize: 15, fontWeight: 700, cursor: 'pointer', boxShadow: '0 10px 25px rgba(249,115,22,0.3)', transition: 'transform 0.2s, box-shadow 0.2s' }} onMouseOver={e => e.currentTarget.style.transform = 'translateY(-2px)'} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
+          <Plus size={20} />
+          Adicionar Item
         </button>
-      </div>
+      </motion.div>
 
-      {/* Filtro por categoria */}
-      <div style={{ padding: '0 32px', display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 16 }}>
+      {/* Tabs / Filters */}
+      <div style={{ padding: '0 40px', marginBottom: 32, display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 8 }} className="hide-scrollbar">
         {todasCategorias.map(cat => (
-          <button key={cat} onClick={() => setCategoriaFiltro(cat)} style={{
-            padding: '7px 18px', borderRadius: 24, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
-            background: categoriaFiltro === cat ? 'linear-gradient(135deg, #f97316, #ea580c)' : '#f1f5f9',
-            color: categoriaFiltro === cat ? '#fff' : '#64748b',
-            fontSize: 13, fontWeight: 600,
-          }}>{cat}</button>
+          <button key={cat} onClick={() => setCategoriaFiltro(cat)} style={{ padding: '8px 20px', borderRadius: 20, fontSize: 14, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.2s', background: categoriaFiltro === cat ? 'rgba(249,115,22,0.15)' : 'rgba(255,255,255,0.05)', color: categoriaFiltro === cat ? '#f97316' : '#94a3b8', border: `1px solid ${categoriaFiltro === cat ? 'rgba(249,115,22,0.3)' : 'transparent'}` }}>
+            {cat}
+          </button>
         ))}
       </div>
 
-      {/* Formulário novo produto */}
-      {adicionando && (
-        <div style={{ margin: '0 32px 20px', background: '#fff', borderRadius: 20, padding: 24, border: '2px solid #f97316', boxShadow: '0 4px 24px rgba(249,115,22,0.1)' }}>
-          <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', marginBottom: 16 }}>Novo prato / produto</div>
+      {/* Grid */}
+      <div style={{ padding: '0 40px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 24 }}>
+        <AnimatePresence>
+          {loading ? (
+            <div style={{ color: '#94a3b8', padding: 20 }}>Carregando cardápio do servidor...</div>
+          ) : filtrados.map(p => (
+            <motion.div key={p.id} layout initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} transition={{ duration: 0.2 }} style={{ background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(10px)', borderRadius: 24, padding: 20, border: '1px solid rgba(255,255,255,0.05)', position: 'relative', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' }}>
+              {/* Badge Ativo */}
+              <button onClick={() => toggleAtivo(p.id)} style={{ position: 'absolute', top: 20, right: 20, background: p.ativo ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)', border: `1px solid ${p.ativo ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`, color: p.ativo ? '#4ade80' : '#f87171', padding: '4px 12px', borderRadius: 12, fontSize: 12, fontWeight: 800, cursor: 'pointer', transition: 'all 0.2s' }}>
+                {p.ativo ? 'ATIVO' : 'ESGOTADO'}
+              </button>
 
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, marginBottom: 6 }}>ÍCONE</div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {emojis.map(e => (
-                <button key={e} onClick={() => setNovo(n => ({ ...n, emoji: e }))} style={{
-                  width: 42, height: 42, borderRadius: 10, fontSize: 20,
-                  border: novo.emoji === e ? '2px solid #f97316' : '1px solid #e2e8f0',
-                  background: novo.emoji === e ? '#fff7ed' : '#f8fafc', cursor: 'pointer',
-                }}>{e}</button>
-              ))}
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-            <div>
-              <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, marginBottom: 4 }}>NOME</div>
-              <input value={novo.nome} onChange={e => setNovo(n => ({ ...n, nome: e.target.value }))}
-                placeholder="Ex: Moqueca de Camarão"
-                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 14, boxSizing: 'border-box', outline: 'none' }} />
-            </div>
-            <div>
-              <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, marginBottom: 4 }}>PREÇO (R$)</div>
-              <input value={novo.preco} onChange={e => setNovo(n => ({ ...n, preco: e.target.value }))}
-                placeholder="0,00" type="number"
-                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 14, boxSizing: 'border-box', outline: 'none' }} />
-            </div>
-          </div>
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, marginBottom: 4 }}>DESCRIÇÃO</div>
-            <input value={novo.descricao} onChange={e => setNovo(n => ({ ...n, descricao: e.target.value }))}
-              placeholder="Com arroz, farofa e pirão..."
-              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 14, boxSizing: 'border-box', outline: 'none' }} />
-          </div>
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, marginBottom: 4 }}>CATEGORIA</div>
-            <select value={novo.categoria} onChange={e => setNovo(n => ({ ...n, categoria: e.target.value }))}
-              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 14, outline: 'none', background: '#fff' }}>
-              {categorias.map(c => <option key={c}>{c}</option>)}
-            </select>
-          </div>
-
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={adicionarProduto} style={{
-              flex: 1, background: 'linear-gradient(135deg, #f97316, #ea580c)',
-              border: 'none', borderRadius: 12, padding: '14px 0',
-              color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer',
-            }}>Adicionar ao cardápio</button>
-            <button onClick={() => setAdicionando(false)} style={{
-              padding: '14px 18px', background: '#f1f5f9', border: 'none', borderRadius: 12, cursor: 'pointer',
-            }}>
-              <X size={18} color="#64748b" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Grid de produtos */}
-      <div style={{ padding: '0 32px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
-        {filtrados.map(produto => (
-          <div key={produto.id} style={{
-            background: '#fff', borderRadius: 20, overflow: 'hidden',
-            boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
-            border: produto.ativo ? '1px solid #e2e8f0' : '2px solid #fecaca',
-            opacity: produto.ativo ? 1 : 0.65,
-          }}>
-            {/* Foto */}
-            <div
-              onClick={() => fileRefs.current[produto.id]?.click()}
-              style={{ height: 160, position: 'relative', cursor: 'pointer', overflow: 'hidden', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              {produto.foto
-                ? <img src={produto.foto} alt={produto.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                : <span style={{ fontSize: 72 }}>{produto.emoji}</span>
-              }
-              <div style={{
-                position: 'absolute', bottom: 0, left: 0, right: 0,
-                background: 'linear-gradient(to top, rgba(0,0,0,0.6), transparent)',
-                padding: '20px 16px 12px',
-                display: 'flex', alignItems: 'center', gap: 8,
-              }}>
-                <Camera size={16} color="#fff" />
-                <span style={{ fontSize: 12, color: '#fff', fontWeight: 700 }}>
-                  {produto.foto ? 'Trocar foto' : 'Adicionar foto real'}
-                </span>
+              <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
+                <div style={{ width: 72, height: 72, borderRadius: 16, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, position: 'relative', overflow: 'hidden' }}>
+                  {p.foto ? <img src={p.foto} alt={p.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : p.emoji}
+                </div>
+                <div style={{ flex: 1, paddingTop: 4 }}>
+                  <div style={{ fontSize: 12, color: '#f97316', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
+                    {p.categoria}
+                  </div>
+                  {editando === p.id ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <input autoFocus value={editNome} onChange={e => setEditNome(e.target.value)} style={{ width: '100%', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(249,115,22,0.3)', borderRadius: 8, padding: '4px 8px', color: '#fff', fontSize: 16, fontWeight: 700 }} />
+                      <input value={editPreco} onChange={e => setEditPreco(e.target.value)} type="number" step="0.01" style={{ width: '100%', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(249,115,22,0.3)', borderRadius: 8, padding: '4px 8px', color: '#fff', fontSize: 16, fontWeight: 700 }} />
+                    </div>
+                  ) : (
+                    <>
+                      <h3 style={{ fontSize: 18, fontWeight: 800, color: '#f8fafc', margin: '0 0 4px', lineHeight: 1.2 }}>{p.nome}</h3>
+                      <div style={{ fontSize: 18, color: '#4ade80', fontWeight: 800 }}>R$ {p.preco.toFixed(2)}</div>
+                    </>
+                  )}
+                </div>
               </div>
-              <input
-                ref={el => { fileRefs.current[produto.id] = el }}
-                type="file" accept="image/*"
-                style={{ display: 'none' }}
-                onChange={e => handleFoto(e, produto.id)}
-              />
-              <span style={{
-                position: 'absolute', top: 10, right: 10,
-                background: produto.ativo ? '#22c55e' : '#ef4444',
-                color: '#fff', fontSize: 10, fontWeight: 700,
-                padding: '3px 10px', borderRadius: 20,
-              }}>{produto.ativo ? 'Ativo' : 'Pausado'}</span>
-              <span style={{
-                position: 'absolute', top: 10, left: 10,
-                background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
-                color: '#fff', fontSize: 10, fontWeight: 700,
-                padding: '3px 10px', borderRadius: 20,
-              }}>{produto.categoria}</span>
-            </div>
 
-            {/* Info */}
-            <div style={{ padding: '14px 16px' }}>
-              {editando === produto.id ? (
+              <p style={{ fontSize: 14, color: '#94a3b8', lineHeight: 1.5, margin: '0 0 20px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                {p.descricao}
+              </p>
+
+              {/* Ações */}
+              <div style={{ display: 'flex', gap: 8, borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: 16 }}>
+                {editando === p.id ? (
+                  <>
+                    <button onClick={() => salvarEdicao(p.id)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: '#10b981', color: '#fff', border: 'none', padding: '8px', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+                      <Check size={16} /> Salvar
+                    </button>
+                    <button onClick={() => setEditando(null)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(255,255,255,0.1)', color: '#fff', border: 'none', padding: '8px', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+                      <X size={16} /> Cancelar
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button onClick={() => { setEditando(p.id); setEditNome(p.nome); setEditPreco(p.preco.toString()) }} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', color: '#cbd5e1', border: 'none', padding: '8px', borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                      <Edit2 size={16} /> Editar
+                    </button>
+                    <button onClick={() => deletar(p.id)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)', padding: '8px', borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                      <Trash2 size={16} /> Excluir
+                    </button>
+                  </>
+                )}
+              </div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+
+      {/* Modal Adicionar */}
+      <AnimatePresence>
+        {adicionando && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setAdicionando(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)' }} />
+            <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} style={{ width: '100%', maxWidth: 480, background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 24, padding: 32, position: 'relative', zIndex: 101, boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }}>
+              <button onClick={() => setAdicionando(false)} style={{ position: 'absolute', top: 20, right: 20, background: 'transparent', border: 'none', cursor: 'pointer', padding: 4 }}>
+                <X size={24} color="#94a3b8" />
+              </button>
+              
+              <h2 style={{ fontSize: 24, fontWeight: 900, color: '#f8fafc', marginBottom: 24 }}>Novo Item</h2>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div>
-                  <input value={editNome} onChange={e => setEditNome(e.target.value)}
-                    style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1.5px solid #f97316', fontSize: 14, marginBottom: 8, boxSizing: 'border-box', outline: 'none' }} />
-                  <input value={editPreco} onChange={e => setEditPreco(e.target.value)} type="number" placeholder="Preço R$"
-                    style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 14, marginBottom: 10, boxSizing: 'border-box', outline: 'none' }} />
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button onClick={() => salvarEdicao(produto.id)} style={{
-                      flex: 1, background: '#22c55e', border: 'none', borderRadius: 8,
-                      padding: '9px 0', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-                    }}><Check size={14} /> Salvar</button>
-                    <button onClick={() => setEditando(null)} style={{
-                      flex: 1, background: '#f1f5f9', border: 'none', borderRadius: 8,
-                      padding: '9px 0', color: '#64748b', fontSize: 13, fontWeight: 700, cursor: 'pointer',
-                    }}>Cancelar</button>
+                  <label style={{ display: 'block', fontSize: 14, color: '#94a3b8', fontWeight: 600, marginBottom: 8 }}>Nome do Produto</label>
+                  <input value={novo.nome} onChange={e => setNovo({...novo, nome: e.target.value})} placeholder="Ex: Porção de Isca de Peixe" style={{ width: '100%', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: '12px 16px', color: '#fff', fontSize: 16, outline: 'none' }} />
+                </div>
+                
+                <div style={{ display: 'flex', gap: 16 }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontSize: 14, color: '#94a3b8', fontWeight: 600, marginBottom: 8 }}>Preço (R$)</label>
+                    <input value={novo.preco} onChange={e => setNovo({...novo, preco: e.target.value})} type="number" step="0.01" placeholder="0.00" style={{ width: '100%', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: '12px 16px', color: '#fff', fontSize: 16, outline: 'none' }} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontSize: 14, color: '#94a3b8', fontWeight: 600, marginBottom: 8 }}>Categoria</label>
+                    <select value={novo.categoria} onChange={e => setNovo({...novo, categoria: e.target.value})} style={{ width: '100%', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: '12px 16px', color: '#fff', fontSize: 16, outline: 'none', appearance: 'none' }}>
+                      {categorias.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
                   </div>
                 </div>
-              ) : (
-                <>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>{produto.nome}</div>
-                  <div style={{ fontSize: 13, color: '#64748b', marginBottom: 10, lineHeight: 1.4 }}>{produto.descricao}</div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 20, fontWeight: 800, color: '#0f172a' }}>
-                      R$ {produto.preco.toFixed(2).replace('.', ',')}
-                    </span>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button onClick={() => toggleAtivo(produto.id)} style={{
-                        background: produto.ativo ? '#fef2f2' : '#f0fdf4',
-                        border: 'none', borderRadius: 8, padding: '7px 12px', cursor: 'pointer',
-                        fontSize: 12, fontWeight: 700,
-                        color: produto.ativo ? '#ef4444' : '#16a34a',
-                      }}>{produto.ativo ? 'Pausar' : 'Ativar'}</button>
-                      <button onClick={() => { setEditando(produto.id); setEditNome(produto.nome); setEditPreco(String(produto.preco)) }} style={{
-                        background: '#f0f9ff', border: 'none', borderRadius: 8, padding: '7px 12px',
-                        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-                        fontSize: 12, fontWeight: 700, color: '#0ea5e9',
-                      }}><Edit2 size={12} /> Editar</button>
-                      <button onClick={() => deletar(produto.id)} style={{
-                        background: '#fff5f5', border: 'none', borderRadius: 8, padding: '7px 10px',
-                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      }}><Trash2 size={14} color="#ef4444" /></button>
-                    </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 14, color: '#94a3b8', fontWeight: 600, marginBottom: 8 }}>Descrição</label>
+                  <textarea value={novo.descricao} onChange={e => setNovo({...novo, descricao: e.target.value})} placeholder="Ingredientes e detalhes..." rows={3} style={{ width: '100%', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: '12px 16px', color: '#fff', fontSize: 16, outline: 'none', resize: 'none' }} />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 14, color: '#94a3b8', fontWeight: 600, marginBottom: 8 }}>Ícone / Emoji</label>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {emojis.map(e => (
+                      <button key={e} onClick={() => setNovo({...novo, emoji: e})} style={{ width: 44, height: 44, borderRadius: 12, fontSize: 24, background: novo.emoji === e ? 'rgba(249,115,22,0.2)' : 'rgba(255,255,255,0.05)', border: `1px solid ${novo.emoji === e ? '#f97316' : 'rgba(255,255,255,0.1)'}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {e}
+                      </button>
+                    ))}
                   </div>
-                </>
-              )}
-            </div>
+                </div>
+
+                <button onClick={adicionarProduto} style={{ width: '100%', padding: '16px', borderRadius: 16, background: 'linear-gradient(135deg, #f97316, #ea580c)', border: 'none', color: '#fff', fontSize: 16, fontWeight: 800, marginTop: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  <Plus size={20} /> Salvar Produto
+                </button>
+              </div>
+            </motion.div>
           </div>
-        ))}
-      </div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

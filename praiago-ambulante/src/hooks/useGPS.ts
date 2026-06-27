@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Geolocation } from '@capacitor/geolocation'
+import { supabase } from '../lib/supabase'
 
 export type GPSData = {
   lat: number
@@ -12,7 +13,7 @@ export type GPSData = {
 
 export type GPSStatus = 'idle' | 'requesting' | 'active' | 'error'
 
-const CHANNEL = 'praiago:ambulante:gps'
+
 const STORAGE = 'praiago:ambulante:pos'
 
 export function useGPS() {
@@ -20,10 +21,12 @@ export function useGPS() {
   const [status, setStatus] = useState<GPSStatus>('idle')
   const [error, setError] = useState<string | null>(null)
   const watchId = useRef<string | null>(null)
-  const channel = useRef<BroadcastChannel | null>(null)
+  const channel = useRef<ReturnType<typeof supabase.channel> | null>(null)
 
   useEffect(() => {
-    channel.current = new BroadcastChannel(CHANNEL)
+    channel.current = supabase.channel('praiago:ambulante:gps')
+    channel.current.subscribe()
+
     setStatus('requesting')
 
     Geolocation.watchPosition(
@@ -45,14 +48,20 @@ export function useGPS() {
         setData(gpsData)
         setStatus('active')
         setError(null)
-        channel.current?.postMessage(gpsData)
+        
+        channel.current?.send({
+          type: 'broadcast',
+          event: 'msg',
+          payload: { ...gpsData }
+        })
+        
         localStorage.setItem(STORAGE, JSON.stringify(gpsData))
       },
     ).then(id => { watchId.current = id })
 
     return () => {
       if (watchId.current) Geolocation.clearWatch({ id: watchId.current })
-      channel.current?.close()
+      if (channel.current) supabase.removeChannel(channel.current)
       localStorage.removeItem(STORAGE)
     }
   }, [])

@@ -15,12 +15,24 @@ dist-ssr/
 .env
 .env.*
 !.env.example
+.mcp.json
+.cursor/mcp.json
 
 # ───────── Keystore/assinatura Android (segredo) ─────────
 *.keystore
 *.jks
 key.properties
 google-services.json
+
+# ───────── Ferramentas Claude / scripts utilitários (podem ter segredos) ─────────
+/.agents/
+/.claude/
+/temp-skills/
+*.mjs
+*.cjs
+/praiago-ia/setup-db.js
+!**/eslint.config.mjs
+!**/vite.config.mjs
 
 # ───────── SO / editor / logs ─────────
 .DS_Store

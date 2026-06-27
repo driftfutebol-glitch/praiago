@@ -1,4 +1,5 @@
-﻿import { Routes, Route, useLocation, Navigate } from 'react-router-dom'
+import { Routes, Route, useLocation, Navigate } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useSessao } from './lib/auth'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
@@ -7,64 +8,68 @@ import CardapioPage from './pages/CardapioPage'
 import PerfilPage from './pages/PerfilPage'
 import ZonasPage from './pages/ZonasPage'
 import BottomNav from './components/BottomNav'
+import VerificationBar from './components/VerificationBar'
+import AiChatbot from './components/AiChatbot'
 import { useGPS } from './hooks/useGPS'
 
 const PUBLIC_ROUTES = ['/login', '/cadastro']
 
-// Logo do PraiaGo
+// Logo do PraiaGo Ambulante
 function LogoBar({ gpsStatus }: { gpsStatus: string }) {
   const isActive = gpsStatus === 'active'
   const isError = gpsStatus === 'error'
   return (
-    <div style={{
+    <div className="glass-panel" style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '10px 20px',
-      background: '#fff',
-      borderBottom: '1px solid #e2e8f0',
+      padding: '16px 20px',
+      borderBottom: '1px solid rgba(255,255,255,0.05)',
       position: 'sticky', top: 0, zIndex: 60,
     }}>
       {/* Logo */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
-          <rect width="34" height="34" rx="10" fill="url(#amb-g)"/>
-          <defs>
-            <linearGradient id="amb-g" x1="0" y1="0" x2="34" y2="34" gradientUnits="userSpaceOnUse">
-              <stop stopColor="#0ea5e9"/>
-              <stop offset="1" stopColor="#22c55e"/>
-            </linearGradient>
-          </defs>
-          <path d="M6 24 Q10 20 14 24 Q18 28 22 24 Q26 20 28 24" stroke="white" strokeWidth="2.2" fill="none" strokeLinecap="round"/>
-          <circle cx="23" cy="10" r="5" fill="#fbbf24"/>
-          <path d="M10 30 Q11 23 13 19" stroke="white" strokeWidth="2" strokeLinecap="round" fill="none"/>
-          <path d="M13 19 Q9 15 6 16 M13 19 Q13 14 11 12 M13 19 Q17 15 17 12" stroke="white" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
-        </svg>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div className="neon-border" style={{ borderRadius: 12, display: 'flex' }}>
+          <svg width="38" height="38" viewBox="0 0 38 38" fill="none">
+            <rect width="38" height="38" rx="12" fill="url(#amb-g)"/>
+            <defs>
+              <linearGradient id="amb-g" x1="0" y1="0" x2="38" y2="38" gradientUnits="userSpaceOnUse">
+                <stop stopColor="#0ea5e9"/>
+                <stop offset="1" stopColor="#22c55e"/>
+              </linearGradient>
+            </defs>
+            <path d="M7 26 Q11 22 15 26 Q19 30 23 26 Q27 22 30 26" stroke="white" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
+            <circle cx="25" cy="12" r="5" fill="#fbbf24" stroke="rgba(255,255,255,0.8)" strokeWidth="1.5"/>
+            <path d="M12 32 Q13 25 15 21" stroke="white" strokeWidth="2.2" strokeLinecap="round" fill="none"/>
+            <path d="M15 21 Q11 17 8 18 M15 21 Q15 16 13 14 M15 21 Q19 17 19 14" stroke="white" strokeWidth="1.8" strokeLinecap="round" fill="none"/>
+          </svg>
+        </div>
         <div>
-          <div style={{ fontSize: 17, fontWeight: 900, letterSpacing: -0.5, lineHeight: 1 }}>
-            <span style={{ color: '#0ea5e9' }}>Praia</span><span style={{ color: '#22c55e' }}>Go</span>
+          <div style={{ fontSize: 20, fontWeight: 900, letterSpacing: -0.5, lineHeight: 1, display: 'flex', alignItems: 'baseline' }}>
+            <span style={{ color: '#f8fafc' }}>Praia</span><span className="tactical-gradient-text" style={{ marginLeft: 1 }}>Go</span>
           </div>
-          <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1.5, color: '#94a3b8', textTransform: 'uppercase' }}>Ambulante</div>
+          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 2, color: '#4ade80', textTransform: 'uppercase', marginTop: 2 }}>Ambulante</div>
         </div>
       </div>
 
       {/* GPS badge */}
-      <div style={{
+      <motion.div animate={isActive ? { opacity: [0.7, 1, 0.7] } : {}} transition={{ repeat: Infinity, duration: 2 }} style={{
         display: 'flex', alignItems: 'center', gap: 6,
-        background: isActive ? '#f0fdf4' : isError ? '#fef2f2' : '#f8fafc',
-        border: `1px solid ${isActive ? '#bbf7d0' : isError ? '#fecaca' : '#e2e8f0'}`,
-        borderRadius: 20, padding: '5px 12px',
+        background: isActive ? 'rgba(34,197,94,0.15)' : isError ? 'rgba(239,68,68,0.15)' : 'rgba(100,116,139,0.15)',
+        border: `1px solid ${isActive ? 'rgba(34,197,94,0.3)' : isError ? 'rgba(239,68,68,0.3)' : 'rgba(100,116,139,0.3)'}`,
+        borderRadius: 20, padding: '6px 12px',
+        boxShadow: isActive ? '0 0 10px rgba(34,197,94,0.2)' : 'none'
       }}>
         <div style={{
           width: 8, height: 8, borderRadius: '50%',
-          background: isActive ? '#22c55e' : isError ? '#ef4444' : '#94a3b8',
-          boxShadow: isActive ? '0 0 0 2px rgba(34,197,94,0.3)' : 'none',
+          background: isActive ? '#22c55e' : isError ? '#ef4444' : '#64748b',
+          boxShadow: isActive ? '0 0 8px #22c55e' : 'none',
         }} />
         <span style={{
-          fontSize: 11, fontWeight: 700,
-          color: isActive ? '#16a34a' : isError ? '#ef4444' : '#94a3b8',
+          fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5,
+          color: isActive ? '#4ade80' : isError ? '#f87171' : '#94a3b8',
         }}>
-          {isActive ? 'GPS Ativo' : isError ? 'GPS Erro' : 'GPS...'}
+          {isActive ? 'GPS ON' : isError ? 'ERRO' : 'BUSCA'}
         </span>
-      </div>
+      </motion.div>
     </div>
   )
 }
@@ -81,19 +86,37 @@ export default function App() {
   if (!sessao && !isPublic) return <Navigate to="/login" replace />
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#f1f5f9' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#0f172a' }}>
       {!isPublic && <LogoBar gpsStatus={gpsStatus} />}
-      <main style={{ flex: 1, overflowY: 'auto', paddingBottom: isPublic ? 0 : '72px' }}>
-        <Routes>
-          <Route path="/login"    element={<LoginPage />} />
-          <Route path="/"         element={<DashboardPage />} />
-          <Route path="/pedidos"  element={<PedidosPage />} />
-          <Route path="/cardapio" element={<CardapioPage />} />
-          <Route path="/zonas"    element={<ZonasPage />} />
-          <Route path="/perfil"   element={<PerfilPage />} />
-        </Routes>
+      {!isPublic && <VerificationBar />}
+      <main style={{ flex: 1, overflowY: 'auto', paddingBottom: isPublic ? 0 : '80px', position: 'relative' }}>
+        <AnimatePresence mode="wait">
+          <Routes location={location} key={location.pathname}>
+            <Route path="/login"    element={<PageWrapper><LoginPage /></PageWrapper>} />
+            <Route path="/"         element={<PageWrapper><DashboardPage /></PageWrapper>} />
+            <Route path="/pedidos"  element={<PageWrapper><PedidosPage /></PageWrapper>} />
+            <Route path="/cardapio" element={<PageWrapper><CardapioPage /></PageWrapper>} />
+            <Route path="/zonas"    element={<PageWrapper><ZonasPage /></PageWrapper>} />
+            <Route path="/perfil"   element={<PageWrapper><PerfilPage /></PageWrapper>} />
+          </Routes>
+        </AnimatePresence>
       </main>
       {!isPublic && <BottomNav />}
+      {!isPublic && <AiChatbot plataforma="ambulante" />}
     </div>
+  )
+}
+
+function PageWrapper({ children }: { children: React.ReactNode }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      transition={{ duration: 0.2 }}
+      style={{ height: '100%' }}
+    >
+      {children}
+    </motion.div>
   )
 }

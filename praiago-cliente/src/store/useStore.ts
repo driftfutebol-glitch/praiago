@@ -3,14 +3,20 @@
 // notificações ficam num só lugar e sobrevivem a reload.
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { supabase } from '../lib/supabase'
 import { getVendedor, getProduto } from '../lib/catalogo'
 
-export type Sessao = { nome: string; email: string; tel: string } | null
+export type Sessao = {
+  id: string
+  email: string
+  nome: string
+  telefone?: string
+} | null
 
 export type PedidoItem = { nome: string; qtd: number; preco: number }
 // Onde entregar na praia: o cliente informa rua/reta + barraca e se compartilha
 // localização fixa (pela reta) ou em tempo real (GPS).
-export type Entrega = { reta: string; barraca: string; modo: 'fixa' | 'tempo_real' }
+export type Entrega = { reta: string; barraca: string; modo: 'fixa' | 'tempo_real'; pagamento: 'pix' | 'cartao' | 'dinheiro' }
 export type Pedido = {
   id: string
   vendedorId: string
@@ -30,9 +36,6 @@ export type Notificacao = {
   lida: boolean
 }
 
-let pedidoSeq = 100 + Math.floor((Date.now() / 1000) % 800)
-const novoId = () => `#${++pedidoSeq}`
-
 type State = {
   sessao: Sessao
   favoritos: string[]                 // ids de vendedores
@@ -42,7 +45,7 @@ type State = {
   notificacoes: Notificacao[]
 
   // sessão
-  login: (email: string, nome?: string) => void
+  login: (id: string, email: string, nome?: string, telefone?: string) => void
   logout: () => void
 
   // favoritos
@@ -57,7 +60,7 @@ type State = {
   totalPreco: () => number
 
   // pedidos
-  criarPedido: (entrega?: Entrega) => Pedido | null
+  criarPedido: (entrega?: Entrega) => Promise<Pedido | null>
 
   // notificações
   addNotif: (n: Omit<Notificacao, 'id' | 'ts' | 'lida'>) => void
@@ -72,17 +75,11 @@ export const useStore = create<State>()(
       favoritos: [],
       carrinhoVendedor: null,
       carrinho: {},
-      pedidos: [
-        // histórico inicial de exemplo
-        { id: '#042', vendedorId: 'coco-do-joao',     vendedorNome: 'Coco do João',     itens: [{ nome: 'Água de Coco Natural', qtd: 2, preco: 8 }],  total: 16, data: Date.now() - 3_600_000,  status: 'entregue' },
-        { id: '#038', vendedorId: 'churrasco-da-mari', vendedorNome: 'Churrasco da Mari', itens: [{ nome: 'Espetinho de Carne', qtd: 1, preco: 12 }],     total: 12, data: Date.now() - 90_000_000, status: 'entregue' },
-      ],
-      notificacoes: [
-        { id: 'n1', titulo: 'Bem-vindo ao PraiaGo 🏖️', texto: 'Peça comida e bebida direto no seu guarda-sol.', ts: Date.now() - 600_000, lida: false },
-      ],
+      pedidos: [],
+      notificacoes: [],
 
-      login: (email, nome) => set({
-        sessao: { nome: nome?.trim() || email.split('@')[0] || 'Cliente', email: email.trim(), tel: '(13) 99999-9999' },
+      login: (id, email, nome = '', telefone = '') => set({ 
+        sessao: { id, email, nome, telefone } 
       }),
       logout: () => set({ sessao: null }),
 
@@ -125,8 +122,8 @@ export const useStore = create<State>()(
         }, 0)
       },
 
-      criarPedido: (entrega) => {
-        const { carrinho, carrinhoVendedor } = get()
+      criarPedido: async (entrega) => {
+        const { carrinho, carrinhoVendedor, sessao } = get()
         if (!carrinhoVendedor) return null
         const vend = getVendedor(carrinhoVendedor)
         if (!vend) return null
@@ -135,9 +132,25 @@ export const useStore = create<State>()(
           return { nome: p.nome, qtd, preco: p.preco }
         })
         const total = itens.reduce((a, i) => a + i.preco * i.qtd, 0)
+        
+        // Insere no banco
+        const { data: inserted, error } = await supabase.from('pedidos').insert({
+          cliente_nome: sessao?.nome || 'Anônimo',
+          zona: entrega?.reta ? `Reta ${entrega.reta} - Barraca ${entrega.barraca || 'Sem Barraca'}` : 'Desconhecida',
+          itens: itens.map(i => `${i.qtd}x ${i.nome}`),
+          total: total,
+          status: 'novo',
+          pagamento: entrega?.pagamento || 'pix'
+        }).select().single()
+
+        if (error || !inserted) {
+          console.error("Erro ao criar pedido", error)
+          return null
+        }
+
         const pedido: Pedido = {
-          id: novoId(), vendedorId: vend.id, vendedorNome: vend.nome,
-          itens, total, data: Date.now(), status: 'preparando', entrega,
+          id: inserted.id, vendedorId: vend.id, vendedorNome: vend.nome,
+          itens, total, data: new Date(inserted.created_at).getTime(), status: 'preparando', entrega,
         }
         set(s => ({ pedidos: [pedido, ...s.pedidos], carrinho: {}, carrinhoVendedor: null }))
         return pedido

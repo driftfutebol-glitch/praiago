@@ -1,12 +1,14 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { MapContainer, TileLayer, Polygon, Circle, Marker, Popup, useMap } from 'react-leaflet'
+import { motion, AnimatePresence } from 'framer-motion'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { Zap, TrendingUp, Navigation, RefreshCw, MapPin, Users, ShoppingBag } from 'lucide-react'
+import { Zap, Navigation, RefreshCw, ShoppingBag, Users, TrendingUp, MapPin } from 'lucide-react'
 import { useGPS } from '../hooks/useGPS'
 import { useOrderNotifications } from '../hooks/useOrderNotifications'
+import { supabase } from '../lib/supabase'
 import {
-  PRAIAGO_ZONES, BEACH_ZONES, getMockHeatData, NIVEL_CONFIG, scoreToNivel,
+  PRAIAGO_ZONES, BEACH_ZONES, getMockHeatData, NIVEL_CONFIG,
   type ZoneHeat, PRAIA_GRANDE_CENTER,
 } from '../lib/praiagoZones'
 
@@ -21,9 +23,9 @@ L.Icon.Default.mergeOptions({
 function mkIcon(html: string, size = 44) {
   return L.divIcon({ className: '', html, iconSize: [size, size], iconAnchor: [size / 2, size / 2] })
 }
-const myIcon = mkIcon(`<div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#0ea5e9,#22c55e);display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 4px 16px rgba(14,165,233,0.6);font-size:22px">🧑‍🤝‍🧑</div>`)
+const myIcon = mkIcon(`<div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#0ea5e9,#22c55e);display:flex;align-items:center;justify-content:center;border:2px solid rgba(255,255,255,0.8);box-shadow:0 0 15px rgba(34,197,94,0.5);font-size:22px;backdrop-filter:blur(4px)">🥥</div>`)
 // Cliente que fez pedido comigo
-const clienteIcon = mkIcon(`<div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#f43f5e,#fb7185);display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 4px 14px rgba(244,63,94,0.5);font-size:19px">🛒</div>`, 40)
+const clienteIcon = mkIcon(`<div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#f43f5e,#fb7185);display:flex;align-items:center;justify-content:center;border:2px solid rgba(255,255,255,0.8);box-shadow:0 0 15px rgba(244,63,94,0.5);font-size:19px;backdrop-filter:blur(4px)">🛒</div>`, 40)
 
 // Centraliza mapa na posição do usuário
 function FlyTo({ pos }: { pos: [number, number] }) {
@@ -77,20 +79,21 @@ export default function ZonasPage() {
 
   const myPos: [number, number] = gpsData ? [gpsData.lat, gpsData.lng] : PRAIA_GRANDE_CENTER
 
-  // Simula atualização automática do heatmap (IA agente)
-  const refreshHeat = useCallback(() => {
-    setHeatData(getMockHeatData().map(h => ({
-      ...h,
-      score: Math.min(1, Math.max(0, h.score + (Math.random() - 0.48) * 0.08)),
-      pedidosHora: Math.max(0, h.pedidosHora + Math.floor((Math.random() - 0.5) * 5)),
-    })).map(h => ({ ...h, nivel: scoreToNivel(h.score) })))
-    setLastUpdate(new Date())
-  }, [])
-
+  // O Cérebro IA (Agente Node.js) vai enviar o Heatmap processado pra cá!
   useEffect(() => {
-    const timer = setInterval(refreshHeat, 10000) // Atualiza a cada 10s
-    return () => clearInterval(timer)
-  }, [refreshHeat])
+    const channel = supabase.channel('radar_ia')
+      .on('broadcast', { event: 'heat_update' }, (payload) => {
+        if (payload.payload && Array.isArray(payload.payload)) {
+          setHeatData(payload.payload)
+          setLastUpdate(new Date())
+        }
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [])
 
   const recomendacao = getRecomendacao(heatData)
 
@@ -102,116 +105,117 @@ export default function ZonasPage() {
     .sort((a, b) => b.score - a.score)
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0f172a', paddingBottom: 100 }}>
+    <div style={{ minHeight: '100vh', paddingBottom: 100 }}>
 
       {/* ── Header ─────────────────────────────────────────── */}
       <div style={{
-        background: 'linear-gradient(135deg, #0ea5e9 0%, #22c55e 100%)',
-        padding: '20px 20px 30px',
+        background: 'linear-gradient(135deg, rgba(14,165,233,0.2) 0%, rgba(34,197,94,0.2) 100%)',
+        padding: '24px 20px 30px',
         position: 'relative', overflow: 'hidden',
+        borderBottom: '1px solid rgba(255,255,255,0.05)'
       }}>
-        <div style={{ position: 'absolute', inset: 0, opacity: 0.06 }}>
-          <svg viewBox="0 0 400 120" style={{ width: '100%' }}>
-            <path fill="#fff" d="M0,60 Q100,20 200,60 Q300,100 400,60 L400,120 L0,120Z" />
-          </svg>
-        </div>
+        <div style={{ position: 'absolute', top: -50, left: -50, width: 200, height: 200, borderRadius: '50%', background: 'linear-gradient(135deg, rgba(14,165,233,0.2), rgba(34,197,94,0.2))', filter: 'blur(40px)' }} />
 
         <div style={{ position: 'relative', zIndex: 1 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <div>
-              <div style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.7)', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 2 }}>
+              <div style={{ fontSize: 11, fontWeight: 900, color: '#4ade80', letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 2 }}>
                 ⚡ PraiaGo Zones
               </div>
-              <h1 style={{ fontSize: 22, fontWeight: 900, color: '#fff', letterSpacing: -0.5, margin: 0 }}>
+              <h1 style={{ fontSize: 24, fontWeight: 900, color: '#f8fafc', letterSpacing: -0.5, margin: 0 }}>
                 Radar de Demanda
               </h1>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,0.2)', padding: '4px 12px', borderRadius: 20 }}>
-                <div style={{ width: 7, height: 7, borderRadius: '50%', background: gpsStatus === 'active' ? '#fff' : 'rgba(255,255,255,0.4)' }} />
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', padding: '6px 12px', borderRadius: 20, border: '1px solid rgba(255,255,255,0.1)' }}>
+                <div className={gpsStatus === 'active' ? "animate-pulse-neon" : ""} style={{ width: 8, height: 8, borderRadius: '50%', background: gpsStatus === 'active' ? '#4ade80' : '#64748b' }} />
+                <span style={{ fontSize: 11, fontWeight: 800, color: gpsStatus === 'active' ? '#4ade80' : '#64748b' }}>
                   {gpsStatus === 'active' ? `GPS ±${Math.round(gpsData?.accuracy ?? 0)}m` : 'GPS...'}
                 </span>
               </div>
-              <button onClick={refreshHeat} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 12, padding: '5px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
-                <RefreshCw size={12} color="#fff" />
-                <span style={{ fontSize: 10, fontWeight: 700, color: '#fff' }}>Atualizar</span>
-              </button>
+              <div style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <RefreshCw size={12} color="#f8fafc" className="animate-spin-slow" />
+                <span style={{ fontSize: 10, fontWeight: 800, color: '#f8fafc' }}>IA SYNC</span>
+              </div>
             </div>
           </div>
 
-          <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.65)', margin: 0 }}>
-            Última atualização: {lastUpdate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          <p style={{ fontSize: 11, color: '#94a3b8', margin: 0, fontWeight: 500 }}>
+            Satélite atualizado: {lastUpdate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
           </p>
         </div>
       </div>
 
-      <div style={{ padding: '0 16px', marginTop: -16, position: 'relative', zIndex: 10 }}>
+      <div style={{ padding: '0 20px', marginTop: 16, position: 'relative', zIndex: 10 }}>
 
         {/* ── Card de Recomendação da IA ─────────────────── */}
+        <AnimatePresence mode="wait">
         {recomendacao && (
-          <div style={{
-            background: '#1e293b',
+          <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="glass-panel" style={{
             borderRadius: 24, padding: '20px',
-            marginBottom: 16,
+            marginBottom: 20, position: 'relative', overflow: 'hidden',
             border: '1px solid rgba(34,197,94,0.3)',
-            boxShadow: '0 0 30px rgba(34,197,94,0.1)',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <div style={{ width: 32, height: 32, borderRadius: 10, background: 'rgba(34,197,94,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Zap size={17} color="#22c55e" />
+            <div style={{ position: 'absolute', top: -30, right: -30, width: 100, height: 100, borderRadius: '50%', background: '#22c55e', opacity: 0.1, filter: 'blur(20px)' }} />
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <div className="neon-border" style={{ width: 32, height: 32, borderRadius: 10, background: 'rgba(34,197,94,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Zap size={16} color="#4ade80" />
               </div>
               <div>
-                <div style={{ fontSize: 10, fontWeight: 800, color: '#22c55e', letterSpacing: 1.2, textTransform: 'uppercase' }}>Agente IA · Recomendação</div>
-                <div style={{ fontSize: 12, color: '#94a3b8' }}>Baseado no movimento atual</div>
+                <div style={{ fontSize: 10, fontWeight: 900, color: '#4ade80', letterSpacing: 1.2, textTransform: 'uppercase' }}>Agente IA · Sugestão</div>
+                <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>Sinais de calor na orla</div>
               </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 52, height: 52, borderRadius: 16, background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{ width: 56, height: 56, borderRadius: 18, background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, border: '1px solid rgba(255,255,255,0.1)' }}>
                 {recomendacao.emoji}
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 17, fontWeight: 900, color: '#f1f5f9' }}>Vá para: {recomendacao.zona}</div>
-                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 3 }}>{recomendacao.motivo}</div>
+                <div style={{ fontSize: 18, fontWeight: 900, color: '#f8fafc' }}>Alvo: {recomendacao.zona}</div>
+                <div style={{ fontSize: 12, color: '#4ade80', marginTop: 4, fontWeight: 700 }}>{recomendacao.motivo}</div>
               </div>
-              <button style={{
+              <motion.button whileTap={{ scale: 0.95 }} style={{
                 background: 'linear-gradient(135deg, #0ea5e9, #22c55e)',
-                border: 'none', borderRadius: 14, padding: '10px 16px',
+                border: 'none', borderRadius: 16, padding: '12px 20px',
                 cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+                boxShadow: '0 4px 15px rgba(34,197,94,0.3)'
               }}>
-                <Navigation size={15} color="#fff" />
-                <span style={{ fontSize: 12, fontWeight: 800, color: '#fff' }}>Ir</span>
-              </button>
+                <Navigation size={16} color="#fff" />
+                <span style={{ fontSize: 13, fontWeight: 900, color: '#fff' }}>IR</span>
+              </motion.button>
             </div>
-          </div>
+          </motion.div>
         )}
+        </AnimatePresence>
 
         {/* ── Clientes que pediram comigo ─────────────────── */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#1e293b', borderRadius: 16, padding: '12px 16px', marginBottom: 16, border: '1px solid #334155' }}>
-          <div style={{ width: 38, height: 38, borderRadius: 12, background: 'rgba(244,63,94,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19 }}>🛒</div>
+        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }} className="glass-panel" style={{ display: 'flex', alignItems: 'center', gap: 12, borderRadius: 20, padding: '16px', marginBottom: 20 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 14, background: 'rgba(244,63,94,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, border: '1px solid rgba(244,63,94,0.2)' }}>🛒</div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 14, fontWeight: 800, color: '#f1f5f9' }}>
-              {orders.length} cliente{orders.length === 1 ? '' : 's'} aguardando
+            <div style={{ fontSize: 14, fontWeight: 900, color: '#f8fafc' }}>
+              {orders.length} cliente{orders.length === 1 ? '' : 's'} no radar
             </div>
-            <div style={{ fontSize: 11, color: '#64748b' }}>Aparecem no mapa 🛒 quando fazem um pedido com você</div>
+            <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500, marginTop: 2 }}>Eles aparecem no mapa após pedirem</div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)', borderRadius: 10, padding: '4px 10px' }}>
-            <span style={{ fontSize: 11, fontWeight: 800, color: '#22c55e' }}>🏖️ Praia</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: 10, padding: '4px 10px' }}>
+            <span style={{ fontSize: 10, fontWeight: 900, color: '#4ade80', textTransform: 'uppercase' }}>Ativo</span>
           </div>
-        </div>
+        </motion.div>
 
         {/* ── Mapa ──────────────────────────────────────── */}
-        <div style={{ borderRadius: 24, overflow: 'hidden', marginBottom: 16, border: '1px solid #334155' }}>
+        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }} style={{ borderRadius: 24, overflow: 'hidden', marginBottom: 20, border: '1px solid rgba(255,255,255,0.05)', boxShadow: '0 10px 40px rgba(0,0,0,0.4)' }}>
           <MapContainer
             center={myPos} zoom={13}
-            style={{ height: 280, width: '100%' }}
+            style={{ height: 320, width: '100%' }}
             zoomControl={false}
           >
+            {/* Dark map style */}
             <TileLayer
-              attribution='&copy; <a href="https://carto.com">CARTO</a> &copy; OpenStreetMap'
-              url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+              attribution='&copy; <a href="https://carto.com">CARTO</a>'
+              url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
               subdomains="abcd"
             />
 
@@ -232,14 +236,14 @@ export default function ZonasPage() {
                     weight: 2,
                   }}
                 >
-                  <Popup>
+                  <Popup className="dark-popup">
                     <div style={{ minWidth: 140 }}>
-                      <b>{zone.emoji} {zone.nome}</b>
+                      <b style={{ fontSize: 14 }}>{zone.emoji} {zone.nome}</b>
                       {heat && cfg && (
-                        <div style={{ marginTop: 6 }}>
-                          <div style={{ color: cfg.cor, fontWeight: 700 }}>{cfg.emoji} {cfg.label}</div>
-                          <div style={{ fontSize: 11, color: '#666' }}>{heat.pedidosHora} pedidos/h</div>
-                          <div style={{ fontSize: 11, color: '#666' }}>{heat.ambulantesAtivos} ambulantes aqui</div>
+                        <div style={{ marginTop: 8 }}>
+                          <div style={{ color: cfg.cor, fontWeight: 900, fontSize: 12 }}>{cfg.emoji} {cfg.label}</div>
+                          <div style={{ fontSize: 12, color: '#cbd5e1', marginTop: 4 }}>{heat.pedidosHora} pedidos/h</div>
+                          <div style={{ fontSize: 12, color: '#cbd5e1' }}>{heat.ambulantesAtivos} ambulantes</div>
                         </div>
                       )}
                     </div>
@@ -252,12 +256,12 @@ export default function ZonasPage() {
             {gpsStatus === 'active' && (
               <>
                 <Marker position={myPos} icon={myIcon}>
-                  <Popup><b>📍 Você está aqui</b><br />GPS ativo</Popup>
+                  <Popup className="dark-popup"><b>📍 Você está aqui</b><br />Radar ativo</Popup>
                 </Marker>
                 <Circle
                   center={myPos}
                   radius={gpsData?.accuracy ?? 30}
-                  pathOptions={{ color: '#0ea5e9', fillColor: '#0ea5e9', fillOpacity: 0.12, weight: 1.5 }}
+                  pathOptions={{ color: '#0ea5e9', fillColor: '#0ea5e9', fillOpacity: 0.15, weight: 1 }}
                 />
               </>
             )}
@@ -265,124 +269,130 @@ export default function ZonasPage() {
             {/* Clientes que fizeram pedido comigo */}
             {orders.map(o => (
               <Marker key={o.id} position={[o.clienteLat, o.clienteLng]} icon={clienteIcon}>
-                <Popup>
+                <Popup className="dark-popup">
                   <b>🛒 {o.clienteNome}</b><br />
                   {o.itens.join(', ')}<br />
-                  <b>R$ {o.total.toFixed(2)}</b> · {o.zona}
+                  <b style={{ color: '#4ade80' }}>R$ {o.total.toFixed(2)}</b> · {o.zona}
                   {(o.reta || o.barraca) && <><br />🏖️ {o.reta ? `Reta ${o.reta}` : ''}{o.reta && o.barraca ? ' · ' : ''}{o.barraca ? `Barraca ${o.barraca}` : ''}</>}
                 </Popup>
               </Marker>
             ))}
           </MapContainer>
-        </div>
+        </motion.div>
 
         {/* ── Lista de Zonas ─────────────────────────────── */}
-        <div style={{ marginBottom: 8 }}>
-          <div style={{ fontSize: 11, fontWeight: 800, color: '#64748b', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 12 }}>
-            Zonas por demanda
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 12, fontWeight: 900, color: '#94a3b8', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 16 }}>
+            Zonas por Demanda
           </div>
 
-          {heatOrdenado.map(h => {
-            const zone = PRAIAGO_ZONES.find(z => z.id === h.zoneId)
-            if (!zone) return null
-            const cfg = NIVEL_CONFIG[h.nivel]
+          <AnimatePresence>
+            {heatOrdenado.map((h, i) => {
+              const zone = PRAIAGO_ZONES.find(z => z.id === h.zoneId)
+              if (!zone) return null
+              const cfg = NIVEL_CONFIG[h.nivel]
 
-            return (
-              <div key={h.zoneId} style={{
-                background: '#1e293b',
-                borderRadius: 20, padding: '16px',
-                marginBottom: 10,
-                border: `1px solid ${cfg.cor}30`,
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  {/* Ícone */}
-                  <div style={{
-                    width: 48, height: 48, borderRadius: 16,
-                    background: `${cfg.cor}20`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 24, flexShrink: 0,
-                    border: `1px solid ${cfg.cor}30`,
-                  }}>
-                    {zone.emoji}
+              return (
+                <motion.div layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.05 }} key={h.zoneId} className="glass-panel" style={{
+                  borderRadius: 20, padding: '16px',
+                  marginBottom: 12,
+                  border: `1px solid ${cfg.cor}30`,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                    {/* Ícone */}
+                    <div style={{
+                      width: 50, height: 50, borderRadius: 16,
+                      background: `${cfg.cor}15`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 26, flexShrink: 0,
+                      border: `1px solid ${cfg.cor}40`,
+                    }}>
+                      {zone.emoji}
+                    </div>
+
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <div>
+                          <div style={{ fontSize: 16, fontWeight: 900, color: '#f8fafc' }}>{zone.nome}</div>
+                          <div style={{ fontSize: 11, color: '#94a3b8', textTransform: 'capitalize', fontWeight: 600 }}>{zone.tipo}</div>
+                        </div>
+                        <div style={{
+                          background: `${cfg.cor}15`, color: cfg.cor,
+                          padding: '4px 12px', borderRadius: 12,
+                          fontSize: 11, fontWeight: 900, textTransform: 'uppercase', border: `1px solid ${cfg.cor}40`
+                        }}>
+                          {cfg.emoji} {cfg.label}
+                        </div>
+                      </div>
+
+                      {/* Barra de progresso */}
+                      <div style={{ height: 6, background: 'rgba(255,255,255,0.05)', borderRadius: 10, marginBottom: 10, overflow: 'hidden' }}>
+                        <motion.div layout style={{
+                          height: '100%',
+                          width: `${h.score * 100}%`,
+                          background: `linear-gradient(90deg, ${cfg.cor}88, ${cfg.cor})`,
+                          borderRadius: 10,
+                          boxShadow: `0 0 10px ${cfg.cor}`
+                        }} transition={{ type: 'spring', bounce: 0, duration: 1 }} />
+                      </div>
+
+                      {/* Stats */}
+                      <div style={{ display: 'flex', gap: 16 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <ShoppingBag size={12} color="#94a3b8" />
+                          <span style={{ fontSize: 12, color: '#cbd5e1', fontWeight: 600 }}>{h.pedidosHora}/h</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <Users size={12} color="#94a3b8" />
+                          <span style={{ fontSize: 12, color: '#cbd5e1', fontWeight: 600 }}>{h.ambulantesAtivos} amb.</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <TrendingUp size={12} color="#94a3b8" />
+                          <span style={{ fontSize: 12, color: '#cbd5e1', fontWeight: 600 }}>{Math.round(h.score * 100)}% calor</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                      <div>
-                        <div style={{ fontSize: 15, fontWeight: 800, color: '#f1f5f9' }}>{zone.nome}</div>
-                        <div style={{ fontSize: 11, color: '#64748b', textTransform: 'capitalize' }}>{zone.tipo}</div>
-                      </div>
-                      <div style={{
-                        background: `${cfg.cor}20`, color: cfg.cor,
-                        padding: '4px 10px', borderRadius: 10,
-                        fontSize: 11, fontWeight: 800,
-                      }}>
-                        {cfg.emoji} {cfg.label}
-                      </div>
-                    </div>
-
-                    {/* Barra de progresso */}
-                    <div style={{ height: 5, background: '#0f172a', borderRadius: 10, marginBottom: 8 }}>
-                      <div style={{
-                        height: '100%',
-                        width: `${h.score * 100}%`,
-                        background: `linear-gradient(90deg, ${cfg.cor}88, ${cfg.cor})`,
-                        borderRadius: 10,
-                        transition: 'width 1.5s ease',
-                      }} />
-                    </div>
-
-                    {/* Stats */}
-                    <div style={{ display: 'flex', gap: 16 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <ShoppingBag size={11} color="#64748b" />
-                        <span style={{ fontSize: 11, color: '#94a3b8' }}>{h.pedidosHora}/h</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <Users size={11} color="#64748b" />
-                        <span style={{ fontSize: 11, color: '#94a3b8' }}>{h.ambulantesAtivos} ambulantes</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <TrendingUp size={11} color="#64748b" />
-                        <span style={{ fontSize: 11, color: '#94a3b8' }}>{Math.round(h.score * 100)}% calor</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
+                </motion.div>
+              )
+            })}
+          </AnimatePresence>
         </div>
 
         {/* ── Info GPS ───────────────────────────────────── */}
-        <div style={{
-          background: '#1e293b', borderRadius: 20, padding: '16px',
-          display: 'flex', alignItems: 'center', gap: 12,
-          border: '1px solid #334155',
+        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4 }} className="glass-panel" style={{
+          borderRadius: 20, padding: '16px 20px',
+          display: 'flex', alignItems: 'center', gap: 14,
         }}>
-          <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(14,165,233,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <MapPin size={20} color="#0ea5e9" />
+          <div className={gpsStatus === 'active' ? "neon-border" : ""} style={{ width: 44, height: 44, borderRadius: 14, background: 'rgba(14,165,233,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <MapPin size={22} color={gpsStatus === 'active' ? '#38bdf8' : '#64748b'} />
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#f1f5f9' }}>GPS PraiaGo</div>
-            <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+            <div style={{ fontSize: 14, fontWeight: 900, color: '#f8fafc' }}>Sinal Satélite</div>
+            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, fontWeight: 500 }}>
               {gpsStatus === 'active'
                 ? `Lat: ${gpsData?.lat.toFixed(5)} · Lng: ${gpsData?.lng.toFixed(5)}`
-                : 'Aguardando sinal GPS...'
+                : 'Aguardando radar...'
               }
             </div>
           </div>
           <div style={{
-            background: gpsStatus === 'active' ? 'rgba(34,197,94,0.1)' : 'rgba(100,116,139,0.1)',
-            border: `1px solid ${gpsStatus === 'active' ? 'rgba(34,197,94,0.3)' : '#334155'}`,
-            borderRadius: 10, padding: '4px 10px',
+            background: gpsStatus === 'active' ? 'rgba(34,197,94,0.15)' : 'rgba(100,116,139,0.1)',
+            border: `1px solid ${gpsStatus === 'active' ? 'rgba(34,197,94,0.3)' : 'rgba(255,255,255,0.1)'}`,
+            borderRadius: 12, padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 6
           }}>
-            <span style={{ fontSize: 10, fontWeight: 800, color: gpsStatus === 'active' ? '#22c55e' : '#64748b' }}>
-              {gpsStatus === 'active' ? '● ATIVO' : '○ OFF'}
+            <div className={gpsStatus === 'active' ? "animate-pulse-neon" : ""} style={{ width: 6, height: 6, borderRadius: '50%', background: gpsStatus === 'active' ? '#4ade80' : '#64748b' }} />
+            <span style={{ fontSize: 10, fontWeight: 900, color: gpsStatus === 'active' ? '#4ade80' : '#94a3b8' }}>
+              {gpsStatus === 'active' ? 'ATIVO' : 'OFF'}
             </span>
           </div>
-        </div>
+        </motion.div>
       </div>
+
+      <style>{`
+        .dark-popup .leaflet-popup-content-wrapper { background: rgba(15,23,42,0.9); backdrop-filter: blur(10px); color: #f8fafc; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; }
+        .dark-popup .leaflet-popup-tip { background: rgba(15,23,42,0.9); }
+      `}</style>
     </div>
   )
 }
