@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { logout, useSessao } from '../lib/auth'
 
 const menuItems = [
+  { icon: TrendingUp, label: 'Resumo de vendas', desc: 'Quanto você vendeu, dia a dia', to: '/vendas' },
   { icon: Bell, label: 'Notificações', desc: 'Alertas de pedidos e novidades' },
   { icon: Shield, label: 'Segurança', desc: 'Sincronização e Conta' },
   { icon: HelpCircle, label: 'Suporte', desc: 'Central Tática PraiaGo' },
@@ -101,8 +102,8 @@ export default function PerfilPage() {
         <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.6 }} className="glass-panel" style={{
           borderRadius: 24, overflow: 'hidden', marginBottom: 20,
         }}>
-          {menuItems.map(({ icon: Icon, label, desc }, i) => (
-            <motion.button whileTap={{ backgroundColor: 'rgba(0,0,0,0.05)' }} key={label} style={{
+          {menuItems.map(({ icon: Icon, label, desc, to }, i) => (
+            <motion.button whileTap={{ backgroundColor: 'rgba(0,0,0,0.05)' }} key={label} onClick={() => to && navigate(to)} style={{
               width: '100%', background: 'transparent', border: 'none', cursor: 'pointer',
               display: 'flex', alignItems: 'center', gap: 16, padding: '16px 20px',
               borderTop: i > 0 ? '1px solid rgba(0,0,0,0.05)' : 'none',

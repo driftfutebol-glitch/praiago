@@ -4,6 +4,7 @@ import { useSessao } from './lib/auth'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import PedidosPage from './pages/PedidosPage'
+import VendasPage from './pages/VendasPage'
 import CardapioPage from './pages/CardapioPage'
 import PerfilPage from './pages/PerfilPage'
 import ZonasPage from './pages/ZonasPage'
@@ -95,6 +96,7 @@ export default function App() {
             <Route path="/login"    element={<PageWrapper><LoginPage /></PageWrapper>} />
             <Route path="/"         element={<PageWrapper><DashboardPage /></PageWrapper>} />
             <Route path="/pedidos"  element={<PageWrapper><PedidosPage /></PageWrapper>} />
+            <Route path="/vendas"   element={<PageWrapper><VendasPage /></PageWrapper>} />
             <Route path="/cardapio" element={<PageWrapper><CardapioPage /></PageWrapper>} />
             <Route path="/zonas"    element={<PageWrapper><ZonasPage /></PageWrapper>} />
             <Route path="/perfil"   element={<PageWrapper><PerfilPage /></PageWrapper>} />

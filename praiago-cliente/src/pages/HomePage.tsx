@@ -319,47 +319,36 @@ export default function HomePage() {
       </header>
 
       <main style={{ padding: '16px 18px 0' }}>
-        <section style={{
-          borderRadius: 30,
-          padding: 20,
-          color: '#fff',
-          position: 'relative',
-          overflow: 'hidden',
-          background: 'linear-gradient(135deg,#0284c7 0%,#0ea5e9 46%,#16a34a 100%)',
-          boxShadow: '0 22px 46px rgba(14,165,233,0.24)',
-          marginBottom: 18,
-        }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 88% 16%, rgba(255,255,255,0.34), transparent 22%), radial-gradient(circle at 74% 120%, rgba(251,191,36,0.38), transparent 32%)' }} />
-          <div style={{ position: 'relative', zIndex: 1, maxWidth: 260 }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 999, padding: '6px 10px', background: 'rgba(255,255,255,0.18)', fontSize: 11, fontWeight: 950, marginBottom: 12 }}>
-              <Percent size={13} /> Promoções da praia
+        {/* Vitrine de promoção: só aparece quando existe OFERTA REAL publicada */}
+        {produtoPromocao && (
+          <section style={{
+            borderRadius: 30,
+            padding: 20,
+            color: '#fff',
+            position: 'relative',
+            overflow: 'hidden',
+            background: 'linear-gradient(135deg,#0284c7 0%,#0ea5e9 46%,#16a34a 100%)',
+            boxShadow: '0 22px 46px rgba(14,165,233,0.24)',
+            marginBottom: 18,
+          }}>
+            <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 88% 16%, rgba(255,255,255,0.34), transparent 22%), radial-gradient(circle at 74% 120%, rgba(251,191,36,0.38), transparent 32%)' }} />
+            <div style={{ position: 'relative', zIndex: 1, maxWidth: 260 }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 999, padding: '6px 10px', background: 'rgba(255,255,255,0.18)', fontSize: 11, fontWeight: 950, marginBottom: 12 }}>
+                <Percent size={13} /> Promoções da praia
+              </div>
+              <h1 style={{ margin: 0, fontSize: 25, fontWeight: 950, lineHeight: 1.05, letterSpacing: -0.7 }}>{produtoPromocao.nome}</h1>
+              <p style={{ margin: '8px 0 16px', fontSize: 13, fontWeight: 700, opacity: 0.9 }}>
+                Em {produtoPromocao.vendedorNome} por R$ {produtoPromocao.preco.toFixed(2).replace('.', ',')}.
+              </p>
+              <button onClick={() => navigate(`/pedir?v=${produtoPromocao.vendedorId}`)} style={{ border: 0, background: '#fff', color: '#0284c7', borderRadius: 15, padding: '12px 16px', fontSize: 13, fontWeight: 950, cursor: 'pointer', boxShadow: '0 10px 24px rgba(15,23,42,0.16)' }}>
+                Ver oferta
+              </button>
             </div>
-            {produtoPromocao ? (
-              <>
-                <h1 style={{ margin: 0, fontSize: 25, fontWeight: 950, lineHeight: 1.05, letterSpacing: -0.7 }}>{produtoPromocao.nome}</h1>
-                <p style={{ margin: '8px 0 16px', fontSize: 13, fontWeight: 700, opacity: 0.9 }}>
-                  Em {produtoPromocao.vendedorNome} por R$ {produtoPromocao.preco.toFixed(2).replace('.', ',')}.
-                </p>
-                <button onClick={() => navigate(`/pedir?v=${produtoPromocao.vendedorId}`)} style={{ border: 0, background: '#fff', color: '#0284c7', borderRadius: 15, padding: '12px 16px', fontSize: 13, fontWeight: 950, cursor: 'pointer', boxShadow: '0 10px 24px rgba(15,23,42,0.16)' }}>
-                  Ver oferta
-                </button>
-              </>
-            ) : (
-              <>
-                <h1 style={{ margin: 0, fontSize: 25, fontWeight: 950, lineHeight: 1.05, letterSpacing: -0.7 }}>Ofertas reais aparecem aqui</h1>
-                <p style={{ margin: '8px 0 16px', fontSize: 13, fontWeight: 700, opacity: 0.9 }}>
-                  Assim que restaurantes ou ambulantes publicarem produtos, a vitrine ativa automaticamente.
-                </p>
-                <button onClick={() => navigate('/pedir')} style={{ border: 0, background: '#fff', color: '#0284c7', borderRadius: 15, padding: '12px 16px', fontSize: 13, fontWeight: 950, cursor: 'pointer', boxShadow: '0 10px 24px rgba(15,23,42,0.16)' }}>
-                  Ver lojas
-                </button>
-              </>
-            )}
-          </div>
-          <div style={{ position: 'absolute', right: 12, bottom: 12, width: 110, height: 110, borderRadius: 35, background: 'rgba(255,255,255,0.18)', display: 'grid', placeItems: 'center', fontSize: 50 }}>
-            {produtoPromocao?.emoji || '🏖️'}
-          </div>
-        </section>
+            <div style={{ position: 'absolute', right: 12, bottom: 12, width: 110, height: 110, borderRadius: 35, background: 'rgba(255,255,255,0.18)', display: 'grid', placeItems: 'center', fontSize: 50 }}>
+              {produtoPromocao.emoji || '🏖️'}
+            </div>
+          </section>
+        )}
 
         <section style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
           <QuickAction title="Restaurantes perto" subtitle={restaurantesLabel} color="#f97316" icon={<Utensils size={21} />} onClick={() => navigate('/pedir?tipo=restaurante')} />

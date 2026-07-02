@@ -15,6 +15,58 @@ export default function LoginPage() {
   const [isLogin, setIsLogin] = useState(true)
   const [loading, setLoading] = useState(false)
 
+  // Cadastro: dados reais do negócio
+  const [nomePessoa, setNomePessoa] = useState('')
+  const [nomeLoja, setNomeLoja] = useState('')
+  const [cnpj, setCnpj] = useState('')
+  const [cnpjStatus, setCnpjStatus] = useState<'idle' | 'buscando' | 'ok' | 'invalido' | 'nao_encontrado'>('idle')
+  const [razaoSocial, setRazaoSocial] = useState('')
+  const [endereco, setEndereco] = useState('')
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null)
+  const [gpsMsg, setGpsMsg] = useState('')
+
+  // Validação local dos dígitos verificadores do CNPJ
+  function cnpjValido(v: string): boolean {
+    const d = v.replace(/\D/g, '')
+    if (d.length !== 14 || /^(\d)\1{13}$/.test(d)) return false
+    const calc = (len: number) => {
+      const pesos = len === 12 ? [5,4,3,2,9,8,7,6,5,4,3,2] : [6,5,4,3,2,9,8,7,6,5,4,3,2]
+      const soma = pesos.reduce((a, p, i) => a + p * Number(d[i]), 0)
+      const r = soma % 11
+      return r < 2 ? 0 : 11 - r
+    }
+    return calc(12) === Number(d[12]) && calc(13) === Number(d[13])
+  }
+
+  // Consulta pública (BrasilAPI) → preenche a razão social automaticamente
+  async function buscarCNPJ() {
+    const d = cnpj.replace(/\D/g, '')
+    if (!d) { setCnpjStatus('idle'); return }
+    if (!cnpjValido(d)) { setCnpjStatus('invalido'); setRazaoSocial(''); return }
+    setCnpjStatus('buscando')
+    try {
+      const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${d}`)
+      if (!r.ok) throw new Error('nao encontrado')
+      const j = await r.json()
+      const nome = j.nome_fantasia || j.razao_social || ''
+      setRazaoSocial(j.razao_social || '')
+      if (nome && !nomeLoja) setNomeLoja(nome)
+      setCnpjStatus('ok')
+    } catch {
+      setCnpjStatus('nao_encontrado') // CNPJ com dígitos ok, mas sem cadastro público → pede o nome manual
+    }
+  }
+
+  function usarMinhaLocalizacao() {
+    if (!navigator.geolocation) { setGpsMsg('GPS não disponível neste dispositivo.'); return }
+    setGpsMsg('Buscando sua posição…')
+    navigator.geolocation.getCurrentPosition(
+      p => { setCoords({ lat: p.coords.latitude, lng: p.coords.longitude }); setGpsMsg('📍 Localização capturada!') },
+      () => setGpsMsg('Não consegui pegar o GPS — preencha o endereço.'),
+      { enableHighAccuracy: true, timeout: 10000 },
+    )
+  }
+
   async function entrar() {
     if (!/^\S+@\S+\.\S+$/.test(email)) { setErro('Informe um e-mail válido.'); return }
     if (senha.length < 6) { setErro('A senha precisa ter ao menos 6 caracteres.'); return }
@@ -37,23 +89,34 @@ export default function LoginPage() {
         }
 
       } else {
-        const { data, error } = await supabase.auth.signUp({ 
-          email, 
+        // validações do cadastro real
+        if (!nomePessoa.trim()) throw new Error('Informe o seu nome.')
+        if (cnpj.trim() && cnpjStatus === 'invalido') throw new Error('CNPJ inválido — confira os números.')
+        if (!nomeLoja.trim()) throw new Error('Informe o nome do restaurante ou loja.')
+        if (!endereco.trim() && !coords) throw new Error('Informe a localização da loja (endereço ou GPS).')
+
+        const { data, error } = await supabase.auth.signUp({
+          email,
           password: senha,
-          options: { data: { role: 'restaurante' } }
+          options: { data: { role: 'restaurante', nome: nomeLoja.trim() } }
         })
-        
+
         if (error) {
           if (error.status === 429) throw new Error('LIMITE EXCEDIDO (Erro 429). Para continuar testando, vá no painel Supabase -> Authentication -> Rate Limits -> e aumente o "Email Signups" para 1000.')
           throw new Error('Erro ao criar conta: ' + error.message)
         }
-        
+
         if (data.user) {
-          await supabase.from('profiles').insert({
-            id: data.user.id,
-            nome: email.split('@')[0],
-            role: 'restaurante'
-          })
+          // o trigger já criou o profile — completamos com os dados do negócio
+          await supabase.from('profiles').update({
+            nome: nomeLoja.trim(),
+            role: 'restaurante',
+            cnpj: cnpj.replace(/\D/g, '') || null,
+            razao_social: razaoSocial || nomePessoa.trim(),
+            endereco: endereco.trim() || null,
+            lat: coords?.lat ?? null,
+            lng: coords?.lng ?? null,
+          }).eq('id', data.user.id)
         }
 
         if (data.session && data.user) {
@@ -113,6 +176,34 @@ export default function LoginPage() {
           <p style={{ fontSize: 14, color: '#64748b', marginBottom: 32, fontWeight: 500 }}>{isLogin ? 'Acesse sua central para gerenciar seu negócio' : 'Crie sua conta de Restaurante e gerencie pedidos'}</p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {!isLogin && (
+              <>
+                <div>
+                  <label htmlFor="rest-nome" style={{ fontSize: 12, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 8, letterSpacing: 1 }}>SEU NOME</label>
+                  <input id="rest-nome" value={nomePessoa} onChange={e => setNomePessoa(e.target.value)} placeholder="Maria da Silva" style={inputStyle} />
+                </div>
+                <div>
+                  <label htmlFor="rest-cnpj" style={{ fontSize: 12, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 8, letterSpacing: 1 }}>CNPJ (SE TIVER)</label>
+                  <input id="rest-cnpj" value={cnpj} onChange={e => { setCnpj(e.target.value); setCnpjStatus('idle') }} onBlur={buscarCNPJ} placeholder="00.000.000/0000-00" style={inputStyle} />
+                  {cnpjStatus === 'buscando' && <div style={{ fontSize: 12, color: '#0284c7', fontWeight: 700, marginTop: 6 }}>Consultando CNPJ…</div>}
+                  {cnpjStatus === 'ok' && <div style={{ fontSize: 12, color: '#16a34a', fontWeight: 700, marginTop: 6 }}>✓ CNPJ válido — {razaoSocial}</div>}
+                  {cnpjStatus === 'invalido' && <div style={{ fontSize: 12, color: '#ef4444', fontWeight: 700, marginTop: 6 }}>✕ CNPJ inválido, confira os números</div>}
+                  {cnpjStatus === 'nao_encontrado' && <div style={{ fontSize: 12, color: '#d97706', fontWeight: 700, marginTop: 6 }}>CNPJ ok, mas não achei o cadastro — digite o nome da empresa abaixo</div>}
+                </div>
+                <div>
+                  <label htmlFor="rest-loja" style={{ fontSize: 12, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 8, letterSpacing: 1 }}>NOME DO RESTAURANTE / LOJA</label>
+                  <input id="rest-loja" value={nomeLoja} onChange={e => setNomeLoja(e.target.value)} placeholder="Quiosque da Praia" style={inputStyle} />
+                </div>
+                <div>
+                  <label htmlFor="rest-end" style={{ fontSize: 12, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 8, letterSpacing: 1 }}>LOCALIZAÇÃO DA LOJA</label>
+                  <input id="rest-end" value={endereco} onChange={e => setEndereco(e.target.value)} placeholder="Av. Presidente Castelo Branco, 1000 - Boqueirão" style={inputStyle} />
+                  <button onClick={usarMinhaLocalizacao} style={{ marginTop: 8, background: 'rgba(14,165,233,0.1)', border: '1px solid rgba(14,165,233,0.3)', borderRadius: 12, padding: '10px 14px', color: '#0284c7', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
+                    📍 Usar minha localização (GPS)
+                  </button>
+                  {gpsMsg && <div style={{ fontSize: 12, color: coords ? '#16a34a' : '#64748b', fontWeight: 700, marginTop: 6 }}>{gpsMsg}</div>}
+                </div>
+              </>
+            )}
             <div>
               <label htmlFor="rest-email" style={{ fontSize: 12, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 8, letterSpacing: 1 }}>E-MAIL</label>
               <input id="rest-email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="restaurante@exemplo.com" style={inputStyle} onFocus={(e) => e.target.style.border = '1px solid rgba(249,115,22,0.5)'} onBlur={(e) => e.target.style.border = '1px solid rgba(0,0,0,0.08)'} />
@@ -146,6 +237,6 @@ export default function LoginPage() {
 const inputStyle: React.CSSProperties = {
   width: '100%', padding: '16px 20px', borderRadius: 16,
   border: '1px solid rgba(0,0,0,0.08)', fontSize: 16, outline: 'none',
-  color: '#0f172a', background: 'rgba(0,0,0,0.3)', boxSizing: 'border-box',
+  color: '#0f172a', background: '#ffffff', boxSizing: 'border-box',
   transition: 'border 0.2s', fontFamily: 'inherit'
 }

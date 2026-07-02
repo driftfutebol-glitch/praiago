@@ -10,6 +10,7 @@ import { useOrders, connectRealtime } from './store/useOrders'
 import LoginPage        from './pages/LoginPage'
 import DashboardPage    from './pages/DashboardPage'
 import PedidosPage      from './pages/PedidosPage'
+import VendasPage       from './pages/VendasPage'
 import CardapioPage     from './pages/CardapioPage'
 import MapaPage         from './pages/MapaPage'
 import EntregadoresPage from './pages/EntregadoresPage'
@@ -20,6 +21,7 @@ import AiChatbot        from './components/AiChatbot'
 const navItems = [
   { to: '/',             icon: LayoutDashboard, label: 'Painel',        badge: null },
   { to: '/pedidos',      icon: ShoppingBag,     label: 'Pedidos',       badge: null },
+  { to: '/vendas',       icon: TrendingUp,      label: 'Vendas',        badge: null },
   { to: '/cardapio',     icon: UtensilsCrossed, label: 'Cardápio',      badge: null },
   { to: '/entregadores', icon: Users,           label: 'Entregadores',  badge: null },
   { to: '/mapa',         icon: Map,             label: 'Zonas Ao Vivo', badge: null },
@@ -271,6 +273,7 @@ export default function App() {
               <Route path="/login"         element={<LoginPage />} />
               <Route path="/"              element={<DashboardPage />} />
               <Route path="/pedidos"       element={<PedidosPage />} />
+              <Route path="/vendas"        element={<VendasPage />} />
               <Route path="/cardapio"      element={<CardapioPage />} />
               <Route path="/entregadores"  element={<EntregadoresPage />} />
               <Route path="/mapa"          element={<MapaPage />} />

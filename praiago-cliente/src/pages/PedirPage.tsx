@@ -87,15 +87,51 @@ function ChatModal({ vendedor, onClose }: { vendedor: Vendedor; onClose: () => v
 }
 
 /* ─── RASTREAMENTO (TÁTICO / GLOW) ──────────────────────── */
-function RastreamentoModal({ vendedor, clientePos, onClose }: { vendedor: Vendedor; clientePos: [number, number]; entrega: Entrega | null; onClose: () => void }) {
+type StatusPedido = 'enviado' | 'preparando' | 'a_caminho' | 'chegou'
+// status na tabela `pedidos` → etapa da linha do tempo
+const DB_STATUS: Record<string, StatusPedido> = {
+  novo: 'enviado', preparando: 'preparando', saiu_entrega: 'a_caminho', entregue: 'chegou',
+}
+
+function RastreamentoModal({ vendedor, clientePos, pedidoId, onClose }: { vendedor: Vendedor; clientePos: [number, number]; entrega: Entrega | null; pedidoId: string | null; onClose: () => void }) {
   const [pos, setPos] = useState<[number, number]>(vendedor.pos)
   const [accuracy, setAccuracy] = useState(999)
   const [isRealGPS, setIsRealGPS] = useState(false)
-  const [status, setStatus] = useState<'preparando' | 'a_caminho' | 'chegou'>('preparando')
+  const [status, setStatus] = useState<StatusPedido>('enviado')
   const [segundos, setSegundos] = useState(0)
   const [atrasado, setAtrasado] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
   const route = useRoute(pos, clientePos)
+
+  // Status REAL: acompanha a linha do pedido no banco (o vendedor atualiza
+  // pelo app dele e a etapa muda aqui na hora).
+  useEffect(() => {
+    if (!pedidoId) return
+    supabase.from('pedidos').select('status').eq('id', pedidoId).single()
+      .then(({ data }) => { if (data?.status && DB_STATUS[data.status]) setStatus(DB_STATUS[data.status]) })
+    const ch = supabase.channel(`pedido_${pedidoId}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pedidos', filter: `id=eq.${pedidoId}` }, (payload) => {
+        const st = (payload.new as { status?: string }).status
+        if (st && DB_STATUS[st]) setStatus(DB_STATUS[st])
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [pedidoId])
+
+  // Avaliação ao final
+  const [nota, setNota] = useState(0)
+  const [comentario, setComentario] = useState('')
+  const [avaliado, setAvaliado] = useState(false)
+  const sessaoNome = useStore(s => s.sessao?.nome)
+  async function enviarAvaliacao() {
+    if (nota === 0) return
+    await supabase.from('avaliacoes').insert({
+      pedido_id: pedidoId, vendedor_id: vendedor.id, vendedor_nome: vendedor.nome,
+      cliente_nome: sessaoNome || 'Cliente', tipo: 'loja', nota, comentario: comentario.trim() || null,
+    })
+    setAvaliado(true)
+    setTimeout(onClose, 1600)
+  }
 
   // Verificação de sentido: a rota OSRM já respeita a mão das vias; aqui
   // detectamos se o entregador está se movendo CONTRA o sentido planejado.
@@ -116,15 +152,11 @@ function RastreamentoModal({ vendedor, clientePos, onClose }: { vendedor: Vended
         setPos([d.lat, d.lng])
         setAccuracy(typeof d.accuracy === 'number' ? d.accuracy : 999)
         setIsRealGPS(true)
-        setStatus(prev => prev === 'preparando' ? 'a_caminho' : prev)
       })
       .subscribe()
 
     return () => { clearInterval(timer); supabase.removeChannel(chan) }
   }, [])
-
-  useEffect(() => { if (segundos === 5) setStatus(prev => prev === 'preparando' ? 'a_caminho' : prev) }, [segundos])
-  useEffect(() => { if (calcDist(pos, clientePos) < 35 && status !== 'chegou') setStatus('chegou') }, [pos])
 
   const distRaw = calcDist(pos, clientePos)
   const distLabel = route?.distancia ?? (distRaw < 1000 ? `${Math.round(distRaw)}m` : `${(distRaw / 1000).toFixed(1)}km`)
@@ -133,12 +165,15 @@ function RastreamentoModal({ vendedor, clientePos, onClose }: { vendedor: Vended
   const limiteSeg = (etaMin + 1) * 60
   useEffect(() => { if (segundos > limiteSeg && status !== 'chegou') setAtrasado(true) }, [segundos, limiteSeg, status])
 
-  const statusColors = {
-    preparando: { bg: 'rgba(251,191,36,0.15)', text: '#fbbf24', border: '#b45309', label: 'PREPARANDO' },
-    a_caminho:  { bg: 'rgba(14,165,233,0.15)', text: '#38bdf8', border: '#0284c7', label: 'A CAMINHO' },
-    chegou:     { bg: 'rgba(34,197,94,0.15)',  text: '#4ade80', border: '#15803d', label: 'CHEGOU! 🎉' },
+  const statusColors: Record<StatusPedido, { bg: string; text: string; border: string; label: string }> = {
+    enviado:    { bg: 'rgba(148,163,184,0.15)', text: '#64748b', border: '#94a3b8', label: 'PEDIDO ENVIADO' },
+    preparando: { bg: 'rgba(251,191,36,0.15)', text: '#d97706', border: '#b45309', label: 'PREPARANDO' },
+    a_caminho:  { bg: 'rgba(14,165,233,0.15)', text: '#0284c7', border: '#0284c7', label: 'SAIU PRA ENTREGA' },
+    chegou:     { bg: 'rgba(34,197,94,0.15)',  text: '#16a34a', border: '#15803d', label: 'ENTREGUE! 🎉' },
   }
   const sc = statusColors[status]
+  const ETAPAS: StatusPedido[] = ['enviado', 'preparando', 'a_caminho', 'chegou']
+  const etapaAtual = ETAPAS.indexOf(status)
 
   return (
     <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 20 }} style={{ position: 'fixed', inset: 0, zIndex: 10000, background: '#ffffff', display: 'flex', flexDirection: 'column' }}>
@@ -186,7 +221,7 @@ function RastreamentoModal({ vendedor, clientePos, onClose }: { vendedor: Vended
         ) : (
           <div style={{ height: '100%', background: 'linear-gradient(160deg,#0ea5e9,#22c55e)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff', textAlign: 'center', padding: '0 32px' }}>
             <motion.div animate={{ y: [0, -10, 0] }} transition={{ repeat: Infinity, duration: 2 }} style={{ fontSize: 72, marginBottom: 16, filter: 'drop-shadow(0 10px 15px rgba(0,0,0,0.2))' }}>
-              {status === 'chegou' ? '🎉' : status === 'a_caminho' ? '🛵' : '👨‍🍳'}
+              {status === 'chegou' ? '🎉' : status === 'a_caminho' ? '🛵' : status === 'preparando' ? '👨‍🍳' : '📨'}
             </motion.div>
             <div className="glass-panel" style={{ display: 'flex', alignItems: 'center', gap: 8, borderRadius: 20, padding: '8px 18px', marginBottom: 16 }}>
               <Shield size={16} color="#fbbf24" /> <span style={{ fontSize: 13, fontWeight: 700 }}>Radar Privado</span>
@@ -204,11 +239,11 @@ function RastreamentoModal({ vendedor, clientePos, onClose }: { vendedor: Vended
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
           <div>
-            <div style={{ fontSize: 12, fontWeight: 800, color: '#38bdf8', letterSpacing: 1, marginBottom: 6, textTransform: 'uppercase' }}>
-              {status === 'preparando' ? 'Confirmado' : status === 'a_caminho' ? 'A Caminho' : 'Entregue'}
+            <div style={{ fontSize: 12, fontWeight: 800, color: '#0284c7', letterSpacing: 1, marginBottom: 6, textTransform: 'uppercase' }}>
+              {status === 'enviado' ? 'Aguardando a loja' : status === 'preparando' ? 'Confirmado' : status === 'a_caminho' ? 'Em rota' : 'Entregue'}
             </div>
             <h2 style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', letterSpacing: -0.5 }}>
-              {status === 'preparando' ? 'Preparando pedido…' : status === 'a_caminho' ? 'Chegando em breve!' : 'Aproveite! 🌊'}
+              {status === 'enviado' ? 'Pedido enviado!' : status === 'preparando' ? 'Preparando pedido…' : status === 'a_caminho' ? 'Saiu pra entrega! 🛵' : 'Aproveite! 🌊'}
             </h2>
           </div>
           <div style={{ textAlign: 'right' }}>
@@ -217,11 +252,16 @@ function RastreamentoModal({ vendedor, clientePos, onClose }: { vendedor: Vended
           </div>
         </div>
 
+        {/* Linha do tempo (4 etapas, estilo iFood) */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+          {ETAPAS.map((s, i) => (
+            <div key={s} style={{ flex: 1, height: 6, borderRadius: 10, background: i <= etapaAtual ? '#22c55e' : '#e2e8f0', transition: 'background 0.5s ease', boxShadow: i <= etapaAtual ? '0 0 10px rgba(34,197,94,0.4)' : 'none' }} />
+          ))}
+        </div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
-          {(['preparando', 'a_caminho', 'chegou'] as const).map((s, i) => {
-            const active = status === 'preparando' ? i === 0 : status === 'a_caminho' ? i <= 1 : true
-            return <div key={s} style={{ flex: 1, height: 6, borderRadius: 10, background: active ? '#22c55e' : '#e2e8f0', transition: 'background 0.5s ease', boxShadow: active ? '0 0 10px rgba(34,197,94,0.4)' : 'none' }} />
-          })}
+          {['Enviado', 'Preparando', 'Em rota', 'Entregue'].map((lbl, i) => (
+            <div key={lbl} style={{ flex: 1, fontSize: 9, fontWeight: 800, textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.3, color: i <= etapaAtual ? '#16a34a' : '#94a3b8', transition: 'color 0.5s ease' }}>{lbl}</div>
+          ))}
         </div>
 
         {!atrasado && status !== 'chegou' && (
@@ -230,17 +270,44 @@ function RastreamentoModal({ vendedor, clientePos, onClose }: { vendedor: Vended
           </motion.button>
         )}
 
-        {/* Card do vendedor + chat */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px', background: '#ffffff', borderRadius: 24, border: '1px solid rgba(0,0,0,0.05)' }}>
-          <div style={{ width: 54, height: 54, borderRadius: 18, background: vendedor.gradiente, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, boxShadow: '0 4px 15px rgba(0,0,0,0.2)' }}>{vendedor.emoji}</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>{vendedor.nome}</div>
-            <div style={{ fontSize: 12, color: '#64748b' }}>Ambulante Oficial PraiaGo</div>
+        {/* Entregue → avaliação · senão → card do vendedor + chat */}
+        {status === 'chegou' ? (
+          <div style={{ padding: '18px', background: '#ffffff', borderRadius: 24, border: '1px solid rgba(0,0,0,0.05)', textAlign: 'center' }}>
+            {avaliado ? (
+              <div className="animate-pop" style={{ padding: '10px 0' }}>
+                <div style={{ fontSize: 34 }}>💚</div>
+                <div style={{ fontSize: 16, fontWeight: 900, color: '#16a34a', marginTop: 6 }}>Avaliação enviada. Valeu!</div>
+              </div>
+            ) : (
+              <>
+                <div style={{ fontSize: 15, fontWeight: 900, color: '#0f172a', marginBottom: 4 }}>Como foi com {vendedor.nome}?</div>
+                <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>Sua avaliação ajuda a praia inteira 🏖️</div>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 14 }}>
+                  {[1, 2, 3, 4, 5].map(n => (
+                    <motion.button key={n} whileTap={{ scale: 0.85 }} onClick={() => setNota(n)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}>
+                      <Star size={32} color="#fbbf24" fill={n <= nota ? '#fbbf24' : 'none'} />
+                    </motion.button>
+                  ))}
+                </div>
+                <input value={comentario} onChange={e => setComentario(e.target.value)} placeholder="Deixe um comentário (opcional)" style={{ width: '100%', padding: '12px 14px', borderRadius: 14, border: '1px solid rgba(0,0,0,0.1)', background: '#f8fafc', color: '#0f172a', fontSize: 14, outline: 'none', marginBottom: 12, boxSizing: 'border-box' }} />
+                <motion.button whileTap={{ scale: 0.97 }} onClick={enviarAvaliacao} disabled={nota === 0} style={{ width: '100%', background: nota === 0 ? '#e2e8f0' : 'linear-gradient(135deg, #0ea5e9, #22c55e)', color: nota === 0 ? '#94a3b8' : '#fff', border: 'none', padding: '14px 0', borderRadius: 16, fontWeight: 900, fontSize: 15, cursor: nota === 0 ? 'default' : 'pointer' }}>
+                  ENVIAR AVALIAÇÃO
+                </motion.button>
+              </>
+            )}
           </div>
-          <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setChatOpen(true)} style={{ background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', color: '#fff', border: 'none', padding: '12px 20px', borderRadius: 16, fontWeight: 800, fontSize: 14, cursor: 'pointer', boxShadow: '0 4px 15px rgba(34,197,94,0.3)' }}>
-            Chat
-          </motion.button>
-        </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px', background: '#ffffff', borderRadius: 24, border: '1px solid rgba(0,0,0,0.05)' }}>
+            <div style={{ width: 54, height: 54, borderRadius: 18, background: vendedor.gradiente, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, boxShadow: '0 4px 15px rgba(0,0,0,0.2)' }}>{vendedor.emoji}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>{vendedor.nome}</div>
+              <div style={{ fontSize: 12, color: '#64748b' }}>Vendedor oficial PraiaGo</div>
+            </div>
+            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setChatOpen(true)} style={{ background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', color: '#fff', border: 'none', padding: '12px 20px', borderRadius: 16, fontWeight: 800, fontSize: 14, cursor: 'pointer', boxShadow: '0 4px 15px rgba(34,197,94,0.3)' }}>
+              Chat
+            </motion.button>
+          </div>
+        )}
       </div>
       <style>{`.neon-polyline { filter: drop-shadow(0 0 8px rgba(14,165,233,0.8)); }`}</style>
     </motion.div>
@@ -248,7 +315,7 @@ function RastreamentoModal({ vendedor, clientePos, onClose }: { vendedor: Vended
 }
 
 /* ─── CHECKOUT MODAL ────────────────────────────────────── */
-function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsAtivo }: { vendedor: Vendedor; onConfirm: (e: Entrega) => void; onClose: () => void; clientePos: [number, number]; gpsAtivo: boolean }) {
+function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsAtivo }: { vendedor: Vendedor; onConfirm: (e: Entrega, pedidoId: string) => void; onClose: () => void; clientePos: [number, number]; gpsAtivo: boolean }) {
   const [confirming, setConfirming] = useState(false)
   const [reta, setReta] = useState('')
   const [barraca, setBarraca] = useState('')
@@ -291,7 +358,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsAtivo }: {
       ts: Date.now(),
     })
     addNotif({ titulo: 'Pedido enviado! 🎉', texto: `Pagamento via ${pagamento.toUpperCase()}.` })
-    setTimeout(() => onConfirm(entrega), 900)
+    setTimeout(() => onConfirm(entrega, pedido.id), 900)
   }
 
   return (
@@ -424,6 +491,7 @@ export default function PedirPage() {
 
   const [step, setStep] = useState<Step>('menu')
   const [entrega, setEntrega] = useState<Entrega | null>(null)
+  const [pedidoId, setPedidoId] = useState<string | null>(null)
 
   // Sem nenhuma loja disponível: mostra estado vazio em vez de quebrar (tela branca).
   if (!vendedor) {
@@ -444,8 +512,8 @@ export default function PedirPage() {
   return (
     <div style={{ minHeight: '100vh', background: '#ffffff', color: '#0f172a' }}>
       <AnimatePresence>
-        {step === 'checkout' && <CheckoutModal vendedor={vendedor} clientePos={clientePos} gpsAtivo={gpsStatus === 'active'} onConfirm={(e) => { setEntrega(e); setStep('rastreando') }} onClose={() => setStep('menu')} />}
-        {step === 'rastreando' && <RastreamentoModal vendedor={vendedor} clientePos={clientePos} entrega={entrega} onClose={() => { setStep('menu'); navigate('/') }} />}
+        {step === 'checkout' && <CheckoutModal vendedor={vendedor} clientePos={clientePos} gpsAtivo={gpsStatus === 'active'} onConfirm={(e, pid) => { setEntrega(e); setPedidoId(pid); setStep('rastreando') }} onClose={() => setStep('menu')} />}
+        {step === 'rastreando' && <RastreamentoModal vendedor={vendedor} clientePos={clientePos} entrega={entrega} pedidoId={pedidoId} onClose={() => { setStep('menu'); navigate('/') }} />}
       </AnimatePresence>
 
       <div style={{ position: 'relative', height: 260 }}>

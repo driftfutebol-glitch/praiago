@@ -12,6 +12,7 @@ import AtendimentoPage from './pages/AtendimentoPage'
 import ErrorsPage from './pages/ErrorsPage'
 import EventosPage from './pages/EventosPage'
 import CuponsPage from './pages/CuponsPage'
+import PromocoesPage from './pages/PromocoesPage'
 import Sidebar from './components/Sidebar'
 
 function NotificationSystem() {
@@ -115,6 +116,7 @@ export default function App() {
             <Route path="/atendimento/:plataforma" element={<AtendimentoPage />} />
             <Route path="/eventos" element={<EventosPage />} />
             <Route path="/cupons" element={<CuponsPage />} />
+            <Route path="/promocoes" element={<PromocoesPage />} />
             <Route path="/erros" element={<ErrorsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

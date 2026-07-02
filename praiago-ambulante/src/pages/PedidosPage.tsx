@@ -7,6 +7,8 @@ import 'leaflet/dist/leaflet.css'
 import { useRoute } from '../hooks/useRoute'
 import { criarMonitorSentido, type SentidoStatus } from '../lib/trafego'
 import { useOrderNotifications, type IncomingOrder } from '../hooks/useOrderNotifications'
+import { supabase } from '../lib/supabase'
+import { getSessao } from '../lib/auth'
 import { ZoneAgent, type ZoneScore } from '../lib/zoneAgent'
 
 delete (L.Icon.Default.prototype as any)._getIconUrl
@@ -23,7 +25,7 @@ function makeIcon(html: string, size = 40) {
 const clienteIcon = makeIcon(`<div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#0ea5e9,#06b6d4);display:flex;align-items:center;justify-content:center;border:2px solid rgba(255,255,255,0.8);box-shadow:0 0 15px rgba(14,165,233,0.6);font-size:20px;backdrop-filter:blur(4px)">👤</div>`)
 const myIcon = makeIcon(`<div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#22c55e,#16a34a);display:flex;align-items:center;justify-content:center;border:2px solid rgba(255,255,255,0.8);box-shadow:0 0 15px rgba(34,197,94,0.6);font-size:20px;backdrop-filter:blur(4px)">🥥</div>`)
 
-type Status = 'novo' | 'preparando' | 'entregue'
+type Status = 'novo' | 'preparando' | 'saiu_entrega' | 'entregue'
 
 type Pedido = {
   id: string
@@ -42,9 +44,10 @@ type Pedido = {
 const pedidosIniciais: Pedido[] = []
 
 const statusConfig = {
-  novo: { label: 'Novo', bg: 'rgba(245,158,11,0.15)', color: '#fbbf24', icon: Clock },
-  preparando: { label: 'Preparando', bg: 'rgba(14,165,233,0.15)', color: '#38bdf8', icon: Timer },
-  entregue: { label: 'Entregue', bg: 'rgba(34,197,94,0.15)', color: '#4ade80', icon: CheckCircle },
+  novo: { label: 'Novo', bg: 'rgba(245,158,11,0.15)', color: '#f59e0b', icon: Clock },
+  preparando: { label: 'Preparando', bg: 'rgba(14,165,233,0.15)', color: '#0284c7', icon: Timer },
+  saiu_entrega: { label: 'Saiu p/ entrega', bg: 'rgba(249,115,22,0.15)', color: '#ea580c', icon: Navigation },
+  entregue: { label: 'Entregue', bg: 'rgba(34,197,94,0.15)', color: '#16a34a', icon: CheckCircle },
 }
 
 function FitBounds({ a, b }: { a: [number, number]; b: [number, number] }) {
@@ -266,7 +269,23 @@ function ZoneAgentPanel({ scores }: { scores: ZoneScore[] }) {
 }
 
 /* ─── PÁGINA PRINCIPAL ───────────────────────────────────── */
-const abas = ['Todos', 'Novos', 'Preparando', 'Entregues'] as const
+const abas = ['Todos', 'Novos', 'Preparando', 'Em rota', 'Entregues'] as const
+
+function rowToPedido(row: Record<string, unknown>): Pedido {
+  const st = String(row.status ?? 'novo')
+  return {
+    id: String(row.id),
+    cliente: String(row.cliente_nome ?? 'Cliente'),
+    clienteTel: String(row.cliente_tel ?? '—'),
+    itens: (row.itens as string[]) ?? [],
+    total: Number(row.total) || 0,
+    status: (['novo', 'preparando', 'saiu_entrega', 'entregue'].includes(st) ? st : 'novo') as Status,
+    hora: new Date(String(row.created_at)).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+    clienteLat: Number(row.lat) || -24.0228,
+    clienteLng: Number(row.lng) || -46.4305,
+    pagamento: String(row.pagamento ?? 'pix'),
+  }
+}
 
 export default function PedidosPage() {
   const [aba, setAba] = useState<typeof abas[number]>('Todos')
@@ -276,6 +295,21 @@ export default function PedidosPage() {
 
   // Hook de notificações em tempo real
   const { orders: liveOrders, latestOrder, dismissLatest } = useOrderNotifications()
+
+  // Carrega os pedidos REAIS deste vendedor ao abrir a tela
+  useEffect(() => {
+    const sessao = getSessao()
+    if (!sessao) return
+    supabase
+      .from('pedidos')
+      .select('*')
+      .eq('vendedor_id', sessao.id)
+      .order('created_at', { ascending: false })
+      .limit(50)
+      .then(({ data }) => {
+        if (data) setPedidos(data.map(rowToPedido))
+      })
+  }, [])
 
   // Radar de zonas: acompanha a demanda real recebida pelo app.
   useEffect(() => {
@@ -312,16 +346,23 @@ export default function PedidosPage() {
     if (aba === 'Todos') return true
     if (aba === 'Novos') return p.status === 'novo'
     if (aba === 'Preparando') return p.status === 'preparando'
+    if (aba === 'Em rota') return p.status === 'saiu_entrega'
     if (aba === 'Entregues') return p.status === 'entregue'
     return true
   })
 
-  function avancar(id: string) {
-    setPedidos(prev => prev.map(p => {
-      if (p.id !== id) return p
-      const map: Record<Status, Status> = { novo: 'preparando', preparando: 'entregue', entregue: 'entregue' }
-      return { ...p, status: map[p.status] }
-    }))
+  async function avancar(id: string) {
+    const map: Record<Status, Status> = { novo: 'preparando', preparando: 'saiu_entrega', saiu_entrega: 'entregue', entregue: 'entregue' }
+    const atual = pedidos.find(p => p.id === id)
+    if (!atual) return
+    const novoStatus = map[atual.status]
+    // otimista na tela + grava no banco (o cliente acompanha em tempo real)
+    setPedidos(prev => prev.map(p => (p.id === id ? { ...p, status: novoStatus } : p)))
+    const { error } = await supabase.from('pedidos').update({ status: novoStatus }).eq('id', id)
+    if (error) {
+      console.error('Falha ao atualizar status', error)
+      setPedidos(prev => prev.map(p => (p.id === id ? { ...p, status: atual.status } : p)))
+    }
   }
 
   const novosCount = pedidos.filter(p => p.status === 'novo').length
@@ -455,7 +496,7 @@ export default function PedidosPage() {
 
                     {pedido.status !== 'entregue' && (
                       <motion.button whileTap={{ scale: 0.95 }} onClick={() => avancar(pedido.id)} style={{ flex: 2, background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', border: 'none', borderRadius: 16, padding: '14px 0', color: '#fff', fontSize: 14, fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 4px 15px rgba(34,197,94,0.3)' }}>
-                        {pedido.status === 'novo' ? 'INICIAR PREPARO' : 'CONCLUIR'}
+                        {pedido.status === 'novo' ? 'ACEITAR PEDIDO' : pedido.status === 'preparando' ? 'SAIU PRA ENTREGA' : 'MARCAR ENTREGUE'}
                         <ChevronRight size={18} />
                       </motion.button>
                     )}

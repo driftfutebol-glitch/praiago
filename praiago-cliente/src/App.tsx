@@ -2,6 +2,8 @@ import { useEffect } from 'react'
 import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
 import { Home, ClipboardList, ShoppingBag, MapPin, User, Calendar } from 'lucide-react'
 import { iniciarCatalogo } from './store/useCatalogo'
+import { useStore } from './store/useStore'
+import { supabase } from './lib/supabase'
 import { motion, AnimatePresence } from 'framer-motion'
 import HomePage from './pages/HomePage'
 import MeusPedidosPage from './pages/MeusPedidosPage'
@@ -26,6 +28,21 @@ export default function App() {
 
   // Carrega o catálogo real (lojas/produtos do banco) + realtime, uma vez.
   useEffect(() => { iniciarCatalogo() }, [])
+
+  // Promoções/avisos enviados pelo admin chegam na hora no sininho
+  useEffect(() => {
+    const ch = supabase.channel('avisos_cliente')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'avisos' }, (payload) => {
+        const a = payload.new as { titulo?: string; mensagem?: string; publico?: string; cupom_codigo?: string | null }
+        if (a.publico && a.publico !== 'clientes' && a.publico !== 'todos') return
+        useStore.getState().addNotif({
+          titulo: a.titulo || 'Novidade PraiaGo',
+          texto: (a.mensagem || '') + (a.cupom_codigo ? ` · Use o cupom ${a.cupom_codigo}` : ''),
+        })
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'transparent' }}>

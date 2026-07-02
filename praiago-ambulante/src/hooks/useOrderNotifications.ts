@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { getSessao } from '../lib/auth'
 
 export type IncomingOrder = {
   id: string
@@ -71,10 +72,13 @@ export function useOrderNotifications() {
   const [latestOrder, setLatestOrder] = useState<IncomingOrder | null>(null)
 
   useEffect(() => {
+    const sessao = getSessao()
+    if (!sessao) return
     const channel = supabase.channel('pedidos_ambulante')
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'pedidos' },
+        // só pedidos DESTE vendedor (antes chegava pedido de todo mundo)
+        { event: 'INSERT', schema: 'public', table: 'pedidos', filter: `vendedor_id=eq.${sessao.id}` },
         (payload) => {
           const row = payload.new
           // Mapeia da tabela pedidos para IncomingOrder

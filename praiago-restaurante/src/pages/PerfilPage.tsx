@@ -1,7 +1,45 @@
+import { useState, useEffect } from 'react'
 import { Store, MapPin, Phone, Star, TrendingUp, ChevronRight, Bell, Shield, HelpCircle, LogOut } from 'lucide-react'
 import { motion } from 'framer-motion'
+import { supabase } from '../lib/supabase'
+import { getSessao } from '../lib/auth'
+
+type PerfilInfo = {
+  nome: string
+  avaliacao: number
+  totalAvaliacoes: number
+  telefone: string | null
+  endereco: string | null
+}
 
 export default function PerfilPage() {
+  const sessao = getSessao()
+  const [perfil, setPerfil] = useState<PerfilInfo>({ nome: sessao?.nome || 'Meu Restaurante', avaliacao: 0, totalAvaliacoes: 0, telefone: null, endereco: null })
+  const [pedidosMes, setPedidosMes] = useState(0)
+  const [faturamentoMes, setFaturamentoMes] = useState(0)
+
+  // Dados REAIS: perfil + pedidos entregues no mês (nada fictício)
+  useEffect(() => {
+    if (!sessao) return
+    supabase.from('profiles').select('nome, razao_social, avaliacao_media, total_avaliacoes, telefone_comercial, endereco').eq('id', sessao.id).maybeSingle()
+      .then(({ data }) => {
+        if (data) setPerfil({
+          nome: data.nome || data.razao_social || sessao.nome || 'Meu Restaurante',
+          avaliacao: Number(data.avaliacao_media) || 0,
+          totalAvaliacoes: Number(data.total_avaliacoes) || 0,
+          telefone: data.telefone_comercial,
+          endereco: data.endereco,
+        })
+      })
+    const inicioMes = new Date(); inicioMes.setDate(1); inicioMes.setHours(0, 0, 0, 0)
+    supabase.from('pedidos').select('total, status').eq('vendedor_id', sessao.id).gte('created_at', inicioMes.toISOString())
+      .then(({ data }) => {
+        const entregues = (data ?? []).filter(p => p.status === 'entregue')
+        setPedidosMes(entregues.length)
+        setFaturamentoMes(entregues.reduce((a, p) => a + (Number(p.total) || 0), 0))
+      })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div style={{ padding: '32px 40px 48px', minHeight: '100vh' }}>
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
@@ -33,14 +71,16 @@ export default function PerfilPage() {
             backdropFilter: 'blur(10px)'
           }}>🍽️</div>
           <div>
-            <div style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', textShadow: '0 0 20px rgba(255,255,255,0.2)' }}>Restaurante Maré</div>
+            <div style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', textShadow: '0 0 20px rgba(255,255,255,0.2)' }}>{perfil.nome}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, color: '#334155', fontWeight: 500, background: 'rgba(0,0,0,0.05)', padding: '4px 12px', borderRadius: 12, border: '1px solid rgba(0,0,0,0.08)' }}>
                 <MapPin size={14} color="#f97316" /> Praia Grande, SP
               </span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, color: '#334155', fontWeight: 500, background: 'rgba(0,0,0,0.05)', padding: '4px 12px', borderRadius: 12, border: '1px solid rgba(0,0,0,0.08)' }}>
                 <Star size={14} color="#fbbf24" fill="#fbbf24" />
-                <span style={{ fontWeight: 800, color: '#0f172a' }}>4.9</span> <span style={{ color: '#64748b' }}>· 328 avaliações</span>
+                {perfil.totalAvaliacoes > 0
+                  ? <><span style={{ fontWeight: 800, color: '#0f172a' }}>{perfil.avaliacao.toFixed(1)}</span> <span style={{ color: '#64748b' }}>· {perfil.totalAvaliacoes} avaliaç{perfil.totalAvaliacoes === 1 ? 'ão' : 'ões'}</span></>
+                  : <span style={{ color: '#64748b' }}>Sem avaliações ainda</span>}
               </span>
             </div>
           </div>
@@ -55,8 +95,8 @@ export default function PerfilPage() {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {[
-              { label: 'Pedidos concluídos', value: '214', icon: Store, c: '#f8fafc' },
-              { label: 'Faturamento bruto', value: 'R$ 12.480,00', icon: TrendingUp, c: '#4ade80' },
+              { label: 'Pedidos concluídos', value: String(pedidosMes), icon: Store, c: '#0f172a' },
+              { label: 'Faturamento bruto', value: `R$ ${faturamentoMes.toFixed(2).replace('.', ',')}`, icon: TrendingUp, c: '#16a34a' },
             ].map(({ label, value, icon: Icon, c }) => (
               <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.2)', padding: '16px', borderRadius: 16, border: '1px solid rgba(255,255,255,0.02)' }}>
                 <span style={{ fontSize: 14, color: '#64748b', fontWeight: 600 }}>{label}</span>
@@ -73,8 +113,8 @@ export default function PerfilPage() {
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {[
-              { label: 'Telefone comercial', value: '(13) 99999-0000', icon: Phone },
-              { label: 'Endereço da base', value: 'Av. Costa e Silva, 1200 - Boqueirão', icon: MapPin },
+              { label: 'Telefone comercial', value: perfil.telefone || 'Adicione no cadastro', icon: Phone },
+              { label: 'Endereço da base', value: perfil.endereco || 'Adicione no cadastro', icon: MapPin },
             ].map(({ label, value, icon: Icon }) => (
               <div key={label} style={{ display: 'flex', gap: 16, alignItems: 'center', background: 'rgba(0,0,0,0.2)', padding: '16px', borderRadius: 16, border: '1px solid rgba(255,255,255,0.02)' }}>
                 <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

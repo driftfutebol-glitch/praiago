@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 import {
   Activity, Package, Users, AlertOctagon, LogOut, ShieldAlert,
   ShieldCheck, Headphones, ChevronDown, CalendarDays, LayoutGrid,
-  Smartphone, TabletSmartphone, UtensilsCrossed, Umbrella, UserCircle, Ticket
+  Smartphone, TabletSmartphone, UtensilsCrossed, Umbrella, UserCircle, Ticket, Megaphone
 } from 'lucide-react'
 
 const atendimentoSubItems = [
@@ -166,6 +166,20 @@ export default function Sidebar({ onLogout }: { onLogout: () => void }) {
         >
           <Ticket size={18} />
           Cupons
+        </NavLink>
+
+        <NavLink
+          to="/promocoes"
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all duration-200 ${
+              isActive
+                ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20 shadow-[0_0_15px_rgba(168,85,247,0.1)]'
+                : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 border border-transparent'
+            }`
+          }
+        >
+          <Megaphone size={18} />
+          Promoções
         </NavLink>
 
         {/* Atendimento Section */}
