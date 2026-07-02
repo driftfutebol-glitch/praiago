@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useRoute } from '../hooks/useRoute'
+import { criarMonitorSentido, type SentidoStatus } from '../lib/trafego'
 import { useOrderNotifications, type IncomingOrder } from '../hooks/useOrderNotifications'
 import { ZoneAgent, type ZoneScore } from '../lib/zoneAgent'
 
@@ -38,7 +39,7 @@ type Pedido = {
   isLive?: boolean
 }
 
-const mockPedidos: Pedido[] = []
+const pedidosIniciais: Pedido[] = []
 
 const statusConfig = {
   novo: { label: 'Novo', bg: 'rgba(245,158,11,0.15)', color: '#fbbf24', icon: Clock },
@@ -59,6 +60,15 @@ function LocationModal({ pedido, onClose }: { pedido: Pedido; onClose: () => voi
   const watchId = useRef<number | null>(null)
   const clientePos: [number, number] = [pedido.clienteLat, pedido.clienteLng]
   const route = useRoute(myPos, clientePos)
+
+  // Verificação de sentido: a rota OSRM já respeita a mão das vias.
+  // Aqui detectamos se VOCÊ está se movendo contra o sentido planejado.
+  const [sentido, setSentido] = useState<SentidoStatus>('indefinido')
+  const monitorSentido = useRef(criarMonitorSentido())
+  useEffect(() => {
+    if (!myPos) return
+    setSentido(monitorSentido.current.atualizar(route?.coords, myPos))
+  }, [myPos?.[0], myPos?.[1]]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -87,11 +97,11 @@ function LocationModal({ pedido, onClose }: { pedido: Pedido; onClose: () => voi
   const tempo = route?.tempo ?? null
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', flexDirection: 'column', background: '#0f172a' }}>
-      <div className="glass-panel" style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, borderRadius: 0 }}>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', flexDirection: 'column', background: '#ffffff' }}>
+      <div className="glass-panel" style={{ padding: '16px 20px', borderBottom: '1px solid rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, borderRadius: 0 }}>
         <div>
-          <div style={{ fontSize: 16, fontWeight: 900, color: '#f8fafc' }}>📍 {pedido.cliente}</div>
-          <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2, fontWeight: 500 }}>Pedido {pedido.id} · {pedido.clienteTel}</div>
+          <div style={{ fontSize: 16, fontWeight: 900, color: '#0f172a' }}>📍 {pedido.cliente}</div>
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 2, fontWeight: 500 }}>Pedido {pedido.id} · {pedido.clienteTel}</div>
         </div>
         {pedido.isLive && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(14,165,233,0.15)', border: '1px solid rgba(14,165,233,0.3)', borderRadius: 10, padding: '4px 10px' }}>
@@ -99,12 +109,23 @@ function LocationModal({ pedido, onClose }: { pedido: Pedido; onClose: () => voi
             <span style={{ fontSize: 10, fontWeight: 800, color: '#38bdf8' }}>AO VIVO</span>
           </div>
         )}
-        <motion.button whileTap={{ scale: 0.9 }} onClick={onClose} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 12, padding: 8, cursor: 'pointer', minWidth: 40, minHeight: 40, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <X size={20} color="#f8fafc" />
+        <motion.button whileTap={{ scale: 0.9 }} onClick={onClose} style={{ background: 'rgba(0,0,0,0.08)', border: 'none', borderRadius: 12, padding: 8, cursor: 'pointer', minWidth: 40, minHeight: 40, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <X size={20} color="#334155" />
         </motion.button>
       </div>
 
       <div style={{ flex: 1, position: 'relative' }}>
+        {/* Aviso de contramão / fora da rota */}
+        {sentido === 'contramao' && (
+          <div className="animate-pulse-neon" style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: '#ef4444', color: '#fff', padding: '10px 18px', borderRadius: 24, fontSize: 13, fontWeight: 900, boxShadow: '0 8px 25px rgba(239,68,68,0.5)' }}>
+            ⚠️ CONTRAMÃO — você está indo contra o sentido da rota!
+          </div>
+        )}
+        {sentido === 'fora_da_rota' && (
+          <div style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(245,158,11,0.95)', color: '#fff', padding: '10px 18px', borderRadius: 24, fontSize: 13, fontWeight: 900, boxShadow: '0 8px 25px rgba(245,158,11,0.4)' }}>
+            🧭 Fora da rota — recalculando…
+          </div>
+        )}
         {myPos ? (
           <MapContainer center={myPos} zoom={15} style={{ height: '100%', width: '100%' }} zoomControl={false}>
             {/* Dark map style */}
@@ -121,7 +142,7 @@ function LocationModal({ pedido, onClose }: { pedido: Pedido; onClose: () => voi
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
             <div style={{ textAlign: 'center', color: '#64748b' }}>
               <MapPin size={40} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
-              <p style={{ fontSize: 15, fontWeight: 700 }}>Conectando ao Satélite…</p>
+              <p style={{ fontSize: 15, fontWeight: 700 }}>Buscando sua localização…</p>
             </div>
           </div>
         )}
@@ -135,14 +156,14 @@ function LocationModal({ pedido, onClose }: { pedido: Pedido; onClose: () => voi
               </span>
             </div>
             <div style={{ display: 'flex', gap: 16 }}>
-              {distancia && <div><div style={{ fontSize: 20, fontWeight: 900, color: '#f8fafc', lineHeight: 1 }}>{distancia}</div><div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, fontWeight: 500 }}>distância</div></div>}
-              {tempo && <div><div style={{ fontSize: 20, fontWeight: 900, color: '#f8fafc', lineHeight: 1 }}>{tempo}</div><div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, fontWeight: 500 }}>a pé</div></div>}
+              {distancia && <div><div style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', lineHeight: 1 }}>{distancia}</div><div style={{ fontSize: 11, color: '#64748b', marginTop: 2, fontWeight: 500 }}>distância</div></div>}
+              {tempo && <div><div style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', lineHeight: 1 }}>{tempo}</div><div style={{ fontSize: 11, color: '#64748b', marginTop: 2, fontWeight: 500 }}>a pé</div></div>}
             </div>
           </motion.div>
         )}
       </div>
 
-      <div style={{ padding: '20px', background: '#0f172a', borderTop: '1px solid rgba(255,255,255,0.05)', flexShrink: 0 }}>
+      <div style={{ padding: '20px', background: '#ffffff', borderTop: '1px solid rgba(0,0,0,0.05)', flexShrink: 0 }}>
         <motion.button
           whileTap={{ scale: 0.98 }}
           onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${pedido.clienteLat},${pedido.clienteLng}`)}
@@ -176,7 +197,7 @@ function NewOrderBanner({ order, onDismiss, onView }: { order: IncomingOrder; on
         </motion.div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 11, fontWeight: 900, color: '#fef08a', letterSpacing: 1, marginBottom: 2 }}>
-            🤖 RADAR IA · NOVO PEDIDO
+            🔔 NOVO PEDIDO NA ÁREA
           </div>
           <div style={{ fontSize: 16, fontWeight: 900, color: '#fff', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {order.clienteNome} — {order.itens[0]}{order.itens.length > 1 ? ` +${order.itens.length - 1}` : ''}
@@ -204,7 +225,7 @@ function NewOrderBanner({ order, onDismiss, onView }: { order: IncomingOrder; on
   )
 }
 
-/* ─── PAINEL DE ZONAS IA ─────────────────────────────────── */
+/* ─── PAINEL DE ZONAS ─────────────────────────────────── */
 function ZoneAgentPanel({ scores }: { scores: ZoneScore[] }) {
   const top = scores.slice().sort((a, b) => b.score - a.score).slice(0, 3)
   return (
@@ -212,8 +233,8 @@ function ZoneAgentPanel({ scores }: { scores: ZoneScore[] }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
         <div className="neon-border" style={{ width: 36, height: 36, borderRadius: 12, background: 'linear-gradient(135deg,#a855f7,#7c3aed)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🤖</div>
         <div>
-          <div style={{ fontSize: 14, fontWeight: 900, color: '#f8fafc' }}>Agente IA · Zonas ao Vivo</div>
-          <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500, marginTop: 2 }}>Monitoramento satélite ativado</div>
+          <div style={{ fontSize: 14, fontWeight: 900, color: '#0f172a' }}>Zonas ao Vivo</div>
+          <div style={{ fontSize: 11, color: '#64748b', fontWeight: 500, marginTop: 2 }}>Movimento da praia em tempo real</div>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(168,85,247,0.15)', borderRadius: 10, padding: '6px 10px', border: '1px solid rgba(168,85,247,0.3)' }}>
           <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#c084fc', boxShadow: '0 0 8px #c084fc' }} className="animate-pulse-neon" />
@@ -227,10 +248,10 @@ function ZoneAgentPanel({ scores }: { scores: ZoneScore[] }) {
             <span style={{ fontSize: 18 }}>{nivel.emoji}</span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span style={{ fontSize: 13, fontWeight: 800, color: '#f8fafc', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{z.nome}</span>
+                <span style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{z.nome}</span>
                 <span style={{ fontSize: 12, color: nivel.color, fontWeight: 800, flexShrink: 0, marginLeft: 8 }}>{z.pedidosHora} ped/h</span>
               </div>
-              <div style={{ height: 6, background: 'rgba(255,255,255,0.05)', borderRadius: 10, overflow: 'hidden' }}>
+              <div style={{ height: 6, background: 'rgba(0,0,0,0.05)', borderRadius: 10, overflow: 'hidden' }}>
                 <div style={{ height: '100%', width: `${z.score * 100}%`, background: nivel.color, borderRadius: 10, transition: 'width 1s ease', boxShadow: `0 0 8px ${nivel.color}` }} />
               </div>
             </div>
@@ -249,14 +270,14 @@ const abas = ['Todos', 'Novos', 'Preparando', 'Entregues'] as const
 
 export default function PedidosPage() {
   const [aba, setAba] = useState<typeof abas[number]>('Todos')
-  const [pedidos, setPedidos] = useState<Pedido[]>(mockPedidos)
+  const [pedidos, setPedidos] = useState<Pedido[]>(pedidosIniciais)
   const [locModal, setLocModal] = useState<Pedido | null>(null)
   const [zoneScores, setZoneScores] = useState<ZoneScore[]>([])
 
   // Hook de notificações em tempo real
   const { orders: liveOrders, latestOrder, dismissLatest } = useOrderNotifications()
 
-  // IA: subscrevendo ao ZoneAgent
+  // Radar de zonas: acompanha a demanda real recebida pelo app.
   useEffect(() => {
     const unsub = ZoneAgent.subscribe(scores => setZoneScores(scores))
     return unsub
@@ -326,11 +347,11 @@ export default function PedidosPage() {
       </AnimatePresence>
 
       {/* Header */}
-      <div style={{ padding: '24px 20px 0', borderBottom: '1px solid rgba(255,255,255,0.05)', marginBottom: 24 }}>
+      <div style={{ padding: '24px 20px 0', borderBottom: '1px solid rgba(0,0,0,0.05)', marginBottom: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <div>
-            <h1 style={{ fontSize: 28, fontWeight: 900, color: '#f8fafc', letterSpacing: -0.5 }}>Pedidos</h1>
-            <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 2, fontWeight: 500 }}>Radar tático em tempo real</div>
+            <h1 style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', letterSpacing: -0.5 }}>Pedidos</h1>
+            <div style={{ fontSize: 13, color: '#64748b', marginTop: 2, fontWeight: 500 }}>Radar tático em tempo real</div>
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             {novosCount > 0 && (
@@ -343,7 +364,7 @@ export default function PedidosPage() {
         <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 10 }} className="hide-scrollbar">
           {abas.map(a => (
             <button key={a} onClick={() => setAba(a)} style={{ 
-              padding: '10px 20px', background: aba === a ? 'rgba(14,165,233,0.15)' : 'rgba(255,255,255,0.05)',
+              padding: '10px 20px', background: aba === a ? 'rgba(14,165,233,0.15)' : 'rgba(0,0,0,0.05)',
               borderRadius: 20, cursor: 'pointer', fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap',
               color: aba === a ? '#38bdf8' : '#94a3b8', transition: 'all 0.2s', border: `1px solid ${aba === a ? 'rgba(14,165,233,0.3)' : 'transparent'}`
             }}>
@@ -354,7 +375,7 @@ export default function PedidosPage() {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-        {/* Painel do agente IA */}
+        {/* Painel de demanda por zona */}
         {zoneScores.length > 0 && <ZoneAgentPanel scores={zoneScores} />}
 
         {/* Lista de pedidos */}
@@ -362,7 +383,7 @@ export default function PedidosPage() {
           {filtrados.length === 0 && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ textAlign: 'center', padding: '60px 0', color: '#64748b' }}>
               <Bell size={40} style={{ margin: '0 auto 16px', opacity: 0.5 }} />
-              <p style={{ fontSize: 16, fontWeight: 800, color: '#f8fafc' }}>Radar Limpo</p>
+              <p style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>Radar Limpo</p>
               <p style={{ fontSize: 13, marginTop: 6 }}>Aguardando sinais de clientes...</p>
             </motion.div>
           )}
@@ -384,7 +405,7 @@ export default function PedidosPage() {
                     boxShadow: isNew ? '0 10px 30px rgba(0,0,0,0.3)' : '0 4px 15px rgba(0,0,0,0.2)',
                     border: isNew
                       ? pedido.isLive ? '1px solid #38bdf8' : '1px solid #fbbf24'
-                      : '1px solid rgba(255,255,255,0.05)',
+                      : '1px solid rgba(0,0,0,0.05)',
                     position: 'relative', overflow: 'hidden',
                   }}
                 >
@@ -399,28 +420,28 @@ export default function PedidosPage() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: 18, fontWeight: 900, color: '#f8fafc' }}>{pedido.id}</span>
+                        <span style={{ fontSize: 18, fontWeight: 900, color: '#0f172a' }}>{pedido.id}</span>
                         <span style={{ background: bg, color, borderRadius: 12, padding: '4px 10px', fontSize: 11, fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 6, border: `1px solid ${color}40` }}>
                           <Icon size={12} /> {label}
                         </span>
                       </div>
-                      <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 6, fontWeight: 500 }}>{pedido.cliente} · {pedido.hora}</div>
+                      <div style={{ fontSize: 13, color: '#64748b', marginTop: 6, fontWeight: 500 }}>{pedido.cliente} · {pedido.hora}</div>
                     </div>
                     <span style={{ fontSize: 18, fontWeight: 900, color: '#4ade80' }}>
                       R$ {pedido.total.toFixed(2).replace('.', ',')}
                     </span>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12, background: 'rgba(255,255,255,0.05)', padding: '6px 12px', borderRadius: 12, width: 'fit-content' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12, background: 'rgba(0,0,0,0.05)', padding: '6px 12px', borderRadius: 12, width: 'fit-content' }}>
                     {pedido.pagamento === 'pix' && <QrCode size={14} color="#22c55e" />}
                     {pedido.pagamento === 'cartao' && <CreditCard size={14} color="#0ea5e9" />}
                     {pedido.pagamento === 'dinheiro' && <Banknote size={14} color="#fbbf24" />}
-                    <span style={{ fontSize: 12, color: '#f8fafc', fontWeight: 800, textTransform: 'uppercase' }}>{pedido.pagamento}</span>
+                    <span style={{ fontSize: 12, color: '#0f172a', fontWeight: 800, textTransform: 'uppercase' }}>{pedido.pagamento}</span>
                   </div>
 
                   <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 12, padding: 12, marginBottom: 16 }}>
                     {pedido.itens.map((item, i) => (
-                      <div key={i} style={{ fontSize: 13, color: '#cbd5e1', fontWeight: 600, paddingTop: i > 0 ? 6 : 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div key={i} style={{ fontSize: 13, color: '#334155', fontWeight: 600, paddingTop: i > 0 ? 6 : 0, display: 'flex', alignItems: 'center', gap: 8 }}>
                         <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#475569' }}/>
                         {item}
                       </div>
@@ -428,7 +449,7 @@ export default function PedidosPage() {
                   </div>
 
                   <div style={{ display: 'flex', gap: 10 }}>
-                    <motion.button whileTap={{ scale: 0.95 }} onClick={() => setLocModal(pedido)} style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, padding: '14px 0', color: '#f8fafc', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    <motion.button whileTap={{ scale: 0.95 }} onClick={() => setLocModal(pedido)} style={{ flex: 1, background: 'rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 16, padding: '14px 0', color: '#0f172a', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                       <MapPin size={16} /> Mapa
                     </motion.button>
 
@@ -448,9 +469,10 @@ export default function PedidosPage() {
       <style>{`
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        .dark-popup .leaflet-popup-content-wrapper { background: rgba(15,23,42,0.9); backdrop-filter: blur(10px); color: #f8fafc; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; }
-        .dark-popup .leaflet-popup-tip { background: rgba(15,23,42,0.9); }
+        .dark-popup .leaflet-popup-content-wrapper { background: rgba(255,255,255,0.9); backdrop-filter: blur(10px); color: #f8fafc; border: 1px solid rgba(0,0,0,0.08); border-radius: 12px; }
+        .dark-popup .leaflet-popup-tip { background: rgba(255,255,255,0.9); }
       `}</style>
     </div>
   )
 }
+

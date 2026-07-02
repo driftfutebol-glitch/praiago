@@ -107,7 +107,7 @@ export default function LoginPage() {
           {tab === 'cadastro' && (
             <div>
               <label htmlFor="amb-nome" style={labelStyle}>Nome da banca</label>
-              <input id="amb-nome" value={nome} onChange={e => setNome(e.target.value)} placeholder="Coco do João" style={inputStyle} />
+              <input id="amb-nome" value={nome} onChange={e => setNome(e.target.value)} placeholder="Nome da sua banca" style={inputStyle} />
             </div>
           )}
           <div>
@@ -118,7 +118,7 @@ export default function LoginPage() {
             <label htmlFor="amb-senha" style={labelStyle}>Senha</label>
             <div style={{ position: 'relative' }}>
               <input id="amb-senha" type={verSenha ? 'text' : 'password'} value={senha} onChange={e => setSenha(e.target.value)} onKeyDown={e => e.key === 'Enter' && submit()} placeholder="••••••••" style={{ ...inputStyle, padding: '13px 44px 13px 16px' }} />
-              <button aria-label={verSenha ? 'Ocultar senha' : 'Mostrar senha'} onClick={() => setVerSenha(!verSenha)} style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>
+              <button aria-label={verSenha ? 'Ocultar senha' : 'Mostrar senha'} onClick={() => setVerSenha(!verSenha)} style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}>
                 {verSenha ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
@@ -133,7 +133,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      <p style={{ fontSize: 12, color: '#94a3b8', marginTop: 24, textAlign: 'center', maxWidth: 300 }}>
+      <p style={{ fontSize: 12, color: '#64748b', marginTop: 24, textAlign: 'center', maxWidth: 300 }}>
         Vender no PraiaGo exige cadastro aprovado pela equipe — a conta é só o primeiro passo.
       </p>
     </div>

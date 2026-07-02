@@ -61,10 +61,10 @@ export default function PedidosPage() {
       {/* ── Header ─────────────────────────────────────────── */}
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 32 }}>
         <div>
-          <h1 style={{ fontSize: 38, fontWeight: 900, color: '#f8fafc', letterSpacing: -1, margin: '0 0 8px', textShadow: '0 0 30px rgba(255,255,255,0.1)' }}>
+          <h1 style={{ fontSize: 38, fontWeight: 900, color: '#0f172a', letterSpacing: -1, margin: '0 0 8px', textShadow: '0 0 30px rgba(0,0,0,0.08)' }}>
             Gerenciar Pedidos
           </h1>
-          <p style={{ fontSize: 15, color: '#94a3b8', margin: 0, fontWeight: 500 }}>
+          <p style={{ fontSize: 15, color: '#64748b', margin: 0, fontWeight: 500 }}>
             {pedidos.filter(p => p.status !== 'entregue').length} ativos ·{' '}
             <span className="animate-pulse-neon" style={{ color: '#f87171', fontWeight: 800, background: 'rgba(239,68,68,0.1)', padding: '2px 8px', borderRadius: 8, border: '1px solid rgba(239,68,68,0.2)' }}>
               {pedidos.filter(p => p.status === 'novo').length} novos aguardando
@@ -80,12 +80,12 @@ export default function PedidosPage() {
             placeholder="Buscar cliente, zona..."
             style={{
               padding: '14px 16px 14px 44px', borderRadius: 16,
-              border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(15,23,42,0.8)', backdropFilter: 'blur(12px)',
-              fontSize: 14, color: '#f8fafc', outline: 'none', width: 300,
+              border: '1px solid rgba(0,0,0,0.08)', background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(12px)',
+              fontSize: 14, color: '#0f172a', outline: 'none', width: 300,
               boxShadow: 'inset 0 2px 5px rgba(0,0,0,0.2)', transition: 'all 0.2s',
             }}
             onFocus={(e) => { e.target.style.border = '1px solid rgba(249,115,22,0.5)'; e.target.style.boxShadow = '0 0 15px rgba(249,115,22,0.2)' }}
-            onBlur={(e) => { e.target.style.border = '1px solid rgba(255,255,255,0.1)'; e.target.style.boxShadow = 'inset 0 2px 5px rgba(0,0,0,0.2)' }}
+            onBlur={(e) => { e.target.style.border = '1px solid rgba(0,0,0,0.08)'; e.target.style.boxShadow = 'inset 0 2px 5px rgba(0,0,0,0.2)' }}
           />
         </div>
       </motion.div>
@@ -98,7 +98,7 @@ export default function PedidosPage() {
           return (
             <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} key={t.key} onClick={() => setTab(t.key as any)} style={{
               display: 'flex', alignItems: 'center', gap: 8,
-              padding: '10px 20px', borderRadius: 16, border: active ? '1px solid rgba(249,115,22,0.4)' : '1px solid rgba(255,255,255,0.05)',
+              padding: '10px 20px', borderRadius: 16, border: active ? '1px solid rgba(249,115,22,0.4)' : '1px solid rgba(0,0,0,0.05)',
               background: active ? 'linear-gradient(135deg,rgba(249,115,22,0.15),rgba(234,88,12,0.05))' : 'rgba(255,255,255,0.02)',
               color: active ? '#f97316' : '#94a3b8',
               fontWeight: 800, fontSize: 14, cursor: 'pointer',
@@ -108,7 +108,7 @@ export default function PedidosPage() {
               <span style={{ fontSize: 16 }}>{t.emoji}</span> {t.label}
               {cnt > 0 && (
                 <span style={{
-                  background: active ? '#f97316' : 'rgba(255,255,255,0.1)',
+                  background: active ? '#f97316' : 'rgba(0,0,0,0.08)',
                   color: active ? '#fff' : '#cbd5e1',
                   fontSize: 11, fontWeight: 900, padding: '2px 8px', borderRadius: 10,
                   boxShadow: active ? '0 0 10px rgba(249,115,22,0.5)' : 'none'
@@ -137,7 +137,7 @@ export default function PedidosPage() {
             return (
               <motion.div layout initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }} transition={{ duration: 0.3 }} key={p.id} className="glass-panel" style={{
                 borderRadius: 24, padding: '24px',
-                border: p.status === 'novo' ? '1px solid rgba(239,68,68,0.4)' : '1px solid rgba(255,255,255,0.08)',
+                border: p.status === 'novo' ? '1px solid rgba(239,68,68,0.4)' : '1px solid rgba(0,0,0,0.06)',
                 boxShadow: p.status === 'novo'
                   ? `0 0 30px ${s.glow}, inset 0 0 10px ${s.glow}`
                   : '0 8px 32px rgba(0,0,0,0.2)',
@@ -154,22 +154,22 @@ export default function PedidosPage() {
                         <SIcon size={22} color={s.cor} />
                       </div>
                       <div>
-                        <div style={{ fontSize: 18, fontWeight: 900, color: '#f8fafc' }}>{p.cliente}</div>
-                        <div style={{ fontSize: 13, color: '#94a3b8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ color: '#cbd5e1' }}>{p.id}</span> · {p.hora}
+                        <div style={{ fontSize: 18, fontWeight: 900, color: '#0f172a' }}>{p.cliente}</div>
+                        <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ color: '#334155' }}>{p.id}</span> · {p.hora}
                         </div>
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', padding: '6px 12px', borderRadius: 12 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.05)', padding: '6px 12px', borderRadius: 12 }}>
                         <MapPin size={14} color="#a855f7" />
                         <span style={{ fontSize: 13, color: '#e9d5ff', fontWeight: 700 }}>{p.zona}</span>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.05)', padding: '6px 12px', borderRadius: 12 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.05)', padding: '6px 12px', borderRadius: 12 }}>
                         {p.pagamento === 'pix' && <QrCode size={14} color="#22c55e" />}
                         {p.pagamento === 'cartao' && <CreditCard size={14} color="#0ea5e9" />}
                         {p.pagamento === 'dinheiro' && <Banknote size={14} color="#fbbf24" />}
-                        <span style={{ fontSize: 13, color: '#f8fafc', fontWeight: 700, textTransform: 'uppercase' }}>{p.pagamento}</span>
+                        <span style={{ fontSize: 13, color: '#0f172a', fontWeight: 700, textTransform: 'uppercase' }}>{p.pagamento}</span>
                       </div>
                     </div>
                   </div>
@@ -186,9 +186,9 @@ export default function PedidosPage() {
                 </div>
 
                 {/* Itens */}
-                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 16, padding: '16px', marginBottom: 20, position: 'relative', zIndex: 1 }}>
+                <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(0,0,0,0.05)', borderRadius: 16, padding: '16px', marginBottom: 20, position: 'relative', zIndex: 1 }}>
                   {p.itens.map((item, i) => (
-                    <div key={i} style={{ fontSize: 14, color: '#cbd5e1', lineHeight: '1.8', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500 }}>
+                    <div key={i} style={{ fontSize: 14, color: '#334155', lineHeight: '1.8', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500 }}>
                       <div style={{ width: 6, height: 6, borderRadius: '50%', background: s.cor, boxShadow: `0 0 5px ${s.cor}` }} /> {item}
                     </div>
                   ))}
@@ -241,7 +241,7 @@ export default function PedidosPage() {
                   )}
 
                   {p.status === 'entregue' && (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '12px 0', color: '#94a3b8', fontSize: 14, fontWeight: 800, background: 'rgba(255,255,255,0.02)', borderRadius: 16, border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '12px 0', color: '#64748b', fontSize: 14, fontWeight: 800, background: 'rgba(255,255,255,0.02)', borderRadius: 16, border: '1px solid rgba(0,0,0,0.05)' }}>
                       <Package size={16} /> ENTREGA CONCLUÍDA
                     </div>
                   )}

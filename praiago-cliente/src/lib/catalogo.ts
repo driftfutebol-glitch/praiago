@@ -1,7 +1,5 @@
-// Catálogo — FONTE ÚNICA de vendedores e produtos do app Cliente.
-// Antes existiam 3 listas divergentes (HomePage, PedirPage, PerfilPage).
-// O ambulante "publica" o cardápio dele aqui (no futuro via Supabase);
-// por ora é o seed compartilhado.
+﻿// Catálogo — tipos e categorias do app Cliente.
+// Os vendedores/produtos REAIS vêm do Supabase (store useCatalogo).
 
 export type Produto = {
   id: string
@@ -36,12 +34,15 @@ export type Vendedor = {
 export const CATEGORIAS = [
   { id: 'bebidas',    emoji: '🥥', nome: 'Bebidas',    cor: '#10b981' },
   { id: 'espetinhos', emoji: '🍢', nome: 'Espetinhos', cor: '#ea580c' },
-  { id: 'acai',       emoji: '🍦', nome: 'Açaí',       cor: '#7c3aed' },
+  { id: 'acai',       emoji: '🍧', nome: 'Açaí',       cor: '#7c3aed' },
   { id: 'peixes',     emoji: '🐟', nome: 'Peixes',     cor: '#0ea5e9' },
   { id: 'lanches',    emoji: '🍔', nome: 'Lanches',    cor: '#f43f5e' },
   { id: 'cerveja',    emoji: '🍺', nome: 'Cerveja',    cor: '#fbbf24' },
 ] as const
 
+// Sem dados fictícios. Os vendedores/produtos reais vêm do Supabase
+// (cadastro do ambulante/restaurante → aprovação no admin → publicação do cardápio).
+// Enquanto não houver vendedor real online, o app mostra estado vazio.
 export const VENDEDORES: Vendedor[] = []
 
 export function getVendedor(id: string | null | undefined): Vendedor | undefined {
@@ -61,4 +62,5 @@ export function getAmbulantes(): Vendedor[] {
 export function getRestaurantes(): Vendedor[] {
   return VENDEDORES.filter(v => v.tipo === 'restaurante')
 }
+
 

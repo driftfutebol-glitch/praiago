@@ -22,7 +22,7 @@ function LogoBar({ gpsStatus }: { gpsStatus: string }) {
     <div className="glass-panel" style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       padding: '16px 20px',
-      borderBottom: '1px solid rgba(255,255,255,0.05)',
+      borderBottom: '1px solid rgba(0,0,0,0.05)',
       position: 'sticky', top: 0, zIndex: 60,
     }}>
       {/* Logo */}
@@ -44,7 +44,7 @@ function LogoBar({ gpsStatus }: { gpsStatus: string }) {
         </div>
         <div>
           <div style={{ fontSize: 20, fontWeight: 900, letterSpacing: -0.5, lineHeight: 1, display: 'flex', alignItems: 'baseline' }}>
-            <span style={{ color: '#f8fafc' }}>Praia</span><span className="tactical-gradient-text" style={{ marginLeft: 1 }}>Go</span>
+            <span style={{ color: '#0f172a' }}>Praia</span><span className="tactical-gradient-text" style={{ marginLeft: 1 }}>Go</span>
           </div>
           <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 2, color: '#4ade80', textTransform: 'uppercase', marginTop: 2 }}>Ambulante</div>
         </div>
@@ -86,7 +86,7 @@ export default function App() {
   if (!sessao && !isPublic) return <Navigate to="/login" replace />
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#0f172a' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#ffffff' }}>
       {!isPublic && <LogoBar gpsStatus={gpsStatus} />}
       {!isPublic && <VerificationBar />}
       <main style={{ flex: 1, overflowY: 'auto', paddingBottom: isPublic ? 0 : '80px', position: 'relative' }}>

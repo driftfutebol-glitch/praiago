@@ -20,25 +20,20 @@ export type OrderPayload = {
 }
 
 export async function broadcastOrder(order: OrderPayload): Promise<OrderPayload> {
-  const { error } = await supabase.from('pedidos').insert({
-    id: order.id,
-    vendedor_id: order.vendedorId !== 'amb-1' && order.vendedorId !== 'amb-2' && order.vendedorId !== 'rest-1' ? null : null, // Por enquanto mockado no bd até termos o Auth real
-    cliente_nome: order.clienteNome,
-    cliente_tel: order.clienteTel,
-    itens: order.itens,
-    total: order.total,
-    pagamento: order.pagamento,
-    zona: order.zona,
-    reta: order.reta,
-    barraca: order.barraca,
-    lat: order.clienteLat,
-    lng: order.clienteLng,
-    status: 'novo'
-  })
-
-  if (error) {
-    console.error('Erro ao enviar pedido para o Supabase:', error)
+  // O pedido JÁ foi inserido na tabela `pedidos` por criarPedido() — fonte única.
+  // (Antes este insert duplicava o pedido com o mesmo id e colunas inexistentes,
+  //  falhando silenciosamente.) Aqui apenas emitimos um broadcast em tempo real
+  // para o ambulante/restaurante serem notificados na hora.
+  try {
+    const ch = supabase.channel('novos_pedidos')
+    await new Promise<void>((resolve) => {
+      ch.subscribe((status) => { if (status === 'SUBSCRIBED') resolve() })
+      setTimeout(resolve, 1500) // não trava o fluxo se o realtime demorar
+    })
+    await ch.send({ type: 'broadcast', event: 'novo_pedido', payload: order })
+    await supabase.removeChannel(ch)
+  } catch (e) {
+    console.warn('Broadcast do pedido falhou (não crítico):', e)
   }
-
   return order
 }

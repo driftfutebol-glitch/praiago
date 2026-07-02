@@ -129,7 +129,7 @@ export default function EventosPage() {
                 <Field label="Hora"><input value={form.hora} onChange={e => set('hora', e.target.value)} placeholder="20:00" className={inp} /></Field>
                 <Field label="Emoji"><input value={form.emoji} onChange={e => set('emoji', e.target.value)} placeholder="🎉" className={inp} /></Field>
                 <Field label="Categoria"><input value={form.categoria} onChange={e => set('categoria', e.target.value)} placeholder="Festa / Música / Esporte" className={inp} /></Field>
-                <Field label="Local (nome)" full><input value={form.local_nome} onChange={e => set('local_nome', e.target.value)} placeholder="Quiosque Maresias" className={inp} /></Field>
+                <Field label="Local (nome)" full><input value={form.local_nome} onChange={e => set('local_nome', e.target.value)} placeholder="Nome do local" className={inp} /></Field>
                 <Field label="Endereço" full><input value={form.endereco} onChange={e => set('endereco', e.target.value)} placeholder="Av. da Praia, 100" className={inp} /></Field>
                 <Field label="Latitude"><input value={form.lat} onChange={e => set('lat', e.target.value)} placeholder="-24.0060" className={inp} /></Field>
                 <Field label="Longitude"><input value={form.lng} onChange={e => set('lng', e.target.value)} placeholder="-46.4140" className={inp} /></Field>
@@ -154,7 +154,7 @@ export default function EventosPage() {
         <div className="glass-panel rounded-2xl p-12 text-center border-slate-800">
           <CalendarDays size={36} className="text-slate-700 mx-auto mb-3" />
           <p className="text-slate-400 font-bold">Nenhum evento cadastrado</p>
-          <p className="text-slate-600 text-sm">Crie o primeiro ou deixe o agente de automação preencher.</p>
+          <p className="text-slate-600 text-sm">Crie o primeiro evento — ele aparece na hora no app dos clientes.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

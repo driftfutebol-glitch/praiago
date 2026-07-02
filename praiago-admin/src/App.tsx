@@ -11,6 +11,7 @@ import VerificacoesPage from './pages/VerificacoesPage'
 import AtendimentoPage from './pages/AtendimentoPage'
 import ErrorsPage from './pages/ErrorsPage'
 import EventosPage from './pages/EventosPage'
+import CuponsPage from './pages/CuponsPage'
 import Sidebar from './components/Sidebar'
 
 function NotificationSystem() {
@@ -64,13 +65,37 @@ function NotificationSystem() {
 }
 
 export default function App() {
-  const [isAdmin, setIsAdmin] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(() => {
+    try {
+      return window.localStorage.getItem('praiago_admin_auth') === 'true'
+    } catch {
+      return false
+    }
+  })
+
+  function entrarAdmin() {
+    try {
+      window.localStorage.setItem('praiago_admin_auth', 'true')
+    } catch {
+      // Mantem a sessao em memoria quando o navegador bloqueia storage.
+    }
+    setIsAdmin(true)
+  }
+
+  function sairAdmin() {
+    try {
+      window.localStorage.removeItem('praiago_admin_auth')
+    } catch {
+      // Sem acao extra.
+    }
+    setIsAdmin(false)
+  }
 
   if (!isAdmin) {
     return (
       <BrowserRouter>
         <Routes>
-          <Route path="*" element={<LoginPage onLogin={() => setIsAdmin(true)} />} />
+          <Route path="*" element={<LoginPage onLogin={entrarAdmin} />} />
         </Routes>
       </BrowserRouter>
     )
@@ -79,7 +104,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <div className="flex h-screen overflow-hidden">
-        <Sidebar onLogout={() => setIsAdmin(false)} />
+        <Sidebar onLogout={sairAdmin} />
         <main className="flex-1 overflow-y-auto bg-slate-950 p-8 relative">
           <NotificationSystem />
           <Routes>
@@ -89,6 +114,7 @@ export default function App() {
             <Route path="/verificacoes" element={<VerificacoesPage />} />
             <Route path="/atendimento/:plataforma" element={<AtendimentoPage />} />
             <Route path="/eventos" element={<EventosPage />} />
+            <Route path="/cupons" element={<CuponsPage />} />
             <Route path="/erros" element={<ErrorsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

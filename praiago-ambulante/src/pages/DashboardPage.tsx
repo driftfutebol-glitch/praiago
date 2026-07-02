@@ -17,13 +17,13 @@ function AccuracyBar({ accuracy }: { accuracy: number }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', letterSpacing: 1 }}>PRECISÃO RADAR</span>
+        <span style={{ fontSize: 10, fontWeight: 800, color: '#64748b', letterSpacing: 1 }}>PRECISÃO RADAR</span>
         <span style={{ fontSize: 10, fontWeight: 800, color: cor }}>{label} · ±{Math.round(accuracy)}m</span>
       </div>
-      <div style={{ height: 6, background: 'rgba(255,255,255,0.05)', borderRadius: 10, overflow: 'hidden', display: 'flex', gap: 4 }}>
-        <motion.div initial={{ width: 0 }} animate={{ width: '100%' }} transition={{ duration: 0.5, delay: 0.1 }} style={{ flex: 1, background: accuracy < 120 ? cor : 'rgba(255,255,255,0.1)', borderRadius: 10 }} />
-        <motion.div initial={{ width: 0 }} animate={{ width: '100%' }} transition={{ duration: 0.5, delay: 0.2 }} style={{ flex: 1, background: accuracy <  80 ? cor : 'rgba(255,255,255,0.1)', borderRadius: 10 }} />
-        <motion.div initial={{ width: 0 }} animate={{ width: '100%' }} transition={{ duration: 0.5, delay: 0.3 }} style={{ flex: 1, background: accuracy <  25 ? cor : 'rgba(255,255,255,0.1)', borderRadius: 10 }} />
+      <div style={{ height: 6, background: 'rgba(0,0,0,0.05)', borderRadius: 10, overflow: 'hidden', display: 'flex', gap: 4 }}>
+        <motion.div initial={{ width: 0 }} animate={{ width: '100%' }} transition={{ duration: 0.5, delay: 0.1 }} style={{ flex: 1, background: accuracy < 120 ? cor : 'rgba(0,0,0,0.08)', borderRadius: 10 }} />
+        <motion.div initial={{ width: 0 }} animate={{ width: '100%' }} transition={{ duration: 0.5, delay: 0.2 }} style={{ flex: 1, background: accuracy <  80 ? cor : 'rgba(0,0,0,0.08)', borderRadius: 10 }} />
+        <motion.div initial={{ width: 0 }} animate={{ width: '100%' }} transition={{ duration: 0.5, delay: 0.3 }} style={{ flex: 1, background: accuracy <  25 ? cor : 'rgba(0,0,0,0.08)', borderRadius: 10 }} />
       </div>
     </div>
   )
@@ -73,8 +73,8 @@ export default function DashboardPage() {
       {/* ── Header gradient ──────────────────────────────────── */}
       <div style={{
         background: 'linear-gradient(135deg, rgba(14,165,233,0.2) 0%, rgba(34,197,94,0.2) 100%)',
-        padding: '32px 20px 80px', color: '#f8fafc', position: 'relative', overflow: 'hidden',
-        borderBottom: '1px solid rgba(255,255,255,0.05)'
+        padding: '32px 20px 80px', color: '#0f172a', position: 'relative', overflow: 'hidden',
+        borderBottom: '1px solid rgba(0,0,0,0.05)'
       }}>
         <div style={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, borderRadius: '50%', background: 'linear-gradient(135deg, rgba(14,165,233,0.3), rgba(34,197,94,0.3))', filter: 'blur(40px)' }} />
 
@@ -89,10 +89,10 @@ export default function DashboardPage() {
             </div>
           </motion.div>
           <motion.div initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} style={{ display: 'flex', gap: 10 }}>
-            <motion.button whileTap={{ scale: 0.9 }} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 16, width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backdropFilter: 'blur(10px)' }}>
+            <motion.button whileTap={{ scale: 0.9 }} style={{ background: 'rgba(0,0,0,0.08)', border: '1px solid rgba(0,0,0,0.05)', borderRadius: 16, width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backdropFilter: 'blur(10px)' }}>
               <Bell size={22} color="#fff" />
             </motion.button>
-            <motion.button whileTap={{ scale: 0.9 }} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 16, width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backdropFilter: 'blur(10px)' }}>
+            <motion.button whileTap={{ scale: 0.9 }} style={{ background: 'rgba(0,0,0,0.08)', border: '1px solid rgba(0,0,0,0.05)', borderRadius: 16, width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backdropFilter: 'blur(10px)' }}>
               <Settings size={22} color="#fff" />
             </motion.button>
           </motion.div>
@@ -118,24 +118,24 @@ export default function DashboardPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <div style={{
               width: 56, height: 56, borderRadius: 20,
-              background: online ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.05)',
+              background: online ? 'rgba(34,197,94,0.15)' : 'rgba(0,0,0,0.05)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              border: `1px solid ${online ? 'rgba(34,197,94,0.3)' : 'rgba(255,255,255,0.1)'}`,
+              border: `1px solid ${online ? 'rgba(34,197,94,0.3)' : 'rgba(0,0,0,0.08)'}`,
             }}>
               <ShoppingBag size={28} color={online ? '#4ade80' : '#64748b'} />
             </div>
             <div>
-              <div style={{ fontSize: 18, fontWeight: 900, color: '#f8fafc' }}>
-                Ponto {online ? <span style={{ color: '#4ade80' }}>Aberto</span> : <span style={{ color: '#94a3b8' }}>Fechado</span>}
+              <div style={{ fontSize: 18, fontWeight: 900, color: '#0f172a' }}>
+                Ponto {online ? <span style={{ color: '#4ade80' }}>Aberto</span> : <span style={{ color: '#64748b' }}>Fechado</span>}
               </div>
-              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4, fontWeight: 500 }}>
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 4, fontWeight: 500 }}>
                 {online ? 'Radar transmitindo aos clientes' : 'Você está invisível no mapa'}
               </div>
             </div>
           </div>
           <button onClick={() => setOnline(!online)} style={{
             width: 72, height: 40, borderRadius: 20,
-            background: online ? 'linear-gradient(135deg, #22c55e, #16a34a)' : 'rgba(255,255,255,0.1)',
+            background: online ? 'linear-gradient(135deg, #22c55e, #16a34a)' : 'rgba(0,0,0,0.08)',
             border: online ? 'none' : '1px solid rgba(255,255,255,0.2)', position: 'relative', cursor: 'pointer', transition: 'background 0.3s',
             boxShadow: online ? '0 4px 15px rgba(34,197,94,0.4)' : 'none'
           }}>
@@ -161,16 +161,16 @@ export default function DashboardPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
               <div className={online ? "neon-border" : ""} style={{
                 width: 52, height: 52, borderRadius: 18,
-                background: online ? 'rgba(34,197,94,0.1)' : status === 'error' ? 'rgba(239,68,68,0.1)' : 'rgba(255,255,255,0.05)',
+                background: online ? 'rgba(34,197,94,0.1)' : status === 'error' ? 'rgba(239,68,68,0.1)' : 'rgba(0,0,0,0.05)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
                 <MapPin size={24} color={online ? '#4ade80' : status === 'error' ? '#f87171' : '#64748b'} />
               </div>
               <div>
-                <div style={{ fontSize: 15, fontWeight: 900, color: '#f8fafc' }}>
+                <div style={{ fontSize: 15, fontWeight: 900, color: '#0f172a' }}>
                   {online ? 'Radar Ativo' : status === 'error' ? 'Radar Offline' : 'Iniciando Radar...'}
                 </div>
-                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4, fontWeight: 500 }}>
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 4, fontWeight: 500 }}>
                   {online
                     ? `${data?.lat.toFixed(5)}, ${data?.lng.toFixed(5)}`
                     : status === 'error' ? 'Verifique as permissões' : 'Aguardando sinal estável'}
@@ -220,8 +220,8 @@ export default function DashboardPage() {
                   <TrendingUp size={12} /> {change}
                 </div>
               </div>
-              <div style={{ fontSize: 24, fontWeight: 900, color: '#f8fafc' }}>{valor}</div>
-              <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4, fontWeight: 600 }}>{label}</div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: '#0f172a' }}>{valor}</div>
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 4, fontWeight: 600 }}>{label}</div>
             </motion.div>
           ))}
         </div>
@@ -231,14 +231,14 @@ export default function DashboardPage() {
           borderRadius: 24, padding: '20px',
           display: 'flex', alignItems: 'center', gap: 16, cursor: 'pointer'
         }} whileTap={{ scale: 0.98 }}>
-          <div style={{ width: 52, height: 52, borderRadius: 16, background: 'linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, border: '1px solid rgba(255,255,255,0.1)' }}>
+          <div style={{ width: 52, height: 52, borderRadius: 16, background: 'linear-gradient(135deg, rgba(0,0,0,0.08), rgba(0,0,0,0.05))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, border: '1px solid rgba(0,0,0,0.08)' }}>
             🛒
           </div>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 15, fontWeight: 800, color: '#fff' }}>Gerenciar Estoque</div>
-            <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4, fontWeight: 500 }}>0 itens online agora</div>
+            <div style={{ fontSize: 12, color: '#64748b', marginTop: 4, fontWeight: 500 }}>0 itens online agora</div>
           </div>
-          <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <ChevronRight size={20} color="#94a3b8" />
           </div>
         </motion.div>

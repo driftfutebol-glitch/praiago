@@ -38,3 +38,4 @@ google-services.json
 .DS_Store
 *.log
 npm-debug.log*
+.codex/

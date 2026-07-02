@@ -20,9 +20,9 @@ function TelaLogada() {
   const logout = useStore(s => s.logout)
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ minHeight: '100vh', background: '#0f172a', paddingBottom: 24 }}>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ minHeight: '100vh', background: '#ffffff', paddingBottom: 24 }}>
       <div style={{ background: 'linear-gradient(135deg, #0ea5e9 0%, #22c55e 100%)', padding: '32px 20px 48px', position: 'relative', overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, borderRadius: '50%', background: 'rgba(255,255,255,0.1)', filter: 'blur(30px)' }} />
+        <div style={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, borderRadius: '50%', background: 'rgba(0,0,0,0.08)', filter: 'blur(30px)' }} />
         
         <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} style={{ display: 'flex', alignItems: 'center', gap: 16, position: 'relative' }}>
           <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, border: '3px solid rgba(255,255,255,0.6)', boxShadow: '0 8px 32px rgba(0,0,0,0.2)', backdropFilter: 'blur(10px)' }}>👤</div>
@@ -43,23 +43,23 @@ function TelaLogada() {
             { icon: Package, label: 'Pedidos', value: String(pedidos.length), color: '#0ea5e9' },
             { icon: Star, label: 'Favoritos', value: String(favoritos.length), color: '#fbbf24' },
           ].map(({ icon: Icon, label, value, color }, i) => (
-            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: i * 0.1 }} key={label} className="glass-panel" style={{ borderRadius: 20, padding: 20, textAlign: 'center', border: '1px solid rgba(255,255,255,0.05)', boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}>
+            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: i * 0.1 }} key={label} className="glass-panel" style={{ borderRadius: 20, padding: 20, textAlign: 'center', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}>
               <Icon size={24} color={color} style={{ margin: '0 auto 12px' }} />
-              <div style={{ fontSize: 26, fontWeight: 900, color: '#f8fafc' }}>{value}</div>
-              <div style={{ fontSize: 13, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
+              <div style={{ fontSize: 26, fontWeight: 900, color: '#0f172a' }}>{value}</div>
+              <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
             </motion.div>
           ))}
         </div>
 
-        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }} className="glass-panel" style={{ borderRadius: 20, padding: '20px', border: '1px solid rgba(255,255,255,0.05)', marginBottom: 20, boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}>
-          <div style={{ fontSize: 13, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 16 }}>Pedidos Recentes</div>
+        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }} className="glass-panel" style={{ borderRadius: 20, padding: '20px', border: '1px solid rgba(0,0,0,0.05)', marginBottom: 20, boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 16 }}>Pedidos Recentes</div>
           {pedidos.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '30px 0', color: '#64748b', fontSize: 14, fontWeight: 500 }}>Você ainda não fez pedidos.</div>
           ) : pedidos.slice(0, 5).map((p, i) => (
-            <div key={p.id} style={{ paddingTop: i > 0 ? 16 : 0, marginTop: i > 0 ? 16 : 0, borderTop: i > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div key={p.id} style={{ paddingTop: i > 0 ? 16 : 0, marginTop: i > 0 ? 16 : 0, borderTop: i > 0 ? '1px solid rgba(0,0,0,0.05)' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <div style={{ fontSize: 15, fontWeight: 800, color: '#f8fafc' }}>{p.vendedorNome}</div>
-                <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4, fontWeight: 500 }}>{p.itens.map(it => `${it.qtd}x ${it.nome}`).join(', ')}</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>{p.vendedorNome}</div>
+                <div style={{ fontSize: 13, color: '#64748b', marginTop: 4, fontWeight: 500 }}>{p.itens.map(it => `${it.qtd}x ${it.nome}`).join(', ')}</div>
                 <div style={{ fontSize: 11, color: '#64748b', marginTop: 6, fontWeight: 600 }}>{fmtData(p.data)}</div>
               </div>
               <div style={{ textAlign: 'right' }}>
@@ -70,14 +70,14 @@ function TelaLogada() {
           ))}
         </motion.div>
 
-        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }} className="glass-panel" style={{ borderRadius: 20, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)', marginBottom: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}>
+        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }} className="glass-panel" style={{ borderRadius: 20, overflow: 'hidden', border: '1px solid rgba(0,0,0,0.05)', marginBottom: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}>
           {[
             { icon: Bell, label: 'Notificações', onClick: () => navigate('/') },
             { icon: HelpCircle, label: 'Ajuda e Suporte', onClick: () => alert('Suporte PraiaGo: (13) 99999-9999') },
           ].map(({ icon: Icon, label, onClick }, i) => (
-            <motion.button whileHover={{ background: 'rgba(255,255,255,0.05)' }} whileTap={{ scale: 0.98 }} key={label} onClick={onClick} style={{ width: '100%', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 16, padding: '18px 20px', borderTop: i > 0 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
+            <motion.button whileHover={{ background: 'rgba(0,0,0,0.05)' }} whileTap={{ scale: 0.98 }} key={label} onClick={onClick} style={{ width: '100%', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 16, padding: '18px 20px', borderTop: i > 0 ? '1px solid rgba(0,0,0,0.05)' : 'none' }}>
               <Icon size={20} color="#94a3b8" />
-              <span style={{ flex: 1, fontSize: 15, fontWeight: 700, color: '#f8fafc', textAlign: 'left' }}>{label}</span>
+              <span style={{ flex: 1, fontSize: 15, fontWeight: 700, color: '#0f172a', textAlign: 'left' }}>{label}</span>
               <ChevronRight size={18} color="#64748b" />
             </motion.button>
           ))}
@@ -172,7 +172,7 @@ export default function PerfilPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 24px' }}>
+    <div style={{ minHeight: '100vh', background: '#ffffff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 24px' }}>
       <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 40 }}>
         <div className="neon-border" style={{ width: 64, height: 64, borderRadius: 20, background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, boxShadow: '0 10px 25px rgba(34,197,94,0.4)' }}>🌴</div>
         <div>
@@ -181,13 +181,13 @@ export default function PerfilPage() {
         </div>
       </motion.div>
 
-      <motion.div initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }} className="glass-panel" style={{ borderRadius: 28, padding: 32, width: '100%', maxWidth: 400, border: '1px solid rgba(255,255,255,0.05)', boxShadow: '0 20px 40px rgba(0,0,0,0.5)' }}>
-        <div style={{ display: 'flex', background: '#020617', borderRadius: 16, padding: 6, marginBottom: 32, position: 'relative' }}>
+      <motion.div initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }} className="glass-panel" style={{ borderRadius: 28, padding: 32, width: '100%', maxWidth: 400, border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 20px 40px rgba(0,0,0,0.5)' }}>
+        <div style={{ display: 'flex', background: '#eef2f7', borderRadius: 16, padding: 6, marginBottom: 32, position: 'relative' }}>
           {(['entrar', 'cadastro'] as const).map(t => (
             <button key={t} onClick={() => { setTab(t); setErro('') }} style={{ flex: 1, padding: '12px 0', borderRadius: 12, border: 'none', fontSize: 15, fontWeight: 800, cursor: 'pointer', background: 'transparent', color: tab === t ? '#fff' : '#64748b', position: 'relative', zIndex: 2, transition: 'color 0.2s' }}>
               {t === 'entrar' ? 'Entrar' : 'Criar conta'}
               {tab === t && (
-                <motion.div layoutId="loginTab" style={{ position: 'absolute', inset: 0, background: '#1e293b', borderRadius: 12, zIndex: -1, boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }} />
+                <motion.div layoutId="loginTab" style={{ position: 'absolute', inset: 0, background: '#f8fafc', borderRadius: 12, zIndex: -1, boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }} />
               )}
             </button>
           ))}
@@ -197,18 +197,18 @@ export default function PerfilPage() {
           <AnimatePresence mode="popLayout">
             {tab === 'cadastro' && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }}>
-                <label htmlFor="cli-nome" style={{ fontSize: 13, fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Nome Completo</label>
+                <label htmlFor="cli-nome" style={{ fontSize: 13, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Nome Completo</label>
                 <input id="cli-nome" value={nome} onChange={e => setNome(e.target.value)} placeholder="Como gosta de ser chamado" style={inputStyle} />
               </motion.div>
             )}
           </AnimatePresence>
 
           <div>
-            <label htmlFor="cli-email" style={{ fontSize: 13, fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>E-mail</label>
+            <label htmlFor="cli-email" style={{ fontSize: 13, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>E-mail</label>
             <input id="cli-email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="voce@exemplo.com" style={inputStyle} />
           </div>
           <div>
-            <label htmlFor="cli-senha" style={{ fontSize: 13, fontWeight: 700, color: '#94a3b8', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Senha</label>
+            <label htmlFor="cli-senha" style={{ fontSize: 13, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Senha</label>
             <div style={{ position: 'relative' }}>
               <input id="cli-senha" type={verSenha ? 'text' : 'password'} value={senha} onChange={e => setSenha(e.target.value)} onKeyDown={e => e.key === 'Enter' && entrar()} placeholder="••••••••" style={{ ...inputStyle, padding: '16px 48px 16px 18px' }} />
               <button aria-label={verSenha ? 'Ocultar senha' : 'Mostrar senha'} onClick={() => setVerSenha(!verSenha)} style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}>
@@ -237,7 +237,7 @@ export default function PerfilPage() {
 
 const inputStyle: React.CSSProperties = {
   width: '100%', padding: '16px 18px', borderRadius: 14,
-  border: '1px solid rgba(255,255,255,0.1)', fontSize: 15, outline: 'none',
-  color: '#f8fafc', background: '#020617', boxSizing: 'border-box',
+  border: '1px solid rgba(0,0,0,0.08)', fontSize: 15, outline: 'none',
+  color: '#0f172a', background: '#eef2f7', boxSizing: 'border-box',
   transition: 'border-color 0.2s', fontWeight: 500,
 }

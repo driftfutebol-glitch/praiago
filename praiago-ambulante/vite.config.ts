@@ -4,9 +4,11 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  server: { 
-    port: 5175, 
+  server: {
+    port: 5175,
     strictPort: true,
+    host: true,
+    allowedHosts: true,
     proxy: {
       '/api/ai': {
         target: 'https://api.blackbox.ai',

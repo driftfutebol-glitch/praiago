@@ -32,7 +32,7 @@ const ICONS = {
 // Fallback em terra (orla de Praia Grande) — usado só se o GPS for negado.
 const REST_POS: [number, number] = [-24.0100, -46.4150]
 
-type Agente = {
+type Operador = {
   id: string; tipo: 'entregador' | 'ambulante'
   nome: string; pos: [number, number]
   clientePos?: [number, number]
@@ -47,7 +47,7 @@ function FlyTo({ center, zoom }: { center: [number,number]; zoom: number }) {
 }
 
 export default function MapaPage() {
-  const [agentes,    setAgentes]    = useState<Agente[]>([])
+  const [operadores, setOperadores] = useState<Operador[]>([])
   const [heatData,   setHeatData]   = useState<ZoneHeat[]>([])
   const [selId,      setSelId]      = useState<string | null>(null)
   const [camadas,    setCamadas]    = useState({ zonas: true, rotas: true, ambulantes: true, heatmap: true })
@@ -71,7 +71,7 @@ export default function MapaPage() {
 
   // Escuta GPS real via Supabase (Realtime) e Broadcast
   useEffect(() => {
-    // 1. Ouvir BroadcastChannel para testes locais e simulados parciais
+    // 1. Ouvir BroadcastChannel para testes locais de desenvolvimento
     const channels = [
       new BroadcastChannel('praiago:entregador:gps'),
       new BroadcastChannel('praiago:ambulante:gps'),
@@ -79,22 +79,22 @@ export default function MapaPage() {
 
     channels.forEach(ch => {
       ch.onmessage = (e) => {
-        const ag: Agente = {
+        const operador: Operador = {
           id: e.data.id || String(Math.random()),
-          nome: e.data.nome || 'Agente',
+          nome: e.data.nome || 'Equipe',
           tipo: e.data.emoji === '🥥' ? 'ambulante' : 'entregador',
           pos: [e.data.lat, e.data.lng],
           status: e.data.aberto ? 'Online' : 'Trabalhando',
           zona: e.data.zona || 'Desconhecida'
         }
-        setAgentes(prev => {
-          const idx = prev.findIndex(a => a.id === ag.id)
+        setOperadores(prev => {
+          const idx = prev.findIndex(a => a.id === operador.id)
           if (idx >= 0) {
             const copy = [...prev]
-            copy[idx] = ag
+            copy[idx] = operador
             return copy
           }
-          return [...prev, ag]
+          return [...prev, operador]
         })
       }
     })
@@ -130,7 +130,7 @@ export default function MapaPage() {
         filter: invert(100%) hue-rotate(180deg) brightness(85%) contrast(100%);
       }
       .leaflet-popup-content-wrapper, .leaflet-popup-tip {
-        background: rgba(15, 23, 42, 0.95);
+        background: rgba(255,255,255,0.95);
         color: #f8fafc;
         border: 1px solid rgba(249,115,22,0.3);
         backdrop-filter: blur(10px);
@@ -145,20 +145,20 @@ export default function MapaPage() {
     <div style={{ display: 'flex', height: '100vh', flexDirection: 'column' }}>
 
       {/* ── Top bar ─────────────────────────────────────────── */}
-      <div style={{ padding: '20px 32px', background: 'rgba(15,23,42,0.8)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(255,255,255,0.05)', flexShrink: 0, zIndex: 10 }}>
+      <div style={{ padding: '20px 32px', background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(0,0,0,0.05)', flexShrink: 0, zIndex: 10 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <h1 style={{ fontSize: 24, fontWeight: 900, color: '#f8fafc', margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <h1 style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
               <Navigation size={24} color="#f97316" /> Radar Tático Ao Vivo
             </h1>
-            <p style={{ fontSize: 13, color: '#94a3b8', margin: '4px 0 0', fontWeight: 500 }}>
-              Monitoramento via satélite · Controle de Entregas & Ambulantes
+            <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 0', fontWeight: 500 }}>
+              Acompanhe entregas e ambulantes em tempo real
             </p>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             {/* Tab cidade/praia/tudo */}
-            <div style={{ display: 'flex', background: 'rgba(255,255,255,0.05)', borderRadius: 16, padding: 4, border: '1px solid rgba(255,255,255,0.1)' }}>
+            <div style={{ display: 'flex', background: 'rgba(0,0,0,0.05)', borderRadius: 16, padding: 4, border: '1px solid rgba(0,0,0,0.08)' }}>
               {(['tudo','cidade','praia'] as const).map(t => (
                 <button key={t} onClick={() => {
                   setTabMapa(t)
@@ -182,7 +182,7 @@ export default function MapaPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(34,197,94,0.1)', padding: '10px 18px', borderRadius: 16, border: '1px solid rgba(34,197,94,0.2)' }}>
               <div className="animate-pulse-neon" style={{ width: 8, height: 8, borderRadius: '50%', background: '#4ade80', boxShadow: '0 0 10px #4ade80' }} />
               <span style={{ fontSize: 13, color: '#4ade80', fontWeight: 800, letterSpacing: 0.5 }}>
-                {agentes.length} AGENTES NO CAMPO
+                {operadores.length} NA RUA AGORA
               </span>
             </div>
           </div>
@@ -192,7 +192,7 @@ export default function MapaPage() {
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
         {/* ── Sidebar esquerda ──────────────────────────────── */}
-        <div className="glass-panel" style={{ width: 340, borderRight: '1px solid rgba(255,255,255,0.05)', overflowY: 'auto', flexShrink: 0, display: 'flex', flexDirection: 'column', zIndex: 10 }}>
+        <div className="glass-panel" style={{ width: 340, borderRight: '1px solid rgba(0,0,0,0.05)', overflowY: 'auto', flexShrink: 0, display: 'flex', flexDirection: 'column', zIndex: 10 }}>
 
           {/* Heatmap das zonas */}
           <div style={{ padding: '24px 24px 16px' }}>
@@ -201,7 +201,7 @@ export default function MapaPage() {
             </div>
 
             {heatData.length === 0 ? (
-              <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: 12, background: 'rgba(255,255,255,0.02)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.05)' }}>
+              <div style={{ padding: '20px', textAlign: 'center', color: '#64748b', fontSize: 12, background: 'rgba(255,255,255,0.02)', borderRadius: 12, border: '1px solid rgba(0,0,0,0.05)' }}>
                 Nenhum dado térmico no momento.
                 <br/>Aguardando atividade nas zonas.
               </div>
@@ -231,10 +231,10 @@ export default function MapaPage() {
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 800, marginBottom: 6 }}>
-                        <span style={{ color: '#f8fafc' }}>{zone.nome}</span>
+                        <span style={{ color: '#0f172a' }}>{zone.nome}</span>
                         <span style={{ color: cfg.cor, fontSize: 11, textShadow: `0 0 10px ${cfg.cor}50` }}>{cfg.emoji} {h.pedidosHora}/h</span>
                       </div>
-                      <div style={{ height: 6, background: 'rgba(255,255,255,0.05)', borderRadius: 10, overflow: 'hidden' }}>
+                      <div style={{ height: 6, background: 'rgba(0,0,0,0.05)', borderRadius: 10, overflow: 'hidden' }}>
                         <div style={{ height: '100%', width: `${h.score * 100}%`, background: cfg.cor, borderRadius: 10, transition: 'width 1s', boxShadow: `0 0 10px ${cfg.cor}` }} />
                       </div>
                     </div>
@@ -244,21 +244,21 @@ export default function MapaPage() {
             )}
           </div>
 
-          <div style={{ height: 1, background: 'rgba(255,255,255,0.05)', margin: '4px 24px' }} />
+          <div style={{ height: 1, background: 'rgba(0,0,0,0.05)', margin: '4px 24px' }} />
 
-          {/* Lista de agentes */}
+          {/* Lista da equipe em campo */}
           <div style={{ padding: '20px 24px 8px' }}>
             <div style={{ fontSize: 11, fontWeight: 900, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 12 }}>
-              🛵 AGENTES NO CAMPO
+              🛵 EQUIPE NA RUA
             </div>
-            {agentes.length === 0 && (
-              <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: 12, background: 'rgba(255,255,255,0.02)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.05)' }}>
-                Nenhum agente enviando GPS no momento.
+            {operadores.length === 0 && (
+              <div style={{ padding: '20px', textAlign: 'center', color: '#64748b', fontSize: 12, background: 'rgba(255,255,255,0.02)', borderRadius: 12, border: '1px solid rgba(0,0,0,0.05)' }}>
+                Nenhum entregador ou ambulante enviando GPS no momento.
               </div>
             )}
           </div>
 
-          {agentes.map(a => (
+          {operadores.map(a => (
             <button key={a.id} onClick={() => {
               setSelId(a.id)
               setMapCenter(a.pos)
@@ -272,12 +272,12 @@ export default function MapaPage() {
               transition: 'all 0.2s',
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <div style={{ width: 44, height: 44, borderRadius: 14, background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, border: '1px solid rgba(255,255,255,0.05)' }}>
+                <div style={{ width: 44, height: 44, borderRadius: 14, background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, border: '1px solid rgba(0,0,0,0.05)' }}>
                   {a.tipo === 'entregador' ? '🛵' : '🥥'}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 800, color: '#f8fafc' }}>{a.nome}</div>
-                  <div style={{ fontSize: 12, color: '#cbd5e1', marginTop: 4, fontWeight: 500 }}>{a.status}</div>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>{a.nome}</div>
+                  <div style={{ fontSize: 12, color: '#334155', marginTop: 4, fontWeight: 500 }}>{a.status}</div>
                   <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
                     <MapPin size={12} /> {a.zona}
                   </div>
@@ -287,7 +287,7 @@ export default function MapaPage() {
           ))}
 
           {/* Camadas */}
-          <div style={{ padding: '24px', marginTop: 'auto', borderTop: '1px solid rgba(255,255,255,0.05)', background: 'rgba(0,0,0,0.2)' }}>
+          <div style={{ padding: '24px', marginTop: 'auto', borderTop: '1px solid rgba(0,0,0,0.05)', background: 'rgba(0,0,0,0.2)' }}>
             <div style={{ fontSize: 11, fontWeight: 900, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
               <Layers size={14} /> CAMADAS
             </div>
@@ -300,10 +300,10 @@ export default function MapaPage() {
               }
               return (
                 <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                  <span style={{ fontSize: 13, color: '#94a3b8', fontWeight: 600 }}>{labels[key]}</span>
+                  <span style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>{labels[key]}</span>
                   <button onClick={() => setCamadas(c => ({ ...c, [key]: !val }))} style={{
                     width: 44, height: 24, borderRadius: 12, border: 'none',
-                    background: val ? '#f97316' : 'rgba(255,255,255,0.1)', position: 'relative', cursor: 'pointer',
+                    background: val ? '#f97316' : 'rgba(0,0,0,0.08)', position: 'relative', cursor: 'pointer',
                     boxShadow: val ? '0 0 10px rgba(249,115,22,0.4)' : 'inset 0 2px 4px rgba(0,0,0,0.3)'
                   }}>
                     <div style={{
@@ -322,7 +322,7 @@ export default function MapaPage() {
         <div style={{ flex: 1, position: 'relative' }}>
           <MapContainer
             center={PRAIA_GRANDE_CENTER} zoom={12}
-            style={{ height: '100%', width: '100%', background: '#0f172a' }}
+            style={{ height: '100%', width: '100%', background: '#ffffff' }}
             zoomControl={true}
           >
             <FlyTo center={mapCenter} zoom={mapZoom} />
@@ -353,14 +353,14 @@ export default function MapaPage() {
                     <div style={{ minWidth: 160 }}>
                       <b style={{ fontSize: 14 }}>{zone.emoji} {zone.nome}</b>
                       <br />
-                      <span style={{ fontSize: 11, color: '#94a3b8', textTransform: 'capitalize' }}>{zone.tipo}</span>
+                      <span style={{ fontSize: 11, color: '#64748b', textTransform: 'capitalize' }}>{zone.tipo}</span>
                       {heat && (
-                        <div style={{ marginTop: 10, background: 'rgba(255,255,255,0.05)', padding: 10, borderRadius: 8 }}>
+                        <div style={{ marginTop: 10, background: 'rgba(0,0,0,0.05)', padding: 10, borderRadius: 8 }}>
                           <span style={{ fontSize: 12, fontWeight: 800, color: cfg!.cor }}>
                             {cfg!.emoji} {cfg!.label.toUpperCase()}
                           </span>
                           <br />
-                          <span style={{ fontSize: 12, color: '#cbd5e1', display: 'block', marginTop: 4 }}>⚡ {heat.pedidosHora} pedidos/h</span>
+                          <span style={{ fontSize: 12, color: '#334155', display: 'block', marginTop: 4 }}>⚡ {heat.pedidosHora} pedidos/h</span>
                         </div>
                       )}
                     </div>
@@ -373,25 +373,25 @@ export default function MapaPage() {
             <Marker position={restPos} icon={ICONS.restaurante}>
               <Popup>
                 <b>🍽️ Seu restaurante</b><br />
-                <span style={{ fontSize: 11, color: '#94a3b8' }}>Sua localização atual (GPS)</span>
+                <span style={{ fontSize: 11, color: '#64748b' }}>Sua localização atual (GPS)</span>
               </Popup>
             </Marker>
 
             {/* ── Entregadores + rotas ──────────────────── */}
-            {agentes.filter(a => a.tipo === 'entregador').map(a => {
+            {operadores.filter(a => a.tipo === 'entregador').map(a => {
               const isSel = a.id === selId
               return (
                 <Fragment key={a.id}>
                   <Marker position={a.pos} icon={ICONS.entregador}>
                     <Popup>
                       <b>🛵 {a.nome}</b><br />
-                      <span style={{ fontSize: 12, color: '#cbd5e1' }}>{a.status}</span>
+                      <span style={{ fontSize: 12, color: '#334155' }}>{a.status}</span>
                     </Popup>
                   </Marker>
 
                   {a.clientePos && (
                     <Marker position={a.clientePos} icon={ICONS.cliente}>
-                      <Popup><b>📍 Cliente (Destino)</b><br /><span style={{color: '#94a3b8'}}>Em andamento</span></Popup>
+                      <Popup><b>📍 Cliente (Destino)</b><br /><span style={{color: '#64748b'}}>Em andamento</span></Popup>
                     </Marker>
                   )}
 
@@ -408,12 +408,12 @@ export default function MapaPage() {
             })}
 
             {/* ── Ambulantes ────────────────────────────── */}
-            {camadas.ambulantes && agentes.filter(a => a.tipo === 'ambulante').map(a => (
+            {camadas.ambulantes && operadores.filter(a => a.tipo === 'ambulante').map(a => (
               <Fragment key={a.id}>
                 <Marker position={a.pos} icon={ICONS.ambulante}>
                   <Popup>
                     <b>🥥 {a.nome}</b><br />
-                    <span style={{ fontSize: 12, color: '#cbd5e1' }}>{a.status}</span><br />
+                    <span style={{ fontSize: 12, color: '#334155' }}>{a.status}</span><br />
                     <span style={{ fontSize: 11, color: '#a855f7' }}>📍 {a.zona}</span>
                   </Popup>
                 </Marker>
@@ -426,11 +426,11 @@ export default function MapaPage() {
           {/* ── Legenda flutuante ─────────────────────────── */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} style={{
             position: 'absolute', bottom: 24, right: 24, zIndex: 999,
-            background: 'rgba(15,23,42,0.95)', backdropFilter: 'blur(12px)', borderRadius: 20, padding: '20px',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)',
+            background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(12px)', borderRadius: 20, padding: '20px',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.4)', border: '1px solid rgba(0,0,0,0.08)',
             minWidth: 220,
           }}>
-            <div style={{ fontSize: 11, fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 14 }}>
+            <div style={{ fontSize: 11, fontWeight: 900, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 14 }}>
               LEGENDA TÁTICA
             </div>
             {[
@@ -439,7 +439,7 @@ export default function MapaPage() {
               { e: '🥥', l: 'Ambulante parceiro' },
               { e: '📍', l: 'Cliente (Destino)' },
             ].map(({ e, l }) => (
-              <div key={l} style={{ display: 'flex', gap: 12, marginBottom: 8, alignItems: 'center', fontSize: 13, color: '#cbd5e1', fontWeight: 500 }}>
+              <div key={l} style={{ display: 'flex', gap: 12, marginBottom: 8, alignItems: 'center', fontSize: 13, color: '#334155', fontWeight: 500 }}>
                 <span style={{ width: 24, textAlign: 'center', fontSize: 16 }}>{e}</span> {l}
               </div>
             ))}
@@ -449,3 +449,4 @@ export default function MapaPage() {
     </div>
   )
 }
+

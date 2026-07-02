@@ -45,7 +45,7 @@ export default function App() {
   // Recebe pedidos do cliente em tempo real (uma vez)
   useEffect(() => { connectRealtime() }, [])
 
-  // Notificações: pedidos novos reais + alertas do agente
+  // Notificacoes: pedidos novos reais + alertas operacionais
   const notifs = [
     ...pedidosNovos.slice(0, 3).map(p => ({ id: p.id, msg: `Novo pedido ${p.id} — ${p.cliente}`, time: p.hora, cor: '#f97316' })),
     ...NOTIFS,
@@ -63,16 +63,16 @@ export default function App() {
       {!isPublic && (
         <aside style={{
           width: 256,
-          background: 'rgba(15, 23, 42, 0.8)',
+          background: 'rgba(255,255,255,0.92)',
           backdropFilter: 'blur(20px)',
           display: 'flex', flexDirection: 'column',
           position: 'fixed', top: 0, left: 0, bottom: 0, zIndex: 40,
-          borderRight: '1px solid rgba(255, 255, 255, 0.05)',
+          borderRight: '1px solid rgba(0,0,0,0.05)',
           boxShadow: '4px 0 24px rgba(0,0,0,0.4)',
         }}>
 
           {/* Logo + status */}
-          <div style={{ padding: '24px 20px 20px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+          <div style={{ padding: '24px 20px 20px', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
               <motion.svg initial={{ scale: 0.8, rotate: -10 }} animate={{ scale: 1, rotate: 0 }} width="44" height="44" viewBox="0 0 34 34" fill="none">
                 <rect width="34" height="34" rx="12" fill="url(#app-rest-g)"/>
@@ -88,7 +88,7 @@ export default function App() {
               </motion.svg>
               <div>
                 <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: -0.5, lineHeight: 1 }}>
-                  <span style={{ color: '#f97316', textShadow: '0 0 15px rgba(249,115,22,0.6)' }}>Praia</span><span style={{ color: '#f8fafc' }}>Go</span>
+                  <span style={{ color: '#f97316', textShadow: '0 0 15px rgba(249,115,22,0.6)' }}>Praia</span><span style={{ color: '#0f172a' }}>Go</span>
                 </div>
                 <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 2.5, color: '#f97316', textTransform: 'uppercase', marginTop: 4 }}>
                   Restaurante
@@ -100,7 +100,7 @@ export default function App() {
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               background: aberto ? 'rgba(34,197,94,0.1)' : 'rgba(255,255,255,0.03)',
-              border: `1px solid ${aberto ? 'rgba(34,197,94,0.3)' : 'rgba(255,255,255,0.05)'}`,
+              border: `1px solid ${aberto ? 'rgba(34,197,94,0.3)' : 'rgba(0,0,0,0.05)'}`,
               borderRadius: 14, padding: '12px 16px',
               transition: 'all 0.3s ease'
             }}>
@@ -160,9 +160,9 @@ export default function App() {
               )
             })}
 
-            {/* Bloco IA */}
+            {/* Radar da praia */}
             <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.5, color: '#64748b', textTransform: 'uppercase', margin: '24px 0 12px', paddingLeft: 10 }}>
-              Agente IA
+              Radar da Praia
             </p>
             <div className="glass-panel" style={{
               background: 'linear-gradient(135deg, rgba(168,85,247,0.1), rgba(139,92,246,0.05))',
@@ -175,23 +175,23 @@ export default function App() {
                 <span style={{ fontSize: 12, fontWeight: 900, color: '#c084fc', letterSpacing: 0.5, textTransform: 'uppercase' }}>Radar Ativo</span>
                 <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#a855f7', marginLeft: 'auto', boxShadow: '0 0 10px #c084fc' }} className="animate-pulse-neon" />
               </div>
-              <p style={{ fontSize: 13, color: '#e9d5ff', lineHeight: 1.5, marginBottom: 10, fontWeight: 500, position: 'relative', zIndex: 1 }}>
-                Zona Boqueirão explosiva — envie +1 entregador agora!
+              <p style={{ fontSize: 13, color: '#7e22ce', lineHeight: 1.5, marginBottom: 10, fontWeight: 500, position: 'relative', zIndex: 1 }}>
+                Acompanhe o movimento das zonas da praia no mapa.
               </p>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, position: 'relative', zIndex: 1 }}>
                 <TrendingUp size={14} color="#a855f7" />
-                <span style={{ fontSize: 11, color: '#c084fc', fontWeight: 800 }}>PICO PREVISTO: 15h</span>
+                <span style={{ fontSize: 11, color: '#9333ea', fontWeight: 800 }}>ATUALIZAÇÃO EM TEMPO REAL</span>
               </div>
             </div>
           </nav>
 
           {/* Rodapé */}
-          <div style={{ padding: '16px', borderTop: '1px solid rgba(255,255,255,0.05)', position: 'relative' }}>
+          <div style={{ padding: '16px', borderTop: '1px solid rgba(0,0,0,0.05)', position: 'relative' }}>
             <button onClick={() => setNotifOpen(v => !v)} style={{
               width: '100%', display: 'flex', alignItems: 'center', gap: 12,
-              padding: '12px 16px', borderRadius: 14, border: '1px solid rgba(255,255,255,0.05)',
+              padding: '12px 16px', borderRadius: 14, border: '1px solid rgba(0,0,0,0.05)',
               background: 'rgba(255,255,255,0.02)', cursor: 'pointer',
-              color: '#cbd5e1', fontSize: 14, fontWeight: 700, marginBottom: 8,
+              color: '#334155', fontSize: 14, fontWeight: 700, marginBottom: 8,
               transition: 'background 0.2s'
             }}>
               <Bell size={18} />
@@ -203,17 +203,17 @@ export default function App() {
               {notifOpen && (
                 <motion.div initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }} style={{
                   position: 'absolute', bottom: 100, left: 16, width: 232,
-                  background: 'rgba(15,23,42,0.95)', backdropFilter: 'blur(16px)', borderRadius: 16, border: '1px solid rgba(255,255,255,0.1)',
+                  background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(16px)', borderRadius: 16, border: '1px solid rgba(0,0,0,0.08)',
                   boxShadow: '0 20px 40px rgba(0,0,0,0.5)', overflow: 'hidden', zIndex: 100,
                 }}>
-                  <div style={{ padding: '14px 16px', borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.02)' }}>
-                    <span style={{ fontSize: 13, fontWeight: 800, color: '#f8fafc', textTransform: 'uppercase', letterSpacing: 0.5 }}>Alertas Satélite</span>
+                  <div style={{ padding: '14px 16px', borderBottom: '1px solid rgba(0,0,0,0.05)', background: 'rgba(255,255,255,0.02)' }}>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', textTransform: 'uppercase', letterSpacing: 0.5 }}>Notificações</span>
                   </div>
                   {notifs.map(n => (
                     <div key={n.id} style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.02)', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
                       <div style={{ width: 8, height: 8, borderRadius: '50%', background: n.cor, flexShrink: 0, marginTop: 4, boxShadow: `0 0 8px ${n.cor}` }} />
                       <div>
-                        <div style={{ fontSize: 12, color: '#f1f5f9', lineHeight: 1.4, fontWeight: 500 }}>{n.msg}</div>
+                        <div style={{ fontSize: 12, color: '#0f172a', lineHeight: 1.4, fontWeight: 500 }}>{n.msg}</div>
                         <div style={{ fontSize: 10, color: '#64748b', marginTop: 4, fontWeight: 700 }}>{n.time} atrás</div>
                       </div>
                     </div>
@@ -225,7 +225,7 @@ export default function App() {
             <button onClick={sair} style={{
               width: '100%', display: 'flex', alignItems: 'center', gap: 12,
               padding: '12px 16px', borderRadius: 14, border: 'none',
-              background: 'transparent', cursor: 'pointer', color: '#94a3b8', fontSize: 13, fontWeight: 700,
+              background: 'transparent', cursor: 'pointer', color: '#64748b', fontSize: 13, fontWeight: 700,
               transition: 'color 0.2s'
             }} onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'} onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}>
               <LogOut size={16} /> Desconectar Terminal
@@ -240,14 +240,14 @@ export default function App() {
           {!isPublic && (
             <motion.div initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} style={{
               position: 'sticky', top: 0, zIndex: 30,
-              background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(16px)',
-              borderBottom: '1px solid rgba(255, 255, 255, 0.05)', padding: '14px 32px',
+              background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(16px)',
+              borderBottom: '1px solid rgba(0,0,0,0.05)', padding: '14px 32px',
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <div className="animate-pulse-neon" style={{ width: 8, height: 8, borderRadius: '50%', background: '#4ade80', boxShadow: '0 0 10px #4ade80' }} />
-                <span style={{ fontSize: 13, color: '#cbd5e1', fontWeight: 600 }}>GPS Engine ativo · <span style={{ color: '#f8fafc', fontWeight: 800 }}>2 entregadores online</span></span>
+                <span style={{ fontSize: 13, color: '#334155', fontWeight: 600 }}>Localizacao ativa · <span style={{ color: '#0f172a', fontWeight: 800 }}>2 entregadores online</span></span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(34,197,94,0.1)', padding: '6px 12px', borderRadius: 20, border: '1px solid rgba(34,197,94,0.2)' }}>
                 <Wifi size={14} color="#4ade80" />

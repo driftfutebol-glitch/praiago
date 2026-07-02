@@ -4,7 +4,15 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { supabase } from '../lib/supabase'
-import { getVendedor, getProduto } from '../lib/catalogo'
+import { useCatalogo } from './useCatalogo'
+
+// Lookups usam o catálogo REAL (banco) via useCatalogo, não mais o estático.
+function getVendedor(id: string | null | undefined) {
+  return id ? useCatalogo.getState().getVendedor(id) : undefined
+}
+function getProduto(vendedorId: string, produtoId: string) {
+  return getVendedor(vendedorId)?.produtos.find(p => p.id === produtoId)
+}
 
 export type Sessao = {
   id: string
@@ -136,7 +144,12 @@ export const useStore = create<State>()(
         // Insere no banco
         const { data: inserted, error } = await supabase.from('pedidos').insert({
           cliente_nome: sessao?.nome || 'Anônimo',
-          zona: entrega?.reta ? `Reta ${entrega.reta} - Barraca ${entrega.barraca || 'Sem Barraca'}` : 'Desconhecida',
+          cliente_id: sessao?.id ?? null,
+          vendedor_id: vend.id,
+          vendedor_nome: vend.nome,
+          zona: entrega?.reta ? `Reta ${entrega.reta} - Barraca ${entrega.barraca || 'Sem Barraca'}` : (vend.zona || 'Desconhecida'),
+          reta: entrega?.reta ?? null,
+          barraca: entrega?.barraca ?? null,
           itens: itens.map(i => `${i.qtd}x ${i.nome}`),
           total: total,
           status: 'novo',

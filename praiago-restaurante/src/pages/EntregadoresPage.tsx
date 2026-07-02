@@ -33,11 +33,11 @@ const veiculoConfig: Record<Veiculo, { icon: typeof Bike; label: string; emoji: 
 const statusConfig: Record<StatusEntregador, { label: string; bg: string; color: string; border: string }> = {
   disponivel: { label: 'Disponível', bg: 'rgba(34,197,94,0.15)', color: '#4ade80', border: 'rgba(34,197,94,0.3)' },
   em_entrega: { label: 'Em entrega', bg: 'rgba(14,165,233,0.15)', color: '#38bdf8', border: 'rgba(14,165,233,0.3)' },
-  offline: { label: 'Offline', bg: 'rgba(255,255,255,0.05)', color: '#94a3b8', border: 'rgba(255,255,255,0.1)' },
+  offline: { label: 'Offline', bg: 'rgba(0,0,0,0.05)', color: '#64748b', border: 'rgba(0,0,0,0.08)' },
 }
 
 const verifBadge: Record<VerifStatus, { label: string; bg: string; color: string; border: string; icon: typeof CheckCircle }> = {
-  nao_verificado: { label: 'Não Verificado', bg: 'rgba(255,255,255,0.05)', color: '#94a3b8', border: 'rgba(255,255,255,0.1)', icon: Shield },
+  nao_verificado: { label: 'Não Verificado', bg: 'rgba(0,0,0,0.05)', color: '#64748b', border: 'rgba(0,0,0,0.08)', icon: Shield },
   pendente: { label: 'Verificando', bg: 'rgba(245,158,11,0.15)', color: '#fbbf24', border: 'rgba(245,158,11,0.3)', icon: Clock },
   aprovado: { label: 'Verificado', bg: 'rgba(34,197,94,0.15)', color: '#4ade80', border: 'rgba(34,197,94,0.3)', icon: CheckCircle },
   rejeitado: { label: 'Rejeitado', bg: 'rgba(239,68,68,0.15)', color: '#f87171', border: 'rgba(239,68,68,0.3)', icon: XCircle },
@@ -152,7 +152,7 @@ function VerificationModal({ entregador, restaurante_id, onClose }: {
           ) : (
             <>
               <Upload size={24} color="#64748b" />
-              <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>{label}</span>
+              <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>{label}</span>
             </>
           )}
         </motion.button>
@@ -161,7 +161,7 @@ function VerificationModal({ entregador, restaurante_id, onClose }: {
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.85)', backdropFilter: 'blur(10px)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(10px)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <motion.div
         initial={{ opacity: 0, scale: 0.9, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -172,12 +172,12 @@ function VerificationModal({ entregador, restaurante_id, onClose }: {
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <div>
-            <h2 style={{ fontSize: 20, fontWeight: 900, color: '#f8fafc', margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <h2 style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
               <Shield size={22} color="#f97316" /> Verificar Entregador
             </h2>
-            <p style={{ fontSize: 13, color: '#94a3b8', margin: '4px 0 0' }}>{entregador.nome} — {entregador.cpf}</p>
+            <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 0' }}>{entregador.nome} — {entregador.cpf}</p>
           </div>
-          <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={onClose} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: 8, cursor: 'pointer' }}>
+          <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={onClose} style={{ background: 'rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 12, padding: 8, cursor: 'pointer' }}>
             <X size={20} color="#cbd5e1" />
           </motion.button>
         </div>
@@ -193,7 +193,7 @@ function VerificationModal({ entregador, restaurante_id, onClose }: {
                 flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
                 padding: '10px 8px', borderRadius: 14,
                 background: isActive ? 'rgba(249,115,22,0.15)' : done ? 'rgba(34,197,94,0.08)' : 'rgba(255,255,255,0.03)',
-                border: `1px solid ${isActive ? 'rgba(249,115,22,0.4)' : done ? 'rgba(34,197,94,0.2)' : 'rgba(255,255,255,0.08)'}`,
+                border: `1px solid ${isActive ? 'rgba(249,115,22,0.4)' : done ? 'rgba(34,197,94,0.2)' : 'rgba(0,0,0,0.06)'}`,
                 color: isActive ? '#f97316' : done ? '#4ade80' : '#64748b',
                 cursor: 'pointer', fontSize: 10, fontWeight: 700,
               }}>
@@ -210,8 +210,8 @@ function VerificationModal({ entregador, restaurante_id, onClose }: {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
               {(() => { const Icon = steps[activeStep].icon; return <Icon size={18} color="#f97316" /> })()}
               <div>
-                <div style={{ fontSize: 15, fontWeight: 800, color: '#f8fafc' }}>{steps[activeStep].title}</div>
-                <div style={{ fontSize: 11, color: '#94a3b8' }}>{steps[activeStep].desc}</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>{steps[activeStep].title}</div>
+                <div style={{ fontSize: 11, color: '#64748b' }}>{steps[activeStep].desc}</div>
               </div>
             </div>
 
@@ -254,8 +254,8 @@ function VerificationModal({ entregador, restaurante_id, onClose }: {
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
           {activeStep > 0 ? (
             <motion.button whileTap={{ scale: 0.95 }} onClick={() => setActiveStep(s => s - 1)} style={{
-              background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: 14, padding: '10px 20px', color: '#94a3b8', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+              background: 'rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.08)',
+              borderRadius: 14, padding: '10px 20px', color: '#64748b', fontSize: 13, fontWeight: 700, cursor: 'pointer',
             }}>Anterior</motion.button>
           ) : <div />}
           {activeStep < 3 ? (
@@ -276,7 +276,7 @@ function VerificationModal({ entregador, restaurante_id, onClose }: {
           disabled={submitting || !allDone}
           style={{
             width: '100%',
-            background: allDone ? 'linear-gradient(135deg, #f97316, #ea580c)' : 'rgba(255,255,255,0.05)',
+            background: allDone ? 'linear-gradient(135deg, #f97316, #ea580c)' : 'rgba(0,0,0,0.05)',
             border: 'none', borderRadius: 16, padding: '14px 0',
             color: allDone ? '#fff' : '#64748b',
             fontSize: 14, fontWeight: 900, cursor: allDone ? 'pointer' : 'not-allowed',
@@ -315,16 +315,16 @@ function FormModal({ onClose, onSave }: { onClose: () => void; onSave: (e: Omit<
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.8)', backdropFilter: 'blur(10px)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(10px)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="glass-panel" style={{ borderRadius: 24, width: '100%', maxWidth: 440, padding: 32, border: '1px solid rgba(249,115,22,0.3)', boxShadow: '0 20px 60px rgba(0,0,0,0.5), inset 0 0 20px rgba(249,115,22,0.05)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <div>
-            <h2 style={{ fontSize: 20, fontWeight: 900, color: '#f8fafc', margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <h2 style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
               <UserPlus size={22} color="#f97316" /> Cadastrar Entregador
             </h2>
-            <p style={{ fontSize: 13, color: '#94a3b8', margin: '4px 0 0' }}>Expanda sua equipe própria</p>
+            <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 0' }}>Expanda sua equipe própria</p>
           </div>
-          <motion.button whileHover={{ scale: 1.1, backgroundColor: 'rgba(255,255,255,0.1)' }} whileTap={{ scale: 0.9 }} onClick={onClose} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: 8, cursor: 'pointer' }}>
+          <motion.button whileHover={{ scale: 1.1, backgroundColor: 'rgba(0,0,0,0.08)' }} whileTap={{ scale: 0.9 }} onClick={onClose} style={{ background: 'rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 12, padding: 8, cursor: 'pointer' }}>
             <X size={20} color="#cbd5e1" />
           </motion.button>
         </div>
@@ -334,21 +334,21 @@ function FormModal({ onClose, onSave }: { onClose: () => void; onSave: (e: Omit<
             <label style={labelStyle}>NOME COMPLETO *</label>
             <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex: João Silva" required style={inputStyle}
               onFocus={(e) => e.target.style.border = '1px solid rgba(249,115,22,0.5)'}
-              onBlur={(e) => e.target.style.border = '1px solid rgba(255,255,255,0.1)'} />
+              onBlur={(e) => e.target.style.border = '1px solid rgba(0,0,0,0.08)'} />
           </div>
 
           <div>
             <label style={labelStyle}>TELEFONE *</label>
             <input value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="(13) 9 0000-0000" required style={inputStyle}
               onFocus={(e) => e.target.style.border = '1px solid rgba(249,115,22,0.5)'}
-              onBlur={(e) => e.target.style.border = '1px solid rgba(255,255,255,0.1)'} />
+              onBlur={(e) => e.target.style.border = '1px solid rgba(0,0,0,0.08)'} />
           </div>
 
           <div>
             <label style={labelStyle}>CPF *</label>
             <input value={cpf} onChange={e => setCpfLocal(formatCPF(e.target.value))} placeholder="000.000.000-00" required style={inputStyle}
               onFocus={(e) => e.target.style.border = '1px solid rgba(249,115,22,0.5)'}
-              onBlur={(e) => e.target.style.border = '1px solid rgba(255,255,255,0.1)'} />
+              onBlur={(e) => e.target.style.border = '1px solid rgba(0,0,0,0.08)'} />
           </div>
 
           <div>
@@ -358,7 +358,7 @@ function FormModal({ onClose, onSave }: { onClose: () => void; onSave: (e: Omit<
                 <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} key={v} type="button" onClick={() => setVeiculo(v)} style={{
                   padding: '12px 10px', borderRadius: 14, cursor: 'pointer',
                   background: veiculo === v ? 'rgba(249,115,22,0.1)' : 'rgba(255,255,255,0.02)',
-                  border: veiculo === v ? '1px solid rgba(249,115,22,0.5)' : '1px solid rgba(255,255,255,0.1)',
+                  border: veiculo === v ? '1px solid rgba(249,115,22,0.5)' : '1px solid rgba(0,0,0,0.08)',
                   display: 'flex', alignItems: 'center', gap: 10,
                   fontSize: 14, fontWeight: veiculo === v ? 800 : 600,
                   color: veiculo === v ? '#f97316' : '#94a3b8',
@@ -497,8 +497,8 @@ export default function EntregadoresPage() {
       {/* Header */}
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} style={{ padding: '32px 40px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1 style={{ fontSize: 38, fontWeight: 900, color: '#f8fafc', margin: '0 0 8px', letterSpacing: -1, textShadow: '0 0 30px rgba(255,255,255,0.1)' }}>Equipe Tática</h1>
-          <p style={{ fontSize: 15, color: '#94a3b8', margin: 0, fontWeight: 500 }}>Gestão da sua frota própria de entregas</p>
+          <h1 style={{ fontSize: 38, fontWeight: 900, color: '#0f172a', margin: '0 0 8px', letterSpacing: -1, textShadow: '0 0 30px rgba(0,0,0,0.08)' }}>Equipe Tática</h1>
+          <p style={{ fontSize: 15, color: '#64748b', margin: 0, fontWeight: 500 }}>Gestão da sua frota própria de entregas</p>
         </div>
         <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setShowForm(true)} style={{
           display: 'flex', alignItems: 'center', gap: 10,
@@ -515,24 +515,24 @@ export default function EntregadoresPage() {
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} style={{ padding: '0 40px 32px', display: 'flex', gap: 20, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 12 }}>
           {[
-            { n: entregadores.length, l: 'TOTAL', bg: 'rgba(255,255,255,0.05)', c: '#f8fafc', b: 'rgba(255,255,255,0.1)' },
+            { n: entregadores.length, l: 'TOTAL', bg: 'rgba(0,0,0,0.05)', c: '#f8fafc', b: 'rgba(0,0,0,0.08)' },
             { n: disponiveis, l: 'DISPONÍVEIS', bg: 'rgba(34,197,94,0.1)', c: '#4ade80', b: 'rgba(34,197,94,0.2)' },
             { n: emEntrega, l: 'EM ROTA', bg: 'rgba(14,165,233,0.1)', c: '#38bdf8', b: 'rgba(14,165,233,0.2)' },
             { n: verificados, l: 'VERIFICADOS', bg: 'rgba(249,115,22,0.1)', c: '#f97316', b: 'rgba(249,115,22,0.2)' },
           ].map(s => (
             <div key={s.l} className="glass-panel" style={{ background: s.bg, border: `1px solid ${s.b}`, borderRadius: 16, padding: '12px 24px', textAlign: 'center', minWidth: 100 }}>
               <div style={{ fontSize: 26, fontWeight: 900, color: s.c, textShadow: `0 0 15px ${s.c}80` }}>{s.n}</div>
-              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4, fontWeight: 800, letterSpacing: 1 }}>{s.l}</div>
+              <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, fontWeight: 800, letterSpacing: 1 }}>{s.l}</div>
             </div>
           ))}
         </div>
 
-        <div className="glass-panel" style={{ flex: 1, minWidth: 300, borderRadius: 16, border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', padding: '0 20px', background: 'rgba(0,0,0,0.2)' }}>
+        <div className="glass-panel" style={{ flex: 1, minWidth: 300, borderRadius: 16, border: '1px solid rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', padding: '0 20px', background: 'rgba(0,0,0,0.2)' }}>
           <Search size={20} color="#64748b" />
           <input
             value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Buscar entregador pelo nome..."
-            style={{ width: '100%', background: 'transparent', border: 'none', color: '#f8fafc', padding: '16px 12px', fontSize: 15, outline: 'none' }}
+            style={{ width: '100%', background: 'transparent', border: 'none', color: '#0f172a', padding: '16px 12px', fontSize: 15, outline: 'none' }}
           />
         </div>
       </motion.div>
@@ -540,9 +540,9 @@ export default function EntregadoresPage() {
       {/* Lista */}
       <div style={{ padding: '0 40px', display: 'flex', flexDirection: 'column', gap: 16 }}>
         {entregadores.length === 0 && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ textAlign: 'center', padding: '80px 0', color: '#94a3b8' }}>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ textAlign: 'center', padding: '80px 0', color: '#64748b' }}>
             <div style={{ fontSize: 64, marginBottom: 20, filter: 'drop-shadow(0 10px 20px rgba(0,0,0,0.5))' }}>🛵</div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: '#f8fafc', marginBottom: 8 }}>Sua frota está vazia</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>Sua frota está vazia</div>
             <div style={{ fontSize: 15, color: '#64748b' }}>Cadastre sua equipe para gerenciar as entregas no radar.</div>
           </motion.div>
         )}
@@ -557,7 +557,7 @@ export default function EntregadoresPage() {
               <motion.div layout initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ delay: idx * 0.05 }} key={e.id} className="glass-panel" style={{
                 borderRadius: 20, padding: '24px',
                 boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
-                border: `1px solid ${e.status === 'em_entrega' ? 'rgba(14,165,233,0.3)' : 'rgba(255,255,255,0.05)'}`,
+                border: `1px solid ${e.status === 'em_entrega' ? 'rgba(14,165,233,0.3)' : 'rgba(0,0,0,0.05)'}`,
                 display: 'flex', alignItems: 'center', gap: 24, position: 'relative', overflow: 'hidden',
               }}>
                 {e.status === 'em_entrega' && <div className="animate-pulse-neon" style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: '#38bdf8', boxShadow: '0 0 15px #38bdf8' }} />}
@@ -585,7 +585,7 @@ export default function EntregadoresPage() {
                 {/* Info */}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 18, fontWeight: 900, color: '#f8fafc' }}>{e.nome}</span>
+                    <span style={{ fontSize: 18, fontWeight: 900, color: '#0f172a' }}>{e.nome}</span>
                     <span style={{
                       background: st.bg, color: st.color, border: `1px solid ${st.border}`, borderRadius: 12,
                       padding: '4px 12px', fontSize: 11, fontWeight: 800, letterSpacing: 0.5,
@@ -599,13 +599,13 @@ export default function EntregadoresPage() {
                     </span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#94a3b8', fontWeight: 500 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#64748b', fontWeight: 500 }}>
                       <Phone size={14} color="#64748b" /> {e.telefone}
                     </span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#94a3b8', fontWeight: 500 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#64748b', fontWeight: 500 }}>
                       <CreditCard size={14} color="#64748b" /> {e.cpf}
                     </span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#94a3b8', fontWeight: 500 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#64748b', fontWeight: 500 }}>
                       <span style={{ fontSize: 14 }}>{vc.emoji}</span> {vc.label}
                     </span>
                   </div>
@@ -627,8 +627,8 @@ export default function EntregadoresPage() {
                     onClick={() => cycleStatus(e.id)}
                     title={e.verificacao !== 'aprovado' && e.status === 'offline' ? 'Verificação necessária para ativar' : ''}
                     style={{
-                      background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14,
-                      padding: '10px 20px', fontSize: 13, fontWeight: 800, color: '#e2e8f0',
+                      background: 'rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 14,
+                      padding: '10px 20px', fontSize: 13, fontWeight: 800, color: '#1e293b',
                       cursor: (e.verificacao !== 'aprovado' && e.status === 'offline') ? 'not-allowed' : 'pointer',
                       whiteSpace: 'nowrap', transition: 'background 0.2s',
                       opacity: (e.verificacao !== 'aprovado' && e.status === 'offline') ? 0.5 : 1,
@@ -660,10 +660,10 @@ export default function EntregadoresPage() {
                   <MapPin size={24} color="#f97316" />
                 </div>
                 <div>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: '#f8fafc', marginBottom: 6, letterSpacing: 0.5 }}>
-                    Rastreamento Ao Vivo via Satélite
+                  <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', marginBottom: 6, letterSpacing: 0.5 }}>
+                    Rastreamento ao vivo da equipe
                   </div>
-                  <div style={{ fontSize: 14, color: '#cbd5e1', lineHeight: 1.6, fontWeight: 500 }}>
+                  <div style={{ fontSize: 14, color: '#334155', lineHeight: 1.6, fontWeight: 500 }}>
                     Monitore a sua equipe no <b style={{ color: '#f97316' }}>Radar Tático</b>. A posição dos entregadores será sincronizada instantaneamente assim que eles abrirem o app no celular.
                     {' '}<b style={{ color: '#fbbf24' }}>Somente entregadores verificados</b> podem ser ativados para entregas.
                   </div>
@@ -678,13 +678,13 @@ export default function EntregadoresPage() {
 }
 
 const labelStyle: React.CSSProperties = {
-  fontSize: 12, fontWeight: 800, color: '#94a3b8', display: 'block',
+  fontSize: 12, fontWeight: 800, color: '#64748b', display: 'block',
   marginBottom: 8, letterSpacing: 1,
 }
 
 const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '14px 16px', border: '1px solid rgba(255,255,255,0.1)',
-  borderRadius: 14, background: 'rgba(0,0,0,0.3)', color: '#f8fafc',
+  width: '100%', padding: '14px 16px', border: '1px solid rgba(0,0,0,0.08)',
+  borderRadius: 14, background: 'rgba(0,0,0,0.3)', color: '#0f172a',
   fontSize: 15, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit',
   transition: 'border 0.2s',
 }

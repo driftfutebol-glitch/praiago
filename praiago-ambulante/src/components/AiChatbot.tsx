@@ -13,7 +13,7 @@ type Message = {
 export default function AiChatbot({ plataforma = 'ambulante' }: { plataforma?: string }) {
   const [isOpen, setIsOpen] = useState(false)
   const [messages, setMessages] = useState<Message[]>([
-    { id: 'welcome', role: 'bot', text: 'Olá, Ambulante Parceiro! Sou a IA do PraiaGo. Como posso te ajudar com as vendas hoje?' }
+    { id: 'welcome', role: 'bot', text: 'Olá, parceiro! Aqui é o atendimento do PraiaGo. Como posso te ajudar com as vendas hoje?' }
   ])
   const [input, setInput] = useState('')
   const [mode, setMode] = useState<'ai' | 'ticket'>('ai')
@@ -53,7 +53,7 @@ export default function AiChatbot({ plataforma = 'ambulante' }: { plataforma?: s
       const apiKey = import.meta.env.VITE_OPENAI_API_KEY
       
       if (!apiKey) {
-        addMessage('bot', '⚠️ A chave da IA não está configurada (VITE_OPENAI_API_KEY). Por favor, fale com o suporte técnico para configurar.')
+        addMessage('bot', '⚠️ O atendimento automático está indisponível agora. Toque em "Falar com Suporte" que nossa equipe te responde.')
         return
       }
 
@@ -96,7 +96,7 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
       addMessage('bot', aiReply)
     } catch (err) {
       console.error(err)
-      addMessage('bot', '❌ Desculpe, não consegui conectar à minha inteligência no momento. Tente novamente mais tarde.')
+      addMessage('bot', '❌ Não consegui te responder agora. Tenta de novo em instantes ou fale com o suporte.')
     } finally {
       setLoading(false)
     }
@@ -193,9 +193,9 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
               height: 500,
               maxHeight: '80vh',
               borderRadius: 24,
-              background: 'rgba(15, 23, 42, 0.95)',
+              background: 'rgba(255,255,255,0.92)',
               backdropFilter: 'blur(20px)',
-              border: '1px solid rgba(255,255,255,0.1)',
+              border: '1px solid rgba(0,0,0,0.08)',
               boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
               display: 'flex',
               flexDirection: 'column',
@@ -206,7 +206,7 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
             <div style={{
               padding: '16px 20px',
               background: 'linear-gradient(90deg, rgba(16,185,129,0.1), rgba(5,150,105,0.1))',
-              borderBottom: '1px solid rgba(255,255,255,0.05)',
+              borderBottom: '1px solid rgba(0,0,0,0.05)',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center'
@@ -219,7 +219,7 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
                   <Bot size={20} color="#fff" />
                 </div>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#f8fafc' }}>Suporte PraiaGo</h3>
+                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#0f172a' }}>Suporte PraiaGo</h3>
                   <span style={{ fontSize: 12, color: '#4ade80', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
                     <div style={{ width: 6, height: 6, borderRadius: 3, background: '#4ade80', boxShadow: '0 0 5px #4ade80' }} />
                     Online
@@ -243,11 +243,11 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
                     borderRadius: 20,
                     borderBottomLeftRadius: msg.role === 'bot' ? 4 : 20,
                     borderBottomRightRadius: msg.role === 'user' ? 4 : 20,
-                    background: msg.role === 'bot' ? 'rgba(255,255,255,0.05)' : '#10b981',
-                    color: msg.role === 'bot' ? '#e2e8f0' : '#fff',
+                    background: msg.role === 'bot' ? 'rgba(0,0,0,0.05)' : '#10b981',
+                    color: msg.role === 'bot' ? '#0f172a' : '#fff',
                     fontSize: 14,
                     lineHeight: 1.5,
-                    border: msg.role === 'bot' ? '1px solid rgba(255,255,255,0.1)' : 'none'
+                    border: msg.role === 'bot' ? '1px solid rgba(0,0,0,0.08)' : 'none'
                   }}>
                     {msg.text}
                   </div>
@@ -260,7 +260,7 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
               <div style={{ padding: '0 20px 10px', display: 'flex', gap: 8, overflowX: 'auto' }} className="hide-scrollbar">
                 <button
                   onClick={() => setInput('Radar não funciona')}
-                  style={{ whiteSpace: 'nowrap', padding: '6px 12px', borderRadius: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#cbd5e1', fontSize: 12, cursor: 'pointer' }}
+                  style={{ whiteSpace: 'nowrap', padding: '6px 12px', borderRadius: 12, background: 'rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.08)', color: '#334155', fontSize: 12, cursor: 'pointer' }}
                 >
                   Radar não funciona
                 </button>
@@ -274,17 +274,17 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
             )}
 
             <form onSubmit={mode === 'ai' ? handleSendAI : handleSendTicket} style={{
-              padding: 16, borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', gap: 8
+              padding: 16, borderTop: '1px solid rgba(0,0,0,0.05)', display: 'flex', gap: 8
             }}>
               <input
                 value={input}
                 onChange={e => setInput(e.target.value)}
-                placeholder={mode === 'ticket' ? "Detalhes do problema..." : "Pergunte algo à IA..."}
+                placeholder={mode === 'ticket' ? "Detalhes do problema..." : "Escreva sua dúvida..."}
                 disabled={loading}
                 style={{
                   flex: 1, padding: '12px 16px', borderRadius: 16,
-                  background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)',
-                  color: '#fff', fontSize: 14, outline: 'none'
+                  background: '#f1f5f9', border: '1px solid rgba(0,0,0,0.08)',
+                  color: '#0f172a', fontSize: 14, outline: 'none'
                 }}
               />
               <button
@@ -292,7 +292,7 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
                 disabled={!input.trim() || loading}
                 style={{
                   width: 44, height: 44, borderRadius: 16,
-                  background: input.trim() && !loading ? '#10b981' : 'rgba(255,255,255,0.05)',
+                  background: input.trim() && !loading ? '#10b981' : 'rgba(0,0,0,0.05)',
                   border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
                   cursor: input.trim() && !loading ? 'pointer' : 'default', transition: 'background 0.2s'
                 }}

@@ -91,7 +91,7 @@ export default function VerificationBar() {
   if (!sessao || status === 'aprovado') return null
 
   return (
-    <div style={{ background: '#020617', borderBottom: '1px solid rgba(255,255,255,0.05)', position: 'relative', zIndex: 50 }}>
+    <div style={{ background: '#eef2f7', borderBottom: '1px solid rgba(0,0,0,0.05)', position: 'relative', zIndex: 50 }}>
       {/* Header Bar */}
       <div 
         onClick={() => status !== 'pendente' && setExpanded(!expanded)}
@@ -110,12 +110,12 @@ export default function VerificationBar() {
            status === 'pendente' ? <CheckCircle color="#f59e0b" size={24} /> : 
            <ShieldAlert color="#0ea5e9" size={24} />}
           <div>
-            <div style={{ fontSize: 14, fontWeight: 800, color: '#f8fafc' }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>
               {status === 'pendente' ? 'Análise em Andamento' : 
                status === 'rejeitado' ? 'Verificação Rejeitada' : 
                'Verificação Obrigatória'}
             </div>
-            <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500, marginTop: 2 }}>
+            <div style={{ fontSize: 12, color: '#64748b', fontWeight: 500, marginTop: 2 }}>
               {status === 'pendente' ? 'Aguarde aprovação do administrador.' : 
                status === 'rejeitado' ? 'Corrija os dados e envie novamente.' : 
                'Conclua seu cadastro para vender na praia.'}
@@ -123,8 +123,8 @@ export default function VerificationBar() {
           </div>
         </div>
         {status !== 'pendente' && (
-          <div style={{ padding: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 8 }}>
-            {expanded ? <ChevronUp size={20} color="#fff" /> : <ChevronDown size={20} color="#fff" />}
+          <div style={{ padding: 4, background: 'rgba(0,0,0,0.08)', borderRadius: 8 }}>
+            {expanded ? <ChevronUp size={20} color="#334155" /> : <ChevronDown size={20} color="#334155" />}
           </div>
         )}
       </div>
@@ -150,7 +150,7 @@ export default function VerificationBar() {
               {/* Progress Steps */}
               <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
                 {[1,2,3,4,5].map(s => (
-                  <div key={s} style={{ flex: 1, height: 4, borderRadius: 2, background: step >= s ? '#0ea5e9' : 'rgba(255,255,255,0.1)' }} />
+                  <div key={s} style={{ flex: 1, height: 4, borderRadius: 2, background: step >= s ? '#0ea5e9' : 'rgba(0,0,0,0.08)' }} />
                 ))}
               </div>
 
@@ -189,7 +189,7 @@ export default function VerificationBar() {
               {step === 3 && (
                 <div style={stepContainer}>
                   <div style={stepTitle}>Passo 3: Face ID</div>
-                  <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12 }}>Tire uma selfie segurando seu documento. (Integração Face ID em breve)</div>
+                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>Tire uma selfie segurando seu documento. (Integração Face ID em breve)</div>
                   
                   <label style={{...uploadBtn, background: 'rgba(34,197,94,0.1)', color: '#4ade80', borderColor: 'rgba(34,197,94,0.3)'}}>
                     <Camera size={20} /> Tirar Selfie
@@ -208,7 +208,7 @@ export default function VerificationBar() {
                 <div style={stepContainer}>
                   <div style={stepTitle}>Passo 4: Licença e Local</div>
                   
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#f8fafc', fontSize: 14 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#0f172a', fontSize: 14 }}>
                     <input type="checkbox" checked={licenca} onChange={e => setLicenca(e.target.checked)} style={{ width: 20, height: 20 }} />
                     Possui licença de ambulante?
                   </label>
@@ -254,24 +254,24 @@ export default function VerificationBar() {
 }
 
 const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '14px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.1)',
-  background: 'rgba(255,255,255,0.05)', color: '#fff', outline: 'none', fontSize: 14
+  width: '100%', padding: '14px', borderRadius: 12, border: '1px solid rgba(0,0,0,0.08)',
+  background: '#ffffff', color: '#0f172a', outline: 'none', fontSize: 14
 }
 const btnStyle: React.CSSProperties = {
   flex: 1, padding: '14px', borderRadius: 12, border: 'none', background: '#0ea5e9',
   color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer'
 }
 const btnStyleGhost: React.CSSProperties = {
-  flex: 1, padding: '14px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.2)',
-  background: 'transparent', color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer'
+  flex: 1, padding: '14px', borderRadius: 12, border: '1px solid rgba(0,0,0,0.15)',
+  background: 'transparent', color: '#334155', fontWeight: 800, fontSize: 14, cursor: 'pointer'
 }
 const stepContainer: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 12 }
-const stepTitle: React.CSSProperties = { fontSize: 16, fontWeight: 900, color: '#fff', marginBottom: 4 }
+const stepTitle: React.CSSProperties = { fontSize: 16, fontWeight: 900, color: '#0f172a', marginBottom: 4 }
 const uploadBtn: React.CSSProperties = {
-  width: '100%', padding: '16px', borderRadius: 12, border: '1px dashed rgba(255,255,255,0.3)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, color: '#e2e8f0',
-  cursor: 'pointer', background: 'rgba(255,255,255,0.02)'
+  width: '100%', padding: '16px', borderRadius: 12, border: '1px dashed rgba(0,0,0,0.25)',
+  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, color: '#1e293b',
+  cursor: 'pointer', background: 'rgba(0,0,0,0.03)'
 }
 const previewImg: React.CSSProperties = {
-  width: '100%', height: 120, objectFit: 'cover', borderRadius: 12, border: '1px solid rgba(255,255,255,0.1)'
+  width: '100%', height: 120, objectFit: 'cover', borderRadius: 12, border: '1px solid rgba(0,0,0,0.08)'
 }

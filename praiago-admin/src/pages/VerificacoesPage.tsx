@@ -9,17 +9,26 @@ import {
   X, Loader2, Filter
 } from 'lucide-react'
 
+// Colunas REAIS da tabela `verificacoes` (as mesmas que os apps gravam).
+// Antes o admin lia `nome`/`praia`/`documento_url` — colunas que não existem —
+// e a verificação chegava "vazia" no painel.
 interface Verificacao {
   id: string
   user_id: string
   tipo: string // 'ambulante' | 'restaurante' | 'entregador'
-  nome: string
+  nome_completo: string
   cpf?: string
   cnpj?: string
-  praia?: string
-  documento_url?: string
+  razao_social?: string
+  praia_principal?: string
+  tipo_cozinha?: string
+  horario_funcionamento?: string
+  licenca_ambulante?: boolean
+  rg_frente_url?: string
+  rg_verso_url?: string
   selfie_url?: string
-  comprovante_url?: string
+  foto_loja_url?: string
+  cnh_url?: string
   status: string // 'pendente' | 'aprovado' | 'rejeitado'
   motivo_rejeicao?: string
   created_at: string
@@ -221,7 +230,7 @@ export default function VerificacoesPage() {
                           <User size={18} className={tipo.color} />
                         </div>
                         <div>
-                          <h3 className="text-base font-bold text-slate-100">{v.nome}</h3>
+                          <h3 className="text-base font-bold text-slate-100">{v.nome_completo || '(sem nome)'}</h3>
                           <div className="flex items-center gap-2 mt-0.5">
                             <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${tipo.bg} ${tipo.color}`}>
                               {tipo.label}
@@ -255,51 +264,61 @@ export default function VerificacoesPage() {
                           <span className="text-slate-300 font-mono font-bold">{v.cnpj}</span>
                         </div>
                       )}
-                      {v.praia && (
+                      {v.praia_principal && (
                         <div className="flex items-center gap-2">
                           <MapPin size={12} className="text-slate-600" />
                           <span className="text-slate-500">Praia:</span>
-                          <span className="text-slate-300 font-bold">{v.praia}</span>
+                          <span className="text-slate-300 font-bold">{v.praia_principal}</span>
+                        </div>
+                      )}
+                      {v.razao_social && (
+                        <div className="flex items-center gap-2">
+                          <Building2 size={12} className="text-slate-600" />
+                          <span className="text-slate-500">Razão:</span>
+                          <span className="text-slate-300 font-bold">{v.razao_social}</span>
+                        </div>
+                      )}
+                      {v.tipo_cozinha && (
+                        <div className="flex items-center gap-2">
+                          <FileText size={12} className="text-slate-600" />
+                          <span className="text-slate-500">Cozinha:</span>
+                          <span className="text-slate-300 font-bold">{v.tipo_cozinha}</span>
+                        </div>
+                      )}
+                      {v.tipo === 'ambulante' && (
+                        <div className="flex items-center gap-2">
+                          <ShieldCheck size={12} className="text-slate-600" />
+                          <span className="text-slate-500">Licença:</span>
+                          <span className={`font-bold ${v.licenca_ambulante ? 'text-green-400' : 'text-red-400'}`}>
+                            {v.licenca_ambulante ? 'Sim' : 'Não'}
+                          </span>
                         </div>
                       )}
                     </div>
 
-                    {/* Document Previews */}
-                    <div className="flex gap-2 mt-4">
-                      {v.documento_url && (
+                    {/* Document Previews — todas as imagens que os apps enviam */}
+                    <div className="flex gap-2 mt-4 flex-wrap">
+                      {([
+                        ['RG Frente', v.rg_frente_url],
+                        ['RG Verso', v.rg_verso_url],
+                        ['Selfie', v.selfie_url],
+                        ['Loja', v.foto_loja_url],
+                        ['CNH', v.cnh_url],
+                      ] as const).filter(([, url]) => !!url).map(([label, url]) => (
                         <button
-                          onClick={() => setPreviewImage(v.documento_url!)}
-                          className="w-16 h-16 rounded-lg bg-slate-800/50 border border-slate-700/50 flex items-center justify-center hover:border-purple-500/30 transition-all group overflow-hidden relative"
+                          key={label}
+                          onClick={() => setPreviewImage(url!)}
+                          title={label}
+                          className="w-16 h-16 rounded-lg bg-slate-800/50 border border-slate-700/50 flex flex-col items-center justify-center hover:border-purple-500/30 transition-all group overflow-hidden relative"
                         >
-                          <img src={v.documento_url} alt="Documento" className="w-full h-full object-cover" />
+                          <img src={url} alt={label} className="w-full h-full object-cover" />
+                          <div className="absolute inset-x-0 bottom-0 bg-slate-950/80 text-[8px] font-bold text-slate-300 text-center py-0.5">{label}</div>
                           <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                             <Eye size={14} className="text-purple-400" />
                           </div>
                         </button>
-                      )}
-                      {v.selfie_url && (
-                        <button
-                          onClick={() => setPreviewImage(v.selfie_url!)}
-                          className="w-16 h-16 rounded-lg bg-slate-800/50 border border-slate-700/50 flex items-center justify-center hover:border-purple-500/30 transition-all group overflow-hidden relative"
-                        >
-                          <img src={v.selfie_url} alt="Selfie" className="w-full h-full object-cover" />
-                          <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <Eye size={14} className="text-purple-400" />
-                          </div>
-                        </button>
-                      )}
-                      {v.comprovante_url && (
-                        <button
-                          onClick={() => setPreviewImage(v.comprovante_url!)}
-                          className="w-16 h-16 rounded-lg bg-slate-800/50 border border-slate-700/50 flex items-center justify-center hover:border-purple-500/30 transition-all group overflow-hidden relative"
-                        >
-                          <img src={v.comprovante_url} alt="Comprovante" className="w-full h-full object-cover" />
-                          <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <Eye size={14} className="text-purple-400" />
-                          </div>
-                        </button>
-                      )}
-                      {!v.documento_url && !v.selfie_url && !v.comprovante_url && (
+                      ))}
+                      {!v.rg_frente_url && !v.rg_verso_url && !v.selfie_url && !v.foto_loja_url && !v.cnh_url && (
                         <div className="text-[10px] text-slate-600 font-mono italic py-2">
                           Nenhum documento enviado
                         </div>

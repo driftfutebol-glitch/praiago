@@ -1,5 +1,7 @@
+import { useEffect } from 'react'
 import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
 import { Home, ClipboardList, ShoppingBag, MapPin, User, Calendar } from 'lucide-react'
+import { iniciarCatalogo } from './store/useCatalogo'
 import { motion, AnimatePresence } from 'framer-motion'
 import HomePage from './pages/HomePage'
 import MeusPedidosPage from './pages/MeusPedidosPage'
@@ -22,13 +24,16 @@ const navItems = [
 export default function App() {
   const location = useLocation()
 
+  // Carrega o catálogo real (lojas/produtos do banco) + realtime, uma vez.
+  useEffect(() => { iniciarCatalogo() }, [])
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#0f172a' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'transparent' }}>
       {/* Logo bar - Glassmorphism */}
       <div className="glass-panel" style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '12px 20px', position: 'sticky', top: 0, zIndex: 60,
-        borderBottom: '1px solid rgba(255,255,255,0.05)'
+        borderBottom: '1px solid rgba(0,0,0,0.05)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{
@@ -53,7 +58,7 @@ export default function App() {
             <div style={{ fontSize: 18, fontWeight: 900, letterSpacing: -0.5, lineHeight: 1 }} className="beach-gradient-text">
               PraiaGo
             </div>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, color: '#94a3b8', textTransform: 'uppercase' }}>Premium</div>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, color: '#64748b', textTransform: 'uppercase' }}>Premium</div>
           </div>
         </div>
         <motion.div 
@@ -108,7 +113,7 @@ export default function App() {
               <NavLink key={to} to={to} style={{
                 flex: 1, display: 'flex', flexDirection: 'column',
                 alignItems: 'center', justifyContent: 'center', gap: '4px',
-                color: active ? '#fff' : '#64748b', textDecoration: 'none', position: 'relative',
+                color: active ? '#0ea5e9' : '#64748b', textDecoration: 'none', position: 'relative',
                 height: '100%'
               }}>
                 {active && (
@@ -116,7 +121,7 @@ export default function App() {
                     layoutId="navBubble"
                     style={{
                       position: 'absolute', inset: '4px', borderRadius: '28px',
-                      background: 'rgba(255,255,255,0.1)', zIndex: 0
+                      background: 'rgba(14,165,233,0.12)', zIndex: 0
                     }}
                     transition={{ type: "spring", stiffness: 300, damping: 30 }}
                   />
@@ -136,7 +141,7 @@ export default function App() {
                       <Icon size={18} color="#fff" />
                     </div>
                   ) : (
-                    <Icon size={20} color={active ? (to === '/ambulantes' ? '#0ea5e9' : '#fff') : '#64748b'} />
+                    <Icon size={20} color={active ? '#0ea5e9' : '#64748b'} />
                   )}
                   {active && <span style={{ fontSize: '10px', fontWeight: 700 }}>{label}</span>}
                 </motion.div>

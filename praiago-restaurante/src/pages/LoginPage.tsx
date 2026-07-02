@@ -81,7 +81,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#020617', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 32, position: 'relative', overflow: 'hidden' }}>
+    <div style={{ minHeight: '100vh', background: '#eef2f7', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 32, position: 'relative', overflow: 'hidden' }}>
       {/* Efeito luminoso de fundo */}
       <div style={{
         position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
@@ -103,25 +103,25 @@ export default function LoginPage() {
             <span style={{ filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.5))' }}>🍽️</span>
           </motion.div>
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-            <div style={{ fontSize: 36, fontWeight: 900, color: '#f8fafc', textShadow: '0 0 30px rgba(255,255,255,0.1)', letterSpacing: -1 }}>PraiaGo</div>
+            <div style={{ fontSize: 36, fontWeight: 900, color: '#0f172a', textShadow: '0 0 30px rgba(0,0,0,0.08)', letterSpacing: -1 }}>PraiaGo</div>
             <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: 3, color: '#f97316', textTransform: 'uppercase', marginTop: 8, textShadow: '0 0 10px rgba(249,115,22,0.5)' }}>Central do Restaurante</div>
           </motion.div>
         </div>
 
         <div className="glass-panel" style={{ borderRadius: 28, padding: '40px 32px', border: '1px solid rgba(249,115,22,0.2)', boxShadow: '0 24px 48px rgba(0,0,0,0.4), inset 0 0 20px rgba(249,115,22,0.05)' }}>
-          <h2 style={{ fontSize: 24, fontWeight: 800, color: '#f8fafc', marginBottom: 8 }}>{isLogin ? 'Entrar no Sistema' : 'Criar Conta'}</h2>
-          <p style={{ fontSize: 14, color: '#94a3b8', marginBottom: 32, fontWeight: 500 }}>{isLogin ? 'Acesse sua central para gerenciar seu negócio' : 'Crie sua conta de Restaurante e gerencie pedidos'}</p>
+          <h2 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>{isLogin ? 'Entrar no Sistema' : 'Criar Conta'}</h2>
+          <p style={{ fontSize: 14, color: '#64748b', marginBottom: 32, fontWeight: 500 }}>{isLogin ? 'Acesse sua central para gerenciar seu negócio' : 'Crie sua conta de Restaurante e gerencie pedidos'}</p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <div>
-              <label htmlFor="rest-email" style={{ fontSize: 12, fontWeight: 800, color: '#94a3b8', display: 'block', marginBottom: 8, letterSpacing: 1 }}>E-MAIL</label>
-              <input id="rest-email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="restaurante@exemplo.com" style={inputStyle} onFocus={(e) => e.target.style.border = '1px solid rgba(249,115,22,0.5)'} onBlur={(e) => e.target.style.border = '1px solid rgba(255,255,255,0.1)'} />
+              <label htmlFor="rest-email" style={{ fontSize: 12, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 8, letterSpacing: 1 }}>E-MAIL</label>
+              <input id="rest-email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="restaurante@exemplo.com" style={inputStyle} onFocus={(e) => e.target.style.border = '1px solid rgba(249,115,22,0.5)'} onBlur={(e) => e.target.style.border = '1px solid rgba(0,0,0,0.08)'} />
             </div>
             <div>
-              <label htmlFor="rest-senha" style={{ fontSize: 12, fontWeight: 800, color: '#94a3b8', display: 'block', marginBottom: 8, letterSpacing: 1 }}>SENHA</label>
+              <label htmlFor="rest-senha" style={{ fontSize: 12, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 8, letterSpacing: 1 }}>SENHA</label>
               <div style={{ position: 'relative' }}>
-                <input id="rest-senha" type={verSenha ? 'text' : 'password'} value={senha} onChange={e => setSenha(e.target.value)} onKeyDown={e => e.key === 'Enter' && entrar()} placeholder="••••••••" style={{ ...inputStyle, padding: '16px 48px 16px 20px' }} onFocus={(e) => e.target.style.border = '1px solid rgba(249,115,22,0.5)'} onBlur={(e) => e.target.style.border = '1px solid rgba(255,255,255,0.1)'} />
-                <button aria-label={verSenha ? 'Ocultar senha' : 'Mostrar senha'} onClick={() => setVerSenha(!verSenha)} style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 4 }}>
+                <input id="rest-senha" type={verSenha ? 'text' : 'password'} value={senha} onChange={e => setSenha(e.target.value)} onKeyDown={e => e.key === 'Enter' && entrar()} placeholder="••••••••" style={{ ...inputStyle, padding: '16px 48px 16px 20px' }} onFocus={(e) => e.target.style.border = '1px solid rgba(249,115,22,0.5)'} onBlur={(e) => e.target.style.border = '1px solid rgba(0,0,0,0.08)'} />
+                <button aria-label={verSenha ? 'Ocultar senha' : 'Mostrar senha'} onClick={() => setVerSenha(!verSenha)} style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: 4 }}>
                   {verSenha ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
               </div>
@@ -133,7 +133,7 @@ export default function LoginPage() {
               <LogIn size={20} /> {loading ? 'AGUARDE...' : (isLogin ? 'ACESSAR PAINEL' : 'CADASTRAR')}
             </motion.button>
             
-            <button onClick={() => { setIsLogin(!isLogin); setErro('') }} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginTop: -4 }}>
+            <button onClick={() => { setIsLogin(!isLogin); setErro('') }} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginTop: -4 }}>
               {isLogin ? 'Não tem conta? Crie uma aqui' : 'Já tem conta? Fazer Login'}
             </button>
           </div>
@@ -145,7 +145,7 @@ export default function LoginPage() {
 
 const inputStyle: React.CSSProperties = {
   width: '100%', padding: '16px 20px', borderRadius: 16,
-  border: '1px solid rgba(255,255,255,0.1)', fontSize: 16, outline: 'none',
-  color: '#f8fafc', background: 'rgba(0,0,0,0.3)', boxSizing: 'border-box',
+  border: '1px solid rgba(0,0,0,0.08)', fontSize: 16, outline: 'none',
+  color: '#0f172a', background: 'rgba(0,0,0,0.3)', boxSizing: 'border-box',
   transition: 'border 0.2s', fontFamily: 'inherit'
 }

@@ -69,8 +69,8 @@ function StatCard({ icon: Icon, label, value, sub, gradient, change, live, delay
           </div>}
         </div>
       </div>
-      <div style={{ fontSize: 32, fontWeight: 900, color: '#f8fafc', letterSpacing: -1 }}>{value}</div>
-      <div style={{ fontSize: 13, color: '#94a3b8', fontWeight: 600, marginTop: 4 }}>{label}</div>
+      <div style={{ fontSize: 32, fontWeight: 900, color: '#0f172a', letterSpacing: -1 }}>{value}</div>
+      <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600, marginTop: 4 }}>{label}</div>
       {sub && <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>{sub}</div>}
     </motion.div>
   )
@@ -78,7 +78,7 @@ function StatCard({ icon: Icon, label, value, sub, gradient, change, live, delay
 
 function ZonePill({ zoneId }: { zoneId: string }) {
   return (
-    <span style={{ fontSize: 10, fontWeight: 900, padding: '2px 8px', borderRadius: 8, background: `rgba(255,255,255,0.05)`, color: '#cbd5e1', border: `1px solid rgba(255,255,255,0.1)` }}>
+    <span style={{ fontSize: 10, fontWeight: 900, padding: '2px 8px', borderRadius: 8, background: `rgba(0,0,0,0.05)`, color: '#334155', border: `1px solid rgba(0,0,0,0.08)` }}>
       📍 {zoneId.replace('praia_', '').toUpperCase()}
     </span>
   )
@@ -90,8 +90,8 @@ function LiveOrderBanner({ order, onDismiss }: { order: OrderPayload; onDismiss:
   return (
     <motion.div initial={{ x: 100, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 100, opacity: 0 }} style={{
       position: 'fixed', top: 80, right: 24, zIndex: 9999,
-      width: 340, background: 'rgba(15,23,42,0.95)', backdropFilter: 'blur(20px)', borderRadius: 24,
-      boxShadow: '0 20px 60px rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)',
+      width: 340, background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(20px)', borderRadius: 24,
+      boxShadow: '0 20px 60px rgba(0,0,0,0.5)', border: '1px solid rgba(0,0,0,0.08)',
       overflow: 'hidden',
     }}>
       {/* Top strip */}
@@ -102,16 +102,16 @@ function LiveOrderBanner({ order, onDismiss }: { order: OrderPayload; onDismiss:
             <div style={{ width: 40, height: 40, borderRadius: 12, background: 'linear-gradient(135deg,#ef4444,#f97316)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, boxShadow: '0 0 15px rgba(239,68,68,0.4)' }}>🔔</div>
             <div>
               <div style={{ fontSize: 11, fontWeight: 900, color: '#f87171', letterSpacing: 0.5 }}>NOVO PEDIDO {order.id}</div>
-              <div style={{ fontSize: 14, fontWeight: 900, color: '#f8fafc' }}>{order.clienteNome}</div>
+              <div style={{ fontSize: 14, fontWeight: 900, color: '#0f172a' }}>{order.clienteNome}</div>
             </div>
           </div>
-          <button onClick={onDismiss} style={{ background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: 10, padding: 6, cursor: 'pointer' }}>
+          <button onClick={onDismiss} style={{ background: 'rgba(0,0,0,0.05)', border: 'none', borderRadius: 10, padding: 6, cursor: 'pointer' }}>
             <X size={16} color="#94a3b8" />
           </button>
         </div>
-        <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: 12, padding: '12px', marginBottom: 12, border: '1px solid rgba(255,255,255,0.05)' }}>
+        <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: 12, padding: '12px', marginBottom: 12, border: '1px solid rgba(0,0,0,0.05)' }}>
           {order.itens.slice(0, 2).map((item, i) => (
-            <div key={i} style={{ fontSize: 12, color: '#cbd5e1', marginBottom: i < order.itens.length - 1 ? 4 : 0, fontWeight: 500 }}>• {item}</div>
+            <div key={i} style={{ fontSize: 12, color: '#334155', marginBottom: i < order.itens.length - 1 ? 4 : 0, fontWeight: 500 }}>• {item}</div>
           ))}
           {order.itens.length > 2 && <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, fontWeight: 700 }}>+{order.itens.length - 2} itens</div>}
         </div>
@@ -195,9 +195,9 @@ export default function DashboardPage() {
 
       {/* ── Cabeçalho ────────────────────────────────────────── */}
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} style={{ marginBottom: 36 }}>
-        <p style={{ fontSize: 15, color: '#94a3b8', fontWeight: 700, marginBottom: 8, letterSpacing: 0.5 }}>{saudacao}, Restaurante Maré 👋</p>
+        <p style={{ fontSize: 15, color: '#64748b', fontWeight: 700, marginBottom: 8, letterSpacing: 0.5 }}>{saudacao}, Restaurante Maré 👋</p>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <h1 style={{ fontSize: 38, fontWeight: 900, color: '#f8fafc', letterSpacing: -1, margin: 0, textShadow: '0 0 30px rgba(255,255,255,0.1)' }}>Painel de Controle</h1>
+          <h1 style={{ fontSize: 38, fontWeight: 900, color: '#0f172a', letterSpacing: -1, margin: 0, textShadow: '0 0 30px rgba(0,0,0,0.08)' }}>Painel de Controle</h1>
           <AnimatePresence>
             {liveOrders.length > 0 && (
               <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 20, padding: '12px 20px', boxShadow: '0 0 20px rgba(239,68,68,0.2)' }}>
@@ -228,11 +228,11 @@ export default function DashboardPage() {
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }} className="glass-panel" style={{ borderRadius: 28, padding: '28px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
               <div>
-                <h2 style={{ fontSize: 20, fontWeight: 900, color: '#f8fafc', margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <h2 style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
                   Pedidos Ativos <div className="animate-pulse-neon" style={{ width: 8, height: 8, borderRadius: '50%', background: '#4ade80' }} />
                 </h2>
-                <p style={{ fontSize: 13, color: '#94a3b8', marginTop: 6, fontWeight: 500 }}>
-                  {liveOrders.length > 0 ? `⚡ ${liveOrders.length} chegaram em tempo real` : 'Atualizado em tempo real via satélite'}
+                <p style={{ fontSize: 13, color: '#64748b', marginTop: 6, fontWeight: 500 }}>
+                  {liveOrders.length > 0 ? `⚡ ${liveOrders.length} chegaram em tempo real` : 'Atualizado em tempo real'}
                 </p>
               </div>
               <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => navigate('/pedidos')} style={{ background: 'linear-gradient(135deg,#f97316,#ea580c)', color: '#fff', border: 'none', borderRadius: 16, padding: '10px 20px', fontSize: 14, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 8px 20px rgba(249,115,22,0.3)' }}>
@@ -247,25 +247,25 @@ export default function DashboardPage() {
                   const SIcon = s.icon
                   const isNew = idx < liveOrders.length
                   return (
-                    <motion.div layout initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }} key={`${p.id}-${idx}`} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '18px 20px', borderRadius: 20, background: isNew ? 'rgba(14,165,233,0.05)' : 'rgba(255,255,255,0.02)', border: isNew ? '1px solid rgba(14,165,233,0.3)' : '1px solid rgba(255,255,255,0.05)', transition: 'all 0.2s', boxShadow: isNew ? '0 0 20px rgba(14,165,233,0.1)' : 'none' }}>
+                    <motion.div layout initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }} key={`${p.id}-${idx}`} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '18px 20px', borderRadius: 20, background: isNew ? 'rgba(14,165,233,0.05)' : 'rgba(255,255,255,0.02)', border: isNew ? '1px solid rgba(14,165,233,0.3)' : '1px solid rgba(0,0,0,0.05)', transition: 'all 0.2s', boxShadow: isNew ? '0 0 20px rgba(14,165,233,0.1)' : 'none' }}>
                       <div style={{ width: 56, height: 56, borderRadius: 16, flexShrink: 0, background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', border: `1px solid ${s.cor}30` }}>
                         <SIcon size={24} color={s.cor} />
                         {isNew && <div className="animate-pulse-neon" style={{ position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: '50%', background: '#f87171', border: '3px solid #1e293b' }} />}
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-                          <span style={{ fontSize: 16, fontWeight: 900, color: '#f8fafc' }}>{p.cliente}</span>
+                          <span style={{ fontSize: 16, fontWeight: 900, color: '#0f172a' }}>{p.cliente}</span>
                           <span style={{ fontSize: 13, color: '#64748b', fontWeight: 700 }}>{p.id}</span>
                           {isNew && <span style={{ fontSize: 10, fontWeight: 900, color: '#38bdf8', background: 'rgba(14,165,233,0.15)', borderRadius: 8, padding: '2px 8px', letterSpacing: 0.5 }}>AO VIVO</span>}
                         </div>
-                        <div style={{ fontSize: 13, color: '#cbd5e1', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 6, fontWeight: 500 }}>{p.itens}</div>
+                        <div style={{ fontSize: 13, color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 6, fontWeight: 500 }}>{p.itens}</div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <ZonePill zoneId={`praia_${p.zona.toLowerCase().replace(' ', '_').replace(/ã/g,'a').replace(/ó/g,'o')}`} />
-                          <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>📍 {p.zona}</span>
+                          <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>📍 {p.zona}</span>
                         </div>
                       </div>
                       <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <div style={{ fontSize: 18, fontWeight: 900, color: '#f8fafc', marginBottom: 6, textShadow: '0 0 10px rgba(255,255,255,0.1)' }}>R$ {p.total.toFixed(2)}</div>
+                        <div style={{ fontSize: 18, fontWeight: 900, color: '#0f172a', marginBottom: 6, textShadow: '0 0 10px rgba(0,0,0,0.08)' }}>R$ {p.total.toFixed(2)}</div>
                         <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 900, padding: '4px 12px', borderRadius: 10, background: s.bg, color: s.cor, marginBottom: 6, border: `1px solid ${s.cor}30` }}>{s.label.toUpperCase()}</div>
                         <div style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end', fontWeight: 700 }}><Clock size={12} /> {p.tempo}</div>
                       </div>
@@ -282,7 +282,7 @@ export default function DashboardPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
 
           {/* Entregas ao vivo */}
-          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 }} className="glass-panel neon-border" style={{ borderRadius: 28, padding: '28px', position: 'relative', overflow: 'hidden', background: 'linear-gradient(135deg, rgba(15,23,42,0.8) 0%, rgba(30,41,59,0.9) 100%)' }}>
+          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 }} className="glass-panel neon-border" style={{ borderRadius: 28, padding: '28px', position: 'relative', overflow: 'hidden', background: 'linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0.9) 100%)' }}>
             <div style={{ position: 'absolute', right: -20, bottom: -20, opacity: 0.1 }}>
               <MapIcon size={160} color="#f97316" />
             </div>
@@ -291,11 +291,11 @@ export default function DashboardPage() {
                 <div className="animate-pulse-neon" style={{ width: 10, height: 10, borderRadius: '50%', background: '#4ade80' }} />
                 <span style={{ fontSize: 12, color: '#4ade80', fontWeight: 900, textTransform: 'uppercase', letterSpacing: 1.5 }}>Ao vivo</span>
               </div>
-              <h3 style={{ fontSize: 22, fontWeight: 900, color: '#f8fafc', margin: '0 0 8px' }}>Entregas em Rota</h3>
-              <p style={{ fontSize: 14, color: '#94a3b8', margin: '0 0 24px', fontWeight: 500 }}>0 entregadores ativos agora</p>
+              <h3 style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', margin: '0 0 8px' }}>Entregas em Rota</h3>
+              <p style={{ fontSize: 14, color: '#64748b', margin: '0 0 24px', fontWeight: 500 }}>0 entregadores ativos agora</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 28 }}>
                 {([] as string[]).map((e, i) => (
-                  <motion.div whileHover={{ scale: 1.02 }} key={e} style={{ background: 'rgba(255,255,255,0.05)', borderRadius: 16, padding: '12px 16px', fontSize: 14, color: '#f1f5f9', fontWeight: 700, border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <motion.div whileHover={{ scale: 1.02 }} key={e} style={{ background: 'rgba(0,0,0,0.05)', borderRadius: 16, padding: '12px 16px', fontSize: 14, color: '#0f172a', fontWeight: 700, border: '1px solid rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', gap: 12 }}>
                     <div style={{ width: 32, height: 32, borderRadius: 10, background: i === 0 ? 'rgba(14,165,233,0.2)' : 'rgba(249,115,22,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: i === 0 ? '#38bdf8' : '#fb923c' }}>{e.split(' ')[0]}</div>
                     {e.split(' ').slice(1).join(' ')}
                   </motion.div>
@@ -310,10 +310,10 @@ export default function DashboardPage() {
           {/* Zonas agora */}
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.6 }} className="glass-panel" style={{ borderRadius: 28, padding: '28px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 900, color: '#f8fafc', margin: 0 }}>Zonas Agora</h3>
+              <h3 style={{ fontSize: 16, fontWeight: 900, color: '#0f172a', margin: 0 }}>Zonas Agora</h3>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(168,85,247,0.1)', padding: '4px 10px', borderRadius: 12, border: '1px solid rgba(168,85,247,0.3)' }}>
                 <Zap size={14} color="#c084fc" />
-                <span style={{ fontSize: 11, color: '#c084fc', fontWeight: 800, letterSpacing: 0.5 }}>IA ATIVA</span>
+                <span style={{ fontSize: 11, color: '#c084fc', fontWeight: 800, letterSpacing: 0.5 }}>AO VIVO</span>
               </div>
             </div>
           </motion.div>
@@ -327,8 +327,8 @@ export default function DashboardPage() {
                 <Shield size={22} color="#fff" />
               </div>
               <div>
-                <div style={{ fontSize: 15, fontWeight: 900, color: '#f8fafc' }}>Sistema Seguro</div>
-                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2, fontWeight: 500 }}>4 robôs verificando · Criptografia ativa</div>
+                <div style={{ fontSize: 15, fontWeight: 900, color: '#0f172a' }}>Sistema Seguro</div>
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 2, fontWeight: 500 }}>4 robôs verificando · Criptografia ativa</div>
               </div>
               <div style={{ marginLeft: 'auto', fontSize: 13, fontWeight: 900, color: '#4ade80', textShadow: '0 0 10px rgba(74,222,128,0.5)' }}>✓ ONLINE</div>
             </div>

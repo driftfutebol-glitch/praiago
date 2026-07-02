@@ -94,7 +94,7 @@ export default function VerificationBar() {
   if (!sessao || status === 'aprovado') return null
 
   return (
-    <div style={{ background: '#020617', borderBottom: '1px solid rgba(255,255,255,0.05)', position: 'relative', zIndex: 50 }}>
+    <div style={{ background: '#eef2f7', borderBottom: '1px solid rgba(0,0,0,0.05)', position: 'relative', zIndex: 50 }}>
       <div 
         onClick={() => status !== 'pendente' && setExpanded(!expanded)}
         style={{ 
@@ -112,12 +112,12 @@ export default function VerificationBar() {
            status === 'pendente' ? <CheckCircle color="#f59e0b" size={24} /> : 
            <ShieldAlert color="#f97316" size={24} />}
           <div>
-            <div style={{ fontSize: 14, fontWeight: 800, color: '#f8fafc' }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>
               {status === 'pendente' ? 'Análise em Andamento' : 
                status === 'rejeitado' ? 'Verificação Rejeitada' : 
                'KYC de Restaurante Obrigatório'}
             </div>
-            <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500, marginTop: 2 }}>
+            <div style={{ fontSize: 12, color: '#64748b', fontWeight: 500, marginTop: 2 }}>
               {status === 'pendente' ? 'Aguarde aprovação do administrador.' : 
                status === 'rejeitado' ? 'Corrija os dados da empresa e envie novamente.' : 
                'Conclua a verificação empresarial para operar na plataforma.'}
@@ -125,7 +125,7 @@ export default function VerificationBar() {
           </div>
         </div>
         {status !== 'pendente' && (
-          <div style={{ padding: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 8 }}>
+          <div style={{ padding: 4, background: 'rgba(0,0,0,0.08)', borderRadius: 8 }}>
             {expanded ? <ChevronUp size={20} color="#fff" /> : <ChevronDown size={20} color="#fff" />}
           </div>
         )}
@@ -150,7 +150,7 @@ export default function VerificationBar() {
 
               <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
                 {[1,2,3,4,5,6].map(s => (
-                  <div key={s} style={{ flex: 1, height: 4, borderRadius: 2, background: step >= s ? '#f97316' : 'rgba(255,255,255,0.1)' }} />
+                  <div key={s} style={{ flex: 1, height: 4, borderRadius: 2, background: step >= s ? '#f97316' : 'rgba(0,0,0,0.08)' }} />
                 ))}
               </div>
 
@@ -245,24 +245,24 @@ export default function VerificationBar() {
 }
 
 const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '14px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.1)',
-  background: 'rgba(255,255,255,0.05)', color: '#fff', outline: 'none', fontSize: 14
+  width: '100%', padding: '14px', borderRadius: 12, border: '1px solid rgba(0,0,0,0.08)',
+  background: '#ffffff', color: '#0f172a', outline: 'none', fontSize: 14
 }
 const btnStyle: React.CSSProperties = {
   flex: 1, padding: '14px', borderRadius: 12, border: 'none', background: '#f97316',
   color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer'
 }
 const btnStyleGhost: React.CSSProperties = {
-  flex: 1, padding: '14px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.2)',
-  background: 'transparent', color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer'
+  flex: 1, padding: '14px', borderRadius: 12, border: '1px solid rgba(0,0,0,0.15)',
+  background: 'transparent', color: '#334155', fontWeight: 800, fontSize: 14, cursor: 'pointer'
 }
 const stepContainer: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 14 }
-const stepTitle: React.CSSProperties = { fontSize: 16, fontWeight: 900, color: '#fff', marginBottom: 4 }
+const stepTitle: React.CSSProperties = { fontSize: 16, fontWeight: 900, color: '#0f172a', marginBottom: 4 }
 const uploadBtn: React.CSSProperties = {
-  width: '100%', padding: '16px', borderRadius: 12, border: '1px dashed rgba(255,255,255,0.3)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, color: '#e2e8f0',
-  cursor: 'pointer', background: 'rgba(255,255,255,0.02)'
+  width: '100%', padding: '16px', borderRadius: 12, border: '1px dashed rgba(0,0,0,0.25)',
+  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, color: '#1e293b',
+  cursor: 'pointer', background: 'rgba(0,0,0,0.03)'
 }
 const previewImg: React.CSSProperties = {
-  width: '100%', height: 160, objectFit: 'cover', borderRadius: 12, border: '1px solid rgba(255,255,255,0.1)'
+  width: '100%', height: 160, objectFit: 'cover', borderRadius: 12, border: '1px solid rgba(0,0,0,0.08)'
 }

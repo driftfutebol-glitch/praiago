@@ -12,7 +12,6 @@ dependencies {
     implementation project(':capacitor-community-background-geolocation')
     implementation project(':capacitor-camera')
     implementation project(':capacitor-geolocation')
-    implementation project(':capacitor-google-maps')
     implementation project(':capacitor-network')
     implementation project(':capacitor-preferences')
     implementation project(':capacitor-push-notifications')

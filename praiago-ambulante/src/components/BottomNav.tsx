@@ -21,7 +21,7 @@ export default function BottomNav() {
       <div className="glass-panel" style={{
         display: 'flex', height: 64, borderRadius: 24,
         boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
-        border: '1px solid rgba(255,255,255,0.05)',
+        border: '1px solid rgba(0,0,0,0.05)',
         position: 'relative'
       }}>
         {navItems.map(({ to, icon: Icon, label, highlight }) => {
@@ -40,7 +40,7 @@ export default function BottomNav() {
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   marginTop: -24,
                   boxShadow: active ? '0 8px 25px rgba(34,197,94,0.4)' : '0 4px 15px rgba(0,0,0,0.5)',
-                  border: active ? 'none' : '2px solid rgba(255,255,255,0.1)',
+                  border: active ? 'none' : '2px solid rgba(0,0,0,0.08)',
                   position: 'relative'
                 }}>
                   {active && (

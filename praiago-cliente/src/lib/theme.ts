@@ -1,14 +1,14 @@
-// Design tokens do app Cliente (tema escuro, estilo iFood)
+// Design tokens do app Cliente (tema claro)
 // Centraliza cores/raios/sombras antes espalhados em inline styles.
 export const theme = {
   color: {
-    bg: '#0f172a',
-    surface: '#1e293b',
-    surfaceAlt: '#0f172a',
-    border: '#334155',
-    text: '#f1f5f9',
+    bg: '#ffffff',
+    surface: '#f8fafc',
+    surfaceAlt: '#eef2f7',
+    border: '#e2e8f0',
+    text: '#0f172a',
     textMuted: '#64748b',
-    textFaint: '#475569',
+    textFaint: '#cbd5e1',
     primary: '#0ea5e9',
     accent: '#22c55e',
     danger: '#ef4444',

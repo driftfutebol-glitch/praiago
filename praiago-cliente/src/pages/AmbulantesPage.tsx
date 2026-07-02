@@ -13,8 +13,7 @@ import { MapPin, List, Map as MapIcon, Navigation, ChevronRight, Wifi, Eye, Cloc
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGPS } from '../hooks/useGPS'
 import { useNearbyAmbulantes, type AmbulanteLive } from '../hooks/useNearbyAmbulantes'
-import { useSimulatedAmbulantes } from '../hooks/useSimulatedAmbulantes'
-import { VENDEDORES } from '../lib/catalogo'
+import { useCatalogo } from '../store/useCatalogo'
 import { getZone, BEACH_ZONES } from '../lib/praiagoZones'
 
 import 'leaflet/dist/leaflet.css'
@@ -105,10 +104,8 @@ export default function AmbulantesPage() {
   const navigate = useNavigate()
   const { pos, status: gpsStatus } = useGPS()
   const { ambulantes, total } = useNearbyAmbulantes(pos)
+  const vendedores = useCatalogo(s => s.vendedores)
   const [viewMode, setViewMode] = useState<'map' | 'list'>('map')
-
-  // Simulação automática de ambulantes para demo
-  useSimulatedAmbulantes(false)
 
   // Zona atual do cliente
   const zonaCliente = useMemo(() => getZone(pos[0], pos[1]), [pos])
@@ -119,24 +116,23 @@ export default function AmbulantesPage() {
 
   // Navegar para pedir de um ambulante (vincula ao catálogo se existir)
   const handlePedir = (amb: AmbulanteLive) => {
-    const vendedor = VENDEDORES.find(v =>
+    const vendedor = vendedores.find(v =>
       v.nome.toLowerCase().includes(amb.nome.split(' ')[0].toLowerCase()) ||
       amb.id.includes(v.id)
     )
     if (vendedor) {
       navigate(`/pedir?v=${vendedor.id}`)
     } else {
-      // ambulante sem catálogo vinculado — mostra primeiro vendedor como fallback
-      navigate(`/pedir?v=${VENDEDORES[0].id}`)
+      alert('Esse vendedor ainda não publicou um cardápio.')
     }
   }
 
   return (
-    <div style={{ minHeight: '100%', background: '#0f172a', color: '#f8fafc', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ minHeight: '100%', background: '#ffffff', color: '#0f172a', display: 'flex', flexDirection: 'column' }}>
       {/* ── Header ──────────────────────────────────────── */}
       <div className="glass-panel" style={{
         padding: '16px 20px 12px',
-        borderBottom: '1px solid rgba(255,255,255,0.05)',
+        borderBottom: '1px solid rgba(0,0,0,0.05)',
         position: 'sticky', top: 0, zIndex: 50
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -148,7 +144,7 @@ export default function AmbulantesPage() {
               <MapPin size={24} style={{ color: '#22c55e' }} />
               Radar PraiaGo
             </h1>
-            <p style={{ margin: '4px 0 0', fontSize: 12, color: '#94a3b8', fontWeight: 600 }}>
+            <p style={{ margin: '4px 0 0', fontSize: 12, color: '#64748b', fontWeight: 600 }}>
               Ambulantes ao vivo perto de você
               {zonaCliente && <span style={{ color: '#38bdf8' }}> · {zonaCliente.emoji} {zonaCliente.nome}</span>}
             </p>
@@ -178,7 +174,7 @@ export default function AmbulantesPage() {
               onClick={() => setViewMode(v => v === 'map' ? 'list' : 'map')}
               style={{
                 width: 42, height: 42, borderRadius: 14,
-                background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)',
+                background: '#f8fafc', border: '1px solid rgba(0,0,0,0.08)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 cursor: 'pointer', color: '#fff',
               }}
@@ -228,12 +224,12 @@ export default function AmbulantesPage() {
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              <div style={{ width: 60, height: 60, borderRadius: 20, background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, border: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }}>
+              <div style={{ width: 60, height: 60, borderRadius: 20, background: 'rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, border: '1px solid rgba(0,0,0,0.08)', flexShrink: 0 }}>
                 {nearest.emoji}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 18, fontWeight: 900, color: '#f8fafc' }}>{nearest.nome}</div>
-                <div style={{ fontSize: 12.5, color: '#94a3b8', fontWeight: 600 }}>
+                <div style={{ fontSize: 18, fontWeight: 900, color: '#0f172a' }}>{nearest.nome}</div>
+                <div style={{ fontSize: 12.5, color: '#64748b', fontWeight: 600 }}>
                   {nearest.categoria}{nearest.zona ? ` · ${nearest.zona}` : ''}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
@@ -247,7 +243,7 @@ export default function AmbulantesPage() {
             </div>
 
             <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
-              <motion.button whileTap={{ scale: 0.97 }} onClick={() => setViewMode('map')} style={{ flex: 1, padding: '12px', borderRadius: 14, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.05)', color: '#f8fafc', fontWeight: 800, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              <motion.button whileTap={{ scale: 0.97 }} onClick={() => setViewMode('map')} style={{ flex: 1, padding: '12px', borderRadius: 14, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.05)', color: '#0f172a', fontWeight: 800, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                 <MapPin size={15} /> No mapa
               </motion.button>
               <motion.button whileTap={{ scale: 0.97 }} onClick={() => handlePedir(nearest)} disabled={!nearest.aberto} style={{ flex: 2, padding: '12px', borderRadius: 14, border: 'none', background: nearest.aberto ? 'linear-gradient(135deg,#0ea5e9,#22c55e)' : '#475569', color: '#fff', fontWeight: 900, fontSize: 14, cursor: nearest.aberto ? 'pointer' : 'not-allowed', boxShadow: nearest.aberto ? '0 6px 20px rgba(34,197,94,0.3)' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
@@ -308,7 +304,7 @@ function MapView({
   onPedir: (a: AmbulanteLive) => void
 }) {
   return (
-    <div style={{ position: 'relative', height: '100%', width: '100%', background: '#020617' }}>
+    <div style={{ position: 'relative', height: '100%', width: '100%', background: '#eef2f7' }}>
       <MapContainer
         center={clientePos}
         zoom={15}
@@ -442,9 +438,9 @@ function MapView({
       {ambulantes.length > 0 && (
         <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} style={{
           position: 'absolute', bottom: 16, left: 16, right: 80, zIndex: 1000,
-          background: 'rgba(15,23,42,0.8)', backdropFilter: 'blur(16px)',
+          background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(16px)',
           borderRadius: 20, padding: '12px',
-          border: '1px solid rgba(255,255,255,0.1)',
+          border: '1px solid rgba(0,0,0,0.08)',
           maxHeight: 180, overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
         }}>
           {ambulantes.slice(0, 3).map((a, i) => (
@@ -455,14 +451,14 @@ function MapView({
               style={{
                 display: 'flex', alignItems: 'center', gap: 12,
                 padding: '10px 8px',
-                borderBottom: i < 2 && ambulantes.length > 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                borderBottom: i < 2 && ambulantes.length > 1 ? '1px solid rgba(0,0,0,0.05)' : 'none',
                 cursor: 'pointer',
               }}
             >
-              <div style={{ width: 36, height: 36, borderRadius: 12, background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>{a.emoji}</div>
+              <div style={{ width: 36, height: 36, borderRadius: 12, background: 'rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>{a.emoji}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 800, color: '#f8fafc' }}>{a.nome}</div>
-                <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>{a.nome}</div>
+                <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
                   {a.zona} · {a.aberto ? <span style={{ color: '#4ade80' }}>Online</span> : 'Offline'}
                 </div>
               </div>
@@ -507,10 +503,10 @@ function ListView({
         padding: '80px 32px', textAlign: 'center',
       }}>
         <motion.div animate={{ y: [0, -10, 0] }} transition={{ repeat: Infinity, duration: 2 }} style={{ fontSize: 70, marginBottom: 20 }}>🏖️</motion.div>
-        <h2 style={{ margin: '0 0 12px', fontSize: 22, fontWeight: 900, color: '#f8fafc' }}>
+        <h2 style={{ margin: '0 0 12px', fontSize: 22, fontWeight: 900, color: '#0f172a' }}>
           Nenhum ambulante no radar
         </h2>
-        <p style={{ margin: '0 0 32px', fontSize: 15, color: '#94a3b8', lineHeight: 1.5, fontWeight: 500 }}>
+        <p style={{ margin: '0 0 32px', fontSize: 15, color: '#64748b', lineHeight: 1.5, fontWeight: 500 }}>
           A praia parece tranquila agora.
           <br />Que tal pedir de um restaurante local?
         </p>
@@ -544,13 +540,13 @@ function ListView({
         ].map((s, i) => (
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.1 }} key={i} style={{
             flex: '0 0 auto', padding: '12px 20px', borderRadius: 16,
-            background: '#1e293b', border: '1px solid rgba(255,255,255,0.05)',
+            background: '#f8fafc', border: '1px solid rgba(0,0,0,0.05)',
             display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
           }}>
-            <div style={{ color: s.color, background: 'rgba(255,255,255,0.05)', padding: 8, borderRadius: 10 }}>{s.icon}</div>
+            <div style={{ color: s.color, background: 'rgba(0,0,0,0.05)', padding: 8, borderRadius: 10 }}>{s.icon}</div>
             <div>
-              <div style={{ fontSize: 18, fontWeight: 900, color: '#f8fafc' }}>{s.value}</div>
-              <div style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>{s.label}</div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: '#0f172a' }}>{s.value}</div>
+              <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>{s.label}</div>
             </div>
           </motion.div>
         ))}
@@ -569,7 +565,7 @@ function ListView({
             style={{
               display: 'flex', alignItems: 'center', gap: 16,
               padding: 16, borderRadius: 20,
-              background: '#1e293b', border: '1px solid rgba(255,255,255,0.05)',
+              background: '#f8fafc', border: '1px solid rgba(0,0,0,0.05)',
               cursor: 'pointer', boxShadow: '0 4px 15px rgba(0,0,0,0.15)'
             }}
           >
@@ -592,7 +588,7 @@ function ListView({
                 display: 'flex', alignItems: 'center', gap: 8,
                 marginBottom: 4,
               }}>
-                <span style={{ fontSize: 16, fontWeight: 900, color: '#f8fafc' }}>{a.nome}</span>
+                <span style={{ fontSize: 16, fontWeight: 900, color: '#0f172a' }}>{a.nome}</span>
                 {a.aberto && (
                   <span style={{
                     fontSize: 9, fontWeight: 900, color: '#4ade80',
@@ -604,7 +600,7 @@ function ListView({
                   </span>
                 )}
               </div>
-              <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 6, fontWeight: 500 }}>
+              <div style={{ fontSize: 13, color: '#64748b', marginBottom: 6, fontWeight: 500 }}>
                 {a.categoria}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, fontWeight: 600 }}>

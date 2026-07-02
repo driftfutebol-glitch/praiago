@@ -82,10 +82,10 @@ export default function EventosPage() {
   const outros = lista.filter(e => !e.destaque)
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0f172a', paddingBottom: 100 }}>
+    <div style={{ minHeight: '100vh', background: '#ffffff', paddingBottom: 100 }}>
       <div style={{ padding: '20px 20px 12px' }}>
-        <h1 style={{ fontSize: 26, fontWeight: 900, color: '#f8fafc', letterSpacing: -0.5 }}>Eventos na Praia 🎉</h1>
-        <p style={{ fontSize: 13, color: '#94a3b8', marginTop: 4, fontWeight: 500 }}>Praia Grande, SP · o que rola de manhã, à tarde e à noite</p>
+        <h1 style={{ fontSize: 26, fontWeight: 900, color: '#0f172a', letterSpacing: -0.5 }}>Eventos na Praia 🎉</h1>
+        <p style={{ fontSize: 13, color: '#64748b', marginTop: 4, fontWeight: 500 }}>Praia Grande, SP · o que rola de manhã, à tarde e à noite</p>
       </div>
 
       {/* Filtros por período */}
@@ -94,8 +94,8 @@ export default function EventosPage() {
           const sel = filtro === p.id
           return (
             <button key={p.id} onClick={() => setFiltro(p.id)} style={{
-              background: sel ? 'linear-gradient(135deg, #0ea5e9, #22c55e)' : 'rgba(255,255,255,0.05)',
-              border: `1px solid ${sel ? 'transparent' : 'rgba(255,255,255,0.1)'}`,
+              background: sel ? 'linear-gradient(135deg, #0ea5e9, #22c55e)' : 'rgba(0,0,0,0.05)',
+              border: `1px solid ${sel ? 'transparent' : 'rgba(0,0,0,0.08)'}`,
               borderRadius: 20, padding: '8px 16px', color: sel ? '#fff' : '#94a3b8',
               fontSize: 13, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap',
               boxShadow: sel ? '0 4px 15px rgba(34,197,94,0.3)' : 'none',
@@ -110,21 +110,21 @@ export default function EventosPage() {
         </div>
       ) : lista.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '64px 32px', color: '#64748b' }}>
-          <div style={{ width: 72, height: 72, borderRadius: 24, background: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+          <div style={{ width: 72, height: 72, borderRadius: 24, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
             <CalendarX size={32} color="#475569" />
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#cbd5e1' }}>Nenhum evento {filtro !== 'todos' ? `de ${PERIODOS.find(p => p.id === filtro)?.label.toLowerCase()}` : ''} por enquanto</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: '#334155' }}>Nenhum evento {filtro !== 'todos' ? `de ${PERIODOS.find(p => p.id === filtro)?.label.toLowerCase()}` : ''} por enquanto</div>
           <div style={{ fontSize: 13, marginTop: 6 }}>Novos eventos aparecem aqui automaticamente.</div>
         </div>
       ) : (
         <>
           {destaques.length > 0 && (
             <div style={{ padding: '0 20px 22px' }}>
-              <h2 style={{ fontSize: 15, fontWeight: 800, color: '#f8fafc', marginBottom: 14 }}>★ Em destaque</h2>
+              <h2 style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', marginBottom: 14 }}>★ Em destaque</h2>
               <div style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 4 }} className="hide-scrollbar">
                 {destaques.map(ev => (
                   <motion.div key={ev.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{
-                    background: 'linear-gradient(135deg, #1e293b, #0f172a)', border: '1px solid #334155',
+                    background: 'linear-gradient(135deg, #f8fafc, #ffffff)', border: '1px solid #e2e8f0',
                     borderRadius: 22, padding: 20, minWidth: 250, flexShrink: 0,
                   }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -133,18 +133,18 @@ export default function EventosPage() {
                         {PERIODOS.find(p => p.id === ev.periodo)?.label}
                       </span>
                     </div>
-                    <div style={{ fontSize: 17, fontWeight: 900, color: '#f8fafc', marginBottom: 8 }}>{ev.titulo}</div>
+                    <div style={{ fontSize: 17, fontWeight: 900, color: '#0f172a', marginBottom: 8 }}>{ev.titulo}</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                      <MapPin size={12} color="#64748b" /><span style={{ fontSize: 12, color: '#94a3b8' }}>{ev.local_nome ?? 'Praia Grande'}</span>
+                      <MapPin size={12} color="#64748b" /><span style={{ fontSize: 12, color: '#64748b' }}>{ev.local_nome ?? 'Praia Grande'}</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14 }}>
-                      <Calendar size={12} color="#64748b" /><span style={{ fontSize: 12, color: '#94a3b8' }}>{fmtData(ev.data)}{ev.hora ? ` · ${ev.hora}` : ''}</span>
+                      <Calendar size={12} color="#64748b" /><span style={{ fontSize: 12, color: '#64748b' }}>{fmtData(ev.data)}{ev.hora ? ` · ${ev.hora}` : ''}</span>
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
                       <button onClick={() => abrirNoMapa(ev)} style={{ flex: 1, background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', border: 'none', borderRadius: 12, padding: '10px 0', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                         <Navigation size={14} /> Ver local
                       </button>
-                      <button aria-label="Compartilhar" onClick={() => compartilhar(ev)} style={{ width: 42, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, color: '#cbd5e1', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <button aria-label="Compartilhar" onClick={() => compartilhar(ev)} style={{ width: 42, background: 'rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 12, color: '#334155', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <Share2 size={15} />
                       </button>
                     </div>
@@ -158,21 +158,21 @@ export default function EventosPage() {
           )}
 
           <div style={{ padding: '0 20px' }}>
-            <h2 style={{ fontSize: 15, fontWeight: 800, color: '#f8fafc', marginBottom: 14 }}>Próximos eventos</h2>
+            <h2 style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', marginBottom: 14 }}>Próximos eventos</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <AnimatePresence>
                 {outros.map(ev => (
                   <motion.div key={ev.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} style={{
-                    background: '#1e293b', borderRadius: 18, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14, border: '1px solid #334155',
+                    background: '#f8fafc', borderRadius: 18, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14, border: '1px solid #e2e8f0',
                   }}>
-                    <div style={{ width: 52, height: 52, borderRadius: 14, background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>{ev.emoji ?? '🎉'}</div>
+                    <div style={{ width: 52, height: 52, borderRadius: 14, background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>{ev.emoji ?? '🎉'}</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 800, color: '#f8fafc' }}>{ev.titulo}</div>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>{ev.titulo}</div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                        <Clock size={11} color="#64748b" /><span style={{ fontSize: 12, color: '#94a3b8' }}>{fmtData(ev.data)}{ev.hora ? ` · ${ev.hora}` : ''}</span>
+                        <Clock size={11} color="#64748b" /><span style={{ fontSize: 12, color: '#64748b' }}>{fmtData(ev.data)}{ev.hora ? ` · ${ev.hora}` : ''}</span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
-                        <MapPin size={11} color="#64748b" /><span style={{ fontSize: 12, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.local_nome ?? 'Praia Grande'}</span>
+                        <MapPin size={11} color="#64748b" /><span style={{ fontSize: 12, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.local_nome ?? 'Praia Grande'}</span>
                       </div>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end', flexShrink: 0 }}>

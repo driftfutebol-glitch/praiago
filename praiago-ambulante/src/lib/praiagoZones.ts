@@ -17,35 +17,54 @@ export type Zone = {
   poligono: [number, number][]  // [lat, lng][]
 }
 
-// Faixa da orla: lng -46.4060 (mar) → -46.4180 (interior).
-// Cada bairro é uma banda de latitude ao longo da praia.
-function faixaPraia(latN: number, latS: number): [number, number][] {
+// Linha d'água REAL da praia (OSM coastline encadeada, Canto do Forte → Solemar)
+// dividida nas fronteiras dos bairros reais (Nominatim). A praia é um ARCO, então
+// cada faixa calcula a própria perpendicular (mar = lado esquerdo indo p/ sudoeste).
+const ORLA: [number, number][] = [
+  [-24.0176, -46.4011], // Canto do Forte (junto ao Forte)
+  [-24.0153, -46.40976], // CF/Boqueirão
+  [-24.0155, -46.42056], // Boqueirão/Guilhermina
+  [-24.0181, -46.43488], // Guilhermina/Aviação
+  [-24.02245, -46.45034], // Aviação/Tupi
+  [-24.02771, -46.46593], // Tupi/Ocian
+  [-24.03321, -46.48134], // Ocian/Mirim
+  [-24.04379, -46.50667], // Mirim/Caiçara
+  [-24.0604, -46.54381], // Caiçara (sul)
+]
+const M_LAT = 110900, M_LNG = 111320 * Math.cos(24.03 * Math.PI / 180)
+function faixaPraia(i: number): [number, number][] {
+  const n = ORLA[i], s = ORLA[i + 1]
+  const dx = (s[1] - n[1]) * M_LNG, dy = (s[0] - n[0]) * M_LAT
+  const len = Math.hypot(dx, dy) || 1
+  const px = -dy / len, py = dx / len // perpendicular apontando pro mar
+  const off = (metros: number): [number, number] => [metros * py / M_LAT, metros * px / M_LNG]
+  const mar = off(60), terra = off(-430)
   return [
-    [latN, -46.4180],
-    [latN, -46.4060],
-    [latS, -46.4060],
-    [latS, -46.4180],
+    [n[0] + terra[0], n[1] + terra[1]],
+    [n[0] + mar[0],   n[1] + mar[1]],
+    [s[0] + mar[0],   s[1] + mar[1]],
+    [s[0] + terra[0], s[1] + terra[1]],
   ]
 }
 
 // ── Zonas de Praia Grande, SP (orla na ordem norte → sul) ────
 export const PRAIAGO_ZONES: Zone[] = [
-  { id: 'praia_canto_forte', nome: 'Canto do Forte', tipo: 'praia', cor: '#0ea5e9', corMapa: 'rgba(14,165,233,0.25)',  emoji: '🏖️', poligono: faixaPraia(-23.9960, -24.0040) },
-  { id: 'praia_boqueirao',   nome: 'Boqueirão',      tipo: 'praia', cor: '#22c55e', corMapa: 'rgba(34,197,94,0.25)',   emoji: '🥥', poligono: faixaPraia(-24.0040, -24.0120) },
-  { id: 'praia_guilhermina', nome: 'Guilhermina',    tipo: 'praia', cor: '#14b8a6', corMapa: 'rgba(20,184,166,0.25)',  emoji: '🌊', poligono: faixaPraia(-24.0120, -24.0200) },
-  { id: 'praia_aviacao',     nome: 'Aviação',        tipo: 'praia', cor: '#06b6d4', corMapa: 'rgba(6,182,212,0.25)',   emoji: '✈️', poligono: faixaPraia(-24.0200, -24.0280) },
-  { id: 'praia_tupi',        nome: 'Tupi',           tipo: 'praia', cor: '#0ea5e9', corMapa: 'rgba(14,165,233,0.25)',  emoji: '🐚', poligono: faixaPraia(-24.0280, -24.0360) },
-  { id: 'praia_ocian',       nome: 'Ocian',          tipo: 'praia', cor: '#10b981', corMapa: 'rgba(16,185,129,0.25)',  emoji: '🌴', poligono: faixaPraia(-24.0360, -24.0440) },
-  { id: 'praia_mirim',       nome: 'Vila Mirim',     tipo: 'praia', cor: '#34d399', corMapa: 'rgba(52,211,153,0.25)',  emoji: '⛱️', poligono: faixaPraia(-24.0440, -24.0520) },
-  { id: 'praia_caicara',     nome: 'Caiçara',        tipo: 'praia', cor: '#2dd4bf', corMapa: 'rgba(45,212,191,0.25)',  emoji: '🏐', poligono: faixaPraia(-24.0520, -24.0600) },
+  { id: 'praia_canto_forte', nome: 'Canto do Forte', tipo: 'praia', cor: '#0ea5e9', corMapa: 'rgba(14,165,233,0.25)',  emoji: '🏖️', poligono: faixaPraia(0) },
+  { id: 'praia_boqueirao',   nome: 'Boqueirão',      tipo: 'praia', cor: '#22c55e', corMapa: 'rgba(34,197,94,0.25)',   emoji: '🥥', poligono: faixaPraia(1) },
+  { id: 'praia_guilhermina', nome: 'Guilhermina',    tipo: 'praia', cor: '#14b8a6', corMapa: 'rgba(20,184,166,0.25)',  emoji: '🌊', poligono: faixaPraia(2) },
+  { id: 'praia_aviacao',     nome: 'Aviação',        tipo: 'praia', cor: '#06b6d4', corMapa: 'rgba(6,182,212,0.25)',   emoji: '✈️', poligono: faixaPraia(3) },
+  { id: 'praia_tupi',        nome: 'Tupi',           tipo: 'praia', cor: '#0ea5e9', corMapa: 'rgba(14,165,233,0.25)',  emoji: '🐚', poligono: faixaPraia(4) },
+  { id: 'praia_ocian',       nome: 'Ocian',          tipo: 'praia', cor: '#10b981', corMapa: 'rgba(16,185,129,0.25)',  emoji: '🌴', poligono: faixaPraia(5) },
+  { id: 'praia_mirim',       nome: 'Vila Mirim',     tipo: 'praia', cor: '#34d399', corMapa: 'rgba(52,211,153,0.25)',  emoji: '⛱️', poligono: faixaPraia(6) },
+  { id: 'praia_caicara',     nome: 'Caiçara',        tipo: 'praia', cor: '#2dd4bf', corMapa: 'rgba(45,212,191,0.25)',  emoji: '🏐', poligono: faixaPraia(7) },
 
   // ── CIDADE (interior) ────────────────────────────────────
-  { id: 'cidade_centro',   nome: 'Centro',     tipo: 'cidade', cor: '#f97316', corMapa: 'rgba(249,115,22,0.18)', emoji: '🏙️', poligono: [[-24.0120,-46.4380],[-24.0120,-46.4250],[-24.0020,-46.4250],[-24.0020,-46.4380]] },
-  { id: 'cidade_quietude', nome: 'Quietude',   tipo: 'cidade', cor: '#fb923c', corMapa: 'rgba(251,146,60,0.18)', emoji: '🏘️', poligono: [[-24.0320,-46.4420],[-24.0320,-46.4290],[-24.0220,-46.4290],[-24.0220,-46.4420]] },
+  { id: 'cidade_centro',   nome: 'Centro',     tipo: 'cidade', cor: '#f97316', corMapa: 'rgba(249,115,22,0.18)', emoji: '🏙️', poligono: [[-24.0105,-46.4209],[-24.0105,-46.4111],[-24.0015,-46.4111],[-24.0015,-46.4209]] },
+  { id: 'cidade_quietude', nome: 'Quietude',   tipo: 'cidade', cor: '#fb923c', corMapa: 'rgba(251,146,60,0.18)', emoji: '🏘️', poligono: [[-24.0211,-46.4844],[-24.0211,-46.4736],[-24.0111,-46.4736],[-24.0111,-46.4844]] },
 
   // ── ACESSO (corredores entre cidade e praia) ─────────────
-  { id: 'acesso_norte', nome: 'Corredor Norte', tipo: 'acesso', cor: '#a78bfa', corMapa: 'rgba(167,139,250,0.15)', emoji: '🛣️', poligono: [[-24.0120,-46.4250],[-24.0120,-46.4180],[-23.9960,-46.4180],[-23.9960,-46.4250]] },
-  { id: 'acesso_sul',   nome: 'Corredor Sul',   tipo: 'acesso', cor: '#8b5cf6', corMapa: 'rgba(139,92,246,0.15)',  emoji: '🛣️', poligono: [[-24.0440,-46.4290],[-24.0440,-46.4180],[-24.0280,-46.4180],[-24.0280,-46.4290]] },
+  { id: 'acesso_norte', nome: 'Corredor Norte', tipo: 'acesso', cor: '#a78bfa', corMapa: 'rgba(167,139,250,0.15)', emoji: '🛣️', poligono: [[-24.0121,-46.4065],[-24.011,-46.4107],[-24.0009,-46.4075],[-24.002,-46.4033]] },
+  { id: 'acesso_sul',   nome: 'Corredor Sul',   tipo: 'acesso', cor: '#8b5cf6', corMapa: 'rgba(139,92,246,0.15)',  emoji: '🛣️', poligono: [[-24.0289,-46.4811],[-24.0305,-46.485],[-24.0208,-46.4897],[-24.0192,-46.4858]] },
 ]
 
 // ── Utilitários ──────────────────────────────────────────────
@@ -76,9 +95,9 @@ export const BEACH_ZONES = PRAIAGO_ZONES.filter(z => z.tipo === 'praia')
 export const CITY_ZONES = PRAIAGO_ZONES.filter(z => z.tipo === 'cidade')
 
 /** Centro geográfico aproximado da orla (para centralizar o mapa) */
-export const PRAIA_GRANDE_CENTER: [number, number] = [-24.0280, -46.4120]
+export const PRAIA_GRANDE_CENTER: [number, number] = [-24.0226, -46.4628]
 
-// ── Heatmap (mock — substitui com Supabase depois) ──────────
+// ── Demanda por zona
 export type ZoneHeat = {
   zoneId: string
   nivel: ZoneNivel
@@ -107,3 +126,4 @@ export function scoreToNivel(score: number): ZoneNivel {
 export function getMockHeatData(): ZoneHeat[] {
   return []
 }
+
