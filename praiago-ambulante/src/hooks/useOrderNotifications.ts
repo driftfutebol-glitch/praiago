@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { parseIncomingOrder } from '../lib/validation'
+import { useState, useEffect, useCallback } from 'react'
+import { supabase } from '../lib/supabase'
+import { getSessao } from '../lib/auth'
 
 export type IncomingOrder = {
   id: string
@@ -13,9 +14,8 @@ export type IncomingOrder = {
   reta?: string
   barraca?: string
   ts: number
+  pagamento: string
 }
-
-const CHANNEL = 'praiago:orders'
 
 // AudioContext compartilhado. Navegadores criam o contexto "suspended" até um
 // gesto do usuário (política de autoplay) — por isso o beep antes não tocava.
@@ -70,21 +70,42 @@ function playNotificationBeep() {
 export function useOrderNotifications() {
   const [orders, setOrders] = useState<IncomingOrder[]>([])
   const [latestOrder, setLatestOrder] = useState<IncomingOrder | null>(null)
-  const channelRef = useRef<BroadcastChannel | null>(null)
 
   useEffect(() => {
-    channelRef.current = new BroadcastChannel(CHANNEL)
-
-    channelRef.current.onmessage = (e: MessageEvent) => {
-      const order = parseIncomingOrder(e.data)   // valida/sanitiza; ignora se forjado
-      if (!order) return
-      playNotificationBeep()
-      setLatestOrder(order)
-      setOrders(prev => [order, ...prev])
-    }
+    const sessao = getSessao()
+    if (!sessao) return
+    const channel = supabase.channel('pedidos_ambulante')
+      .on(
+        'postgres_changes',
+        // só pedidos DESTE vendedor (antes chegava pedido de todo mundo)
+        { event: 'INSERT', schema: 'public', table: 'pedidos', filter: `vendedor_id=eq.${sessao.id}` },
+        (payload) => {
+          const row = payload.new
+          // Mapeia da tabela pedidos para IncomingOrder
+          const order: IncomingOrder = {
+            id: row.id,
+            clienteNome: row.cliente_nome,
+            clienteTel: row.cliente_tel || '(00) 00000-0000',
+            itens: row.itens,
+            total: Number(row.total),
+            pagamento: row.pagamento,
+            zona: row.zona || 'Desconhecida',
+            reta: row.reta,
+            barraca: row.barraca,
+            clienteLat: Number(row.lat) || -24.0,
+            clienteLng: Number(row.lng) || -46.41,
+            ts: new Date(row.created_at).getTime()
+          }
+          
+          playNotificationBeep()
+          setLatestOrder(order)
+          setOrders(prev => [order, ...prev])
+        }
+      )
+      .subscribe()
 
     return () => {
-      channelRef.current?.close()
+      supabase.removeChannel(channel)
     }
   }, [])
 

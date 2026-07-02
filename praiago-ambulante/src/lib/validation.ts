@@ -25,6 +25,7 @@ export type CleanIncomingOrder = {
   reta: string
   barraca: string
   ts: number
+  pagamento: string
 }
 
 // Centro de Praia Grande como fallback caso as coordenadas venham inválidas
@@ -49,5 +50,6 @@ export function parseIncomingOrder(raw: unknown): CleanIncomingOrder | null {
     reta: sanitizeText(o.reta, 24),
     barraca: sanitizeText(o.barraca, 24),
     ts: clampNumber(o.ts, 0, Number.MAX_SAFE_INTEGER, Date.now()),
+    pagamento: sanitizeText(o.pagamento, 20) || 'pix',
   }
 }

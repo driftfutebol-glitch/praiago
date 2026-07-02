@@ -1,4 +1,4 @@
-// 🤖 Agente de IA — monitora pedidos por zona e atualiza heat scores automaticamente
+// Radar de demanda — monitora pedidos por zona e atualiza os scores em tempo real.
 import { PRAIAGO_ZONES, pointInPolygon } from './praiagoZones'
 
 export type ZoneScore = {
@@ -37,7 +37,7 @@ class ZoneAgentClass {
     this.orders = this.orders.filter(o => o.ts > cutoff)
   }
 
-  // Calcula scores por zona com base nos pedidos reais + drift simulado (IA)
+  // Calcula scores por zona somente com pedidos reais recebidos na janela de 1h.
   computeScores(): ZoneScore[] {
     this.prune()
 
@@ -47,10 +47,7 @@ class ZoneAgentClass {
         pointInPolygon(o.clienteLat, o.clienteLng, zone.poligono)
       ).length
 
-      // Base simulada — drift lento para simular agente IA
-      const baseScore = 0.2 + Math.random() * 0.3
-      const orderBonus = Math.min(realOrders * 0.12, 0.5)
-      const score = Math.min(baseScore + orderBonus, 1)
+      const score = Math.min(realOrders / 8, 1)
 
       const prev = this.previousScores[zone.id] ?? score
       const tendencia: ZoneScore['tendencia'] =
@@ -62,8 +59,8 @@ class ZoneAgentClass {
       return {
         id: zone.id,
         nome: zone.nome,
-        pedidosHora: realOrders + Math.floor(Math.random() * 8),
-        ambulantesAtivos: Math.floor(Math.random() * 4) + 1,
+        pedidosHora: realOrders,
+        ambulantesAtivos: 0,
         score,
         tendencia,
       }
@@ -75,7 +72,7 @@ class ZoneAgentClass {
     this.listeners.forEach(fn => fn(scores))
   }
 
-  // Inicia auto-refresh a cada 10s (simulação IA)
+  // Atualiza periodicamente para expirar pedidos antigos da janela de 1h.
   start() {
     if (this.intervalId) return
     this.intervalId = setInterval(() => this.broadcast(), 10_000)

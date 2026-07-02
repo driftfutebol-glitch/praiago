@@ -59,7 +59,7 @@ export default function MeusPedidosPage() {
 
                 <div style={{ background: theme.color.bg, borderRadius: 14, padding: '10px 14px', marginBottom: 12 }}>
                   {p.itens.map((it, i) => (
-                    <div key={i} style={{ fontSize: 13, color: '#cbd5e1', lineHeight: 1.7 }}>
+                    <div key={i} style={{ fontSize: 13, color: '#334155', lineHeight: 1.7 }}>
                       <span style={{ color: theme.color.accent, fontWeight: 800 }}>·</span> {it.qtd}x {it.nome}
                     </div>
                   ))}

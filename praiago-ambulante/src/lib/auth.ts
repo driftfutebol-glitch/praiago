@@ -2,7 +2,11 @@
 // Antes o botão "Entrar" não fazia nada — agora há sessão real + proteção de rota.
 import { useSyncExternalStore } from 'react'
 
-export type Sessao = { email: string; nome: string } | null
+export type Sessao = {
+  id: string
+  email: string
+  nome: string
+} | null
 
 const KEY = 'praiago:ambulante:sessao'
 const listeners = new Set<() => void>()
@@ -16,8 +20,8 @@ function refresh() { cache = read(); listeners.forEach(l => l()) }
 
 export function getSessao(): Sessao { return cache }
 
-export function login(email: string, nome?: string): Sessao {
-  const s: Sessao = { email: email.trim(), nome: nome?.trim() || email.split('@')[0] || 'Ambulante' }
+export function login(id: string, email: string, nome?: string): Sessao {
+  const s: Sessao = { id, email: email.trim(), nome: nome?.trim() || email.split('@')[0] || 'Ambulante' }
   localStorage.setItem(KEY, JSON.stringify(s))
   refresh()
   return cache

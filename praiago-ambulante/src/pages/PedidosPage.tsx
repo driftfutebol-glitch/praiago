@@ -1,10 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
-import { Clock, CheckCircle, ChevronRight, Timer, Navigation, MapPin, X, Route, Bell, Zap } from 'lucide-react'
+import { Bell, MapPin, CheckCircle, Clock, Navigation, X, Timer, QrCode, CreditCard, Banknote, ChevronRight } from 'lucide-react'
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet'
+import { motion, AnimatePresence } from 'framer-motion'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useRoute } from '../hooks/useRoute'
+import { criarMonitorSentido, type SentidoStatus } from '../lib/trafego'
 import { useOrderNotifications, type IncomingOrder } from '../hooks/useOrderNotifications'
+import { supabase } from '../lib/supabase'
+import { getSessao } from '../lib/auth'
 import { ZoneAgent, type ZoneScore } from '../lib/zoneAgent'
 
 delete (L.Icon.Default.prototype as any)._getIconUrl
@@ -18,10 +22,10 @@ function makeIcon(html: string, size = 40) {
   return L.divIcon({ className: '', html, iconSize: [size, size], iconAnchor: [size / 2, size / 2] })
 }
 
-const clienteIcon = makeIcon(`<div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#0ea5e9,#06b6d4);display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 3px 12px rgba(14,165,233,0.5);font-size:20px">👤</div>`)
-const myIcon = makeIcon(`<div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#22c55e,#16a34a);display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 3px 12px rgba(34,197,94,0.5);font-size:20px">🥥</div>`)
+const clienteIcon = makeIcon(`<div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#0ea5e9,#06b6d4);display:flex;align-items:center;justify-content:center;border:2px solid rgba(255,255,255,0.8);box-shadow:0 0 15px rgba(14,165,233,0.6);font-size:20px;backdrop-filter:blur(4px)">👤</div>`)
+const myIcon = makeIcon(`<div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#22c55e,#16a34a);display:flex;align-items:center;justify-content:center;border:2px solid rgba(255,255,255,0.8);box-shadow:0 0 15px rgba(34,197,94,0.6);font-size:20px;backdrop-filter:blur(4px)">🥥</div>`)
 
-type Status = 'novo' | 'preparando' | 'entregue'
+type Status = 'novo' | 'preparando' | 'saiu_entrega' | 'entregue'
 
 type Pedido = {
   id: string
@@ -33,34 +37,17 @@ type Pedido = {
   hora: string
   clienteLat: number
   clienteLng: number
+  pagamento: string
   isLive?: boolean
 }
 
-const mockPedidos: Pedido[] = [
-  {
-    id: '#001', cliente: 'João S.', clienteTel: '(13) 98888-1111',
-    itens: ['2x Água de Coco', '1x Mate Gelado'], total: 22,
-    status: 'novo', hora: 'Agora',
-    clienteLat: -24.0045, clienteLng: -46.4115,
-  },
-  {
-    id: '#002', cliente: 'Maria L.', clienteTel: '(13) 97777-2222',
-    itens: ['3x Biscoito Globo'], total: 15,
-    status: 'preparando', hora: '5 min',
-    clienteLat: -24.0060, clienteLng: -46.4100,
-  },
-  {
-    id: '#003', cliente: 'Carlos M.', clienteTel: '(13) 96666-3333',
-    itens: ['1x Suco Natural', '1x Água de Coco'], total: 16,
-    status: 'entregue', hora: '22 min',
-    clienteLat: -24.0070, clienteLng: -46.4130,
-  },
-]
+const pedidosIniciais: Pedido[] = []
 
 const statusConfig = {
-  novo: { label: 'Novo', bg: '#fef3c7', color: '#d97706', icon: Clock },
-  preparando: { label: 'Preparando', bg: '#dbeafe', color: '#2563eb', icon: Timer },
-  entregue: { label: 'Entregue', bg: '#dcfce7', color: '#16a34a', icon: CheckCircle },
+  novo: { label: 'Novo', bg: 'rgba(245,158,11,0.15)', color: '#f59e0b', icon: Clock },
+  preparando: { label: 'Preparando', bg: 'rgba(14,165,233,0.15)', color: '#0284c7', icon: Timer },
+  saiu_entrega: { label: 'Saiu p/ entrega', bg: 'rgba(249,115,22,0.15)', color: '#ea580c', icon: Navigation },
+  entregue: { label: 'Entregue', bg: 'rgba(34,197,94,0.15)', color: '#16a34a', icon: CheckCircle },
 }
 
 function FitBounds({ a, b }: { a: [number, number]; b: [number, number] }) {
@@ -76,6 +63,15 @@ function LocationModal({ pedido, onClose }: { pedido: Pedido; onClose: () => voi
   const watchId = useRef<number | null>(null)
   const clientePos: [number, number] = [pedido.clienteLat, pedido.clienteLng]
   const route = useRoute(myPos, clientePos)
+
+  // Verificação de sentido: a rota OSRM já respeita a mão das vias.
+  // Aqui detectamos se VOCÊ está se movendo contra o sentido planejado.
+  const [sentido, setSentido] = useState<SentidoStatus>('indefinido')
+  const monitorSentido = useRef(criarMonitorSentido())
+  useEffect(() => {
+    if (!myPos) return
+    setSentido(monitorSentido.current.atualizar(route?.coords, myPos))
+  }, [myPos?.[0], myPos?.[1]]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -104,177 +100,218 @@ function LocationModal({ pedido, onClose }: { pedido: Pedido; onClose: () => voi
   const tempo = route?.tempo ?? null
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', flexDirection: 'column', background: '#0f172a' }}>
-      <div style={{ padding: '14px 20px', background: '#0f172a', borderBottom: '1px solid #1e293b', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', flexDirection: 'column', background: '#ffffff' }}>
+      <div className="glass-panel" style={{ padding: '16px 20px', borderBottom: '1px solid rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, borderRadius: 0 }}>
         <div>
-          <div style={{ fontSize: 15, fontWeight: 800, color: '#f1f5f9' }}>📍 {pedido.cliente}</div>
-          <div style={{ fontSize: 12, color: '#475569', marginTop: 1 }}>Pedido {pedido.id} · {pedido.clienteTel}</div>
+          <div style={{ fontSize: 16, fontWeight: 900, color: '#0f172a' }}>📍 {pedido.cliente}</div>
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 2, fontWeight: 500 }}>Pedido {pedido.id} · {pedido.clienteTel}</div>
         </div>
         {pedido.isLive && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(14,165,233,0.15)', border: '1px solid rgba(14,165,233,0.3)', borderRadius: 10, padding: '4px 10px' }}>
-            <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#0ea5e9', animation: 'livePulse 1s infinite' }} />
-            <span style={{ fontSize: 10, fontWeight: 700, color: '#0ea5e9' }}>AO VIVO</span>
+            <div className="animate-pulse-neon" style={{ width: 6, height: 6, borderRadius: '50%', background: '#38bdf8' }} />
+            <span style={{ fontSize: 10, fontWeight: 800, color: '#38bdf8' }}>AO VIVO</span>
           </div>
         )}
-        <button onClick={onClose} style={{ background: '#1e293b', border: 'none', borderRadius: 10, padding: 8, cursor: 'pointer', minWidth: 36, minHeight: 36 }}>
-          <X size={18} color="#94a3b8" />
-        </button>
+        <motion.button whileTap={{ scale: 0.9 }} onClick={onClose} style={{ background: 'rgba(0,0,0,0.08)', border: 'none', borderRadius: 12, padding: 8, cursor: 'pointer', minWidth: 40, minHeight: 40, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <X size={20} color="#334155" />
+        </motion.button>
       </div>
 
       <div style={{ flex: 1, position: 'relative' }}>
+        {/* Aviso de contramão / fora da rota */}
+        {sentido === 'contramao' && (
+          <div className="animate-pulse-neon" style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: '#ef4444', color: '#fff', padding: '10px 18px', borderRadius: 24, fontSize: 13, fontWeight: 900, boxShadow: '0 8px 25px rgba(239,68,68,0.5)' }}>
+            ⚠️ CONTRAMÃO — você está indo contra o sentido da rota!
+          </div>
+        )}
+        {sentido === 'fora_da_rota' && (
+          <div style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(245,158,11,0.95)', color: '#fff', padding: '10px 18px', borderRadius: 24, fontSize: 13, fontWeight: 900, boxShadow: '0 8px 25px rgba(245,158,11,0.4)' }}>
+            🧭 Fora da rota — recalculando…
+          </div>
+        )}
         {myPos ? (
           <MapContainer center={myPos} zoom={15} style={{ height: '100%', width: '100%' }} zoomControl={false}>
-            <TileLayer attribution='&copy; CARTO &copy; OpenStreetMap' url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" subdomains="abcd" />
+            {/* Dark map style */}
+            <TileLayer attribution='&copy; CARTO' url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" subdomains="abcd" />
             <FitBounds a={myPos} b={clientePos} />
-            <Marker position={myPos} icon={myIcon}><Popup><b>🥥 Você (ambulante)</b></Popup></Marker>
-            <Marker position={clientePos} icon={clienteIcon}><Popup><b>👤 {pedido.cliente}</b><br />{pedido.clienteTel}</Popup></Marker>
+            <Marker position={myPos} icon={myIcon}><Popup className="dark-popup"><b>🥥 Você (ambulante)</b></Popup></Marker>
+            <Marker position={clientePos} icon={clienteIcon}><Popup className="dark-popup"><b>👤 {pedido.cliente}</b><br />{pedido.clienteTel}</Popup></Marker>
             {route && route.coords.length > 1
-              ? <Polyline positions={route.coords} pathOptions={{ color: '#22c55e', weight: 5, opacity: 0.85 }} />
-              : <Polyline positions={[myPos, clientePos]} pathOptions={{ color: '#22c55e', weight: 3, dashArray: '8 6', opacity: 0.5 }} />
+              ? <Polyline positions={route.coords} pathOptions={{ color: '#4ade80', weight: 5, opacity: 0.8 }} />
+              : <Polyline positions={[myPos, clientePos]} pathOptions={{ color: '#4ade80', weight: 3, dashArray: '8 8', opacity: 0.4 }} />
             }
           </MapContainer>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-            <div style={{ textAlign: 'center', color: '#475569' }}>
-              <MapPin size={36} style={{ margin: '0 auto 10px', opacity: 0.4 }} />
-              <p style={{ fontSize: 14, fontWeight: 600 }}>Obtendo localização…</p>
+            <div style={{ textAlign: 'center', color: '#64748b' }}>
+              <MapPin size={40} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
+              <p style={{ fontSize: 15, fontWeight: 700 }}>Buscando sua localização…</p>
             </div>
           </div>
         )}
 
         {myPos && (
-          <div style={{ position: 'absolute', top: 14, left: 14, zIndex: 1000, background: 'rgba(15,23,42,0.92)', borderRadius: 16, padding: '12px 16px', border: '1px solid #334155' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-              <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#22c55e' }} />
-              <span style={{ fontSize: 10, color: '#22c55e', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>
-                {route ? 'Rota calculada' : 'GPS ativo'}
+          <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="glass-panel" style={{ position: 'absolute', top: 16, left: 16, zIndex: 1000, borderRadius: 20, padding: '14px 18px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <div className="animate-pulse-neon" style={{ width: 8, height: 8, borderRadius: '50%', background: '#4ade80' }} />
+              <span style={{ fontSize: 11, color: '#4ade80', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1 }}>
+                {route ? 'Rota Otimizada' : 'Radar Ativo'}
               </span>
             </div>
-            <div style={{ display: 'flex', gap: 12 }}>
-              {distancia && <div><div style={{ fontSize: 18, fontWeight: 900, color: '#f1f5f9', lineHeight: 1 }}>{distancia}</div><div style={{ fontSize: 10, color: '#475569', marginTop: 1 }}>distância</div></div>}
-              {tempo && <div><div style={{ fontSize: 18, fontWeight: 900, color: '#f1f5f9', lineHeight: 1 }}>{tempo}</div><div style={{ fontSize: 10, color: '#475569', marginTop: 1 }}>a pé</div></div>}
+            <div style={{ display: 'flex', gap: 16 }}>
+              {distancia && <div><div style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', lineHeight: 1 }}>{distancia}</div><div style={{ fontSize: 11, color: '#64748b', marginTop: 2, fontWeight: 500 }}>distância</div></div>}
+              {tempo && <div><div style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', lineHeight: 1 }}>{tempo}</div><div style={{ fontSize: 11, color: '#64748b', marginTop: 2, fontWeight: 500 }}>a pé</div></div>}
             </div>
-            {route && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 6 }}>
-                <Route size={10} color="#0ea5e9" /><span style={{ fontSize: 9, color: '#0ea5e9' }}>Via ruas · OSRM</span>
-              </div>
-            )}
-          </div>
+          </motion.div>
         )}
       </div>
 
-      <div style={{ padding: '16px', background: '#0f172a', borderTop: '1px solid #1e293b', flexShrink: 0 }}>
-        <button
+      <div style={{ padding: '20px', background: '#ffffff', borderTop: '1px solid rgba(0,0,0,0.05)', flexShrink: 0 }}>
+        <motion.button
+          whileTap={{ scale: 0.98 }}
           onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${pedido.clienteLat},${pedido.clienteLng}`)}
-          style={{ width: '100%', background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', border: 'none', borderRadius: 16, padding: '16px 0', color: '#fff', fontSize: 16, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 8px 24px rgba(34,197,94,0.3)', minHeight: 52 }}>
-          <Navigation size={20} /> Abrir no Google Maps
-        </button>
+          style={{ width: '100%', background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', border: 'none', borderRadius: 20, padding: '16px 0', color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, boxShadow: '0 8px 25px rgba(34,197,94,0.4)' }}>
+          <Navigation size={20} /> INICIAR NAVEGAÇÃO
+        </motion.button>
       </div>
-      <style>{`@keyframes livePulse { 0%,100% { opacity:1; } 50% { opacity:0.3; } }`}</style>
-    </div>
+    </motion.div>
   )
 }
 
 /* ─── BANNER DE NOVO PEDIDO ─────────────────────────────── */
 function NewOrderBanner({ order, onDismiss, onView }: { order: IncomingOrder; onDismiss: () => void; onView: () => void }) {
   return (
-    <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 99999,
-      background: 'linear-gradient(135deg, #0ea5e9, #22c55e)',
-      padding: '16px 20px',
-      animation: 'bannerSlide 0.4s cubic-bezier(0,0,0.2,1)',
-      boxShadow: '0 8px 32px rgba(14,165,233,0.45)',
-    }}>
+    <motion.div
+      initial={{ y: -100, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      exit={{ y: -100, opacity: 0 }}
+      transition={{ type: "spring", stiffness: 400, damping: 25 }}
+      style={{
+        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 99999,
+        background: 'linear-gradient(135deg, rgba(14,165,233,0.95), rgba(34,197,94,0.95))',
+        backdropFilter: 'blur(10px)',
+        padding: '16px 20px',
+        boxShadow: '0 10px 40px rgba(14,165,233,0.5)',
+        borderBottom: '1px solid rgba(255,255,255,0.2)'
+      }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-        {/* Icon pulsante */}
-        <div style={{ width: 50, height: 50, borderRadius: 18, background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, animation: 'iconBounce 0.6s ease', flexShrink: 0 }}>
+        <motion.div animate={{ scale: [0.8, 1.2, 1] }} transition={{ duration: 0.5 }} style={{ width: 50, height: 50, borderRadius: 16, background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0, boxShadow: 'inset 0 0 10px rgba(255,255,255,0.3)' }}>
           🔔
-        </div>
+        </motion.div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.8)', letterSpacing: 0.6, marginBottom: 2 }}>
-            🤖 AGENTE IA · NOVO PEDIDO
+          <div style={{ fontSize: 11, fontWeight: 900, color: '#fef08a', letterSpacing: 1, marginBottom: 2 }}>
+            🔔 NOVO PEDIDO NA ÁREA
           </div>
-          <div style={{ fontSize: 15, fontWeight: 900, color: '#fff', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: 16, fontWeight: 900, color: '#fff', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {order.clienteNome} — {order.itens[0]}{order.itens.length > 1 ? ` +${order.itens.length - 1}` : ''}
           </div>
-          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 2 }}>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 4, fontWeight: 600 }}>
             R$ {order.total.toFixed(2)} · Zona {order.zona}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-          <button
+          <motion.button
+            whileTap={{ scale: 0.9 }}
             onClick={onView}
-            style={{ background: '#fff', color: '#0ea5e9', border: 'none', borderRadius: 14, padding: '10px 16px', fontWeight: 800, fontSize: 13, cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-          >Ver</button>
-          <button
+            style={{ background: '#fff', color: '#0ea5e9', border: 'none', borderRadius: 14, padding: '10px 16px', fontWeight: 900, fontSize: 13, cursor: 'pointer', boxShadow: '0 4px 15px rgba(0,0,0,0.2)' }}
+          >VER</motion.button>
+          <motion.button
+            whileTap={{ scale: 0.9 }}
             onClick={onDismiss}
             style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 14, padding: '10px', cursor: 'pointer' }}
           >
             <X size={16} color="#fff" />
-          </button>
+          </motion.button>
         </div>
       </div>
-      <style>{`
-        @keyframes bannerSlide { from { transform: translateY(-100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        @keyframes iconBounce { 0% { transform: scale(0.8); } 60% { transform: scale(1.2); } 100% { transform: scale(1); } }
-      `}</style>
-    </div>
+    </motion.div>
   )
 }
 
-/* ─── PAINEL DE ZONAS IA ─────────────────────────────────── */
+/* ─── PAINEL DE ZONAS ─────────────────────────────────── */
 function ZoneAgentPanel({ scores }: { scores: ZoneScore[] }) {
   const top = scores.slice().sort((a, b) => b.score - a.score).slice(0, 3)
   return (
-    <div style={{ margin: '0 16px 14px', background: '#0f172a', borderRadius: 20, padding: '16px', border: '1px solid #1e293b' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-        <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg,#a855f7,#7c3aed)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🤖</div>
+    <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="glass-panel" style={{ margin: '0 20px 20px', borderRadius: 24, padding: '20px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+        <div className="neon-border" style={{ width: 36, height: 36, borderRadius: 12, background: 'linear-gradient(135deg,#a855f7,#7c3aed)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🤖</div>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 800, color: '#f1f5f9' }}>Agente IA · Zonas ao Vivo</div>
-          <div style={{ fontSize: 10, color: '#475569' }}>Atualização automática a cada 10s</div>
+          <div style={{ fontSize: 14, fontWeight: 900, color: '#0f172a' }}>Zonas ao Vivo</div>
+          <div style={{ fontSize: 11, color: '#64748b', fontWeight: 500, marginTop: 2 }}>Movimento da praia em tempo real</div>
         </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(168,85,247,0.12)', borderRadius: 8, padding: '4px 8px' }}>
-          <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#a855f7', animation: 'aiPulse 1.5s infinite' }} />
-          <span style={{ fontSize: 9, fontWeight: 700, color: '#a855f7' }}>ATIVO</span>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(168,85,247,0.15)', borderRadius: 10, padding: '6px 10px', border: '1px solid rgba(168,85,247,0.3)' }}>
+          <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#c084fc', boxShadow: '0 0 8px #c084fc' }} className="animate-pulse-neon" />
+          <span style={{ fontSize: 10, fontWeight: 800, color: '#c084fc' }}>SYNC</span>
         </div>
       </div>
-      {top.map(z => {
-        const nivel = z.score > 0.75 ? { emoji: '🔥', color: '#f97316' } : z.score > 0.5 ? { emoji: '🌡️', color: '#eab308' } : { emoji: '❄️', color: '#0ea5e9' }
+      {top.map((z, i) => {
+        const nivel = z.score > 0.75 ? { emoji: '🔥', color: '#f87171' } : z.score > 0.5 ? { emoji: '🌡️', color: '#fbbf24' } : { emoji: '❄️', color: '#38bdf8' }
         return (
-          <div key={z.id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <span style={{ fontSize: 16 }}>{nivel.emoji}</span>
+          <motion.div initial={{ x: -10, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: i * 0.1 }} key={z.id} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+            <span style={{ fontSize: 18 }}>{nivel.emoji}</span>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{z.nome}</span>
-                <span style={{ fontSize: 11, color: nivel.color, fontWeight: 700, flexShrink: 0, marginLeft: 8 }}>{z.pedidosHora} pedidos/h</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                <span style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{z.nome}</span>
+                <span style={{ fontSize: 12, color: nivel.color, fontWeight: 800, flexShrink: 0, marginLeft: 8 }}>{z.pedidosHora} ped/h</span>
               </div>
-              <div style={{ height: 5, background: '#1e293b', borderRadius: 10, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${z.score * 100}%`, background: nivel.color, borderRadius: 10, transition: 'width 1s ease' }} />
+              <div style={{ height: 6, background: 'rgba(0,0,0,0.05)', borderRadius: 10, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${z.score * 100}%`, background: nivel.color, borderRadius: 10, transition: 'width 1s ease', boxShadow: `0 0 8px ${nivel.color}` }} />
               </div>
             </div>
-            <div style={{ fontSize: 10, color: z.tendencia === 'subindo' ? '#22c55e' : z.tendencia === 'descendo' ? '#ef4444' : '#64748b', flexShrink: 0 }}>
-              {z.tendencia === 'subindo' ? '↑' : z.tendencia === 'descendo' ? '↓' : '→'}
+            <div style={{ fontSize: 12, fontWeight: 900, color: z.tendencia === 'subindo' ? '#4ade80' : z.tendencia === 'descendo' ? '#f87171' : '#94a3b8', flexShrink: 0, width: 16, textAlign: 'center' }}>
+              {z.tendencia === 'subindo' ? '↑' : z.tendencia === 'descendo' ? '↓' : '—'}
             </div>
-          </div>
+          </motion.div>
         )
       })}
-    </div>
+    </motion.div>
   )
 }
 
 /* ─── PÁGINA PRINCIPAL ───────────────────────────────────── */
-const abas = ['Todos', 'Novos', 'Preparando', 'Entregues'] as const
+const abas = ['Todos', 'Novos', 'Preparando', 'Em rota', 'Entregues'] as const
+
+function rowToPedido(row: Record<string, unknown>): Pedido {
+  const st = String(row.status ?? 'novo')
+  return {
+    id: String(row.id),
+    cliente: String(row.cliente_nome ?? 'Cliente'),
+    clienteTel: String(row.cliente_tel ?? '—'),
+    itens: (row.itens as string[]) ?? [],
+    total: Number(row.total) || 0,
+    status: (['novo', 'preparando', 'saiu_entrega', 'entregue'].includes(st) ? st : 'novo') as Status,
+    hora: new Date(String(row.created_at)).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+    clienteLat: Number(row.lat) || -24.0228,
+    clienteLng: Number(row.lng) || -46.4305,
+    pagamento: String(row.pagamento ?? 'pix'),
+  }
+}
 
 export default function PedidosPage() {
   const [aba, setAba] = useState<typeof abas[number]>('Todos')
-  const [pedidos, setPedidos] = useState<Pedido[]>(mockPedidos)
+  const [pedidos, setPedidos] = useState<Pedido[]>(pedidosIniciais)
   const [locModal, setLocModal] = useState<Pedido | null>(null)
   const [zoneScores, setZoneScores] = useState<ZoneScore[]>([])
 
   // Hook de notificações em tempo real
   const { orders: liveOrders, latestOrder, dismissLatest } = useOrderNotifications()
 
-  // IA: subscrevendo ao ZoneAgent
+  // Carrega os pedidos REAIS deste vendedor ao abrir a tela
+  useEffect(() => {
+    const sessao = getSessao()
+    if (!sessao) return
+    supabase
+      .from('pedidos')
+      .select('*')
+      .eq('vendedor_id', sessao.id)
+      .order('created_at', { ascending: false })
+      .limit(50)
+      .then(({ data }) => {
+        if (data) setPedidos(data.map(rowToPedido))
+      })
+  }, [])
+
+  // Radar de zonas: acompanha a demanda real recebida pelo app.
   useEffect(() => {
     const unsub = ZoneAgent.subscribe(scores => setZoneScores(scores))
     return unsub
@@ -296,6 +333,7 @@ export default function PedidosPage() {
       hora: 'Agora',
       clienteLat: newest.clienteLat,
       clienteLng: newest.clienteLng,
+      pagamento: newest.pagamento,
       isLive: true,
     }
     setPedidos(prev => {
@@ -308,145 +346,174 @@ export default function PedidosPage() {
     if (aba === 'Todos') return true
     if (aba === 'Novos') return p.status === 'novo'
     if (aba === 'Preparando') return p.status === 'preparando'
+    if (aba === 'Em rota') return p.status === 'saiu_entrega'
     if (aba === 'Entregues') return p.status === 'entregue'
     return true
   })
 
-  function avancar(id: string) {
-    setPedidos(prev => prev.map(p => {
-      if (p.id !== id) return p
-      const map: Record<Status, Status> = { novo: 'preparando', preparando: 'entregue', entregue: 'entregue' }
-      return { ...p, status: map[p.status] }
-    }))
+  async function avancar(id: string) {
+    const map: Record<Status, Status> = { novo: 'preparando', preparando: 'saiu_entrega', saiu_entrega: 'entregue', entregue: 'entregue' }
+    const atual = pedidos.find(p => p.id === id)
+    if (!atual) return
+    const novoStatus = map[atual.status]
+    // otimista na tela + grava no banco (o cliente acompanha em tempo real)
+    setPedidos(prev => prev.map(p => (p.id === id ? { ...p, status: novoStatus } : p)))
+    const { error } = await supabase.from('pedidos').update({ status: novoStatus }).eq('id', id)
+    if (error) {
+      console.error('Falha ao atualizar status', error)
+      setPedidos(prev => prev.map(p => (p.id === id ? { ...p, status: atual.status } : p)))
+    }
   }
 
   const novosCount = pedidos.filter(p => p.status === 'novo').length
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f1f5f9', paddingBottom: 24 }}>
+    <div style={{ minHeight: '100vh', paddingBottom: 40 }}>
       {/* Banner de notificação ao vivo */}
-      {latestOrder && (
-        <NewOrderBanner
-          order={latestOrder}
-          onDismiss={dismissLatest}
-          onView={() => {
-            dismissLatest()
-            setAba('Novos')
-          }}
-        />
-      )}
-      {locModal && <LocationModal pedido={locModal} onClose={() => setLocModal(null)} />}
+      <AnimatePresence>
+        {latestOrder && (
+          <NewOrderBanner
+            order={latestOrder}
+            onDismiss={dismissLatest}
+            onView={() => {
+              dismissLatest()
+              setAba('Novos')
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {locModal && <LocationModal pedido={locModal} onClose={() => setLocModal(null)} />}
+      </AnimatePresence>
 
       {/* Header */}
-      <div style={{ background: '#fff', padding: '20px 16px 0', borderBottom: '1px solid #f1f5f9' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+      <div style={{ padding: '24px 20px 0', borderBottom: '1px solid rgba(0,0,0,0.05)', marginBottom: 24 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <div>
-            <h1 style={{ fontSize: 22, fontWeight: 900, color: '#0f172a' }}>Pedidos</h1>
-            <div style={{ fontSize: 12, color: '#64748b', marginTop: 1 }}>Conexão interligada com clientes em tempo real</div>
+            <h1 style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', letterSpacing: -0.5 }}>Pedidos</h1>
+            <div style={{ fontSize: 13, color: '#64748b', marginTop: 2, fontWeight: 500 }}>Radar tático em tempo real</div>
           </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             {novosCount > 0 && (
-              <span style={{ background: '#fee2e2', color: '#ef4444', borderRadius: 20, padding: '4px 12px', fontSize: 12, fontWeight: 700 }}>
-                {novosCount} {novosCount === 1 ? 'novo' : 'novos'}
-              </span>
+              <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171', borderRadius: 20, padding: '6px 14px', fontSize: 12, fontWeight: 800, border: '1px solid rgba(239,68,68,0.3)' }}>
+                {novosCount} {novosCount === 1 ? 'NOVO' : 'NOVOS'}
+              </motion.span>
             )}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(168,85,247,0.08)', borderRadius: 10, padding: '4px 10px', border: '1px solid rgba(168,85,247,0.15)' }}>
-              <Zap size={11} color="#a855f7" />
-              <span style={{ fontSize: 10, fontWeight: 700, color: '#a855f7' }}>IA Ativa</span>
-            </div>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 0, overflowX: 'auto' }}>
+        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 10 }} className="hide-scrollbar">
           {abas.map(a => (
-            <button key={a} onClick={() => setAba(a)} style={{ padding: '10px 16px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', color: aba === a ? '#0ea5e9' : '#94a3b8', borderBottom: aba === a ? '2px solid #0ea5e9' : '2px solid transparent', minHeight: 44 }}>
+            <button key={a} onClick={() => setAba(a)} style={{ 
+              padding: '10px 20px', background: aba === a ? 'rgba(14,165,233,0.15)' : 'rgba(0,0,0,0.05)',
+              borderRadius: 20, cursor: 'pointer', fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap',
+              color: aba === a ? '#38bdf8' : '#94a3b8', transition: 'all 0.2s', border: `1px solid ${aba === a ? 'rgba(14,165,233,0.3)' : 'transparent'}`
+            }}>
               {a}
             </button>
           ))}
         </div>
       </div>
 
-      <div style={{ padding: '14px 0', display: 'flex', flexDirection: 'column', gap: 0 }}>
-        {/* Painel do agente IA */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+        {/* Painel de demanda por zona */}
         {zoneScores.length > 0 && <ZoneAgentPanel scores={zoneScores} />}
 
         {/* Lista de pedidos */}
-        <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
           {filtrados.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8' }}>
-              <Bell size={32} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
-              <p style={{ fontSize: 14, fontWeight: 600 }}>Aguardando pedidos…</p>
-              <p style={{ fontSize: 12, marginTop: 4 }}>O agente IA notificará automaticamente</p>
-            </div>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ textAlign: 'center', padding: '60px 0', color: '#64748b' }}>
+              <Bell size={40} style={{ margin: '0 auto 16px', opacity: 0.5 }} />
+              <p style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>Radar Limpo</p>
+              <p style={{ fontSize: 13, marginTop: 6 }}>Aguardando sinais de clientes...</p>
+            </motion.div>
           )}
-          {filtrados.map(pedido => {
-            const { label, bg, color, icon: Icon } = statusConfig[pedido.status]
-            const isNew = pedido.status === 'novo'
-            return (
-              <div
-                key={pedido.id}
-                style={{
-                  background: '#fff',
-                  borderRadius: 20,
-                  padding: 16,
-                  boxShadow: isNew ? '0 4px 20px rgba(14,165,233,0.12)' : '0 2px 8px rgba(0,0,0,0.05)',
-                  border: isNew
-                    ? pedido.isLive ? '2px solid #0ea5e9' : '2px solid #fbbf24'
-                    : '1.5px solid #f1f5f9',
-                  animation: pedido.isLive ? 'cardPop 0.4s cubic-bezier(0,0,0.2,1)' : 'none',
-                  position: 'relative',
-                  overflow: 'hidden',
-                }}
-              >
-                {/* Live badge */}
-                {pedido.isLive && (
-                  <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', alignItems: 'center', gap: 4, background: '#0ea5e9', borderRadius: 8, padding: '3px 8px' }}>
-                    <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#fff', animation: 'livePulse 1s infinite' }} />
-                    <span style={{ fontSize: 9, fontWeight: 800, color: '#fff' }}>AO VIVO</span>
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>{pedido.id}</span>
-                      <span style={{ background: bg, color, borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                        <Icon size={10} /> {label}
-                      </span>
+          
+          <AnimatePresence mode="popLayout">
+            {filtrados.map(pedido => {
+              const { label, bg, color, icon: Icon } = statusConfig[pedido.status]
+              const isNew = pedido.status === 'novo'
+              return (
+                <motion.div
+                  key={pedido.id}
+                  layout
+                  initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.9, y: -20 }}
+                  className="glass-panel"
+                  style={{
+                    borderRadius: 24, padding: 20,
+                    boxShadow: isNew ? '0 10px 30px rgba(0,0,0,0.3)' : '0 4px 15px rgba(0,0,0,0.2)',
+                    border: isNew
+                      ? pedido.isLive ? '1px solid #38bdf8' : '1px solid #fbbf24'
+                      : '1px solid rgba(0,0,0,0.05)',
+                    position: 'relative', overflow: 'hidden',
+                  }}
+                >
+                  {/* Live badge */}
+                  {pedido.isLive && (
+                    <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(14,165,233,0.15)', borderRadius: 10, padding: '4px 10px', border: '1px solid rgba(14,165,233,0.3)' }}>
+                      <div className="animate-pulse-neon" style={{ width: 6, height: 6, borderRadius: '50%', background: '#38bdf8' }} />
+                      <span style={{ fontSize: 10, fontWeight: 900, color: '#38bdf8' }}>AO VIVO</span>
                     </div>
-                    <div style={{ fontSize: 13, color: '#64748b', marginTop: 3 }}>{pedido.cliente} · {pedido.hora}</div>
+                  )}
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 18, fontWeight: 900, color: '#0f172a' }}>{pedido.id}</span>
+                        <span style={{ background: bg, color, borderRadius: 12, padding: '4px 10px', fontSize: 11, fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 6, border: `1px solid ${color}40` }}>
+                          <Icon size={12} /> {label}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 13, color: '#64748b', marginTop: 6, fontWeight: 500 }}>{pedido.cliente} · {pedido.hora}</div>
+                    </div>
+                    <span style={{ fontSize: 18, fontWeight: 900, color: '#4ade80' }}>
+                      R$ {pedido.total.toFixed(2).replace('.', ',')}
+                    </span>
                   </div>
-                  <span style={{ fontSize: 17, fontWeight: 800, color: '#0f172a' }}>
-                    R$ {pedido.total.toFixed(2).replace('.', ',')}
-                  </span>
-                </div>
 
-                <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 10, marginBottom: 12 }}>
-                  {pedido.itens.map((item, i) => (
-                    <div key={i} style={{ fontSize: 13, color: '#475569', paddingTop: i > 0 ? 3 : 0 }}>• {item}</div>
-                  ))}
-                </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12, background: 'rgba(0,0,0,0.05)', padding: '6px 12px', borderRadius: 12, width: 'fit-content' }}>
+                    {pedido.pagamento === 'pix' && <QrCode size={14} color="#22c55e" />}
+                    {pedido.pagamento === 'cartao' && <CreditCard size={14} color="#0ea5e9" />}
+                    {pedido.pagamento === 'dinheiro' && <Banknote size={14} color="#fbbf24" />}
+                    <span style={{ fontSize: 12, color: '#0f172a', fontWeight: 800, textTransform: 'uppercase' }}>{pedido.pagamento}</span>
+                  </div>
 
-                <button onClick={() => setLocModal(pedido)} style={{ width: '100%', background: '#f0fdf4', border: '1.5px solid #bbf7d0', borderRadius: 12, padding: '11px 0', marginBottom: 10, color: '#16a34a', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 44 }}>
-                  <MapPin size={15} /> Ver rota até o cliente
-                </button>
+                  <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 12, padding: 12, marginBottom: 16 }}>
+                    {pedido.itens.map((item, i) => (
+                      <div key={i} style={{ fontSize: 13, color: '#334155', fontWeight: 600, paddingTop: i > 0 ? 6 : 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#475569' }}/>
+                        {item}
+                      </div>
+                    ))}
+                  </div>
 
-                {pedido.status !== 'entregue' && (
-                  <button onClick={() => avancar(pedido.id)} style={{ width: '100%', background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', border: 'none', borderRadius: 12, padding: '13px 0', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 44 }}>
-                    {pedido.status === 'novo' ? 'Iniciar preparo' : 'Marcar como entregue'}
-                    <ChevronRight size={16} />
-                  </button>
-                )}
-              </div>
-            )
-          })}
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <motion.button whileTap={{ scale: 0.95 }} onClick={() => setLocModal(pedido)} style={{ flex: 1, background: 'rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 16, padding: '14px 0', color: '#0f172a', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                      <MapPin size={16} /> Mapa
+                    </motion.button>
+
+                    {pedido.status !== 'entregue' && (
+                      <motion.button whileTap={{ scale: 0.95 }} onClick={() => avancar(pedido.id)} style={{ flex: 2, background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', border: 'none', borderRadius: 16, padding: '14px 0', color: '#fff', fontSize: 14, fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 4px 15px rgba(34,197,94,0.3)' }}>
+                        {pedido.status === 'novo' ? 'ACEITAR PEDIDO' : pedido.status === 'preparando' ? 'SAIU PRA ENTREGA' : 'MARCAR ENTREGUE'}
+                        <ChevronRight size={18} />
+                      </motion.button>
+                    )}
+                  </div>
+                </motion.div>
+              )
+            })}
+          </AnimatePresence>
         </div>
       </div>
-
       <style>{`
-        @keyframes cardPop { from { transform: scale(0.97) translateY(-6px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
-        @keyframes livePulse { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
-        @keyframes aiPulse { 0%,100% { opacity:1; transform: scale(1); } 50% { opacity:0.4; transform: scale(1.3); } }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .dark-popup .leaflet-popup-content-wrapper { background: rgba(255,255,255,0.9); backdrop-filter: blur(10px); color: #f8fafc; border: 1px solid rgba(0,0,0,0.08); border-radius: 12px; }
+        .dark-popup .leaflet-popup-tip { background: rgba(255,255,255,0.9); }
       `}</style>
     </div>
   )
 }
+

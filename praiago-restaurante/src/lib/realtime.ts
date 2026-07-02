@@ -1,11 +1,7 @@
 // Camada de tempo real — abstrai o transporte (ver explicação no app cliente).
 // Supabase Realtime quando há VITE_SUPABASE_URL/ANON_KEY; senão BroadcastChannel.
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { supabase } from './supabase'
 
-const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
-const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
-
-export const supabase: SupabaseClient | null = url && key ? createClient(url, key) : null
 export const isCloudRealtime = !!supabase
 
 export const TOPICS = {

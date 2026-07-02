@@ -27,6 +27,7 @@
     "@types/leaflet": "^1.9.21",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
+    "framer-motion": "^12.42.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.21.0",
     "react": "^19.2.7",

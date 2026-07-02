@@ -25,7 +25,7 @@ export function isLatLng(lat: unknown, lng: unknown): boolean {
     lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180
 }
 
-export type CleanOrder = { id: string; cliente: string; zona: string; itens: string[]; total: number; ts: number }
+export type CleanOrder = { id: string; cliente: string; zona: string; itens: string[]; total: number; ts: number; pagamento: string }
 
 // Normaliza um pedido recebido via realtime. Retorna null se for inválido/forjado.
 export function parseIncomingOrder(raw: unknown): CleanOrder | null {
@@ -40,5 +40,6 @@ export function parseIncomingOrder(raw: unknown): CleanOrder | null {
     itens: Array.isArray(o.itens) ? o.itens.slice(0, 30).map(i => sanitizeText(i, 80)).filter(Boolean) : [],
     total: clampNumber(o.total, 0, 100_000, 0),
     ts: clampNumber(o.ts, 0, Number.MAX_SAFE_INTEGER, Date.now()),
+    pagamento: sanitizeText(o.pagamento, 20) || 'pix',
   }
 }
