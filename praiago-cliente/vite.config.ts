@@ -14,6 +14,12 @@ export default defineConfig({
         target: 'https://api.blackbox.ai',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/ai/, '')
+      },
+      // Posição aproximada por IP quando o aparelho não tem GPS (dev/web)
+      '/api/ip': {
+        target: 'https://ipwho.is',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/ip/, '')
       }
     }
   },

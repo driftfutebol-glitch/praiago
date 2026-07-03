@@ -5,7 +5,7 @@
 //  ambulantes na areia via GPS ao vivo.
 // ==========================================================
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet'
 import L from 'leaflet'
@@ -68,6 +68,18 @@ function ambulanteIcon(emoji: string, aberto: boolean) {
 
 // ── Recenter helper ──────────────────────────────────────────
 
+// Voa até a posição do cliente quando ela muda de verdade (chegou GPS/IP/ajuste)
+function FlyToCliente({ pos }: { pos: [number, number] }) {
+  const map = useMap()
+  const last = useRef(pos)
+  useEffect(() => {
+    const moveu = Math.abs(last.current[0] - pos[0]) + Math.abs(last.current[1] - pos[1]) > 0.0005
+    if (moveu) map.flyTo(pos, Math.max(map.getZoom(), 14), { duration: 0.8 })
+    last.current = pos
+  }, [map, pos])
+  return null
+}
+
 function RecenterMap({ pos }: { pos: [number, number] }) {
   const map = useMap()
   const handleRecenter = () => {
@@ -102,7 +114,7 @@ function formatDist(m: number): string {
 
 export default function AmbulantesPage() {
   const navigate = useNavigate()
-  const { pos, status: gpsStatus } = useGPS()
+  const { pos, status: gpsStatus, fonte, cidadeAproximada, definirPosicaoManual, limparPosicaoManual } = useGPS()
   const { ambulantes, total } = useNearbyAmbulantes(pos)
   const vendedores = useCatalogo(s => s.vendedores)
   const [viewMode, setViewMode] = useState<'map' | 'list'>('map')
@@ -188,15 +200,36 @@ export default function AmbulantesPage() {
           </div>
         </div>
 
-        {/* GPS status */}
-        {gpsStatus !== 'active' && (
+        {/* GPS status / fonte da posição */}
+        {fonte === 'manual' ? (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} style={{
+            marginTop: 12, padding: '8px 14px', borderRadius: 12,
+            background: 'rgba(14,165,233,0.08)', border: '1px solid rgba(14,165,233,0.2)',
+            fontSize: 12, fontWeight: 600, color: '#0284c7', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+          }}>
+            <MapPin size={14} />
+            <span style={{ flex: 1, minWidth: 180 }}>Posição ajustada por você — arraste o pino azul para mudar.</span>
+            <button onClick={limparPosicaoManual} style={{
+              border: '1px solid rgba(14,165,233,0.35)', background: '#fff', color: '#0284c7',
+              borderRadius: 10, padding: '4px 10px', fontSize: 11, fontWeight: 800, cursor: 'pointer',
+            }}>
+              Voltar pro GPS
+            </button>
+          </motion.div>
+        ) : gpsStatus !== 'active' && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} style={{
             marginTop: 12, padding: '8px 14px', borderRadius: 12,
             background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.2)',
-            fontSize: 12, fontWeight: 600, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: 8,
+            fontSize: 12, fontWeight: 600, color: '#d97706', display: 'flex', alignItems: 'center', gap: 8,
           }}>
             <RefreshCw size={14} style={{ animation: 'spin 1s linear infinite' }} />
-            {gpsStatus === 'requesting' ? 'Obtendo radar...' : 'GPS indisponível — usando posição aproximada'}
+            {gpsStatus === 'requesting'
+              ? 'Obtendo radar...'
+              : fonte === 'ip'
+                ? `Sem GPS — posição aproximada pela internet${cidadeAproximada ? ` (${cidadeAproximada})` : ''}. Arraste o pino azul até onde você está.`
+                : fonte === 'memoria'
+                  ? 'Sem GPS — usando sua última posição conhecida. Arraste o pino azul para ajustar.'
+                  : 'GPS indisponível — arraste o pino azul no mapa até onde você está.'}
           </motion.div>
         )}
       </div>
@@ -264,6 +297,7 @@ export default function AmbulantesPage() {
                 clientePos={pos}
                 ambulantes={ambulantes}
                 onPedir={handlePedir}
+                onAjustarPos={definirPosicaoManual}
               />
             </motion.div>
           ) : (
@@ -299,10 +333,12 @@ function MapView({
   clientePos,
   ambulantes,
   onPedir,
+  onAjustarPos,
 }: {
   clientePos: [number, number]
   ambulantes: AmbulanteLive[]
   onPedir: (a: AmbulanteLive) => void
+  onAjustarPos: (lat: number, lng: number) => void
 }) {
   return (
     <div style={{ position: 'relative', height: '100%', width: '100%', background: '#eef2f7' }}>
@@ -315,14 +351,30 @@ function MapView({
       >
         <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
 
-        {/* Cliente */}
-        <Marker position={clientePos} icon={clienteIcon()}>
+        <FlyToCliente pos={clientePos} />
+
+        {/* Cliente — pino ARRASTÁVEL: sem GPS, o usuário posiciona onde está */}
+        <Marker
+          position={clientePos}
+          icon={clienteIcon()}
+          draggable
+          eventHandlers={{
+            dragend: (e) => {
+              const p = (e.target as L.Marker).getLatLng()
+              onAjustarPos(p.lat, p.lng)
+            },
+          }}
+        >
           <Popup>
             <div style={{ textAlign: 'center', fontFamily: 'Inter, sans-serif' }}>
               <strong style={{ color: '#0f172a' }}>📍 Radar Central</strong>
               <br />
               <span style={{ fontSize: 11, color: '#64748b' }}>
                 {clientePos[0].toFixed(4)}, {clientePos[1].toFixed(4)}
+              </span>
+              <br />
+              <span style={{ fontSize: 10.5, color: '#0284c7', fontWeight: 700 }}>
+                Arraste o pino para ajustar sua posição
               </span>
             </div>
           </Popup>
