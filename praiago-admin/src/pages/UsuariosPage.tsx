@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { supabase } from '../lib/supabase'
-import { UserCheck, ShieldCheck, ShieldX, Search } from 'lucide-react'
+import { Ban, RotateCcw, Trash2, UserCheck, ShieldCheck, ShieldX, Search } from 'lucide-react'
 import { format } from 'date-fns'
 
 export default function UsuariosPage() {
   const [usuarios, setUsuarios] = useState<any[]>([])
   const [busca, setBusca] = useState('')
   const [filtroRole, setFiltroRole] = useState('todos')
+  const [acaoId, setAcaoId] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -36,12 +37,76 @@ export default function UsuariosPage() {
   const filtrados = usuarios.filter(u => {
     const matchBusca = !busca || 
       (u.nome && u.nome.toLowerCase().includes(busca.toLowerCase())) ||
+      (u.email && u.email.toLowerCase().includes(busca.toLowerCase())) ||
+      (u.cnpj && String(u.cnpj).toLowerCase().includes(busca.toLowerCase())) ||
       u.id.toLowerCase().includes(busca.toLowerCase())
     const matchRole = filtroRole === 'todos' || u.role === filtroRole
     return matchBusca && matchRole
   })
 
   const roles = ['todos', ...new Set(usuarios.map(u => u.role).filter(Boolean))]
+
+  async function alternarBanimento(u: any) {
+    const jaBanido = u.status === 'banido'
+    const motivo = jaBanido ? null : window.prompt('Motivo do bloqueio:', 'Violacao das regras da plataforma')
+    if (!jaBanido && !motivo) return
+
+    setAcaoId(u.id)
+    const atualizacao = {
+      status: jaBanido ? 'ativo' : 'banido',
+      banido_em: jaBanido ? null : new Date().toISOString(),
+      ban_motivo: jaBanido ? null : motivo,
+      online: false,
+    }
+
+    const { error } = await supabase.from('profiles').update(atualizacao).eq('id', u.id)
+    if (!error) {
+      setUsuarios(prev => prev.map(item => item.id === u.id ? { ...item, ...atualizacao } : item))
+    } else {
+      window.alert('Nao foi possivel atualizar este usuario: ' + error.message)
+    }
+    setAcaoId(null)
+  }
+
+  async function resetarPerfil(u: any) {
+    if (!window.confirm(`Resetar dados operacionais de ${u.nome || u.email}?`)) return
+    setAcaoId(u.id)
+    const atualizacao = {
+      status: 'ativo',
+      verificado: false,
+      email_verificado: false,
+      online: false,
+      lat: null,
+      lng: null,
+      zona: null,
+      banido_em: null,
+      ban_motivo: null,
+    }
+
+    const { error } = await supabase.from('profiles').update(atualizacao).eq('id', u.id)
+    await supabase.from('verificacoes').delete().eq('user_id', u.id)
+    if (!error) {
+      setUsuarios(prev => prev.map(item => item.id === u.id ? { ...item, ...atualizacao } : item))
+    } else {
+      window.alert('Nao foi possivel resetar este usuario: ' + error.message)
+    }
+    setAcaoId(null)
+  }
+
+  async function excluirPerfil(u: any) {
+    const alvo = u.email || u.nome || u.id
+    if (!window.confirm(`Excluir o perfil de ${alvo} do sistema? Esta acao remove dados publicos, mas nao apaga o usuario do Supabase Auth.`)) return
+    setAcaoId(u.id)
+    await supabase.from('verificacoes').delete().eq('user_id', u.id)
+    await supabase.from('produtos').delete().eq('vendedor_id', u.id)
+    const { error } = await supabase.from('profiles').delete().eq('id', u.id)
+    if (!error) {
+      setUsuarios(prev => prev.filter(item => item.id !== u.id))
+    } else {
+      window.alert('Nao foi possivel excluir este perfil: ' + error.message)
+    }
+    setAcaoId(null)
+  }
 
   return (
     <div className="space-y-6">
@@ -56,10 +121,10 @@ export default function UsuariosPage() {
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
             type="text"
-            placeholder="Buscar nome ou ID..."
+            placeholder="Buscar nome, e-mail, CNPJ ou ID..."
             value={busca}
             onChange={e => setBusca(e.target.value)}
-            className="bg-slate-900/50 border border-slate-800 rounded-xl py-2 pl-9 pr-4 text-sm text-slate-200 outline-none focus:border-purple-500/30 w-56 transition-colors"
+            className="bg-slate-900/50 border border-slate-800 rounded-xl py-2 pl-9 pr-4 text-sm text-slate-200 outline-none focus:border-purple-500/30 w-72 transition-colors"
           />
         </div>
         <div className="flex items-center gap-1 glass-panel rounded-xl p-1 border-slate-800">
@@ -118,6 +183,11 @@ export default function UsuariosPage() {
                   <div className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase border ${rc.bg} ${rc.color} ${rc.border}`}>
                     {u.role}
                   </div>
+                  {u.status === 'banido' && (
+                    <div className="px-2 py-0.5 rounded text-[9px] font-bold uppercase border bg-red-500/10 text-red-400 border-red-500/20">
+                      Banido
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -128,15 +198,53 @@ export default function UsuariosPage() {
               {u.telefone && (
                 <div className="text-xs text-slate-500 mb-1 font-mono">{u.telefone}</div>
               )}
+              {u.cnpj && (
+                <div className="text-xs text-slate-500 mb-1 font-mono">CNPJ {u.cnpj}</div>
+              )}
+              {u.ban_motivo && (
+                <div className="text-xs text-red-300 mb-2 rounded-lg border border-red-500/10 bg-red-500/5 px-3 py-2">
+                  Motivo: {u.ban_motivo}
+                </div>
+              )}
               
-              <div className="mt-auto pt-3 border-t border-slate-800/50 flex justify-between items-center text-xs">
-                <span className="text-slate-400 font-medium flex items-center gap-1">
+              <div className="mt-auto pt-3 border-t border-slate-800/50 flex justify-between items-center gap-3 text-xs">
+                <span className={`${u.status === 'banido' ? 'text-red-400' : 'text-slate-400'} font-medium flex items-center gap-1`}>
                   <UserCheck size={12} />
-                  Ativo
+                  {u.status === 'banido' ? 'Bloqueado' : 'Ativo'}
                 </span>
+                <button
+                  onClick={() => alternarBanimento(u)}
+                  disabled={acaoId === u.id}
+                  className={`px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-wide border transition-colors flex items-center gap-1 ${
+                    u.status === 'banido'
+                      ? 'bg-green-500/10 text-green-400 border-green-500/20 hover:bg-green-500/15'
+                      : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/15'
+                  } disabled:opacity-50`}
+                >
+                  {u.status === 'banido' ? <RotateCcw size={12} /> : <Ban size={12} />}
+                  {acaoId === u.id ? 'Salvando' : u.status === 'banido' ? 'Desbanir' : 'Banir'}
+                </button>
                 <span className="text-slate-600 text-[10px] font-mono">
                   Desde {u.created_at ? format(new Date(u.created_at), 'dd/MM/yyyy') : '—'}
                 </span>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => resetarPerfil(u)}
+                  disabled={acaoId === u.id}
+                  className="px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-wide border bg-sky-500/10 text-sky-400 border-sky-500/20 hover:bg-sky-500/15 disabled:opacity-50 flex items-center justify-center gap-1"
+                >
+                  <RotateCcw size={12} />
+                  Resetar
+                </button>
+                <button
+                  onClick={() => excluirPerfil(u)}
+                  disabled={acaoId === u.id}
+                  className="px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-wide border bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/15 disabled:opacity-50 flex items-center justify-center gap-1"
+                >
+                  <Trash2 size={12} />
+                  Excluir perfil
+                </button>
               </div>
             </motion.div>
           )

@@ -31,6 +31,20 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email_verificado BOOLEAN DE
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS telefone TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS role TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS cnpj TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS razao_social TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS endereco TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS telefone_comercial TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS lat DOUBLE PRECISION;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS lng DOUBLE PRECISION;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS online BOOLEAN DEFAULT false;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS zona TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'ativo';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS banido_em TIMESTAMPTZ;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS ban_motivo TEXT;
+CREATE INDEX IF NOT EXISTS profiles_status_idx ON public.profiles(status);
+CREATE INDEX IF NOT EXISTS profiles_cnpj_idx ON public.profiles(cnpj) WHERE cnpj IS NOT NULL;
+CREATE INDEX IF NOT EXISTS profiles_email_idx ON public.profiles(lower(email)) WHERE email IS NOT NULL;
 
 -- =====================================================
 -- 2. TRIGGER: cria o profile AUTOMATICAMENTE no cadastro

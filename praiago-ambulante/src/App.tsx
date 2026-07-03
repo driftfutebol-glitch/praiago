@@ -1,6 +1,8 @@
-import { Routes, Route, useLocation, Navigate } from 'react-router-dom'
+import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useSessao } from './lib/auth'
+import { useEffect } from 'react'
+import { logout, useSessao } from './lib/auth'
+import { supabase } from './lib/supabase'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import PedidosPage from './pages/PedidosPage'
@@ -77,11 +79,42 @@ function LogoBar({ gpsStatus }: { gpsStatus: string }) {
 
 export default function App() {
   const location = useLocation()
+  const navigate = useNavigate()
   const isPublic = PUBLIC_ROUTES.includes(location.pathname)
   const sessao = useSessao()
 
   // GPS ativo em todo o app — transmite posição em tempo real
   const { status: gpsStatus } = useGPS()
+
+  useEffect(() => {
+    if (!sessao?.id || isPublic) return
+
+    let ativo = true
+    const bloquearSeBanido = (perfil?: { status?: string } | null) => {
+      if (!ativo || perfil?.status !== 'banido') return
+      logout()
+      navigate('/login', { replace: true })
+    }
+
+    supabase
+      .from('profiles')
+      .select('status')
+      .eq('id', sessao.id)
+      .maybeSingle()
+      .then(({ data }) => bloquearSeBanido(data))
+
+    const channel = supabase
+      .channel(`ambulante_status_${sessao.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${sessao.id}` }, payload => {
+        bloquearSeBanido(payload.new as { status?: string })
+      })
+      .subscribe()
+
+    return () => {
+      ativo = false
+      supabase.removeChannel(channel)
+    }
+  }, [sessao?.id, isPublic, navigate])
 
   // Proteção de rota: sem sessão, vai para o login
   if (!sessao && !isPublic) return <Navigate to="/login" replace />

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Eye, EyeOff, LogIn, LogOut, User, Package, MapPin, ChevronRight, Bell, HelpCircle, Star } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -102,6 +102,38 @@ export default function PerfilPage() {
   const [erro, setErro] = useState('')
   const [loading, setLoading] = useState(false)
 
+  useEffect(() => {
+    const { data } = supabase.auth.onAuthStateChange(async (event) => {
+      if (event !== 'PASSWORD_RECOVERY') return
+      const novaSenha = window.prompt('Digite a nova senha com pelo menos 6 caracteres:')
+      if (!novaSenha || novaSenha.length < 6) {
+        setErro('A nova senha precisa ter ao menos 6 caracteres.')
+        return
+      }
+      const { error } = await supabase.auth.updateUser({ password: novaSenha })
+      setErro(error ? `Nao foi possivel redefinir a senha: ${error.message}` : 'Senha redefinida com sucesso. Faca login novamente.')
+    })
+    return () => data.subscription.unsubscribe()
+  }, [])
+
+  function emailNormalizado() {
+    return email.trim().toLowerCase()
+  }
+
+  async function enviarResetSenha() {
+    const alvo = emailNormalizado()
+    if (!/^\S+@\S+\.\S+$/.test(alvo)) { setErro('Informe seu e-mail valido para redefinir a senha.'); return }
+    const { error } = await supabase.auth.resetPasswordForEmail(alvo, { redirectTo: window.location.origin })
+    setErro(error ? `Nao foi possivel enviar redefinicao: ${error.message}` : 'Enviamos o link de redefinicao para seu e-mail.')
+  }
+
+  async function reenviarVerificacao() {
+    const alvo = emailNormalizado()
+    if (!/^\S+@\S+\.\S+$/.test(alvo)) { setErro('Informe seu e-mail valido para reenviar a verificacao.'); return }
+    const { error } = await supabase.auth.resend({ type: 'signup', email: alvo })
+    setErro(error ? `Nao foi possivel reenviar verificacao: ${error.message}` : 'Enviamos um novo e-mail de verificacao.')
+  }
+
   if (sessao) return <TelaLogada />
 
   async function entrar() {
@@ -123,11 +155,15 @@ export default function PerfilPage() {
         
         const { data: profile } = await supabase
           .from('profiles')
-          .select('nome')
+          .select('nome,status,ban_motivo')
           .eq('email', email.trim().toLowerCase())
           .maybeSingle()
 
         if (data.user) {
+          if (profile?.status === 'banido') {
+            await supabase.auth.signOut()
+            throw new Error(`Conta bloqueada pelo suporte.${profile.ban_motivo ? ` Motivo: ${profile.ban_motivo}` : ''}`)
+          }
           useStore.getState().login(data.user.id, email, profile?.nome || 'Cliente PraiaGo')
         }
       } else {
@@ -229,6 +265,12 @@ export default function PerfilPage() {
             {tab === 'entrar' ? <LogIn size={20} /> : <User size={20} />}
             {loading ? 'AGUARDE...' : (tab === 'entrar' ? 'Acessar Conta' : 'Criar Conta')}
           </motion.button>
+          {tab === 'entrar' && (
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap', marginTop: -2 }}>
+              <button type="button" onClick={enviarResetSenha} style={{ background: 'none', border: 0, color: '#0284c7', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Esqueci minha senha</button>
+              <button type="button" onClick={reenviarVerificacao} style={{ background: 'none', border: 0, color: '#16a34a', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Reenviar verificacao</button>
+            </div>
+          )}
         </div>
       </motion.div>
     </div>

@@ -1,6 +1,6 @@
-import { useEffect } from 'react'
-import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
-import { Home, ClipboardList, ShoppingBag, MapPin, User, Calendar } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Routes, Route, NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { Bell, Home, ClipboardList, ShoppingBag, MapPin, User, Calendar, X } from 'lucide-react'
 import { iniciarCatalogo } from './store/useCatalogo'
 import { useStore } from './store/useStore'
 import { supabase } from './lib/supabase'
@@ -23,11 +23,119 @@ const navItems = [
   { to: '/perfil',      icon: User,          label: 'Perfil'    },
 ]
 
+function playNotifySound() {
+  try {
+    const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext
+    if (!AudioContextCtor) return
+    const ctx = new AudioContextCtor()
+    const now = ctx.currentTime
+    ;[[880, 0], [1175, 0.16], [988, 0.34]].forEach(([freq, start]) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.value = freq
+      gain.gain.setValueAtTime(0.0001, now + start)
+      gain.gain.exponentialRampToValueAtTime(0.24, now + start + 0.02)
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + start + 0.14)
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start(now + start)
+      osc.stop(now + start + 0.16)
+    })
+    setTimeout(() => ctx.close(), 900)
+  } catch {
+    // Navegadores podem bloquear audio antes do primeiro toque do usuario.
+  }
+}
+
+function NotificationToast() {
+  const ultima = useStore(s => s.notificacoes[0])
+  const [visivel, setVisivel] = useState(false)
+
+  useEffect(() => {
+    if (!ultima) return
+    setVisivel(true)
+    playNotifySound()
+    const t = window.setTimeout(() => setVisivel(false), 6500)
+    return () => window.clearTimeout(t)
+  }, [ultima?.id])
+
+  if (!ultima || !visivel) return null
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -20, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -16, scale: 0.96 }}
+      style={{
+        position: 'fixed',
+        top: 82,
+        left: 16,
+        right: 16,
+        zIndex: 2000,
+        background: '#ffffff',
+        border: '1px solid rgba(14,165,233,0.22)',
+        borderRadius: 18,
+        padding: 14,
+        boxShadow: '0 18px 40px rgba(15,23,42,0.18)',
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 12,
+        maxWidth: 460,
+        margin: '0 auto',
+      }}
+    >
+      <div style={{ width: 40, height: 40, borderRadius: 14, background: 'linear-gradient(135deg,#0ea5e9,#22c55e)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <Bell size={19} color="#fff" />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, color: '#0f172a', fontWeight: 900 }}>{ultima.titulo}</div>
+        <div style={{ fontSize: 12, color: '#475569', fontWeight: 600, marginTop: 3, lineHeight: 1.35 }}>{ultima.texto}</div>
+      </div>
+      <button onClick={() => setVisivel(false)} style={{ border: 0, background: '#f1f5f9', width: 30, height: 30, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+        <X size={15} color="#64748b" />
+      </button>
+    </motion.div>
+  )
+}
+
 export default function App() {
   const location = useLocation()
+  const navigate = useNavigate()
+  const sessao = useStore(s => s.sessao)
 
   // Carrega o catálogo real (lojas/produtos do banco) + realtime, uma vez.
   useEffect(() => { iniciarCatalogo() }, [])
+
+  useEffect(() => {
+    if (!sessao?.id) return
+
+    let ativo = true
+    const bloquearSeBanido = (perfil?: { status?: string } | null) => {
+      if (!ativo || perfil?.status !== 'banido') return
+      useStore.getState().logout()
+      navigate('/perfil', { replace: true })
+    }
+
+    supabase
+      .from('profiles')
+      .select('status')
+      .eq('id', sessao.id)
+      .maybeSingle()
+      .then(({ data }) => bloquearSeBanido(data))
+
+    const channel = supabase
+      .channel(`cliente_status_${sessao.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${sessao.id}` }, payload => {
+        bloquearSeBanido(payload.new as { status?: string })
+      })
+      .subscribe()
+
+    return () => {
+      ativo = false
+      supabase.removeChannel(channel)
+    }
+  }, [sessao?.id, navigate])
 
   // Promoções/avisos enviados pelo admin chegam na hora no sininho
   useEffect(() => {
@@ -114,6 +222,9 @@ export default function App() {
       </main>
 
       <AiChatbot plataforma="cliente" />
+      <AnimatePresence>
+        <NotificationToast />
+      </AnimatePresence>
 
       {/* Floating Bottom Nav - Glassmorphism Pill */}
       <div style={{

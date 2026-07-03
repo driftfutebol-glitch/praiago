@@ -19,15 +19,67 @@ function NotificationSystem() {
   const [notifications, setNotifications] = useState<any[]>([])
 
   useEffect(() => {
+    function playSound() {
+      try {
+        const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext
+        if (!AudioContextCtor) return
+        const ctx = new AudioContextCtor()
+        const now = ctx.currentTime
+        ;[[784, 0], [1046, 0.14], [1318, 0.32]].forEach(([freq, start]) => {
+          const osc = ctx.createOscillator()
+          const gain = ctx.createGain()
+          osc.type = 'triangle'
+          osc.frequency.value = freq
+          gain.gain.setValueAtTime(0.0001, now + start)
+          gain.gain.exponentialRampToValueAtTime(0.22, now + start + 0.02)
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + start + 0.16)
+          osc.connect(gain)
+          gain.connect(ctx.destination)
+          osc.start(now + start)
+          osc.stop(now + start + 0.18)
+        })
+        setTimeout(() => ctx.close(), 900)
+      } catch {
+        // Audio pode ficar bloqueado ate o primeiro clique do usuario.
+      }
+    }
+
+    function pushNotification(n: any) {
+      const toast = { ...n, _toastId: `${n.id || crypto.randomUUID()}-${Date.now()}` }
+      setNotifications(prev => [toast, ...prev].slice(0, 5))
+      playSound()
+      setTimeout(() => {
+        setNotifications(prev => prev.filter(item => item._toastId !== toast._toastId))
+      }, 9000)
+    }
+
     const sub = supabase.channel('tickets_inserts')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tickets' }, (payload) => {
         const ticket = payload.new
-        setNotifications(prev => [...prev, ticket])
-        
-        // Auto-remove after 8s
-        setTimeout(() => {
-          setNotifications(prev => prev.filter(n => n.id !== ticket.id))
-        }, 8000)
+        pushNotification({
+          id: ticket.id,
+          titulo: `Novo chamado: ${ticket.plataforma || 'suporte'}`,
+          texto: ticket.assunto || ticket.mensagem || 'Chamado recebido no atendimento.',
+          origem: ticket.usuario_nome || ticket.user_nome || 'Usuario',
+        })
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'verificacoes' }, (payload) => {
+        const v = payload.new
+        pushNotification({
+          id: v.id,
+          titulo: `Nova verificacao: ${v.tipo || 'usuario'}`,
+          texto: 'Documento enviado e aguardando analise.',
+          origem: v.nome || v.email || v.user_id || 'Cadastro',
+        })
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'pedidos' }, (payload) => {
+        const p = payload.new
+        pushNotification({
+          id: p.id,
+          titulo: 'Novo pedido recebido',
+          texto: `Pedido ${p.id?.slice?.(0, 8) || ''} no valor de R$ ${Number(p.total || 0).toFixed(2).replace('.', ',')}`,
+          origem: p.cliente_nome || p.cliente || 'Cliente',
+        })
       })
       .subscribe()
 
@@ -41,7 +93,7 @@ function NotificationSystem() {
       <AnimatePresence>
         {notifications.map(n => (
           <motion.div
-            key={n.id}
+            key={n._toastId || n.id}
             initial={{ opacity: 0, y: 20, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9, x: 20 }}
@@ -51,11 +103,11 @@ function NotificationSystem() {
               <Bell size={20} />
             </div>
             <div className="flex-1">
-              <h4 className="text-white font-bold text-sm">Novo Chamado: {n.plataforma}</h4>
-              <p className="text-slate-400 text-xs mt-1">{n.assunto}</p>
-              <p className="text-slate-500 text-xs mt-1">De: {n.usuario_nome}</p>
+              <h4 className="text-white font-bold text-sm">{n.titulo}</h4>
+              <p className="text-slate-400 text-xs mt-1">{n.texto}</p>
+              <p className="text-slate-500 text-xs mt-1">De: {n.origem}</p>
             </div>
-            <button onClick={() => setNotifications(prev => prev.filter(t => t.id !== n.id))} className="text-slate-500 hover:text-white transition-colors cursor-pointer">
+            <button onClick={() => setNotifications(prev => prev.filter(t => (t._toastId || t.id) !== (n._toastId || n.id)))} className="text-slate-500 hover:text-white transition-colors cursor-pointer">
               <X size={16} />
             </button>
           </motion.div>

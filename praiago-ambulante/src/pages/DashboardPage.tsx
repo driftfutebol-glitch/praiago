@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Package, Bell, MapPin, TrendingUp, DollarSign,
          ShoppingBag, Settings, ChevronRight, Navigation } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useGPS } from '../hooks/useGPS'
+import { ONLINE_EVENT, ONLINE_STORAGE, useGPS } from '../hooks/useGPS'
 
 // Dados reais de stats do Supabase
 import { supabase } from '../lib/supabase'
@@ -32,7 +32,9 @@ function AccuracyBar({ accuracy }: { accuracy: number }) {
 // ── Page principal ───────────────────────────────────────────
 export default function DashboardPage() {
   const { data, status } = useGPS()
-  const [online,  setOnline]  = useState(false)
+  const [online, setOnline] = useState(() => {
+    try { return localStorage.getItem(ONLINE_STORAGE) === 'true' } catch { return false }
+  })
   const sessao = getSessao()
   const [pedidosHoje, setPedidosHoje] = useState(0)
   const [faturamentoHoje, setFaturamentoHoje] = useState(0)
@@ -66,6 +68,23 @@ export default function DashboardPage() {
 
     return () => { supabase.removeChannel(ch) }
   }, [sessao])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(ONLINE_STORAGE, online ? 'true' : 'false')
+      window.dispatchEvent(new Event(ONLINE_EVENT))
+    } catch {
+      // Storage pode falhar em webviews restritas; o banco ainda e atualizado abaixo.
+    }
+
+    if (!sessao) return
+    const patch: Record<string, unknown> = { online }
+    if (data) {
+      patch.lat = data.lat
+      patch.lng = data.lng
+    }
+    supabase.from('profiles').update(patch).eq('id', sessao.id)
+  }, [online, data?.lat, data?.lng, sessao])
 
   return (
     <div style={{ minHeight: '100vh', paddingBottom: 120 }}>
@@ -133,7 +152,7 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
-          <button onClick={() => setOnline(!online)} style={{
+          <button onClick={() => setOnline(v => !v)} style={{
             width: 72, height: 40, borderRadius: 20,
             background: online ? 'linear-gradient(135deg, #22c55e, #16a34a)' : 'rgba(0,0,0,0.08)',
             border: online ? 'none' : '1px solid rgba(255,255,255,0.2)', position: 'relative', cursor: 'pointer', transition: 'background 0.3s',

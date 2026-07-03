@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { channel, TOPICS } from '../lib/realtime'
+import { supabase } from '../lib/supabase'
 
 // ── Tipos ────────────────────────────────────────────────────
 
@@ -32,6 +33,19 @@ export type AmbulanteGPSPayload = {
   aberto: boolean
   zona: string
   ts: number
+}
+
+type ProfileAmbulanteRow = {
+  id: string
+  nome: string | null
+  emoji: string | null
+  categoria: string | null
+  role: string | null
+  online: boolean | null
+  lat: number | null
+  lng: number | null
+  zona: string | null
+  status?: string | null
 }
 
 // ── Haversine ────────────────────────────────────────────────
@@ -82,11 +96,39 @@ export function useNearbyAmbulantes(clientePos: [number, number]) {
     setAmbulantes(result)
   }, [])
 
+  const upsertProfile = useCallback((row: ProfileAmbulanteRow) => {
+    if (row.role !== 'ambulante' || row.status === 'banido' || !row.online || typeof row.lat !== 'number' || typeof row.lng !== 'number') {
+      mapRef.current.delete(row.id)
+      recalcAndSort()
+      return
+    }
+
+    mapRef.current.set(row.id, {
+      id: row.id,
+      nome: row.nome ?? 'Ambulante',
+      emoji: row.emoji ?? '🥥',
+      categoria: row.categoria ?? 'Ambulante',
+      lat: row.lat,
+      lng: row.lng,
+      accuracy: 30,
+      lastSeen: Date.now(),
+      aberto: true,
+      zona: row.zona ?? 'Praia Grande',
+      distancia: 0,
+    })
+    recalcAndSort()
+  }, [recalcAndSort])
+
   useEffect(() => {
     const ch = channel<AmbulanteGPSPayload>(TOPICS.ambulanteGPS)
 
     const unsub = ch.subscribe((payload) => {
       if (!payload?.id || typeof payload.lat !== 'number' || typeof payload.lng !== 'number') return
+      if (payload.aberto === false) {
+        mapRef.current.delete(payload.id)
+        recalcAndSort()
+        return
+      }
 
       const entry: AmbulanteLive = {
         id: payload.id,
@@ -115,6 +157,39 @@ export function useNearbyAmbulantes(clientePos: [number, number]) {
       clearInterval(pruner)
     }
   }, [recalcAndSort])
+
+  useEffect(() => {
+    let ativo = true
+
+    supabase
+      .from('profiles')
+      .select('id,nome,emoji,categoria,role,online,lat,lng,zona,status')
+      .eq('role', 'ambulante')
+      .eq('online', true)
+      .not('lat', 'is', null)
+      .not('lng', 'is', null)
+      .then(({ data }) => {
+        if (!ativo) return
+        for (const row of (data ?? []) as ProfileAmbulanteRow[]) upsertProfile(row)
+      })
+
+    const dbChannel = supabase
+      .channel('cliente_ambulantes_profiles')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, payload => {
+        if (payload.eventType === 'DELETE') {
+          mapRef.current.delete((payload.old as { id?: string }).id || '')
+          recalcAndSort()
+          return
+        }
+        upsertProfile(payload.new as ProfileAmbulanteRow)
+      })
+      .subscribe()
+
+    return () => {
+      ativo = false
+      supabase.removeChannel(dbChannel)
+    }
+  }, [recalcAndSort, upsertProfile])
 
   // Recalcula quando posição do cliente muda
   useEffect(() => {

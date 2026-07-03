@@ -6,6 +6,7 @@ import {
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSessao, logout } from './lib/auth'
+import { supabase } from './lib/supabase'
 import { useOrders, connectRealtime } from './store/useOrders'
 import LoginPage        from './pages/LoginPage'
 import DashboardPage    from './pages/DashboardPage'
@@ -46,6 +47,36 @@ export default function App() {
 
   // Recebe pedidos do cliente em tempo real (uma vez)
   useEffect(() => { connectRealtime() }, [])
+
+  useEffect(() => {
+    if (!sessao?.id || isPublic) return
+
+    let ativo = true
+    const bloquearSeBanido = (perfil?: { status?: string; ban_motivo?: string | null } | null) => {
+      if (!ativo || perfil?.status !== 'banido') return
+      logout()
+      navigate('/login', { replace: true })
+    }
+
+    supabase
+      .from('profiles')
+      .select('status,ban_motivo')
+      .eq('id', sessao.id)
+      .maybeSingle()
+      .then(({ data }) => bloquearSeBanido(data))
+
+    const channel = supabase
+      .channel(`restaurante_status_${sessao.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${sessao.id}` }, payload => {
+        bloquearSeBanido(payload.new as { status?: string; ban_motivo?: string | null })
+      })
+      .subscribe()
+
+    return () => {
+      ativo = false
+      supabase.removeChannel(channel)
+    }
+  }, [sessao?.id, isPublic, navigate])
 
   // Notificacoes: pedidos novos reais + alertas operacionais
   const notifs = [
@@ -249,7 +280,7 @@ export default function App() {
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <div className="animate-pulse-neon" style={{ width: 8, height: 8, borderRadius: '50%', background: '#4ade80', boxShadow: '0 0 10px #4ade80' }} />
-                <span style={{ fontSize: 13, color: '#334155', fontWeight: 600 }}>Localizacao ativa · <span style={{ color: '#0f172a', fontWeight: 800 }}>2 entregadores online</span></span>
+                <span style={{ fontSize: 13, color: '#334155', fontWeight: 600 }}>Base do restaurante ativa</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(34,197,94,0.1)', padding: '6px 12px', borderRadius: 20, border: '1px solid rgba(34,197,94,0.2)' }}>
                 <Wifi size={14} color="#4ade80" />

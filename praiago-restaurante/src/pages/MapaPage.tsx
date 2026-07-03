@@ -9,6 +9,7 @@ import {
   NIVEL_CONFIG, type ZoneHeat,
 } from '../lib/praiagoZones'
 import { supabase } from '../lib/supabase'
+import { useSessao } from '../lib/auth'
 
 // ── Fix ícones Leaflet ───────────────────────────────────────
 delete (L.Icon.Default.prototype as any)._getIconUrl
@@ -39,6 +40,13 @@ type Operador = {
   status: string; zona: string; valor?: number
 }
 
+type RestauranteBase = {
+  nome: string | null
+  endereco: string | null
+  lat: number | null
+  lng: number | null
+}
+
 // ── Componente que centraliza o mapa ─────────────────────────
 function FlyTo({ center, zoom }: { center: [number,number]; zoom: number }) {
   const map = useMap()
@@ -47,6 +55,7 @@ function FlyTo({ center, zoom }: { center: [number,number]; zoom: number }) {
 }
 
 export default function MapaPage() {
+  const sessao = useSessao()
   const [operadores, setOperadores] = useState<Operador[]>([])
   const [heatData,   setHeatData]   = useState<ZoneHeat[]>([])
   const [selId,      setSelId]      = useState<string | null>(null)
@@ -55,9 +64,12 @@ export default function MapaPage() {
   const [mapCenter,  setMapCenter]  = useState<[number,number]>(PRAIA_GRANDE_CENTER)
   const [mapZoom,    setMapZoom]    = useState(12)
   const [restPos,    setRestPos]    = useState<[number, number]>(REST_POS)
+  const [restInfo,   setRestInfo]   = useState<RestauranteBase | null>(null)
+  const [baseStatus, setBaseStatus] = useState<'carregando' | 'ok' | 'sem_endereco'>('carregando')
 
   // Localização REAL do restaurante (GPS do dispositivo) — sem ponto fantasma fixo
   useEffect(() => {
+    if (sessao?.id) return
     if (typeof navigator === 'undefined' || !navigator.geolocation) return
     navigator.geolocation.getCurrentPosition(
       p => {
@@ -67,7 +79,44 @@ export default function MapaPage() {
       () => { /* permissão negada → mantém o fallback em terra */ },
       { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
     )
-  }, [])
+  }, [sessao?.id])
+
+  useEffect(() => {
+    let alive = true
+
+    async function carregarBase() {
+      if (!sessao?.id) {
+        setBaseStatus('sem_endereco')
+        return
+      }
+
+      setBaseStatus('carregando')
+      const { data } = await supabase
+        .from('profiles')
+        .select('nome,endereco,lat,lng')
+        .eq('id', sessao.id)
+        .maybeSingle()
+
+      if (!alive) return
+      const perfil = data as RestauranteBase | null
+      setRestInfo(perfil)
+
+      const lat = Number(perfil?.lat)
+      const lng = Number(perfil?.lng)
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        const pos: [number, number] = [lat, lng]
+        setRestPos(pos)
+        setMapCenter(pos)
+        setMapZoom(16)
+        setBaseStatus('ok')
+      } else {
+        setBaseStatus('sem_endereco')
+      }
+    }
+
+    carregarBase()
+    return () => { alive = false }
+  }, [sessao?.id])
 
   // Escuta GPS real via Supabase (Realtime) e Broadcast
   useEffect(() => {
@@ -154,6 +203,14 @@ export default function MapaPage() {
             <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 0', fontWeight: 500 }}>
               Acompanhe entregas e ambulantes em tempo real
             </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 12, color: baseStatus === 'ok' ? '#16a34a' : '#d97706', fontWeight: 800 }}>
+              <MapPin size={14} />
+              {baseStatus === 'carregando'
+                ? 'Carregando base do restaurante...'
+                : baseStatus === 'ok'
+                  ? `Base confirmada: ${restInfo?.endereco || 'endereco cadastrado'}`
+                  : 'Base sem endereco verificado. Cadastre o endereco da loja para fixar o ponto real.'}
+            </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -372,8 +429,10 @@ export default function MapaPage() {
             {/* ── Restaurante ─────────────────────────────── */}
             <Marker position={restPos} icon={ICONS.restaurante}>
               <Popup>
-                <b>🍽️ Seu restaurante</b><br />
-                <span style={{ fontSize: 11, color: '#64748b' }}>Sua localização atual (GPS)</span>
+                <b>{restInfo?.nome || 'Seu restaurante'}</b><br />
+                <span style={{ fontSize: 11, color: '#64748b' }}>
+                  {baseStatus === 'ok' ? (restInfo?.endereco || 'Endereco cadastrado') : 'Endereco ainda nao verificado'}
+                </span>
               </Popup>
             </Marker>
 

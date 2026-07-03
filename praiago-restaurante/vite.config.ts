@@ -12,6 +12,12 @@ export default defineConfig({
         target: 'https://api.blackbox.ai',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/ai/, '')
+      },
+      '/api/geocode': {
+        target: 'https://nominatim.openstreetmap.org',
+        changeOrigin: true,
+        headers: { 'User-Agent': 'PraiaGoDev/1.0' },
+        rewrite: (path) => path.replace(/^\/api\/geocode/, '')
       }
     }
   },

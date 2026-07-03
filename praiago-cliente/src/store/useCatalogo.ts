@@ -115,5 +115,8 @@ export function iniciarCatalogo() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'produtos' }, () => {
       useCatalogo.getState().carregar()
     })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+      useCatalogo.getState().carregar()
+    })
     .subscribe()
 }

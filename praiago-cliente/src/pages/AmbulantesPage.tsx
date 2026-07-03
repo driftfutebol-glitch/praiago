@@ -254,8 +254,9 @@ export default function AmbulantesPage() {
         )}
       </AnimatePresence>
 
-      {/* ── Conteúdo ────────────────────────────────────── */}
-      <div style={{ flex: 1, position: 'relative' }}>
+      {/* ── Conteúdo ── altura explícita: com flex:1 puro o pai sem altura
+          definida colapsava pra 0px e o mapa ficava invisível */}
+      <div style={{ flex: 1, position: 'relative', minHeight: 'max(420px, calc(100dvh - 330px))' }}>
         <AnimatePresence mode="wait">
           {viewMode === 'map' ? (
             <motion.div key="map" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} style={{ height: '100%', width: '100%', position: 'absolute', inset: 0 }}>

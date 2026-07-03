@@ -1,17 +1,36 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { ShieldAlert, Terminal } from 'lucide-react'
+import { supabase } from '../lib/supabase'
 
 export default function LoginPage({ onLogin }: { onLogin: () => void }) {
   const [user, setUser] = useState('')
   const [pass, setPass] = useState('')
   const [erro, setErro] = useState('')
 
-  function handleLogin() {
-    if (user === 'admin' && pass === 'admin') {
+  async function handleLogin() {
+    setErro('')
+
+    if (/^\S+@\S+\.\S+$/.test(user)) {
+      const { data, error } = await supabase.auth.signInWithPassword({ email: user.trim().toLowerCase(), password: pass })
+      if (!error && data.user) {
+        const { data: perfil } = await supabase.from('profiles').select('role,status,nome').eq('id', data.user.id).maybeSingle()
+        if ((perfil?.role === 'admin' || perfil?.role === 'sysadmin') && perfil?.status !== 'banido') {
+          onLogin()
+          return
+        }
+        await supabase.auth.signOut()
+        setErro('ACESSO NEGADO. ESTE USUARIO NAO E ADMIN.')
+        return
+      }
+    }
+
+    const envUser = import.meta.env.VITE_ADMIN_USER || ''
+    const envPass = import.meta.env.VITE_ADMIN_PASSWORD || ''
+    if (envUser && envPass && user === envUser && pass === envPass) {
       onLogin()
     } else {
-      setErro('ACESSO NEGADO. CREDENCIAIS INVÁLIDAS.')
+      setErro('ACESSO NEGADO. CREDENCIAIS INVALIDAS.')
     }
   }
 

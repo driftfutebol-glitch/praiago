@@ -39,6 +39,15 @@ export function useGPS() {
 
     setStatus('requesting')
 
+    // App NATIVO (Capacitor): pede a permissão de localização do Android antes —
+    // sem isso o navigator.geolocation do WebView falha silenciosamente.
+    const capacitor = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor
+    if (capacitor?.isNativePlatform?.()) {
+      import('@capacitor/geolocation')
+        .then(({ Geolocation }) => Geolocation.requestPermissions())
+        .catch(() => { /* plugin ausente → segue com o geolocation web */ })
+    }
+
     const onPos = (p: GeolocationPosition) => {
       const gps: GPSData = {
         lat: p.coords.latitude,
