@@ -6,7 +6,7 @@
     <!-- Content-Security-Policy: bloqueia scripts/origens não previstos (anti-XSS/injeção).
          Libera só os recursos usados: tiles OSM, ícones unpkg, fotos Unsplash, rotas OSRM, Supabase.
          Obs.: em apps Capacitor 'self' = origem do WebView. Se algum plugin precisar de mais, ajuste aqui. -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://unpkg.com https://images.unsplash.com; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self' data:; connect-src 'self' https://router.project-osrm.org https://*.supabase.co wss://*.supabase.co; form-action 'self'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://unpkg.com https://images.unsplash.com; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self' data:; connect-src 'self' https://ipwho.is https://router.project-osrm.org https://*.supabase.co wss://*.supabase.co; form-action 'self'" />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />

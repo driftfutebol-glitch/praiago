@@ -63,7 +63,7 @@ export function useGPS() {
   async function buscarPorIP() {
     if (buscouIp.current) return
     buscouIp.current = true
-    for (const url of ['https://ipwho.is/', '/api/ip/']) {
+    for (const url of ['/api/ip/', 'https://ipwho.is/']) {
       try {
         const r = await fetch(url)
         const j = await r.json()
