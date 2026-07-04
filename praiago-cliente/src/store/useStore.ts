@@ -213,7 +213,9 @@ export const useStore = create<State>()(
           lng: entrega?.lng ?? null,
           itens: itens.map(i => `${i.qtd}x ${i.nome}`),
           total: total,
-          status: 'novo',
+          // Pagamento online: o pedido NASCE travado e só vira 'novo' (visível
+          // pro vendedor) quando o webhook do Mercado Pago confirmar o pagamento.
+          status: presencial ? 'novo' : 'aguardando_pagamento',
           pagamento: method,
           payment_provider: presencial ? 'manual' : 'mercadopago',
           payment_status: presencial ? 'presencial' : 'pendente',

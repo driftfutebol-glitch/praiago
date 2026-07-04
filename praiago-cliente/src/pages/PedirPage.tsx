@@ -88,9 +88,10 @@ function ChatModal({ vendedor, onClose }: { vendedor: Vendedor; onClose: () => v
 }
 
 /* ─── RASTREAMENTO (TÁTICO / GLOW) ──────────────────────── */
-type StatusPedido = 'enviado' | 'preparando' | 'a_caminho' | 'chegou'
+type StatusPedido = 'aguardando' | 'enviado' | 'preparando' | 'a_caminho' | 'chegou'
 // status na tabela `pedidos` → etapa da linha do tempo
 const DB_STATUS: Record<string, StatusPedido> = {
+  aguardando_pagamento: 'aguardando',
   novo: 'enviado', preparando: 'preparando', saiu_entrega: 'a_caminho', entregue: 'chegou',
 }
 
@@ -167,6 +168,7 @@ function RastreamentoModal({ vendedor, clientePos, pedidoId, onClose }: { vended
   useEffect(() => { if (segundos > limiteSeg && status !== 'chegou') setAtrasado(true) }, [segundos, limiteSeg, status])
 
   const statusColors: Record<StatusPedido, { bg: string; text: string; border: string; label: string }> = {
+    aguardando: { bg: 'rgba(251,191,36,0.15)', text: '#b45309', border: '#d97706', label: 'AGUARDANDO PAGAMENTO' },
     enviado:    { bg: 'rgba(148,163,184,0.15)', text: '#64748b', border: '#94a3b8', label: 'PEDIDO ENVIADO' },
     preparando: { bg: 'rgba(251,191,36,0.15)', text: '#d97706', border: '#b45309', label: 'PREPARANDO' },
     a_caminho:  { bg: 'rgba(14,165,233,0.15)', text: '#0284c7', border: '#0284c7', label: 'SAIU PRA ENTREGA' },
@@ -358,6 +360,21 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
       setConfirming(false)
       return
     }
+    if (usaMercadoPago) {
+      // Pagamento online: o vendedor SÓ recebe o pedido depois que o Mercado
+      // Pago confirmar — nada de broadcast nem "pedido enviado" antes de pagar.
+      addNotif({ titulo: 'Falta só o pagamento 💳', texto: 'Finalize no Mercado Pago para o pedido ser enviado ao vendedor.' })
+      try {
+        const checkout = await criarCheckoutMercadoPago(pedido.id)
+        limparCarrinho()
+        window.location.assign(checkout.checkout_url)
+        return
+      } catch (err) {
+        setErro(err instanceof Error ? err.message : 'Nao foi possivel abrir o Mercado Pago.')
+        setConfirming(false)
+        return
+      }
+    }
     broadcastOrder({
       id: pedido.id,
       vendedorId: vendedor.id,
@@ -374,19 +391,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
       pagamento,
       ts: Date.now(),
     })
-    addNotif({ titulo: 'Pedido enviado! 🎉', texto: `Pagamento via ${pagamento.toUpperCase()}.` })
-    if (usaMercadoPago) {
-      try {
-        const checkout = await criarCheckoutMercadoPago(pedido.id)
-        limparCarrinho()
-        window.location.assign(checkout.checkout_url)
-        return
-      } catch (err) {
-        setErro(err instanceof Error ? err.message : 'Nao foi possivel abrir o Mercado Pago.')
-        setConfirming(false)
-        return
-      }
-    }
+    addNotif({ titulo: 'Pedido enviado! 🎉', texto: `Pagamento via ${pagamento.toUpperCase()} na entrega.` })
     setTimeout(() => onConfirm(entrega, pedido.id), 900)
   }
 

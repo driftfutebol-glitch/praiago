@@ -1,29 +1,75 @@
-import { useEffect } from 'react'
+// Quando o usuário clica no link "redefinir senha" do e-mail, o Supabase abre
+// o app com uma sessão de recuperação e dispara PASSWORD_RECOVERY. Aqui a
+// gente mostra um formulário DE VERDADE (window.prompt não abre no Android).
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
-const RECOVERY_KEY = 'praiago:password-recovery-handled'
-
 export default function PasswordRecoveryHandler() {
+  const [aberto, setAberto] = useState(false)
+  const [senha, setSenha] = useState('')
+  const [confirma, setConfirma] = useState('')
+  const [msg, setMsg] = useState('')
+  const [ok, setOk] = useState(false)
+  const [salvando, setSalvando] = useState(false)
+
   useEffect(() => {
-    const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event !== 'PASSWORD_RECOVERY') return
-      const tokenKey = session?.access_token ? `${RECOVERY_KEY}:${session.access_token.slice(0, 16)}` : RECOVERY_KEY
-      if (sessionStorage.getItem(tokenKey)) return
-      sessionStorage.setItem(tokenKey, 'true')
-
-      const novaSenha = window.prompt('Digite a nova senha com pelo menos 6 caracteres:')
-      if (!novaSenha || novaSenha.length < 6) {
-        window.alert('A nova senha precisa ter ao menos 6 caracteres.')
-        return
-      }
-
-      const { error } = await supabase.auth.updateUser({ password: novaSenha })
-      window.alert(error ? `Nao foi possivel redefinir a senha: ${error.message}` : 'Senha redefinida com sucesso. Faca login novamente.')
-      if (!error) await supabase.auth.signOut()
+    const { data } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') setAberto(true)
     })
-
     return () => data.subscription.unsubscribe()
   }, [])
 
-  return null
+  if (!aberto) return null
+
+  async function salvar() {
+    if (senha.length < 6) { setMsg('A nova senha precisa ter ao menos 6 caracteres.'); return }
+    if (senha !== confirma) { setMsg('As senhas não conferem.'); return }
+    setMsg('')
+    setSalvando(true)
+    const { error } = await supabase.auth.updateUser({ password: senha })
+    setSalvando(false)
+    if (error) { setMsg(`Não foi possível redefinir: ${error.message}`); return }
+    setOk(true)
+    setMsg('Senha redefinida com sucesso! Entre com a nova senha.')
+    await supabase.auth.signOut()
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', boxSizing: 'border-box', background: '#f8fafc',
+    border: '1px solid rgba(0,0,0,0.1)', borderRadius: 14, padding: '14px',
+    fontSize: 15, fontWeight: 600, color: '#0f172a', outline: 'none', marginBottom: 10,
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ width: '100%', maxWidth: 420, background: '#ffffff', borderRadius: 24, padding: 26, boxShadow: '0 24px 60px rgba(15,23,42,0.35)' }}>
+        <div style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', marginBottom: 6 }}>Criar nova senha</div>
+        <div style={{ fontSize: 13.5, color: '#64748b', fontWeight: 600, marginBottom: 18, lineHeight: 1.45 }}>
+          Você abriu o link de redefinição do PraiaGo. Escolha a nova senha da sua conta.
+        </div>
+        {!ok && (
+          <>
+            <input type="password" value={senha} onChange={e => setSenha(e.target.value)} placeholder="Nova senha (mín. 6 caracteres)" style={inputStyle} />
+            <input type="password" value={confirma} onChange={e => setConfirma(e.target.value)} placeholder="Repita a nova senha" style={inputStyle} />
+            <button
+              onClick={salvar}
+              disabled={salvando}
+              style={{ width: '100%', border: 'none', background: 'linear-gradient(135deg,#0ea5e9,#22c55e)', color: '#fff', borderRadius: 14, padding: 15, fontSize: 15, fontWeight: 900, cursor: salvando ? 'wait' : 'pointer', marginTop: 4 }}
+            >
+              {salvando ? 'Salvando…' : 'Salvar nova senha'}
+            </button>
+          </>
+        )}
+        {msg && (
+          <div style={{ marginTop: 12, fontSize: 13.5, fontWeight: 700, color: ok ? '#16a34a' : '#ef4444' }}>{msg}</div>
+        )}
+        <button
+          onClick={() => setAberto(false)}
+          style={{ width: '100%', border: 'none', background: 'transparent', color: '#64748b', padding: '12px 0 0', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}
+        >
+          {ok ? 'Fechar e fazer login' : 'Cancelar'}
+        </button>
+      </div>
+    </div>
+  )
 }

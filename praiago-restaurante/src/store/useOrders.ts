@@ -4,6 +4,7 @@
 // reflete os pedidos novos de verdade.
 import { create } from 'zustand'
 import { supabase } from '../lib/supabase'
+import { getSessao } from '../lib/auth'
 
 export type Status = 'novo' | 'preparando' | 'pronto' | 'entregando' | 'entregue'
 
@@ -39,7 +40,15 @@ export const useOrders = create<State>((set, get) => ({
   lastSeen: Date.now(),
 
   fetchOrders: async () => {
-    const { data, error } = await supabase.from('pedidos').select('*').order('created_at', { ascending: false })
+    const sessao = getSessao()
+    if (!sessao?.id) return
+    const { data, error } = await supabase
+      .from('pedidos')
+      .select('*')
+      // só pedidos DESTE restaurante — e pedido online não pago fica invisível
+      .eq('vendedor_id', sessao.id)
+      .not('status', 'in', '(aguardando_pagamento,cancelado)')
+      .order('created_at', { ascending: false })
     if (error || !data) return
     const formatados: Pedido[] = data.map(row => ({
       id: row.id,

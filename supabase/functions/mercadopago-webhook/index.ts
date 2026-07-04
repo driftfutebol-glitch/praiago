@@ -91,6 +91,25 @@ Deno.serve(async req => {
 
     if (error) throw error
 
+    // LIBERAÇÃO DO PEDIDO: pagamento aprovado destrava 'aguardando_pagamento' →
+    // 'novo' (o vendedor só vê/ouve o pedido a partir daqui). Pagamento que
+    // morreu (rejeitado/cancelado/estornado) cancela o pedido travado. O filtro
+    // por status impede que um reenvio do webhook regrida um pedido já aceito.
+    if (approved) {
+      await supabase
+        .from('pedidos')
+        .update({ status: 'novo' })
+        .eq('id', pedidoId)
+        .eq('status', 'aguardando_pagamento')
+    }
+    if (terminal) {
+      await supabase
+        .from('pedidos')
+        .update({ status: 'cancelado' })
+        .eq('id', pedidoId)
+        .eq('status', 'aguardando_pagamento')
+    }
+
     if (terminal) {
       await supabase
         .from('financial_ledger')

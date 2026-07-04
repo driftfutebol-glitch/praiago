@@ -304,6 +304,8 @@ export default function PedidosPage() {
       .from('pedidos')
       .select('*')
       .eq('vendedor_id', sessao.id)
+      // pedido online ainda não pago (ou cancelado) não aparece pro vendedor
+      .not('status', 'in', '(aguardando_pagamento,cancelado)')
       .order('created_at', { ascending: false })
       .limit(50)
       .then(({ data }) => {
