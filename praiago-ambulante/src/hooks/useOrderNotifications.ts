@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { supabase } from '../lib/supabase'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { getSessao } from '../lib/auth'
+import { supabase } from '../lib/supabase'
 
 export type IncomingOrder = {
   id: string
@@ -8,136 +8,205 @@ export type IncomingOrder = {
   clienteTel: string
   itens: string[]
   total: number
+  pagamento: string
+  zona: string
+  reta: string
+  barraca: string
   clienteLat: number
   clienteLng: number
-  zona: string
-  reta?: string
-  barraca?: string
   ts: number
-  pagamento: string
 }
 
-// AudioContext compartilhado. Navegadores criam o contexto "suspended" até um
-// gesto do usuário (política de autoplay) — por isso o beep antes não tocava.
-// Destravamos no primeiro toque/clique/tecla.
+type OrderListener = (order: IncomingOrder) => void
+type PedidoRow = Record<string, unknown>
+
+const listeners = new Set<OrderListener>()
+const notifiedRecently = new Set<string>()
+
+let activeChannel: ReturnType<typeof supabase.channel> | null = null
+let activeSellerId: string | null = null
+let channelSeq = 0
 let sharedCtx: AudioContext | null = null
-function getCtx(): AudioContext | null {
-  try {
-    if (!sharedCtx) sharedCtx = new (window.AudioContext || (window as any).webkitAudioContext)()
-    if (sharedCtx.state === 'suspended') sharedCtx.resume().catch(() => {})
-    return sharedCtx
-  } catch { return null }
-}
-if (typeof window !== 'undefined') {
-  const unlock = () => { getCtx() }
-  window.addEventListener('pointerdown', unlock, { once: false })
-  window.addEventListener('keydown', unlock, { once: false })
-}
 
-// O hook é montado no App (global) E na página de Pedidos — sem isso o mesmo
-// pedido tocaria 2 beeps. Cada pedido só apita uma vez.
-const beepRecentes = new Set<string>()
+function rowToOrder(row: PedidoRow): IncomingOrder {
+  const createdAt = typeof row.created_at === 'string' ? row.created_at : undefined
+  const itens = Array.isArray(row.itens) ? row.itens.map(item => String(item)) : []
 
-// Contador pra dar um nome de canal diferente a cada instância do hook.
-let canalSeq = 0
-
-// Gera beep duplo estilo notificação usando Web Audio API pura
-function playNotificationBeep(dedupeId?: string) {
-  if (dedupeId) {
-    if (beepRecentes.has(dedupeId)) return
-    beepRecentes.add(dedupeId)
-    setTimeout(() => beepRecentes.delete(dedupeId), 8000)
+  return {
+    id: String(row.id ?? ''),
+    clienteNome: String(row.cliente_nome ?? 'Cliente'),
+    clienteTel: String(row.cliente_tel ?? ''),
+    itens,
+    total: Number(row.total) || 0,
+    pagamento: String(row.pagamento ?? 'pix'),
+    zona: String(row.zona ?? ''),
+    reta: String(row.reta ?? ''),
+    barraca: String(row.barraca ?? ''),
+    clienteLat: Number(row.lat) || -24.0228,
+    clienteLng: Number(row.lng) || -46.4305,
+    ts: createdAt ? new Date(createdAt).getTime() : Date.now(),
   }
+}
+
+function getAudioContext(): AudioContext | null {
   try {
-    const ctx = getCtx()
-    if (!ctx) return
-    const ac: AudioContext = ctx
+    const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    if (!AudioContextCtor) return null
 
-    function beep(startTime: number, freq: number, duration: number, volume = 0.4) {
-      const osc = ac.createOscillator()
-      const gain = ac.createGain()
-      osc.connect(gain)
-      gain.connect(ac.destination)
-      osc.type = 'sine'
-      osc.frequency.setValueAtTime(freq, startTime)
-      gain.gain.setValueAtTime(0, startTime)
-      gain.gain.linearRampToValueAtTime(volume, startTime + 0.01)
-      gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration)
-      osc.start(startTime)
-      osc.stop(startTime + duration)
-    }
-
-    const now = ac.currentTime
-    // Beep duplo sobe-desce (como WhatsApp)
-    beep(now,        880, 0.15, 0.45)
-    beep(now + 0.18, 1046, 0.15, 0.45)
-    beep(now + 0.40, 880, 0.12, 0.35)
-    beep(now + 0.55, 1046, 0.20, 0.45)
-    // Não fechamos: o contexto é compartilhado e reutilizado nos próximos beeps.
+    if (!sharedCtx) sharedCtx = new AudioContextCtor()
+    if (sharedCtx.state === 'suspended') void sharedCtx.resume().catch(() => undefined)
+    return sharedCtx
   } catch {
-    // silently fail se não suportado
+    return null
+  }
+}
+
+if (typeof window !== 'undefined') {
+  const unlockAudio = () => {
+    getAudioContext()
+  }
+  window.addEventListener('pointerdown', unlockAudio, { once: false })
+  window.addEventListener('keydown', unlockAudio, { once: false })
+}
+
+function playNotificationBeep() {
+  try {
+    const ctx = getAudioContext()
+    if (!ctx) return
+
+    const now = ctx.currentTime
+
+    ;[880, 1175, 1568].forEach((freq, i) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.value = freq
+      gain.gain.setValueAtTime(0.0001, now + i * 0.13)
+      gain.gain.exponentialRampToValueAtTime(0.18, now + i * 0.13 + 0.02)
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.13 + 0.11)
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start(now + i * 0.13)
+      osc.stop(now + i * 0.13 + 0.13)
+    })
+  } catch {
+    // Audio pode ficar bloqueado ate o primeiro toque do usuario.
+  }
+}
+
+function emitOrder(row: PedidoRow) {
+  if (String(row.status ?? 'novo') !== 'novo') return
+
+  const id = String(row.id ?? '')
+  if (!id || notifiedRecently.has(id)) return
+
+  notifiedRecently.add(id)
+  window.setTimeout(() => notifiedRecently.delete(id), 8000)
+
+  const order = rowToOrder(row)
+  playNotificationBeep()
+  listeners.forEach(listener => listener(order))
+}
+
+function clearActiveChannel() {
+  if (!activeChannel) return
+
+  try {
+    void supabase.removeChannel(activeChannel)
+  } catch (error) {
+    console.warn('Falha ao remover canal de pedidos', error)
+  } finally {
+    activeChannel = null
+    activeSellerId = null
+  }
+}
+
+function removeStalePedidoChannels() {
+  const getChannels = (supabase as typeof supabase & {
+    getChannels?: () => Array<{ topic?: string }>
+  }).getChannels
+
+  if (typeof getChannels !== 'function') return
+
+  getChannels.call(supabase).forEach(channel => {
+    if (channel === activeChannel) return
+    if (!channel.topic?.startsWith('realtime:pedidos_ambulante')) return
+
+    try {
+      void supabase.removeChannel(channel as ReturnType<typeof supabase.channel>)
+    } catch (error) {
+      console.warn('Falha ao limpar canal antigo de pedidos', error)
+    }
+  })
+}
+
+function ensureOrderChannel(sellerId: string) {
+  if (activeChannel && activeSellerId === sellerId) return
+
+  clearActiveChannel()
+  removeStalePedidoChannels()
+
+  const topic = `pedidos_ambulante_${sellerId}_${Date.now()}_${++channelSeq}`
+
+  try {
+    const channel = supabase
+      .channel(topic)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'pedidos', filter: `vendedor_id=eq.${sellerId}` },
+        payload => emitOrder(payload.new as PedidoRow),
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'pedidos', filter: `vendedor_id=eq.${sellerId}` },
+        payload => emitOrder(payload.new as PedidoRow),
+      )
+      .subscribe((status, error) => {
+        if (error) console.error('Erro no realtime de pedidos', error)
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          if (activeChannel === channel) {
+            activeChannel = null
+            activeSellerId = null
+            if (listeners.size > 0 && status !== 'CLOSED') {
+              window.setTimeout(() => ensureOrderChannel(sellerId), 1500)
+            }
+          }
+        }
+      })
+    activeChannel = channel
+    activeSellerId = sellerId
+  } catch (error) {
+    activeChannel = null
+    activeSellerId = null
+    console.error('Falha ao iniciar realtime de pedidos', error)
+  }
+}
+
+function addOrderListener(sellerId: string, listener: OrderListener) {
+  listeners.add(listener)
+  ensureOrderChannel(sellerId)
+
+  return () => {
+    listeners.delete(listener)
+    if (listeners.size === 0) clearActiveChannel()
   }
 }
 
 export function useOrderNotifications() {
   const [orders, setOrders] = useState<IncomingOrder[]>([])
   const [latestOrder, setLatestOrder] = useState<IncomingOrder | null>(null)
-  // Pedidos já notificados NESTA instância (evita repetir quando o mesmo
-  // pedido chega por INSERT e depois por UPDATE do webhook de pagamento).
-  const vistos = useRef<Set<string>>(new Set())
+  const seen = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     const sessao = getSessao()
-    if (!sessao) return
+    if (!sessao?.id) return
 
-    const notificar = (row: Record<string, any>) => {
-      // Pedido online ainda não pago fica INVISÍVEL pro vendedor: só chega
-      // quando o Mercado Pago aprovar (webhook muda o status pra 'novo').
-      if (row.status !== 'novo') return
-      if (vistos.current.has(row.id)) return
-      vistos.current.add(row.id)
-
-      const order: IncomingOrder = {
-        id: row.id,
-        clienteNome: row.cliente_nome,
-        clienteTel: row.cliente_tel || '(00) 00000-0000',
-        itens: row.itens,
-        total: Number(row.total),
-        pagamento: row.pagamento,
-        zona: row.zona || 'Desconhecida',
-        reta: row.reta,
-        barraca: row.barraca,
-        clienteLat: Number(row.lat) || -24.0,
-        clienteLng: Number(row.lng) || -46.41,
-        ts: new Date(row.created_at).getTime()
-      }
-
-      playNotificationBeep(order.id)
+    return addOrderListener(sessao.id, order => {
+      if (seen.current.has(order.id)) return
+      seen.current.add(order.id)
       setLatestOrder(order)
-      setOrders(prev => [order, ...prev])
-    }
-
-    // Nome ÚNICO por instância: o hook roda no App (popup global) E na página
-    // de Pedidos ao mesmo tempo — com o mesmo nome, o supabase-js reaproveita o
-    // canal já inscrito e estoura "cannot add postgres_changes after subscribe()".
-    const channel = supabase.channel(`pedidos_ambulante_${++canalSeq}`)
-      .on(
-        'postgres_changes',
-        // só pedidos DESTE vendedor (antes chegava pedido de todo mundo)
-        { event: 'INSERT', schema: 'public', table: 'pedidos', filter: `vendedor_id=eq.${sessao.id}` },
-        (payload) => notificar(payload.new as Record<string, any>)
-      )
-      .on(
-        'postgres_changes',
-        // pagamento aprovado libera o pedido (aguardando_pagamento → novo)
-        { event: 'UPDATE', schema: 'public', table: 'pedidos', filter: `vendedor_id=eq.${sessao.id}` },
-        (payload) => notificar(payload.new as Record<string, any>)
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
+      setOrders(prev => (prev.some(current => current.id === order.id) ? prev : [order, ...prev]))
+    })
   }, [])
 
   const dismissLatest = useCallback(() => setLatestOrder(null), [])
