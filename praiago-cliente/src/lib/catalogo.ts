@@ -6,8 +6,18 @@ export type Produto = {
   nome: string
   desc: string
   preco: number
+  precoOriginal?: number
   emoji: string
   categoria: string
+  promocao?: {
+    id: string
+    titulo: string
+    descricao?: string | null
+    selo: string
+    descontoTipo: 'preco_promocional' | 'percentual' | 'valor_fixo'
+    descontoValor?: number | null
+    dataFim?: string | null
+  }
 }
 
 export type VendedorTipo = 'restaurante' | 'ambulante'

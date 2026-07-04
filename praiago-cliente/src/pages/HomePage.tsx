@@ -156,13 +156,19 @@ function ProdutoCard({ item, onAdd, added }: { item: ProdutoDestaque; onAdd: () 
     <div style={{ background: '#fff', borderRadius: 22, padding: 14, border: '1px solid #e2e8f0', boxShadow: '0 10px 26px rgba(15,23,42,0.06)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
         <div style={{ minWidth: 0 }}>
+          {item.promocao && <div style={{ display: 'inline-flex', fontSize: 9, fontWeight: 950, color: '#fff', background: '#ea580c', borderRadius: 999, padding: '3px 7px', marginBottom: 6 }}>{item.promocao.selo}</div>}
           <div style={{ fontSize: 13, fontWeight: 900, color: '#0f172a', lineHeight: 1.25 }}>{item.nome}</div>
           <div style={{ fontSize: 10, color: '#64748b', fontWeight: 700, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.vendedorNome}</div>
         </div>
         <div style={{ fontSize: 28, lineHeight: 1 }}>{item.emoji}</div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 }}>
-        <div style={{ fontSize: 16, fontWeight: 950, color: '#16a34a' }}>R$ {item.preco.toFixed(2).replace('.', ',')}</div>
+        <div>
+          {item.precoOriginal && (
+            <div style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textDecoration: 'line-through' }}>R$ {item.precoOriginal.toFixed(2).replace('.', ',')}</div>
+          )}
+          <div style={{ fontSize: 16, fontWeight: 950, color: '#16a34a' }}>R$ {item.preco.toFixed(2).replace('.', ',')}</div>
+        </div>
         <button onClick={onAdd} style={{
           height: 34,
           minWidth: 38,
@@ -220,11 +226,14 @@ export default function HomePage() {
 
   const restaurantes = useMemo(() => catalogo.filter(v => v.tipo === 'restaurante'), [catalogo])
   const ambulantes = useMemo(() => catalogo.filter(v => v.tipo === 'ambulante'), [catalogo])
-  const produtos = useMemo<ProdutoDestaque[]>(() => (
+  const todosProdutos = useMemo<ProdutoDestaque[]>(() => (
     catalogo.flatMap(v => v.produtos.map(p => ({ ...p, vendedorId: v.id, vendedorNome: v.nome })))
+  ), [catalogo])
+  const produtos = useMemo<ProdutoDestaque[]>(() => (
+    todosProdutos
       .sort((a, b) => a.preco - b.preco)
       .slice(0, 4)
-  ), [catalogo])
+  ), [todosProdutos])
 
   const vendedores = useMemo(() => {
     const termo = busca.trim().toLowerCase()
@@ -240,7 +249,15 @@ export default function HomePage() {
     })
   }, [busca, catSel, soFavoritos, favoritos, catalogo])
 
-  const produtoPromocao = produtos[0]
+  const produtoPromocao = useMemo(() => (
+    todosProdutos
+      .filter(p => !!p.promocao)
+      .sort((a, b) => {
+        const pa = a.promocao?.descontoValor ?? 0
+        const pb = b.promocao?.descontoValor ?? 0
+        return pb - pa
+      })[0]
+  ), [todosProdutos])
   const restaurantesLabel = restaurantes.length === 1 ? '1 disponível' : `${restaurantes.length} disponíveis`
   const ambulantesLabel = ambulantes.length === 1 ? '1 na praia' : `${ambulantes.length} na praia`
   const lojasLabel = catalogo.length === 1 ? '1 loja no app' : `${catalogo.length} lojas no app`
@@ -342,9 +359,10 @@ export default function HomePage() {
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 999, padding: '6px 10px', background: 'rgba(255,255,255,0.18)', fontSize: 11, fontWeight: 950, marginBottom: 12 }}>
                 <Percent size={13} /> Promoções da praia
               </div>
-              <h1 style={{ margin: 0, fontSize: 25, fontWeight: 950, lineHeight: 1.05, letterSpacing: -0.7 }}>{produtoPromocao.nome}</h1>
+              <h1 style={{ margin: 0, fontSize: 25, fontWeight: 950, lineHeight: 1.05, letterSpacing: -0.7 }}>{produtoPromocao.promocao?.titulo || produtoPromocao.nome}</h1>
               <p style={{ margin: '8px 0 16px', fontSize: 13, fontWeight: 700, opacity: 0.9 }}>
-                Em {produtoPromocao.vendedorNome} por R$ {produtoPromocao.preco.toFixed(2).replace('.', ',')}.
+                {produtoPromocao.nome} em {produtoPromocao.vendedorNome}
+                {produtoPromocao.precoOriginal ? ` de R$ ${produtoPromocao.precoOriginal.toFixed(2).replace('.', ',')}` : ''} por R$ {produtoPromocao.preco.toFixed(2).replace('.', ',')}.
               </p>
               <button onClick={() => navigate(`/pedir?v=${produtoPromocao.vendedorId}`)} style={{ border: 0, background: '#fff', color: '#0284c7', borderRadius: 15, padding: '12px 16px', fontSize: 13, fontWeight: 950, cursor: 'pointer', boxShadow: '0 10px 24px rgba(15,23,42,0.16)' }}>
                 Ver oferta
