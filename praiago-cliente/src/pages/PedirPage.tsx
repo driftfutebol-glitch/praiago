@@ -1,15 +1,16 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { ArrowLeft, MapPin, X, WifiOff, Star, Check, Zap, Send, Heart, Shield, Navigation, CreditCard, Banknote, QrCode } from 'lucide-react'
+import { ArrowLeft, MapPin, X, WifiOff, Star, Check, Zap, Send, Heart, Shield, Navigation, CreditCard, Banknote, QrCode, Trash2 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, Polyline, Circle, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRoute } from '../hooks/useRoute'
-import { useGPS } from '../hooks/useGPS'
+import { useGPS, type GPSFonte, type GPSStatus } from '../hooks/useGPS'
 import { criarMonitorSentido, type SentidoStatus } from '../lib/trafego'
 import { broadcastOrder } from '../hooks/useOrderBroadcast'
 import { type Vendedor } from '../lib/catalogo'
+import { criarCheckoutMercadoPago, isMercadoPagoMethod } from '../lib/mercadopago'
 import { useCatalogo } from '../store/useCatalogo'
 import { useStore, type Entrega } from '../store/useStore'
 import { supabase } from '../lib/supabase'
@@ -315,27 +316,43 @@ function RastreamentoModal({ vendedor, clientePos, pedidoId, onClose }: { vended
 }
 
 /* ─── CHECKOUT MODAL ────────────────────────────────────── */
-function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsAtivo }: { vendedor: Vendedor; onConfirm: (e: Entrega, pedidoId: string) => void; onClose: () => void; clientePos: [number, number]; gpsAtivo: boolean }) {
+function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gpsFonte }: { vendedor: Vendedor; onConfirm: (e: Entrega, pedidoId: string) => void; onClose: () => void; clientePos: [number, number]; gpsStatus: GPSStatus; gpsFonte: GPSFonte }) {
   const [confirming, setConfirming] = useState(false)
   const [reta, setReta] = useState('')
   const [barraca, setBarraca] = useState('')
   const [modo, setModo] = useState<'fixa' | 'tempo_real'>('fixa')
-  const [pagamento, setPagamento] = useState<'pix' | 'cartao' | 'dinheiro'>('pix')
+  const [pagamento, setPagamento] = useState<Entrega['pagamento']>('pix')
   const [erro, setErro] = useState('')
   const carrinho = useStore(s => s.carrinho)
   const criarPedido = useStore(s => s.criarPedido)
+  const setQtd = useStore(s => s.setQtd)
+  const limparCarrinho = useStore(s => s.limparCarrinho)
   const addNotif = useStore(s => s.addNotif)
   const sessao = useStore(s => s.sessao)
 
   const itensList = vendedor.produtos.filter(p => (carrinho[p.id] ?? 0) > 0)
   const total = itensList.reduce((acc, p) => acc + p.preco * carrinho[p.id], 0)
+  const radarReal = gpsFonte === 'gps' || gpsFonte === 'manual' || gpsFonte === 'memoria'
+
+  function removerItem(produtoId: string) {
+    setQtd(produtoId, 0)
+    if (itensList.length <= 1) setTimeout(onClose, 0)
+  }
+
+  function excluirPedido() {
+    limparCarrinho()
+    onClose()
+  }
 
   async function handleConfirm() {
-    if (!reta.trim() && !barraca.trim()) { setErro('Informe a reta ou barraca para te acharmos.'); return }
+    if (itensList.length === 0) { setErro('Seu pedido esta vazio.'); return }
+    if (modo === 'fixa' && !reta.trim() && !barraca.trim()) { setErro('Informe a reta ou barraca para te acharmos.'); return }
+    if (modo === 'tempo_real' && !radarReal) { setErro('Ative a localizacao do celular para usar o Radar GPS real.'); return }
     setErro('')
     setConfirming(true)
-    const entrega: Entrega = { reta: reta.trim(), barraca: barraca.trim(), modo, pagamento }
-    const pedido = await criarPedido(entrega)
+    const entrega: Entrega = { reta: reta.trim(), barraca: barraca.trim(), modo, pagamento, lat: clientePos[0], lng: clientePos[1] }
+    const usaMercadoPago = isMercadoPagoMethod(pagamento)
+    const pedido = await criarPedido(entrega, { limparCarrinho: !usaMercadoPago })
     if (!pedido) {
       setErro('Erro ao criar pedido. Tente novamente.')
       setConfirming(false)
@@ -358,6 +375,18 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsAtivo }: {
       ts: Date.now(),
     })
     addNotif({ titulo: 'Pedido enviado! 🎉', texto: `Pagamento via ${pagamento.toUpperCase()}.` })
+    if (usaMercadoPago) {
+      try {
+        const checkout = await criarCheckoutMercadoPago(pedido.id)
+        limparCarrinho()
+        window.location.assign(checkout.checkout_url)
+        return
+      } catch (err) {
+        setErro(err instanceof Error ? err.message : 'Nao foi possivel abrir o Mercado Pago.')
+        setConfirming(false)
+        return
+      }
+    }
     setTimeout(() => onConfirm(entrega, pedido.id), 900)
   }
 
@@ -373,7 +402,12 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsAtivo }: {
 
         {/* Resumo */}
         <div style={{ background: '#f8fafc', borderRadius: 24, padding: '20px', marginBottom: 20, border: '1px solid rgba(0,0,0,0.05)' }}>
-          <div style={{ fontSize: 12, fontWeight: 800, color: '#64748b', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 16 }}>Resumo · {vendedor.nome}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: '#64748b', letterSpacing: 1, textTransform: 'uppercase' }}>Resumo · {vendedor.nome}</div>
+            <button type="button" onClick={excluirPedido} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid rgba(239,68,68,0.18)', background: '#fff1f2', color: '#e11d48', borderRadius: 999, padding: '8px 11px', fontSize: 12, fontWeight: 900, cursor: 'pointer' }}>
+              <Trash2 size={14} /> Excluir pedido
+            </button>
+          </div>
           {itensList.map(p => (
             <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -383,7 +417,12 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsAtivo }: {
                   <div style={{ fontSize: 13, color: '#64748b' }}>{carrinho[p.id]}x · R$ {p.preco.toFixed(2)}</div>
                 </div>
               </div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>R$ {(p.preco * carrinho[p.id]).toFixed(2)}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>R$ {(p.preco * carrinho[p.id]).toFixed(2)}</div>
+                <button type="button" aria-label={`Remover ${p.nome}`} onClick={() => removerItem(p.id)} style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(239,68,68,0.16)', background: '#ffffff', color: '#ef4444', borderRadius: 12, cursor: 'pointer' }}>
+                  <Trash2 size={16} />
+                </button>
+              </div>
             </div>
           ))}
           <div style={{ borderTop: '1px solid rgba(0,0,0,0.08)', paddingTop: 16, marginTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -398,7 +437,14 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsAtivo }: {
             <CreditCard size={18} color="#0ea5e9" /> Forma de Pagamento
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-            {([['pix', QrCode, 'PIX'], ['cartao', CreditCard, 'Cartão'], ['dinheiro', Banknote, 'Dinheiro']] as const).map(([key, Icon, label]) => {
+            {([
+              ['pix', QrCode, 'PIX MP'],
+              ['credito_online', CreditCard, 'Credito MP'],
+              ['debito_online', CreditCard, 'Debito MP'],
+              ['mercadopago', CreditCard, 'Saldo MP'],
+              ['dinheiro', Banknote, 'Dinheiro'],
+              ['cartao_fisico', CreditCard, 'Maquininha'],
+            ] as const).map(([key, Icon, label]) => {
               const sel = pagamento === key
               return (
                 <button key={key} onClick={() => setPagamento(key)} style={{
@@ -433,12 +479,11 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsAtivo }: {
           <div style={{ display: 'flex', gap: 12 }}>
             {([['fixa', '📍 Ponto Fixo'], ['tempo_real', '🛰️ Radar GPS']] as const).map(([key, titulo]) => {
               const sel = modo === key
-              const disabled = key === 'tempo_real' && !gpsAtivo
               return (
-                <button key={key} onClick={() => !disabled && setModo(key)} disabled={disabled} style={{
-                  flex: 1, padding: '14px', borderRadius: 16, cursor: disabled ? 'not-allowed' : 'pointer',
+                <button key={key} onClick={() => setModo(key)} style={{
+                  flex: 1, padding: '14px', borderRadius: 16, cursor: 'pointer',
                   border: `1.5px solid ${sel ? '#22c55e' : 'rgba(0,0,0,0.06)'}`,
-                  background: sel ? 'rgba(34,197,94,0.1)' : '#f1f5f9', opacity: disabled ? 0.5 : 1,
+                  background: sel ? 'rgba(34,197,94,0.1)' : '#f1f5f9', opacity: 1,
                   color: sel ? '#22c55e' : '#64748b', fontSize: 13, fontWeight: 800, transition: 'all 0.2s'
                 }}>
                   {titulo}
@@ -446,6 +491,13 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsAtivo }: {
               )
             })}
           </div>
+          {modo === 'tempo_real' && (
+            <div style={{ marginTop: 10, fontSize: 12, lineHeight: 1.45, color: radarReal ? '#15803d' : '#b45309', background: radarReal ? '#ecfdf5' : '#fffbeb', border: `1px solid ${radarReal ? '#bbf7d0' : '#fde68a'}`, borderRadius: 14, padding: '10px 12px', fontWeight: 700 }}>
+              {radarReal
+                ? `Radar pronto: vamos enviar sua posicao ${gpsFonte === 'gps' ? 'GPS' : 'salva'} para o vendedor.`
+                : `Buscando permissao de localizacao (${gpsStatus}). Ative o GPS do celular para fechar pelo Radar.`}
+            </div>
+          )}
         </div>
 
         {erro && <div style={{ fontSize: 13, color: '#ef4444', fontWeight: 800, marginBottom: 16, textAlign: 'center', background: 'rgba(239,68,68,0.1)', padding: 12, borderRadius: 12 }}>{erro}</div>}
@@ -470,7 +522,7 @@ type Step = 'menu' | 'checkout' | 'rastreando'
 export default function PedirPage() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
-  const { pos: clientePos, status: gpsStatus } = useGPS()
+  const { pos: clientePos, status: gpsStatus, fonte: gpsFonte } = useGPS()
 
   const vendedores = useCatalogo(s => s.vendedores)
   const vendedor = useMemo<Vendedor | undefined>(() => {
@@ -512,7 +564,7 @@ export default function PedirPage() {
   return (
     <div style={{ minHeight: '100vh', background: '#ffffff', color: '#0f172a' }}>
       <AnimatePresence>
-        {step === 'checkout' && <CheckoutModal vendedor={vendedor} clientePos={clientePos} gpsAtivo={gpsStatus === 'active'} onConfirm={(e, pid) => { setEntrega(e); setPedidoId(pid); setStep('rastreando') }} onClose={() => setStep('menu')} />}
+        {step === 'checkout' && <CheckoutModal vendedor={vendedor} clientePos={clientePos} gpsStatus={gpsStatus} gpsFonte={gpsFonte} onConfirm={(e, pid) => { setEntrega(e); setPedidoId(pid); setStep('rastreando') }} onClose={() => setStep('menu')} />}
         {step === 'rastreando' && <RastreamentoModal vendedor={vendedor} clientePos={clientePos} entrega={entrega} pedidoId={pedidoId} onClose={() => { setStep('menu'); navigate('/') }} />}
       </AnimatePresence>
 

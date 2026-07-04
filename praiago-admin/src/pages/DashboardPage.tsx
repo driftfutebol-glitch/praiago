@@ -29,7 +29,7 @@ export default function DashboardPage() {
 
       // Open tickets
       const { count: ticketCount } = await supabase
-        .from('tickets_suporte')
+        .from('tickets')
         .select('*', { count: 'exact', head: true })
         .in('status', ['aberto', 'em_andamento'])
       setOpenTickets(ticketCount || 0)
@@ -48,8 +48,8 @@ export default function DashboardPage() {
         supabase.from('verificacoes').select('*', { count: 'exact', head: true }).eq('status', 'pendente')
           .then(({ count }) => setPendingVerificacoes(count || 0))
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets_suporte' }, () => {
-        supabase.from('tickets_suporte').select('*', { count: 'exact', head: true }).in('status', ['aberto', 'em_andamento'])
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets' }, () => {
+        supabase.from('tickets').select('*', { count: 'exact', head: true }).in('status', ['aberto', 'em_andamento'])
           .then(({ count }) => setOpenTickets(count || 0))
       })
       .subscribe()

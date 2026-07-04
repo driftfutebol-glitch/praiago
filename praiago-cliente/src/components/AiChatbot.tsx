@@ -42,22 +42,21 @@ export default function AiChatbot({ plataforma = 'cliente' }: { plataforma?: str
     addMessage('user', userText)
     setInput('')
     
-    // If the user asks for support, trigger the ticket flow instead of AI
-    if (userText.toLowerCase().includes('atendente') || userText.toLowerCase().includes('humano') || userText.toLowerCase().includes('suporte')) {
-      startTicketFlow()
+    // Casos sensiveis viram atendimento real no painel, nao resposta solta.
+    if (/(atendente|humano|suporte|reembolso|estorno|cancelar|cancelamento|problema.*pedido|pedido.*problema)/i.test(userText)) {
+      startTicketFlow(
+        /(reembolso|estorno)/i.test(userText)
+          ? 'Solicitacao de reembolso'
+          : /(cancelar|cancelamento)/i.test(userText)
+            ? 'Cancelamento de pedido'
+            : undefined,
+      )
       return
     }
 
     setLoading(true)
     
     try {
-      const apiKey = import.meta.env.VITE_OPENAI_API_KEY  // configurar em .env.local (não hardcode)
-      
-      if (!apiKey) {
-        addMessage('bot', '⚠️ O atendimento automático está indisponível agora. Toque em "Falar com Suporte" que nossa equipe te responde.')
-        return
-      }
-
       // Convert messages to OpenAI format
       const apiMessages = [
         { role: 'system', content: `Você é um assistente virtual gentil e prestativo do aplicativo PraiaGo para a plataforma: ${plataforma}. Você ajuda clientes, ambulantes ou restaurantes a entender o aplicativo. Seja breve e prestativo. 
@@ -65,30 +64,21 @@ Regras e Termos da PraiaGo que você deve seguir e informar quando perguntado:
 1. A PraiaGo é apenas uma plataforma de intermediação tecnológica. Não somos fornecedores, não vendemos e não entregamos produtos. Conectamos consumidores a ambulantes e restaurantes.
 2. O ambulante/restaurante é autônomo e responsável pela qualidade, higiene, preço e entrega do produto.
 3. Pagamentos são processados via AbacatePay (Pix ou cartão) diretamente para o vendedor.
-4. Problemas com pedidos, reembolsos ou trocas devem ser resolvidos diretamente com o vendedor.
+4. Problemas com pedidos, reembolsos, cancelamentos ou trocas devem abrir atendimento no painel. Oriente o usuario a informar o numero do pedido e os detalhes.
 5. Coletamos localização e dados essenciais apenas para conectar as pessoas, seguindo a LGPD.
 Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "suporte".` },
         ...messages.filter(m => m.id !== 'welcome').map(m => ({ role: m.role === 'bot' ? 'assistant' : 'user', content: m.text })),
         { role: 'user', content: userText }
       ]
 
-      const response = await fetch('/api/ai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: 'blackboxai/blackbox-pro',
-          messages: apiMessages,
-          temperature: 0.7,
-        })
+      const { data, error } = await supabase.functions.invoke('ai-chat', {
+        body: { plataforma, messages: apiMessages },
       })
 
-      if (!response.ok) throw new Error('Falha na API da OpenAI')
-      
-      const data = await response.json()
-      const aiReply = data.choices[0].message.content
+      if (error) throw error
+
+      const aiReply = data?.reply
+      if (!aiReply) throw new Error('Resposta vazia da IA')
       
       addMessage('bot', aiReply)
     } catch (err) {
@@ -99,8 +89,9 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
     }
   }
 
-  const startTicketFlow = () => {
+  const startTicketFlow = (subject?: string) => {
     setMode('ticket')
+    if (subject) setTicketSubject(subject)
     addMessage('bot', 'Entendido. Vou transferir você para nossa equipe de suporte humano. Sobre o que você gostaria de falar? (Ex: Problema com pedido, Dúvida na conta)')
   }
 
@@ -266,10 +257,16 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
                   Onde está meu pedido?
                 </button>
                 <button
-                  onClick={startTicketFlow}
+                  onClick={() => startTicketFlow()}
                   style={{ whiteSpace: 'nowrap', padding: '6px 12px', borderRadius: 12, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
                 >
                   <Headphones size={14} /> Falar com Suporte
+                </button>
+                <button
+                  onClick={() => startTicketFlow('Solicitacao de reembolso')}
+                  style={{ whiteSpace: 'nowrap', padding: '6px 12px', borderRadius: 12, background: 'rgba(14,165,233,0.1)', border: '1px solid rgba(14,165,233,0.2)', color: '#0284c7', fontSize: 12, cursor: 'pointer' }}
+                >
+                  Reembolso
                 </button>
               </div>
             )}

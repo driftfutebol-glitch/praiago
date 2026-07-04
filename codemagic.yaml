@@ -1,0 +1,246 @@
+definitions:
+  scripts:
+    - &validate_public_env
+      name: Validate public app environment
+      script: |
+        : "${VITE_SUPABASE_URL:?Missing VITE_SUPABASE_URL in Codemagic group praiago_public_env}"
+        : "${VITE_SUPABASE_ANON_KEY:?Missing VITE_SUPABASE_ANON_KEY in Codemagic group praiago_public_env}"
+
+    - &prepare_capacitor_ios
+      name: Install dependencies and sync iOS
+      script: |
+        cd "$APP_DIR"
+        npm ci
+        npm run build
+        npx cap sync ios
+
+    - &build_unsigned_simulator
+      name: Build unsigned iOS simulator app
+      script: |
+        cd "$APP_DIR"
+        xcodebuild \
+          -project "$XCODE_PROJECT" \
+          -scheme "$XCODE_SCHEME" \
+          -configuration Debug \
+          -sdk iphonesimulator \
+          -destination 'generic/platform=iOS Simulator' \
+          CODE_SIGNING_ALLOWED=NO \
+          clean build
+
+    - &configure_ios_signing
+      name: Configure iOS signing
+      script: |
+        cd "$APP_DIR"
+        xcode-project use-profiles --project "$XCODE_PROJECT"
+
+    - &increment_ios_build_number
+      name: Increment iOS build number
+      script: |
+        cd "$APP_DIR/ios/App"
+        if [ -n "$APP_STORE_APPLE_ID" ]; then
+          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || echo "")
+        else
+          LATEST_BUILD_NUMBER=""
+        fi
+
+        if [ -z "$LATEST_BUILD_NUMBER" ]; then
+          UPDATED_BUILD_NUMBER=$BUILD_NUMBER
+        else
+          UPDATED_BUILD_NUMBER=$(($LATEST_BUILD_NUMBER + 1))
+        fi
+
+        agvtool new-version -all "$UPDATED_BUILD_NUMBER"
+
+    - &resolve_apple_app_id
+      name: Resolve App Store app id
+      script: |
+        if [ -z "$APP_STORE_APPLE_ID_SOURCE" ]; then
+          echo "Missing APP_STORE_APPLE_ID_SOURCE workflow variable."
+          exit 1
+        fi
+
+        APP_STORE_APPLE_ID_VALUE=$(printenv "$APP_STORE_APPLE_ID_SOURCE" || true)
+        if [ -z "$APP_STORE_APPLE_ID_VALUE" ]; then
+          echo "Missing Codemagic environment variable: $APP_STORE_APPLE_ID_SOURCE"
+          exit 1
+        fi
+
+        echo "APP_STORE_APPLE_ID=$APP_STORE_APPLE_ID_VALUE" >> "$CM_ENV"
+
+    - &build_testflight_ipa
+      name: Build IPA for TestFlight
+      script: |
+        cd "$APP_DIR"
+        xcode-project build-ipa \
+          --project "$XCODE_PROJECT" \
+          --scheme "$XCODE_SCHEME" \
+          --archive-flags="-destination 'generic/platform=iOS'"
+
+workflows:
+  ios-cliente-simulator:
+    name: iOS Cliente - simulator check
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      groups:
+        - praiago_public_env
+      xcode: latest
+      vars:
+        APP_DIR: praiago-cliente
+        XCODE_PROJECT: ios/App/App.xcodeproj
+        XCODE_SCHEME: App
+    scripts:
+      - *validate_public_env
+      - *prepare_capacitor_ios
+      - *build_unsigned_simulator
+    artifacts:
+      - praiago-cliente/ios/App/build/**/*
+      - /tmp/xcodebuild_logs/*.log
+
+  ios-ambulante-simulator:
+    name: iOS Ambulante - simulator check
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      groups:
+        - praiago_public_env
+      xcode: latest
+      vars:
+        APP_DIR: praiago-ambulante
+        XCODE_PROJECT: ios/App/App.xcodeproj
+        XCODE_SCHEME: App
+    scripts:
+      - *validate_public_env
+      - *prepare_capacitor_ios
+      - *build_unsigned_simulator
+    artifacts:
+      - praiago-ambulante/ios/App/build/**/*
+      - /tmp/xcodebuild_logs/*.log
+
+  ios-restaurante-simulator:
+    name: iOS Restaurante - simulator check
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      groups:
+        - praiago_public_env
+      xcode: latest
+      vars:
+        APP_DIR: praiago-restaurante
+        XCODE_PROJECT: ios/App/App.xcodeproj
+        XCODE_SCHEME: App
+    scripts:
+      - *validate_public_env
+      - *prepare_capacitor_ios
+      - *build_unsigned_simulator
+    artifacts:
+      - praiago-restaurante/ios/App/build/**/*
+      - /tmp/xcodebuild_logs/*.log
+
+  ios-cliente-testflight:
+    name: iOS Cliente - TestFlight
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: praiago-apple
+    environment:
+      groups:
+        - praiago_public_env
+        - praiago_ios_appstore
+      xcode: latest
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.ferrazcode.praiago.cliente
+      vars:
+        APP_DIR: praiago-cliente
+        XCODE_PROJECT: ios/App/App.xcodeproj
+        XCODE_SCHEME: App
+        APP_STORE_APPLE_ID_SOURCE: PRAIAGO_CLIENTE_APPLE_ID
+    scripts:
+      - *validate_public_env
+      - *prepare_capacitor_ios
+      - *configure_ios_signing
+      - *resolve_apple_app_id
+      - *increment_ios_build_number
+      - *build_testflight_ipa
+    artifacts:
+      - praiago-cliente/ios/App/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        expire_build_submitted_for_review: true
+
+  ios-ambulante-testflight:
+    name: iOS Ambulante - TestFlight
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: praiago-apple
+    environment:
+      groups:
+        - praiago_public_env
+        - praiago_ios_appstore
+      xcode: latest
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.ferrazcode.praiago.ambulante
+      vars:
+        APP_DIR: praiago-ambulante
+        XCODE_PROJECT: ios/App/App.xcodeproj
+        XCODE_SCHEME: App
+        APP_STORE_APPLE_ID_SOURCE: PRAIAGO_AMBULANTE_APPLE_ID
+    scripts:
+      - *validate_public_env
+      - *prepare_capacitor_ios
+      - *configure_ios_signing
+      - *resolve_apple_app_id
+      - *increment_ios_build_number
+      - *build_testflight_ipa
+    artifacts:
+      - praiago-ambulante/ios/App/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        expire_build_submitted_for_review: true
+
+  ios-restaurante-testflight:
+    name: iOS Restaurante - TestFlight
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: praiago-apple
+    environment:
+      groups:
+        - praiago_public_env
+        - praiago_ios_appstore
+      xcode: latest
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.ferrazcode.praiago.restaurante
+      vars:
+        APP_DIR: praiago-restaurante
+        XCODE_PROJECT: ios/App/App.xcodeproj
+        XCODE_SCHEME: App
+        APP_STORE_APPLE_ID_SOURCE: PRAIAGO_RESTAURANTE_APPLE_ID
+    scripts:
+      - *validate_public_env
+      - *prepare_capacitor_ios
+      - *configure_ios_signing
+      - *resolve_apple_app_id
+      - *increment_ios_build_number
+      - *build_testflight_ipa
+    artifacts:
+      - praiago-restaurante/ios/App/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        expire_build_submitted_for_review: true

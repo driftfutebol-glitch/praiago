@@ -50,13 +50,6 @@ export default function AiChatbot({ plataforma = 'restaurante' }: { plataforma?:
     setLoading(true)
     
     try {
-      const apiKey = import.meta.env.VITE_OPENAI_API_KEY
-      
-      if (!apiKey) {
-        addMessage('bot', '⚠️ O atendimento automático está indisponível agora. Toque em "Falar com Suporte" que nossa equipe te responde.')
-        return
-      }
-
       // Convert messages to OpenAI format
       const apiMessages = [
         { role: 'system', content: `Você é um assistente virtual gentil e prestativo do aplicativo PraiaGo para a plataforma: ${plataforma}. Você ajuda clientes, ambulantes ou restaurantes a entender o aplicativo. Seja breve e prestativo. 
@@ -75,23 +68,14 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
         { role: 'user', content: userText }
       ]
 
-      const response = await fetch('/api/ai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: 'blackboxai/blackbox-pro',
-          messages: apiMessages,
-          temperature: 0.7,
-        })
+      const { data, error } = await supabase.functions.invoke('ai-chat', {
+        body: { plataforma, messages: apiMessages },
       })
 
-      if (!response.ok) throw new Error('Falha na API da OpenAI')
-      
-      const data = await response.json()
-      const aiReply = data.choices[0].message.content
+      if (error) throw error
+
+      const aiReply = data?.reply
+      if (!aiReply) throw new Error('Resposta vazia da IA')
       
       addMessage('bot', aiReply)
     } catch (err) {

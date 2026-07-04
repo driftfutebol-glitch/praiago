@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Bell, ChevronRight, HelpCircle, LogOut, MapPin, Phone, Shield, Star, Store, TrendingUp } from 'lucide-react'
+import { Bell, ChevronRight, CreditCard, HelpCircle, Loader2, LogOut, MapPin, Phone, Shield, Star, Store, TrendingUp } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { getSessao, logout } from '../lib/auth'
+import { buscarStatusMercadoPago, iniciarVinculoMercadoPago, type MercadoPagoLinkStatus } from '../lib/mercadopago'
 
 type PerfilInfo = {
   nome: string
@@ -58,6 +59,9 @@ export default function PerfilPage() {
   const [pedidosMes, setPedidosMes] = useState(0)
   const [faturamentoMes, setFaturamentoMes] = useState(0)
   const [painelAberto, setPainelAberto] = useState<Painel | null>(null)
+  const [mpStatus, setMpStatus] = useState<MercadoPagoLinkStatus | null>(null)
+  const [mpLoading, setMpLoading] = useState(false)
+  const [mpErro, setMpErro] = useState('')
 
   useEffect(() => {
     if (!sessao) return
@@ -92,7 +96,21 @@ export default function PerfilPage() {
         setPedidosMes(entregues.length)
         setFaturamentoMes(entregues.reduce((a, p) => a + (Number(p.total) || 0), 0))
       })
+
+    buscarStatusMercadoPago(sessao.id).then(setMpStatus)
   }, [sessao])
+
+  async function conectarMercadoPago() {
+    if (!sessao) return
+    setMpErro('')
+    setMpLoading(true)
+    try {
+      await iniciarVinculoMercadoPago(sessao.id)
+    } catch (err) {
+      setMpErro(err instanceof Error ? err.message : 'Nao foi possivel vincular o Mercado Pago.')
+      setMpLoading(false)
+    }
+  }
 
   function sair() {
     logout()
@@ -156,6 +174,24 @@ export default function PerfilPage() {
           <PublicInfo icon={<MapPin size={18} color="#64748b" />} label="Endereco da base" value={perfil.endereco || 'Adicione no cadastro'} />
         </InfoCard>
       </div>
+
+      <InfoCard title="Recebimentos Mercado Pago" icon={<CreditCard size={16} color="#0284c7" />}>
+        <Metric
+          label="Status do split"
+          value={mpStatus?.provider === 'mercadopago' && mpStatus.status === 'verificado' ? 'Conta vinculada' : 'Pendente'}
+          color={mpStatus?.provider === 'mercadopago' && mpStatus.status === 'verificado' ? '#16a34a' : '#d97706'}
+        />
+        <button
+          type="button"
+          onClick={conectarMercadoPago}
+          disabled={mpLoading}
+          style={{ width: '100%', border: '1px solid rgba(2,132,199,0.25)', background: '#eff6ff', color: '#0284c7', borderRadius: 16, padding: 16, fontSize: 14, fontWeight: 900, cursor: mpLoading ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
+        >
+          {mpLoading ? <Loader2 size={18} className="animate-spin-slow" /> : <CreditCard size={18} />}
+          {mpStatus?.provider === 'mercadopago' ? 'Atualizar vinculo Mercado Pago' : 'Vincular conta Mercado Pago'}
+        </button>
+        {mpErro && <div style={{ color: '#ef4444', fontSize: 13, fontWeight: 800 }}>{mpErro}</div>}
+      </InfoCard>
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-panel" style={{ borderRadius: 24, overflow: 'hidden', border: '1px solid rgba(0,0,0,0.06)', marginBottom: 24 }}>
         {[

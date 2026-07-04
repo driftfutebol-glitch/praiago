@@ -34,8 +34,17 @@ if (typeof window !== 'undefined') {
   window.addEventListener('keydown', unlock, { once: false })
 }
 
+// O hook é montado no App (global) E na página de Pedidos — sem isso o mesmo
+// pedido tocaria 2 beeps. Cada pedido só apita uma vez.
+const beepRecentes = new Set<string>()
+
 // Gera beep duplo estilo notificação usando Web Audio API pura
-function playNotificationBeep() {
+function playNotificationBeep(dedupeId?: string) {
+  if (dedupeId) {
+    if (beepRecentes.has(dedupeId)) return
+    beepRecentes.add(dedupeId)
+    setTimeout(() => beepRecentes.delete(dedupeId), 8000)
+  }
   try {
     const ctx = getCtx()
     if (!ctx) return
@@ -97,7 +106,7 @@ export function useOrderNotifications() {
             ts: new Date(row.created_at).getTime()
           }
           
-          playNotificationBeep()
+          playNotificationBeep(order.id)
           setLatestOrder(order)
           setOrders(prev => [order, ...prev])
         }

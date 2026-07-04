@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 import {
   Activity, Package, Users, AlertOctagon, LogOut, ShieldAlert,
   ShieldCheck, Headphones, ChevronDown, CalendarDays, LayoutGrid,
-  Smartphone, TabletSmartphone, UtensilsCrossed, Umbrella, UserCircle, Ticket, Megaphone
+  Smartphone, TabletSmartphone, UtensilsCrossed, Umbrella, UserCircle, Ticket, Megaphone, WalletCards
 } from 'lucide-react'
 
 const atendimentoSubItems = [
@@ -70,6 +70,7 @@ export default function Sidebar({ onLogout }: { onLogout: () => void }) {
   const mainMenus = [
     { to: '/', icon: Activity, label: 'Dashboard' },
     { to: '/pedidos', icon: Package, label: 'Pedidos Globais' },
+    { to: '/financeiro', icon: WalletCards, label: 'Financeiro' },
     { to: '/usuarios', icon: Users, label: 'Usuários' },
   ]
 

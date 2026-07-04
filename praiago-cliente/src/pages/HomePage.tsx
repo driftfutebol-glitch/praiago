@@ -95,9 +95,15 @@ function QuickAction({
 function VendorCard({ v, onClick }: { v: Vendedor; onClick: () => void }) {
   const isFav = useStore(s => s.favoritos.includes(v.id))
   const toggleFavorito = useStore(s => s.toggleFavorito)
+  const abrirComTeclado = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      onClick()
+    }
+  }
 
   return (
-    <button onClick={onClick} style={{
+    <div role="button" tabIndex={0} onClick={onClick} onKeyDown={abrirComTeclado} style={{
       width: 286,
       flexShrink: 0,
       cursor: 'pointer',
@@ -141,7 +147,7 @@ function VendorCard({ v, onClick }: { v: Vendedor; onClick: () => void }) {
           <span>{v.distancia}</span>
         </div>
       </div>
-    </button>
+    </div>
   )
 }
 

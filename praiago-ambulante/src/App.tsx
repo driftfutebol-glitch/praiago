@@ -1,6 +1,6 @@
 import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { logout, useSessao } from './lib/auth'
 import { supabase } from './lib/supabase'
 import LoginPage from './pages/LoginPage'
@@ -13,7 +13,9 @@ import ZonasPage from './pages/ZonasPage'
 import BottomNav from './components/BottomNav'
 import VerificationBar from './components/VerificationBar'
 import AiChatbot from './components/AiChatbot'
+import PasswordRecoveryHandler from './components/PasswordRecoveryHandler'
 import { useGPS } from './hooks/useGPS'
+import { useOrderNotifications } from './hooks/useOrderNotifications'
 
 const PUBLIC_ROUTES = ['/login', '/cadastro']
 
@@ -77,6 +79,140 @@ function LogoBar({ gpsStatus }: { gpsStatus: string }) {
   )
 }
 
+function GlobalOrderToast() {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { latestOrder, dismissLatest } = useOrderNotifications()
+
+  if (!latestOrder || location.pathname === '/pedidos') return null
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0, y: -18, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: -18, scale: 0.96 }}
+        style={{
+          position: 'fixed',
+          top: 92,
+          left: 14,
+          right: 14,
+          zIndex: 9999,
+          background: '#ffffff',
+          border: '1px solid rgba(14,165,233,0.24)',
+          borderRadius: 20,
+          boxShadow: '0 18px 45px rgba(15,23,42,0.2)',
+          padding: 14,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+        }}
+      >
+        <div style={{ width: 46, height: 46, borderRadius: 16, background: 'linear-gradient(135deg,#0ea5e9,#22c55e)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 900 }}>
+          R$
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 900, color: '#0f172a' }}>Novo pedido recebido</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#475569', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {latestOrder.clienteNome} - R$ {latestOrder.total.toFixed(2).replace('.', ',')}
+          </div>
+        </div>
+        <button
+          onClick={() => { dismissLatest(); navigate('/pedidos') }}
+          style={{ border: 0, borderRadius: 13, background: '#0ea5e9', color: '#fff', padding: '10px 12px', fontSize: 12, fontWeight: 900, cursor: 'pointer' }}
+        >
+          Ver
+        </button>
+        <button
+          aria-label="Fechar aviso"
+          onClick={dismissLatest}
+          style={{ border: 0, borderRadius: 12, background: '#f1f5f9', color: '#64748b', width: 34, height: 34, fontSize: 18, cursor: 'pointer' }}
+        >
+          x
+        </button>
+      </motion.div>
+    </AnimatePresence>
+  )
+}
+
+function playAvisoSound() {
+  try {
+    const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext
+    if (!AudioContextCtor) return
+    const ctx = new AudioContextCtor()
+    const now = ctx.currentTime
+    ;[740, 988].forEach((freq, i) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.value = freq
+      gain.gain.setValueAtTime(0.0001, now + i * 0.16)
+      gain.gain.exponentialRampToValueAtTime(0.2, now + i * 0.16 + 0.02)
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.16 + 0.14)
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start(now + i * 0.16)
+      osc.stop(now + i * 0.16 + 0.16)
+    })
+    setTimeout(() => ctx.close(), 700)
+  } catch {
+    // Audio pode ficar bloqueado ate o primeiro toque do usuario.
+  }
+}
+
+function GlobalAvisoToast() {
+  const [aviso, setAviso] = useState<{ id?: string; titulo?: string; mensagem?: string; cupom_codigo?: string | null } | null>(null)
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('avisos_ambulante')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'avisos' }, payload => {
+        const row = payload.new as { id?: string; titulo?: string; mensagem?: string; publico?: string; cupom_codigo?: string | null }
+        if (row.publico && row.publico !== 'ambulantes' && row.publico !== 'todos') return
+        setAviso(row)
+        playAvisoSound()
+        window.setTimeout(() => setAviso(current => current?.id === row.id ? null : current), 8000)
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [])
+
+  if (!aviso) return null
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 18, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 18, scale: 0.96 }}
+      style={{
+        position: 'fixed',
+        left: 14,
+        right: 14,
+        bottom: 96,
+        zIndex: 9998,
+        background: '#ffffff',
+        border: '1px solid rgba(34,197,94,0.24)',
+        borderRadius: 20,
+        boxShadow: '0 18px 45px rgba(15,23,42,0.18)',
+        padding: 14,
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 12,
+      }}
+    >
+      <div style={{ width: 42, height: 42, borderRadius: 15, background: 'linear-gradient(135deg,#22c55e,#0ea5e9)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>!</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, color: '#0f172a', fontWeight: 900 }}>{aviso.titulo || 'Aviso PraiaGo'}</div>
+        <div style={{ fontSize: 12, color: '#475569', fontWeight: 650, lineHeight: 1.35, marginTop: 3 }}>
+          {aviso.mensagem}{aviso.cupom_codigo ? ` - Cupom ${aviso.cupom_codigo}` : ''}
+        </div>
+      </div>
+      <button onClick={() => setAviso(null)} style={{ border: 0, borderRadius: 12, background: '#f1f5f9', color: '#64748b', width: 32, height: 32, cursor: 'pointer' }}>x</button>
+    </motion.div>
+  )
+}
+
 export default function App() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -121,6 +257,7 @@ export default function App() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#ffffff' }}>
+      <PasswordRecoveryHandler />
       {!isPublic && <LogoBar gpsStatus={gpsStatus} />}
       {!isPublic && <VerificationBar />}
       <main style={{ flex: 1, overflowY: 'auto', paddingBottom: isPublic ? 0 : '80px', position: 'relative' }}>
@@ -138,6 +275,12 @@ export default function App() {
       </main>
       {!isPublic && <BottomNav />}
       {!isPublic && <AiChatbot plataforma="ambulante" />}
+      {!isPublic && <GlobalOrderToast />}
+      {!isPublic && (
+        <AnimatePresence>
+          <GlobalAvisoToast />
+        </AnimatePresence>
+      )}
     </div>
   )
 }

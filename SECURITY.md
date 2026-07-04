@@ -44,6 +44,15 @@ O resto deste documento é como fazer isso.
 - Se algum dia uma chave secreta for commitada por engano: **rotacione** (gere outra)
   no painel do Supabase. Apagar o commit não basta — já foi exposta.
 
+### IA e APIs pagas
+
+- Chaves de IA, Mercado Pago, banco e qualquer API paga ficam em **Supabase Edge
+  Function Secrets**.
+- O front chama Edge Functions autenticadas, por exemplo `ai-chat`; ele nunca envia
+  `Authorization: Bearer <chave-do-provedor>` direto do app.
+- Variáveis `VITE_*` são públicas. Use `VITE_*` apenas para URL do Supabase e anon
+  key, que dependem de Auth/RLS para ficarem seguras.
+
 ---
 
 ## 2. Banco de dados único e seguro (multi-tenant com RLS)

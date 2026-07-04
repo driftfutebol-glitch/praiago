@@ -18,6 +18,7 @@ import EntregadoresPage from './pages/EntregadoresPage'
 import PerfilPage       from './pages/PerfilPage'
 import VerificationBar  from './components/VerificationBar'
 import AiChatbot        from './components/AiChatbot'
+import PasswordRecoveryHandler from './components/PasswordRecoveryHandler'
 
 const navItems = [
   { to: '/',             icon: LayoutDashboard, label: 'Painel',        badge: null },
@@ -32,6 +33,85 @@ const navItems = [
 const PUBLIC = ['/login']
 
 const NOTIFS: any[] = []
+
+function playAvisoSound() {
+  try {
+    const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext
+    if (!AudioContextCtor) return
+    const ctx = new AudioContextCtor()
+    const now = ctx.currentTime
+    ;[659, 880].forEach((freq, i) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sine'
+      osc.frequency.value = freq
+      gain.gain.setValueAtTime(0.0001, now + i * 0.15)
+      gain.gain.exponentialRampToValueAtTime(0.2, now + i * 0.15 + 0.02)
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.15 + 0.14)
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start(now + i * 0.15)
+      osc.stop(now + i * 0.15 + 0.16)
+    })
+    setTimeout(() => ctx.close(), 700)
+  } catch {
+    // Audio pode ficar bloqueado ate o primeiro toque do usuario.
+  }
+}
+
+function GlobalAvisoToast() {
+  const [aviso, setAviso] = useState<{ id?: string; titulo?: string; mensagem?: string; cupom_codigo?: string | null } | null>(null)
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('avisos_restaurante')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'avisos' }, payload => {
+        const row = payload.new as { id?: string; titulo?: string; mensagem?: string; publico?: string; cupom_codigo?: string | null }
+        if (row.publico && row.publico !== 'restaurantes' && row.publico !== 'todos') return
+        setAviso(row)
+        playAvisoSound()
+        window.setTimeout(() => setAviso(current => current?.id === row.id ? null : current), 8000)
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [])
+
+  if (!aviso) return null
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 18, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 18, scale: 0.96 }}
+      style={{
+        position: 'fixed',
+        right: 28,
+        bottom: 28,
+        zIndex: 9999,
+        width: 360,
+        maxWidth: 'calc(100vw - 32px)',
+        background: '#ffffff',
+        border: '1px solid rgba(249,115,22,0.24)',
+        borderRadius: 18,
+        boxShadow: '0 18px 45px rgba(15,23,42,0.22)',
+        padding: 14,
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 12,
+      }}
+    >
+      <div style={{ width: 42, height: 42, borderRadius: 14, background: 'linear-gradient(135deg,#f97316,#ea580c)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>!</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, color: '#0f172a', fontWeight: 900 }}>{aviso.titulo || 'Aviso PraiaGo'}</div>
+        <div style={{ fontSize: 12, color: '#475569', fontWeight: 650, lineHeight: 1.35, marginTop: 3 }}>
+          {aviso.mensagem}{aviso.cupom_codigo ? ` - Cupom ${aviso.cupom_codigo}` : ''}
+        </div>
+      </div>
+      <button onClick={() => setAviso(null)} style={{ border: 0, borderRadius: 12, background: '#f1f5f9', color: '#64748b', width: 32, height: 32, cursor: 'pointer' }}>x</button>
+    </motion.div>
+  )
+}
 
 export default function App() {
   const location    = useLocation()
@@ -91,6 +171,7 @@ export default function App() {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'system-ui,-apple-system,sans-serif' }}>
+      <PasswordRecoveryHandler />
 
       {/* ══ SIDEBAR ══════════════════════════════════════════ */}
       {!isPublic && (
@@ -313,6 +394,11 @@ export default function App() {
           </motion.div>
         </AnimatePresence>
         {!isPublic && <AiChatbot plataforma="restaurante" />}
+        {!isPublic && (
+          <AnimatePresence>
+            <GlobalAvisoToast />
+          </AnimatePresence>
+        )}
       </main>
     </div>
   )

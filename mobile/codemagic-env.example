@@ -1,0 +1,10 @@
+# Codemagic variable group: praiago_public_env
+VITE_SUPABASE_URL=https://SEU-PROJETO.supabase.co
+VITE_SUPABASE_ANON_KEY=SUA_CHAVE_ANON_PUBLICA
+CAPACITOR_OTA_UPDATE_URL=https://SEU-PROJETO.supabase.co/functions/v1/ota-update
+CAPACITOR_OTA_CHANNEL=production
+
+# Codemagic variable group: praiago_ios_appstore
+PRAIAGO_CLIENTE_APPLE_ID=0000000000
+PRAIAGO_AMBULANTE_APPLE_ID=0000000000
+PRAIAGO_RESTAURANTE_APPLE_ID=0000000000

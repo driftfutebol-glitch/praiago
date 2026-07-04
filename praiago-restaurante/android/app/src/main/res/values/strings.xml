@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">PraiaGo Restaurante</string>
+    <string name="title_activity_main">PraiaGo Restaurante</string>
+    <string name="package_name">com.ferrazcode.praiago.restaurante</string>
+    <string name="custom_url_scheme">com.ferrazcode.praiago.restaurante</string>
+</resources>

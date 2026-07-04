@@ -25,13 +25,7 @@ export default function LoginPage({ onLogin }: { onLogin: () => void }) {
       }
     }
 
-    const envUser = import.meta.env.VITE_ADMIN_USER || ''
-    const envPass = import.meta.env.VITE_ADMIN_PASSWORD || ''
-    if (envUser && envPass && user === envUser && pass === envPass) {
-      onLogin()
-    } else {
-      setErro('ACESSO NEGADO. CREDENCIAIS INVALIDAS.')
-    }
+    setErro('ACESSO NEGADO. USE UMA CONTA ADMIN DO SUPABASE AUTH.')
   }
 
   return (

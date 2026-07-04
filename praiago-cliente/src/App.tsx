@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Routes, Route, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { Bell, Home, ClipboardList, ShoppingBag, MapPin, User, Calendar, X } from 'lucide-react'
 import { iniciarCatalogo } from './store/useCatalogo'
@@ -13,6 +13,7 @@ import AmbulantesPage from './pages/AmbulantesPage'
 import PerfilPage from './pages/PerfilPage'
 import EmailVerificationBanner from './components/EmailVerificationBanner'
 import AiChatbot from './components/AiChatbot'
+import PasswordRecoveryHandler from './components/PasswordRecoveryHandler'
 
 const navItems = [
   { to: '/',            icon: Home,          label: 'Início'    },
@@ -51,9 +52,11 @@ function playNotifySound() {
 function NotificationToast() {
   const ultima = useStore(s => s.notificacoes[0])
   const [visivel, setVisivel] = useState(false)
+  const initialNotifIdRef = useRef(ultima?.id ?? null)
 
   useEffect(() => {
     if (!ultima) return
+    if (ultima.id === initialNotifIdRef.current) return
     setVisivel(true)
     playNotifySound()
     const t = window.setTimeout(() => setVisivel(false), 6500)
@@ -103,9 +106,11 @@ export default function App() {
   const location = useLocation()
   const navigate = useNavigate()
   const sessao = useStore(s => s.sessao)
+  const limparNotificacoesTeste = useStore(s => s.limparNotificacoesTeste)
 
   // Carrega o catálogo real (lojas/produtos do banco) + realtime, uma vez.
   useEffect(() => { iniciarCatalogo() }, [])
+  useEffect(() => { limparNotificacoesTeste() }, [limparNotificacoesTeste])
 
   useEffect(() => {
     if (!sessao?.id) return
@@ -143,6 +148,7 @@ export default function App() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'avisos' }, (payload) => {
         const a = payload.new as { titulo?: string; mensagem?: string; publico?: string; cupom_codigo?: string | null }
         if (a.publico && a.publico !== 'clientes' && a.publico !== 'todos') return
+        if (`${a.titulo || ''} ${a.mensagem || ''}`.toUpperCase().includes('TESTE-NOTIF-FABLE')) return
         useStore.getState().addNotif({
           titulo: a.titulo || 'Novidade PraiaGo',
           texto: (a.mensagem || '') + (a.cupom_codigo ? ` · Use o cupom ${a.cupom_codigo}` : ''),
@@ -154,6 +160,7 @@ export default function App() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'transparent' }}>
+      <PasswordRecoveryHandler />
       {/* Logo bar - Glassmorphism */}
       <div className="glass-panel" style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',

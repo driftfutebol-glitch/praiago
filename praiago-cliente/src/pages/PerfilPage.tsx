@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Eye, EyeOff, LogIn, LogOut, User, Package, MapPin, ChevronRight, Bell, HelpCircle, Star } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -102,20 +102,6 @@ export default function PerfilPage() {
   const [erro, setErro] = useState('')
   const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
-    const { data } = supabase.auth.onAuthStateChange(async (event) => {
-      if (event !== 'PASSWORD_RECOVERY') return
-      const novaSenha = window.prompt('Digite a nova senha com pelo menos 6 caracteres:')
-      if (!novaSenha || novaSenha.length < 6) {
-        setErro('A nova senha precisa ter ao menos 6 caracteres.')
-        return
-      }
-      const { error } = await supabase.auth.updateUser({ password: novaSenha })
-      setErro(error ? `Nao foi possivel redefinir a senha: ${error.message}` : 'Senha redefinida com sucesso. Faca login novamente.')
-    })
-    return () => data.subscription.unsubscribe()
-  }, [])
-
   function emailNormalizado() {
     return email.trim().toLowerCase()
   }
@@ -124,7 +110,22 @@ export default function PerfilPage() {
     const alvo = emailNormalizado()
     if (!/^\S+@\S+\.\S+$/.test(alvo)) { setErro('Informe seu e-mail valido para redefinir a senha.'); return }
     const { error } = await supabase.auth.resetPasswordForEmail(alvo, { redirectTo: window.location.origin })
-    setErro(error ? `Nao foi possivel enviar redefinicao: ${error.message}` : 'Enviamos o link de redefinicao para seu e-mail.')
+    setErro(error ? `Nao foi possivel enviar redefinicao: ${error.message}` : 'Enviamos o e-mail de redefinicao. Use o link ou o codigo recebido.')
+  }
+
+  async function confirmarCodigoSenha() {
+    const alvo = emailNormalizado()
+    if (!/^\S+@\S+\.\S+$/.test(alvo)) { setErro('Informe seu e-mail valido para confirmar o codigo.'); return }
+    const codigo = window.prompt('Digite o codigo recebido por e-mail:')
+    if (!codigo?.trim()) return
+    const novaSenha = window.prompt('Digite a nova senha com pelo menos 6 caracteres:')
+    if (!novaSenha || novaSenha.length < 6) { setErro('A nova senha precisa ter ao menos 6 caracteres.'); return }
+
+    const { error: otpError } = await supabase.auth.verifyOtp({ email: alvo, token: codigo.trim(), type: 'recovery' })
+    if (otpError) { setErro(`Codigo invalido ou expirado: ${otpError.message}`); return }
+    const { error } = await supabase.auth.updateUser({ password: novaSenha })
+    setErro(error ? `Nao foi possivel trocar a senha: ${error.message}` : 'Senha alterada com sucesso. Entre novamente.')
+    if (!error) await supabase.auth.signOut()
   }
 
   async function reenviarVerificacao() {
@@ -268,6 +269,7 @@ export default function PerfilPage() {
           {tab === 'entrar' && (
             <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap', marginTop: -2 }}>
               <button type="button" onClick={enviarResetSenha} style={{ background: 'none', border: 0, color: '#0284c7', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Esqueci minha senha</button>
+              <button type="button" onClick={confirmarCodigoSenha} style={{ background: 'none', border: 0, color: '#7c3aed', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Tenho codigo</button>
               <button type="button" onClick={reenviarVerificacao} style={{ background: 'none', border: 0, color: '#16a34a', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Reenviar verificacao</button>
             </div>
           )}

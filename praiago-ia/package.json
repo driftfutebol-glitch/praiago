@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"No automated tests configured\"",
+    "abacatepay:check": "node -e \"require('./abacatepay'); console.log('AbacatePay helper carregado')\""
   },
   "keywords": [],
   "author": "",

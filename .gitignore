@@ -17,12 +17,21 @@ dist-ssr/
 !.env.example
 .mcp.json
 .cursor/mcp.json
+supabase/.temp/
 
 # ───────── Keystore/assinatura Android (segredo) ─────────
 *.keystore
 *.jks
 key.properties
 google-services.json
+
+# Apple signing / App Store Connect secrets
+*.p8
+*.p12
+*.cer
+*.mobileprovision
+*.provisionprofile
+AuthKey_*.p8
 
 # ───────── Ferramentas Claude / scripts utilitários (podem ter segredos) ─────────
 /.agents/
