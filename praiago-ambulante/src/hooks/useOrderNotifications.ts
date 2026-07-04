@@ -38,6 +38,9 @@ if (typeof window !== 'undefined') {
 // pedido tocaria 2 beeps. Cada pedido só apita uma vez.
 const beepRecentes = new Set<string>()
 
+// Contador pra dar um nome de canal diferente a cada instância do hook.
+let canalSeq = 0
+
 // Gera beep duplo estilo notificação usando Web Audio API pura
 function playNotificationBeep(dedupeId?: string) {
   if (dedupeId) {
@@ -114,7 +117,10 @@ export function useOrderNotifications() {
       setOrders(prev => [order, ...prev])
     }
 
-    const channel = supabase.channel('pedidos_ambulante')
+    // Nome ÚNICO por instância: o hook roda no App (popup global) E na página
+    // de Pedidos ao mesmo tempo — com o mesmo nome, o supabase-js reaproveita o
+    // canal já inscrito e estoura "cannot add postgres_changes after subscribe()".
+    const channel = supabase.channel(`pedidos_ambulante_${++canalSeq}`)
       .on(
         'postgres_changes',
         // só pedidos DESTE vendedor (antes chegava pedido de todo mundo)

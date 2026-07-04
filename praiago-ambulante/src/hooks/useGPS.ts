@@ -28,6 +28,19 @@ function isOnline(): boolean {
   try { return localStorage.getItem(ONLINE_STORAGE) === 'true' } catch { return false }
 }
 
+// Canal de broadcast do GPS: SINGLETON do módulo. O useGPS roda no App e no
+// Dashboard ao mesmo tempo — se cada instância criasse/assinasse o mesmo tópico
+// ('praiago:ambulante:gps' precisa ser fixo, é ele que o radar do cliente ouve),
+// o segundo subscribe() estourava e o unmount de uma tela matava o canal da outra.
+let gpsChannel: ReturnType<typeof supabase.channel> | null = null
+function getGpsChannel() {
+  if (!gpsChannel) {
+    gpsChannel = supabase.channel('praiago:ambulante:gps')
+    gpsChannel.subscribe()
+  }
+  return gpsChannel
+}
+
 // GPS REAL e ROBUSTO do ambulante.
 // - navigator.geolocation com fix rápido inicial + watch ao vivo (sem timeout estourando);
 // - publica um payload ENRIQUECIDO (id/nome/emoji/zona) via Supabase para que o app do
@@ -78,8 +91,7 @@ export function useGPS() {
   }
 
   useEffect(() => {
-    channel.current = supabase.channel('praiago:ambulante:gps')
-    channel.current.subscribe()
+    channel.current = getGpsChannel()
     supabase.auth.getUser()
       .then(({ data }) => { nome.current = (data.user?.user_metadata?.nome as string) || 'Ambulante' })
       .catch(() => {})
@@ -147,7 +159,7 @@ export function useGPS() {
 
     return () => {
       if (watchId.current != null) navigator.geolocation.clearWatch(watchId.current)
-      if (channel.current) supabase.removeChannel(channel.current)
+      // o canal de GPS é singleton e fica vivo pro app inteiro — não remover aqui
       window.removeEventListener(ONLINE_EVENT, onOnlineChange)
     }
   }, [])
