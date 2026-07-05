@@ -7,6 +7,7 @@ import { buscarStatusMercadoPago, iniciarVinculoMercadoPago, type MercadoPagoLin
 
 const menuItems = [
   { icon: TrendingUp, label: 'Resumo de vendas', desc: 'Quanto você vendeu, dia a dia', to: '/vendas' },
+  { icon: Star, label: 'Avaliações', desc: 'O que os clientes acharam de você', to: '/avaliacoes' },
   { icon: Bell, label: 'Notificações', desc: 'Alertas de pedidos e novidades' },
   { icon: Shield, label: 'Segurança', desc: 'Sincronização e Conta' },
   { icon: HelpCircle, label: 'Suporte', desc: 'Central Tática PraiaGo' },

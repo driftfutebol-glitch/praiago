@@ -416,7 +416,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
           {itensList.map(p => (
             <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span style={{ fontSize: 24, background: '#ffffff', padding: 8, borderRadius: 12 }}>{p.emoji}</span>
+                <span style={{ fontSize: 24, background: '#ffffff', padding: p.foto ? 0 : 8, borderRadius: 12, width: p.foto ? 40 : undefined, height: p.foto ? 40 : undefined, overflow: 'hidden', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{p.foto ? <img src={p.foto} alt={p.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : p.emoji}</span>
                 <div>
                   <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>{p.nome}</div>
                   <div style={{ fontSize: 13, color: '#64748b' }}>{carrinho[p.id]}x · R$ {p.preco.toFixed(2)}</div>
@@ -622,7 +622,7 @@ export default function PedirPage() {
                 <div style={{ fontSize: 18, fontWeight: 900, color: '#4ade80', marginTop: 10, textShadow: '0 0 10px rgba(74,222,128,0.2)' }}>R$ {p.preco.toFixed(2).replace('.', ',')}</div>
               </div>
               <div style={{ position: 'relative', flexShrink: 0 }}>
-                <div style={{ width: 100, height: 100, borderRadius: 24, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 44, border: '1px solid rgba(0,0,0,0.05)', boxShadow: 'inset 0 4px 20px rgba(0,0,0,0.2)' }}>{p.emoji}</div>
+                <div style={{ width: 100, height: 100, borderRadius: 24, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 44, border: '1px solid rgba(0,0,0,0.05)', boxShadow: 'inset 0 4px 20px rgba(0,0,0,0.2)', overflow: 'hidden' }}>{p.foto ? <img src={p.foto} alt={p.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : p.emoji}</div>
                 <div style={{ position: 'absolute', bottom: -14, left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', background: '#0ea5e9', borderRadius: 16, boxShadow: '0 8px 20px rgba(14,165,233,0.4)' }}>
                   {qtd > 0 ? (
                     <>

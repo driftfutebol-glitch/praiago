@@ -143,6 +143,7 @@ export const useCatalogo = create<State>((set, get) => ({
         preco: precoFinal,
         precoOriginal: temPromocao ? precoOriginal : undefined,
         emoji: r.emoji || '🍽️',
+        foto: (r as { foto?: string | null }).foto ?? null,
         categoria: r.categoria || 'geral',
         promocao: temPromocao ? {
           id: promocao.id,

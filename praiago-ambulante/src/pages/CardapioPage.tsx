@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
-import { Plus, Trash2, Edit2, Check, X } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Plus, Trash2, Edit2, Check, X, Camera, Loader2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { getSessao } from '../lib/auth'
+import { alertDialog } from '../lib/dialog'
 
 type Produto = {
   id: string
@@ -16,7 +17,7 @@ type Produto = {
   emoji: string
 }
 
-type NovoForm = { nome: string; preco: string; descricao: string; emoji: string }
+type NovoForm = { nome: string; preco: string; descricao: string; emoji: string; foto: string | null }
 
 export default function CardapioPage() {
   const [produtos, setProdutos] = useState<Produto[]>([])
@@ -25,7 +26,7 @@ export default function CardapioPage() {
   const [editPreco, setEditPreco] = useState('')
   const [adicionando, setAdicionando] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [novo, setNovo] = useState<NovoForm>({ nome: '', preco: '', descricao: '', emoji: '🍽️' })
+  const [novo, setNovo] = useState<NovoForm>({ nome: '', preco: '', descricao: '', emoji: '🍽️', foto: null })
   
   const sessao = getSessao()
 
@@ -98,12 +99,13 @@ export default function CardapioPage() {
       categoria: 'Ambulante', // Ambulante n tem categoria na UI
       ativo: true,
       emoji: novo.emoji,
+      foto: novo.foto,
     }
-    
+
     const { data, error } = await supabase.from('produtos').insert(prod).select().single()
     if (data) {
       setProdutos(prev => [data, ...prev])
-      setNovo({ nome: '', preco: '', descricao: '', emoji: '🍽️' })
+      setNovo({ nome: '', preco: '', descricao: '', emoji: '🍽️', foto: null })
       setAdicionando(false)
     } else {
       console.error("Erro ao adicionar produto:", error)
@@ -111,6 +113,28 @@ export default function CardapioPage() {
   }
 
   const emojis = ['🥥', '🧉', '🍢', '🍦', '🍕', '🌽', '🐟', '🍪', '🍹', '🫐', '🍉', '🥤']
+
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [enviandoFoto, setEnviandoFoto] = useState(false)
+
+  async function enviarFoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || !sessao) return
+    if (file.size > 5 * 1024 * 1024) { alertDialog({ title: 'Foto muito grande', message: 'Envie uma imagem de até 5 MB.', tone: 'danger' }); return }
+    setEnviandoFoto(true)
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+    const caminho = `${sessao.id}/${Date.now()}.${ext}`
+    const { error } = await supabase.storage.from('produtos').upload(caminho, file, { upsert: true, contentType: file.type })
+    if (error) {
+      setEnviandoFoto(false)
+      alertDialog({ title: 'Não deu pra enviar', message: 'Tente outra foto em instantes.', tone: 'danger' })
+      return
+    }
+    const { data } = supabase.storage.from('produtos').getPublicUrl(caminho)
+    setNovo(n => ({ ...n, foto: data.publicUrl }))
+    setEnviandoFoto(false)
+  }
 
   return (
     <div style={{ minHeight: '100vh', paddingBottom: 40 }}>
@@ -228,7 +252,30 @@ export default function CardapioPage() {
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: 13, color: '#64748b', fontWeight: 600, marginBottom: 8 }}>EMOJI</label>
+                  <label style={{ display: 'block', fontSize: 13, color: '#64748b', fontWeight: 600, marginBottom: 8 }}>FOTO DO PRODUTO (opcional)</label>
+                  <input ref={fileRef} type="file" accept="image/*" onChange={enviarFoto} style={{ display: 'none' }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <button
+                      onClick={() => fileRef.current?.click()}
+                      disabled={enviandoFoto}
+                      style={{ width: 84, height: 84, borderRadius: 18, border: `1.5px dashed ${novo.foto ? 'transparent' : 'rgba(14,165,233,0.4)'}`, background: novo.foto ? 'transparent' : 'rgba(14,165,233,0.06)', cursor: 'pointer', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
+                    >
+                      {enviandoFoto
+                        ? <Loader2 size={22} color="#0ea5e9" className="animate-spin-slow" />
+                        : novo.foto
+                          ? <img src={novo.foto} alt="Produto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          : <Camera size={24} color="#0ea5e9" />}
+                    </button>
+                    <div style={{ fontSize: 12.5, color: '#64748b', fontWeight: 600, lineHeight: 1.4 }}>
+                      {novo.foto
+                        ? <>Foto pronta! <button onClick={() => setNovo(n => ({ ...n, foto: null }))} style={{ background: 'none', border: 0, color: '#ef4444', fontWeight: 800, cursor: 'pointer', padding: 0 }}>remover</button></>
+                        : 'Toque pra tirar/escolher uma foto. Sem foto, mostramos o emoji.'}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 13, color: '#64748b', fontWeight: 600, marginBottom: 8 }}>EMOJI {novo.foto ? '(usado só se remover a foto)' : ''}</label>
                   <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 8 }} className="hide-scrollbar">
                     {emojis.map(e => (
                       <button key={e} onClick={() => setNovo({...novo, emoji: e})} style={{ minWidth: 44, height: 44, borderRadius: 12, fontSize: 20, background: novo.emoji === e ? 'rgba(14,165,233,0.2)' : 'rgba(0,0,0,0.05)', border: `1px solid ${novo.emoji === e ? '#0ea5e9' : 'rgba(0,0,0,0.08)'}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

@@ -8,6 +8,7 @@ export type Produto = {
   preco: number
   precoOriginal?: number
   emoji: string
+  foto?: string | null
   categoria: string
   promocao?: {
     id: string
