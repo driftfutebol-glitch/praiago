@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
 import { CheckCircle2, CreditCard, DollarSign, Percent, RefreshCw, Search, WalletCards } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { confirmDialog } from '../lib/dialog'
+import { confirmDialog, alertDialog } from '../lib/dialog'
 
 type PedidoFinanceiro = {
   id: string
@@ -19,6 +19,9 @@ type PedidoFinanceiro = {
   vendor_amount?: number | null
   mercadopago_payment_id?: string | null
   payment_checkout_url?: string | null
+  reembolso_status?: string | null
+  reembolso_motivo?: string | null
+  reembolso_previsao?: string | null
 }
 
 type Settings = {
@@ -49,7 +52,7 @@ export default function FinanceiroPage() {
     const [{ data: pedidosData }, { data: settingsData }] = await Promise.all([
       supabase
         .from('pedidos')
-        .select('id,created_at,cliente_nome,vendedor_nome,pagamento,payment_provider,payment_status,settlement_status,gross_amount,total,platform_fee_amount,vendor_amount,mercadopago_payment_id,payment_checkout_url')
+        .select('id,created_at,cliente_nome,vendedor_nome,pagamento,payment_provider,payment_status,settlement_status,gross_amount,total,platform_fee_amount,vendor_amount,mercadopago_payment_id,payment_checkout_url,reembolso_status,reembolso_motivo,reembolso_previsao')
         .order('created_at', { ascending: false }),
       supabase
         .from('payment_settings')
@@ -128,6 +131,20 @@ export default function FinanceiroPage() {
     load()
   }
 
+  const reembolsos = useMemo(() => pedidos.filter(p => p.reembolso_status === 'solicitado'), [pedidos])
+  const [processandoReembolso, setProcessandoReembolso] = useState<string | null>(null)
+
+  async function resolverReembolso(pedido: PedidoFinanceiro, acao: 'aprovar' | 'negar') {
+    if (acao === 'aprovar' && !await confirmDialog({ title: 'Aprovar reembolso?', message: `Devolver ${money(pedido.total)} para ${pedido.cliente_nome || 'cliente'}? Se foi pago online, o estorno é disparado no Mercado Pago na hora (PIX volta rápido, cartão demora dias).`, confirmText: 'Aprovar e estornar', tone: 'danger' })) return
+    if (acao === 'negar' && !await confirmDialog({ title: 'Negar reembolso?', message: 'O cliente será informado de que o reembolso não foi aprovado.', confirmText: 'Negar', tone: 'danger' })) return
+    setProcessandoReembolso(pedido.id)
+    const { data, error } = await supabase.functions.invoke('pedido-reembolso', { body: { pedido_id: pedido.id, acao } })
+    setProcessandoReembolso(null)
+    if (error) { await alertDialog({ title: 'Erro', message: 'Não foi possível processar agora. ' + error.message, tone: 'danger' }); return }
+    await alertDialog({ title: acao === 'aprovar' ? 'Reembolso processado' : 'Reembolso negado', message: acao === 'aprovar' ? (data?.previsao || 'Estorno registrado.') : 'O cliente foi informado.', tone: 'success' })
+    load()
+  }
+
   const cards = [
     { label: 'Bruto processado', value: money(resumo.bruto), icon: DollarSign, color: 'text-sky-400', bg: 'bg-sky-500/10' },
     { label: '10% empresa', value: money(resumo.taxa), icon: Percent, color: 'text-green-400', bg: 'bg-green-500/10' },
@@ -160,6 +177,35 @@ export default function FinanceiroPage() {
           </div>
         ))}
       </div>
+
+      {/* Reembolsos solicitados */}
+      {reembolsos.length > 0 && (
+        <section className="glass-panel rounded-2xl border border-amber-500/20 p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <RefreshCw size={16} className="text-amber-400" />
+            <h2 className="text-lg font-black text-slate-100">Reembolsos solicitados</h2>
+            <span className="text-xs font-black text-amber-400 font-mono">({reembolsos.length})</span>
+          </div>
+          <div className="space-y-3">
+            {reembolsos.map(p => (
+              <div key={p.id} className="flex flex-col md:flex-row md:items-center gap-3 bg-slate-950/40 rounded-xl p-4 border border-slate-800/50">
+                <div className="flex-1">
+                  <div className="text-slate-200 font-bold">{p.cliente_nome || 'Cliente'} <span className="text-slate-500 font-normal">· {p.vendedor_nome || 'vendedor'}</span></div>
+                  <div className="text-xs text-slate-500 mt-0.5">{money(p.total)} · {(p.pagamento || '').toUpperCase()} · {p.reembolso_motivo || 'sem motivo'}</div>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => resolverReembolso(p, 'aprovar')} disabled={processandoReembolso === p.id} className="inline-flex items-center gap-1.5 bg-green-500/10 text-green-400 border border-green-500/20 rounded-lg px-3 py-2 text-xs font-black hover:bg-green-500/20 disabled:opacity-50">
+                    <CheckCircle2 size={14} /> Aprovar e estornar
+                  </button>
+                  <button onClick={() => resolverReembolso(p, 'negar')} disabled={processandoReembolso === p.id} className="inline-flex items-center gap-1.5 bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg px-3 py-2 text-xs font-black hover:bg-red-500/20 disabled:opacity-50">
+                    Negar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="glass-panel rounded-2xl border-slate-800 p-5">
         <div className="flex flex-col xl:flex-row xl:items-end gap-4">

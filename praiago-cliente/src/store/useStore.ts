@@ -315,6 +315,15 @@ export const useStore = create<State>()(
           return false
         }
 
+        // marca o pedido como reembolso SOLICITADO (o admin aprova/nega no painel)
+        if (tipo === 'reembolso') {
+          await supabase.from('pedidos').update({
+            reembolso_status: 'solicitado',
+            reembolso_motivo: `Solicitado pelo cliente. Total R$ ${pedido.total.toFixed(2)}.`,
+            reembolso_solicitado_em: new Date().toISOString(),
+          }).eq('id', pedidoId)
+        }
+
         await avisarVendedorSePossivel(
           pedido,
           tipo === 'reembolso' ? 'Pedido com solicitacao de reembolso' : 'Pedido precisa de atencao',
