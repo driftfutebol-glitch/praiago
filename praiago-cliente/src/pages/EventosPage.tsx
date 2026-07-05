@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Calendar, MapPin, Clock, Ticket, Navigation, Share2, Loader2, CalendarX } from 'lucide-react'
+import { useState, useEffect, useCallback, type CSSProperties } from 'react'
+import { Calendar, MapPin, Clock, Ticket, Navigation, Share2, Loader2, CalendarX, ShoppingCart, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
+import { criarCheckoutIngresso } from '../lib/eventTickets'
+import { useStore, type Sessao } from '../store/useStore'
 
 type Periodo = 'manha' | 'tarde' | 'noite' | 'madrugada'
 
@@ -22,6 +24,18 @@ type Evento = {
   imagem_url: string | null
   destaque: boolean
   status: string
+  ingressos_enabled?: boolean
+  event_ticket_lots?: TicketLot[]
+}
+
+type TicketLot = {
+  id: string
+  nome: string
+  preco_origem: number
+  preco_venda: number
+  estoque_disponivel: number | null
+  status: string
+  fonte_url: string | null
 }
 
 const PERIODOS: { id: Periodo | 'todos'; label: string; emoji: string }[] = [
@@ -37,6 +51,21 @@ function fmtData(d: string | null) {
   try {
     return new Date(d + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' })
   } catch { return d }
+}
+
+function fmtMoney(value: number) {
+  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
+function lotesDisponiveis(ev: Evento) {
+  return [...(ev.event_ticket_lots || [])]
+    .filter(l => l.status === 'disponivel')
+    .sort((a, b) => Number(a.preco_venda) - Number(b.preco_venda))
+}
+
+function menorPrecoIngresso(ev: Evento) {
+  const lotes = lotesDisponiveis(ev)
+  return lotes.length ? Number(lotes[0].preco_venda) : Number(ev.preco || 0)
 }
 
 function abrirNoMapa(ev: Evento) {
@@ -55,15 +84,136 @@ async function compartilhar(ev: Evento) {
   } catch { /* cancelado */ }
 }
 
+function ComprarIngressoModal({ evento, onClose, sessao }: { evento: Evento; onClose: () => void; sessao: Sessao }) {
+  const lotes = lotesDisponiveis(evento)
+  const [lotId, setLotId] = useState(lotes[0]?.id || '')
+  const [quantidade, setQuantidade] = useState(1)
+  const [nome, setNome] = useState(sessao?.nome || '')
+  const [email, setEmail] = useState(sessao?.email || '')
+  const [telefone, setTelefone] = useState(sessao?.telefone || '')
+  const [loading, setLoading] = useState(false)
+  const [erro, setErro] = useState('')
+  const lote = lotes.find(l => l.id === lotId) || lotes[0]
+  const total = lote ? Number(lote.preco_venda) * quantidade : 0
+
+  async function comprar() {
+    if (!lote) return
+    if (!nome.trim()) { setErro('Informe seu nome para entrega do ingresso.'); return }
+    if (!/^\S+@\S+\.\S+$/.test(email.trim())) { setErro('Informe um e-mail valido para entrega.'); return }
+    setErro('')
+    setLoading(true)
+    try {
+      const checkout = await criarCheckoutIngresso({
+        ticket_lot_id: lote.id,
+        quantidade,
+        cliente_nome: nome.trim(),
+        cliente_email: email.trim().toLowerCase(),
+        cliente_telefone: telefone.trim(),
+      })
+      window.location.href = checkout.checkout_url
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Nao foi possivel iniciar a compra.')
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 2500, background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }} style={{ width: '100%', maxWidth: 460, background: '#ffffff', borderRadius: '24px 24px 0 0', padding: 20, boxShadow: '0 -20px 60px rgba(15,23,42,0.25)' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 12, color: '#0ea5e9', fontWeight: 900, textTransform: 'uppercase' }}>Ingressos PraiaGo</div>
+            <h3 style={{ margin: '4px 0 0', fontSize: 20, lineHeight: 1.15, color: '#0f172a', fontWeight: 900 }}>{evento.titulo}</h3>
+            <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: 13, fontWeight: 600 }}>{evento.local_nome || 'Praia Grande'} {evento.data ? `· ${fmtData(evento.data)}` : ''}</p>
+          </div>
+          <button onClick={onClose} style={{ width: 36, height: 36, border: 0, borderRadius: 12, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <X size={18} color="#475569" />
+          </button>
+        </div>
+
+        <div style={{ marginTop: 18, display: 'grid', gap: 12 }}>
+          <label style={modalLabel}>Tipo de ingresso</label>
+          <select value={lotId} onChange={e => setLotId(e.target.value)} style={modalInput}>
+            {lotes.map(l => (
+              <option key={l.id} value={l.id}>{l.nome} · {fmtMoney(Number(l.preco_venda))}</option>
+            ))}
+          </select>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 112px', gap: 10 }}>
+            <div>
+              <label style={modalLabel}>Nome</label>
+              <input value={nome} onChange={e => setNome(e.target.value)} style={modalInput} placeholder="Nome completo" />
+            </div>
+            <div>
+              <label style={modalLabel}>Qtd</label>
+              <input type="number" min={1} max={20} value={quantidade} onChange={e => setQuantidade(Math.max(1, Math.min(20, Number(e.target.value) || 1)))} style={modalInput} />
+            </div>
+          </div>
+
+          <div>
+            <label style={modalLabel}>E-mail para entrega</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={modalInput} placeholder="voce@email.com" />
+          </div>
+          <div>
+            <label style={modalLabel}>Telefone/WhatsApp</label>
+            <input value={telefone} onChange={e => setTelefone(e.target.value)} style={modalInput} placeholder="(13) 99999-9999" />
+          </div>
+
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 16, padding: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontSize: 13, fontWeight: 700 }}>
+              <span>{quantidade}x {lote?.nome}</span>
+              <span>{fmtMoney(total)}</span>
+            </div>
+            <div style={{ marginTop: 6, fontSize: 11, color: '#94a3b8', lineHeight: 1.35 }}>
+              Valor ja inclui a margem PraiaGo. Entrega do ingresso e conferida por admin apos pagamento.
+            </div>
+          </div>
+
+          {erro && <div style={{ color: '#dc2626', fontSize: 13, fontWeight: 800 }}>{erro}</div>}
+
+          <button disabled={loading || !lote} onClick={comprar} style={{ border: 0, borderRadius: 16, padding: '14px 16px', background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', color: '#fff', fontSize: 15, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: loading ? 0.6 : 1 }}>
+            {loading ? <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> : <ShoppingCart size={18} />}
+            Pagar no Mercado Pago
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  )
+}
+
+const modalLabel: CSSProperties = {
+  display: 'block',
+  fontSize: 11,
+  fontWeight: 900,
+  color: '#64748b',
+  textTransform: 'uppercase',
+  letterSpacing: 0.4,
+  marginBottom: 6,
+}
+
+const modalInput: CSSProperties = {
+  width: '100%',
+  border: '1px solid #e2e8f0',
+  background: '#f8fafc',
+  borderRadius: 12,
+  padding: '11px 12px',
+  color: '#0f172a',
+  fontSize: 14,
+  fontWeight: 700,
+  outline: 'none',
+}
+
 export default function EventosPage() {
   const [eventos, setEventos] = useState<Evento[]>([])
   const [loading, setLoading] = useState(true)
   const [filtro, setFiltro] = useState<Periodo | 'todos'>('todos')
+  const [comprando, setComprando] = useState<Evento | null>(null)
+  const sessao = useStore(s => s.sessao)
 
   const carregar = useCallback(async () => {
     const { data } = await supabase
       .from('eventos')
-      .select('*')
+      .select('*, event_ticket_lots(id,nome,preco_origem,preco_venda,estoque_disponivel,status,fonte_url)')
       .eq('status', 'ativo')
       .order('data', { ascending: true, nullsFirst: false })
     setEventos((data as Evento[]) ?? [])
@@ -84,6 +234,10 @@ export default function EventosPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#ffffff', paddingBottom: 100 }}>
+      <AnimatePresence>
+        {comprando && <ComprarIngressoModal evento={comprando} sessao={sessao} onClose={() => setComprando(null)} />}
+      </AnimatePresence>
+
       <div style={{ padding: '20px 20px 12px' }}>
         <h1 style={{ fontSize: 26, fontWeight: 900, color: '#0f172a', letterSpacing: -0.5 }}>Eventos na Praia 🎉</h1>
         <p style={{ fontSize: 13, color: '#64748b', marginTop: 4, fontWeight: 500 }}>Praia Grande, SP · manhã, tarde, noite e madrugada</p>
@@ -142,6 +296,11 @@ export default function EventosPage() {
                       <Calendar size={12} color="#64748b" /><span style={{ fontSize: 12, color: '#64748b' }}>{fmtData(ev.data)}{ev.hora ? ` · ${ev.hora}` : ''}</span>
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
+                      {lotesDisponiveis(ev).length > 0 && (
+                        <button onClick={() => setComprando(ev)} style={{ flex: 1, background: 'linear-gradient(135deg, #22c55e, #16a34a)', border: 'none', borderRadius: 12, padding: '10px 0', color: '#fff', fontSize: 13, fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                          <ShoppingCart size={14} /> Comprar
+                        </button>
+                      )}
                       <button onClick={() => abrirNoMapa(ev)} style={{ flex: 1, background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', border: 'none', borderRadius: 12, padding: '10px 0', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                         <Navigation size={14} /> Ver local
                       </button>
@@ -149,8 +308,8 @@ export default function EventosPage() {
                         <Share2 size={15} />
                       </button>
                     </div>
-                    <div style={{ marginTop: 10, fontSize: 13, fontWeight: 800, color: ev.preco > 0 ? '#fbbf24' : '#4ade80', display: 'flex', alignItems: 'center', gap: 5 }}>
-                      <Ticket size={14} /> {ev.preco > 0 ? `R$ ${ev.preco.toFixed(2).replace('.', ',')}` : 'Entrada gratuita'}
+                    <div style={{ marginTop: 10, fontSize: 13, fontWeight: 800, color: menorPrecoIngresso(ev) > 0 ? '#f59e0b' : '#16a34a', display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <Ticket size={14} /> {menorPrecoIngresso(ev) > 0 ? `A partir de ${fmtMoney(menorPrecoIngresso(ev))}` : 'Entrada gratuita'}
                     </div>
                   </motion.div>
                 ))}
@@ -177,9 +336,14 @@ export default function EventosPage() {
                       </div>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end', flexShrink: 0 }}>
-                      <span style={{ fontSize: 12, fontWeight: 800, color: ev.preco > 0 ? '#fbbf24' : '#4ade80', background: ev.preco > 0 ? 'rgba(251,191,36,0.1)' : 'rgba(34,197,94,0.1)', borderRadius: 20, padding: '4px 10px' }}>
-                        {ev.preco > 0 ? `R$ ${ev.preco}` : 'Grátis'}
+                      <span style={{ fontSize: 12, fontWeight: 800, color: menorPrecoIngresso(ev) > 0 ? '#f59e0b' : '#16a34a', background: menorPrecoIngresso(ev) > 0 ? 'rgba(245,158,11,0.1)' : 'rgba(34,197,94,0.1)', borderRadius: 20, padding: '4px 10px' }}>
+                        {menorPrecoIngresso(ev) > 0 ? fmtMoney(menorPrecoIngresso(ev)) : 'Grátis'}
                       </span>
+                      {lotesDisponiveis(ev).length > 0 && (
+                        <button aria-label="Comprar ingresso" onClick={() => setComprando(ev)} style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.25)', color: '#16a34a', borderRadius: 10, padding: '5px 8px', fontSize: 12, fontWeight: 900, cursor: 'pointer' }}>
+                          <ShoppingCart size={12} /> Comprar
+                        </button>
+                      )}
                       <button aria-label="Ver no mapa" onClick={() => abrirNoMapa(ev)} style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: '#38bdf8', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
                         <Navigation size={12} /> Local
                       </button>

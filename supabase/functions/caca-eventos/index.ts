@@ -23,6 +23,27 @@ const ALVOS_SUGERIDOS = [
 
 type Periodo = 'manha' | 'tarde' | 'noite' | 'madrugada'
 
+type IngressoBruto = {
+  id?: string
+  source_ticket_id?: string
+  nome?: string
+  title?: string
+  name?: string
+  descricao?: string
+  description?: string
+  preco?: number | string
+  price?: number | string
+  taxa?: number | string
+  fee?: number | string
+  moeda?: string
+  currency?: string
+  status?: string
+  availability?: string
+  estoque_disponivel?: number | string | null
+  fonte_url?: string
+  metadata?: Record<string, unknown>
+}
+
 type EventoBruto = {
   titulo?: string
   title?: string
@@ -57,6 +78,7 @@ type EventoBruto = {
   url_amigavel?: string
   fonte_url?: string
   periodo?: string
+  ingressos?: IngressoBruto[]
 }
 
 type Fonte = {
@@ -83,6 +105,19 @@ type EventoNormalizado = {
   fonte_url: string | null
   destaque: boolean
   status: 'pendente'
+  ingressos?: IngressoNormalizado[]
+}
+
+type IngressoNormalizado = {
+  source_ticket_id: string | null
+  nome: string
+  descricao: string | null
+  preco_origem: number
+  taxa_origem: number
+  moeda: string
+  estoque_disponivel: number | null
+  fonte_url: string | null
+  metadata: Record<string, unknown>
 }
 
 function json(body: unknown, status = 200) {
@@ -237,6 +272,48 @@ function periodoPelaHora(hora?: string | null, periodo?: string): Periodo {
   return 'noite'
 }
 
+function normalizarIngressos(items: IngressoBruto[] | undefined, fonteUrl: string | null, fallbackPreco: number | null): IngressoNormalizado[] {
+  const candidatos = Array.isArray(items) ? [...items] : []
+  if (!candidatos.length && fallbackPreco && fallbackPreco > 0) {
+    candidatos.push({
+      nome: 'Entrada',
+      preco: fallbackPreco,
+      fonte_url: fonteUrl || undefined,
+    })
+  }
+
+  const vistos = new Set<string>()
+  const ingressos: IngressoNormalizado[] = []
+  for (const item of candidatos) {
+    const preco = number(item.preco, item.price)
+    if (preco === null || preco < 0) continue
+    const nome = text(item.nome, item.title, item.name, 'Entrada')
+    const sourceTicketId = text(item.source_ticket_id, item.id) || null
+    const key = `${sourceTicketId || nome}|${preco}`
+    if (vistos.has(key)) continue
+    vistos.add(key)
+
+    const estoque = number(item.estoque_disponivel)
+    ingressos.push({
+      source_ticket_id: sourceTicketId,
+      nome,
+      descricao: resumo(text(item.descricao, item.description)),
+      preco_origem: Math.round(preco * 100) / 100,
+      taxa_origem: Math.max(0, Math.round((number(item.taxa, item.fee) || 0) * 100) / 100),
+      moeda: text(item.moeda, item.currency, 'BRL') || 'BRL',
+      estoque_disponivel: estoque === null ? null : Math.max(0, Math.floor(estoque)),
+      fonte_url: absolutizarUrl(text(item.fonte_url, fonteUrl), fonteUrl || undefined) || fonteUrl,
+      metadata: {
+        status_origem: text(item.status),
+        availability: text(item.availability),
+        origem: item.metadata || null,
+      },
+    })
+  }
+
+  return ingressos
+}
+
 function emojiPorCategoria(cat?: string): string {
   const c = (cat || '').toLowerCase()
   if (c.includes('balada') || c.includes('dj') || c.includes('club')) return '🎧'
@@ -257,6 +334,8 @@ function normalizar(e: EventoBruto, fonte?: Fonte): EventoNormalizado | null {
   const titulo = text(e.titulo, e.title, e.name, e.nome)
   if (titulo.length < 3) return null
   const fonteUrl = absolutizarUrl(text(e.fonte_url, e.url, e.url_amigavel, fonte?.url), fonte?.url)
+  const fallbackPreco = number(e.preco, e.price)
+  const ingressos = normalizarIngressos(e.ingressos, fonteUrl || null, fallbackPreco)
 
   return {
     titulo,
@@ -268,13 +347,14 @@ function normalizar(e: EventoBruto, fonte?: Fonte): EventoNormalizado | null {
     endereco: text(e.endereco, e.address, e.cidade) || null,
     lat: number(e.lat, e.latitude),
     lng: number(e.lng, e.longitude),
-    preco: number(e.preco, e.price) || 0,
+    preco: fallbackPreco || 0,
     categoria,
     emoji: text(e.emoji) || emojiPorCategoria(categoria),
     fonte: 'robo',
     fonte_url: fonteUrl || null,
     destaque: false,
     status: 'pendente',
+    ingressos,
   }
 }
 
@@ -369,6 +449,19 @@ function brutoDeObjeto(obj: Record<string, unknown>, fonte: Fonte): EventoBruto 
   const geo = asRecord(location?.geo)
   const address = asRecord(location?.address)
   const offers = Array.isArray(obj.offers) ? asRecord(obj.offers[0]) : asRecord(obj.offers)
+  const offerItems = Array.isArray(obj.offers) ? obj.offers : offers ? [offers] : []
+  const ingressos = offerItems
+    .map(offer => asRecord(offer))
+    .filter((offer): offer is Record<string, unknown> => !!offer)
+    .map((offer, idx): IngressoBruto => ({
+      id: text(offer.id, offer.sku, idx + 1),
+      nome: text(offer.name, offer.title, 'Entrada'),
+      preco: text(offer.price, offer.lowPrice),
+      moeda: text(offer.priceCurrency, 'BRL'),
+      availability: text(offer.availability),
+      fonte_url: absolutizarUrl(text(offer.url, fonte.url), fonte.url),
+    }))
+    .filter(item => number(item.preco) !== null)
 
   return {
     titulo: text(obj.titulo, obj.title, obj.name, obj.nome),
@@ -387,6 +480,7 @@ function brutoDeObjeto(obj: Record<string, unknown>, fonte: Fonte): EventoBruto 
     url: absolutizarUrl(text(obj.url, obj.url_amigavel, offers?.url, fonte.url), fonte.url),
     fonte_url: absolutizarUrl(text(obj.fonte_url, obj.url, obj.url_amigavel, offers?.url, fonte.url), fonte.url),
     periodo: text(obj.periodo),
+    ingressos,
   }
 }
 
@@ -436,6 +530,127 @@ function extrairCardsArticket(html: string, fonte: Fonte) {
   }
 
   return eventos
+}
+
+function extrairObjetoBalanceado(texto: string, inicio: number) {
+  let depth = 0
+  let inString = false
+  let escape = false
+  let quote = ''
+  for (let i = inicio; i < texto.length; i++) {
+    const ch = texto[i]
+    if (inString) {
+      if (escape) {
+        escape = false
+      } else if (ch === '\\') {
+        escape = true
+      } else if (ch === quote) {
+        inString = false
+      }
+      continue
+    }
+    if (ch === '"' || ch === "'") {
+      inString = true
+      quote = ch
+      continue
+    }
+    if (ch === '{') depth++
+    if (ch === '}') {
+      depth--
+      if (depth === 0) return texto.slice(inicio, i + 1)
+    }
+  }
+  return ''
+}
+
+function extrairIngressosArticket(html: string, fonte: Fonte): IngressoBruto[] {
+  const ticketKey = html.indexOf('tickets:')
+  if (ticketKey < 0) return []
+  const inicio = html.indexOf('{', ticketKey)
+  if (inicio < 0) return []
+  const rawTickets = extrairObjetoBalanceado(html, inicio)
+  if (!rawTickets) return []
+
+  try {
+    const parsed = JSON.parse(rawTickets) as Record<string, unknown>
+    return Object.entries(parsed).map(([id, value]) => {
+      const item = asRecord(value) || {}
+      return {
+        id,
+        source_ticket_id: id,
+        nome: text(item.title, item.name, 'Entrada'),
+        preco: number(item.price),
+        taxa: number(item.fee),
+        moeda: 'BRL',
+        fonte_url: fonte.url,
+        metadata: item,
+      } as IngressoBruto & { metadata?: Record<string, unknown> }
+    }).filter(item => number(item.preco) !== null)
+  } catch {
+    return []
+  }
+}
+
+function anexarIngressos(eventos: EventoBruto[], ingressos: IngressoBruto[]) {
+  if (!ingressos.length) return eventos
+  return eventos.map(evento => ({
+    ...evento,
+    ingressos: [...(evento.ingressos || []), ...ingressos],
+  }))
+}
+
+function mesclarDetalheArticket(base: EventoBruto, detalhes: EventoBruto[], ingressos: IngressoBruto[]) {
+  const detalhe = detalhes[0] || {}
+  return {
+    ...base,
+    descricao: text(detalhe.descricao, base.descricao),
+    descricao_curta: text(detalhe.descricao_curta, base.descricao_curta),
+    data: text(detalhe.data, base.data),
+    startDate: text(detalhe.startDate, base.startDate),
+    hora: text(detalhe.hora, base.hora),
+    local_nome: text(detalhe.local_nome, base.local_nome),
+    endereco: text(detalhe.endereco, base.endereco),
+    lat: number(detalhe.lat, base.lat),
+    lng: number(detalhe.lng, base.lng),
+    fonte_url: text(base.fonte_url, detalhe.fonte_url),
+    url: text(base.url, detalhe.url),
+    ingressos: [...(base.ingressos || []), ...(detalhe.ingressos || []), ...ingressos],
+  } as EventoBruto
+}
+
+async function enriquecerDetalhesArticket(eventos: EventoBruto[], fonte: Fonte) {
+  const maxDetalhes = Math.max(1, Math.min(60, number(env('ARTICKET_DETAIL_MAX')) || 20))
+  const enriquecidos: EventoBruto[] = []
+  let consultados = 0
+
+  for (const evento of eventos) {
+    const url = absolutizarUrl(text(evento.fonte_url, evento.url), fonte.url)
+    if (!url || !url.includes('articket.com.br/e/') || consultados >= maxDetalhes) {
+      enriquecidos.push(evento)
+      continue
+    }
+
+    try {
+      consultados++
+      const detalheFonte = { ...fonte, url }
+      const res = await fetch(url, {
+        signal: AbortSignal.timeout(12000),
+        headers: {
+          Accept: 'text/html,application/json;q=0.9,*/*;q=0.8',
+          'User-Agent': 'PraiaGoCacaEventos/1.0',
+        },
+      })
+      if (!res.ok) throw new Error(`detalhe respondeu ${res.status}`)
+      const html = await res.text()
+      const detalhes = [...extrairJsonLd(html, detalheFonte), ...extrairDetalheHtmlGenerico(html, detalheFonte)]
+      const ingressos = extrairIngressosArticket(html, detalheFonte)
+      enriquecidos.push(mesclarDetalheArticket(evento, detalhes, ingressos))
+    } catch {
+      enriquecidos.push(evento)
+    }
+  }
+
+  return enriquecidos
 }
 
 function extrairDetalheHtmlGenerico(html: string, fonte: Fonte) {
@@ -581,7 +796,77 @@ async function buscarFonte(fonte: Fonte) {
   }
 
   const roleAgora = parsedUrl.hostname.includes('roleagora.com.br') ? extrairRoleAgoraNextData(body, fonte) : []
-  return [...roleAgora, ...extrairJsonLd(body, fonte), ...extrairCardsArticket(body, fonte), ...extrairDetalheHtmlGenerico(body, fonte)]
+  let eventos = [...roleAgora, ...extrairJsonLd(body, fonte), ...extrairCardsArticket(body, fonte), ...extrairDetalheHtmlGenerico(body, fonte)]
+  if (parsedUrl.hostname.includes('articket.com.br') && !parsedUrl.pathname.startsWith('/e/')) {
+    eventos = await enriquecerDetalhesArticket(eventos, fonte)
+  }
+  const ingressosArticket = parsedUrl.hostname.includes('articket.com.br') ? extrairIngressosArticket(body, fonte) : []
+  return anexarIngressos(eventos, ingressosArticket)
+}
+
+async function localizarEvento(supabase: ReturnType<typeof createClient>, ev: EventoNormalizado) {
+  if (ev.fonte_url) {
+    const { data } = await supabase
+      .from('eventos')
+      .select('id')
+      .eq('fonte_url', ev.fonte_url)
+      .maybeSingle()
+    if (data?.id) return data.id as string
+  }
+
+  if (ev.data) {
+    const { data } = await supabase
+      .from('eventos')
+      .select('id')
+      .eq('titulo', ev.titulo)
+      .eq('data', ev.data)
+      .maybeSingle()
+    if (data?.id) return data.id as string
+  }
+
+  return null
+}
+
+async function salvarIngressos(supabase: ReturnType<typeof createClient>, eventoId: string, ingressos: IngressoNormalizado[] | undefined) {
+  if (!ingressos?.length) return { salvos: 0 }
+
+  let salvos = 0
+  let menorPrecoVenda = Number.POSITIVE_INFINITY
+  for (const ingresso of ingressos) {
+    const precoVenda = Math.round((ingresso.preco_origem * 1.25) * 100) / 100
+    menorPrecoVenda = Math.min(menorPrecoVenda, precoVenda)
+    const row = {
+      evento_id: eventoId,
+      source_ticket_id: ingresso.source_ticket_id,
+      nome: ingresso.nome,
+      descricao: ingresso.descricao,
+      preco_origem: ingresso.preco_origem,
+      markup_percent: 25,
+      taxa_origem: ingresso.taxa_origem,
+      moeda: ingresso.moeda,
+      estoque_total: ingresso.estoque_disponivel,
+      estoque_disponivel: ingresso.estoque_disponivel,
+      status: 'pendente_aprovacao',
+      fonte_url: ingresso.fonte_url,
+      metadata: ingresso.metadata,
+      criado_por: 'robo',
+    }
+
+    const onConflict = ingresso.source_ticket_id ? 'evento_id,source_ticket_id' : 'evento_id,nome,preco_origem'
+    const { error } = await supabase
+      .from('event_ticket_lots')
+      .upsert(row, { onConflict })
+
+    if (!error) salvos++
+  }
+
+  if (salvos > 0) {
+    const update: Record<string, unknown> = { ingressos_enabled: true }
+    if (Number.isFinite(menorPrecoVenda)) update.preco = menorPrecoVenda
+    await supabase.from('eventos').update(update).eq('id', eventoId)
+  }
+
+  return { salvos }
 }
 
 Deno.serve(async (req: Request) => {
@@ -652,13 +937,27 @@ Deno.serve(async (req: Request) => {
 
     let inseridos = 0
     let ignorados = 0
+    let ingressos_salvos = 0
 
     for (const ev of validos) {
-      const { error } = await supabase.from('eventos').insert(ev)
+      const { ingressos, ...eventoRow } = ev
+      const { data: inserido, error } = await supabase
+        .from('eventos')
+        .insert(eventoRow)
+        .select('id')
+        .maybeSingle()
+
+      const eventoId = inserido?.id || await localizarEvento(supabase, ev)
+
       if (error) {
         ignorados++
       } else {
         inseridos++
+      }
+
+      if (eventoId) {
+        const { salvos } = await salvarIngressos(supabase, eventoId, ingressos)
+        ingressos_salvos += salvos
       }
     }
 
@@ -667,6 +966,7 @@ Deno.serve(async (req: Request) => {
       recebidos: validos.length,
       inseridos,
       ignorados,
+      ingressos_salvos,
       status: 'pendente',
       fontes_consultadas: fontes.length,
       erros_fontes,

@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import {
   CalendarDays, Plus, Trash2, Star, Eye, EyeOff, Loader2, MapPin, Ticket, Sun, Sunset, Moon, MoonStar, X, Bot, ExternalLink,
-  CheckCircle2, Clock3,
+  CheckCircle2, Clock3, ShoppingCart, Send, PauseCircle,
 } from 'lucide-react'
 
 type EventoStatus = 'pendente' | 'ativo' | 'inativo'
@@ -30,6 +30,49 @@ interface Evento {
   fonte_url?: string | null
   descricao_curta?: string | null
   created_at: string
+  ingressos_enabled?: boolean
+  event_ticket_lots?: TicketLot[]
+}
+
+type TicketLot = {
+  id: string
+  nome: string
+  preco_origem: number
+  markup_percent: number
+  preco_venda: number
+  estoque_disponivel: number | null
+  status: 'pendente_aprovacao' | 'disponivel' | 'pausado' | 'esgotado'
+  fonte_url: string | null
+}
+
+type TicketOrder = {
+  id: string
+  cliente_nome: string
+  cliente_email: string | null
+  cliente_telefone: string | null
+  quantidade: number
+  total: number
+  status: string
+  delivery_status: string
+  created_at: string
+  eventos?: { titulo?: string | null } | { titulo?: string | null }[] | null
+  event_ticket_lots?: { nome?: string | null } | { nome?: string | null }[] | null
+}
+
+type TicketRefund = {
+  id: string
+  order_id: string
+  status: string
+  motivo: string | null
+  valor: number | null
+  created_at: string
+  event_ticket_orders?: (TicketOrder & {
+    eventos?: { titulo?: string | null } | { titulo?: string | null }[] | null
+    event_ticket_lots?: { nome?: string | null } | { nome?: string | null }[] | null
+  }) | (TicketOrder & {
+    eventos?: { titulo?: string | null } | { titulo?: string | null }[] | null
+    event_ticket_lots?: { nome?: string | null } | { nome?: string | null }[] | null
+  })[] | null
 }
 
 const PERIODOS = [
@@ -46,6 +89,8 @@ const vazio = {
 
 export default function EventosPage() {
   const [eventos, setEventos] = useState<Evento[]>([])
+  const [orders, setOrders] = useState<TicketOrder[]>([])
+  const [refunds, setRefunds] = useState<TicketRefund[]>([])
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState({ ...vazio })
   const [salvando, setSalvando] = useState(false)
@@ -61,12 +106,13 @@ export default function EventosPage() {
     if (error) { setCacaMsg('O robô não conseguiu rodar agora: ' + error.message); return }
     const ins = data?.inseridos ?? 0
     const ign = data?.ignorados ?? 0
+    const lotes = data?.ingressos_salvos ?? 0
     const fontes = data?.fontes_consultadas ?? 0
     setCacaMsg(
       ins > 0
-        ? `Robô achou ${ins} evento(s) novo(s) para aprovação! ${ign ? `(${ign} já existiam)` : ''}`
+        ? `Robô achou ${ins} evento(s) novo(s) para aprovação e ${lotes} lote(s) de ingresso! ${ign ? `(${ign} já existiam)` : ''}`
         : fontes > 0
-          ? 'Robô consultou as fontes, mas nenhum evento novo entrou na fila.'
+          ? `Robô consultou as fontes; ${lotes} lote(s) de ingresso foram atualizados.`
           : 'Configure EVENTOS_SOURCE_URLS no Supabase para o robô buscar casas, baladas e organizadores automaticamente.'
     )
     carregar()
@@ -74,8 +120,27 @@ export default function EventosPage() {
   }
 
   const carregar = useCallback(async () => {
-    const { data } = await supabase.from('eventos').select('*').order('created_at', { ascending: false })
+    const [{ data }, { data: pedidos }, { data: reembolsos }] = await Promise.all([
+      supabase
+        .from('eventos')
+        .select('*, event_ticket_lots(id,nome,preco_origem,markup_percent,preco_venda,estoque_disponivel,status,fonte_url)')
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('event_ticket_orders')
+        .select('id,cliente_nome,cliente_email,cliente_telefone,quantidade,total,status,delivery_status,created_at,eventos(titulo),event_ticket_lots(nome)')
+        .in('status', ['entrega_pendente', 'entregue'])
+        .order('created_at', { ascending: false })
+        .limit(40),
+      supabase
+        .from('event_ticket_refunds')
+        .select('id,order_id,status,motivo,valor,created_at,event_ticket_orders(id,cliente_nome,cliente_email,cliente_telefone,quantidade,total,status,delivery_status,created_at,eventos(titulo),event_ticket_lots(nome))')
+        .in('status', ['pendente_admin', 'aprovado', 'processando'])
+        .order('created_at', { ascending: false })
+        .limit(30),
+    ])
     setEventos((data as Evento[]) ?? [])
+    setOrders((pedidos as TicketOrder[]) ?? [])
+    setRefunds((reembolsos as TicketRefund[]) ?? [])
     setLoading(false)
   }, [])
 
@@ -117,7 +182,87 @@ export default function EventosPage() {
   }
 
   async function aprovar(id: string) {
-    await supabase.from('eventos').update({ status: 'ativo' }).eq('id', id)
+    const { error } = await supabase.from('eventos').update({ status: 'ativo' }).eq('id', id)
+    if (!error) {
+      await supabase
+        .from('event_ticket_lots')
+        .update({ status: 'disponivel' })
+        .eq('evento_id', id)
+        .eq('status', 'pendente_aprovacao')
+    }
+    carregar()
+  }
+
+  async function adicionarIngresso(ev: Evento) {
+    const nome = prompt('Nome do ingresso/lote', 'Entrada')
+    if (!nome?.trim()) return
+    const precoRaw = prompt('Preco original do ingresso em R$', String(ev.preco || ''))
+    const preco = Number((precoRaw || '').replace(',', '.'))
+    if (!Number.isFinite(preco) || preco < 0) {
+      alert('Preco invalido.')
+      return
+    }
+    const estoqueRaw = prompt('Quantidade disponivel. Deixe vazio se for manual/sem limite.')
+    const estoque = estoqueRaw?.trim() ? Math.max(0, Math.floor(Number(estoqueRaw.replace(',', '.')) || 0)) : null
+
+    const { error } = await supabase.from('event_ticket_lots').insert({
+      evento_id: ev.id,
+      nome: nome.trim(),
+      preco_origem: preco,
+      markup_percent: 25,
+      estoque_total: estoque,
+      estoque_disponivel: estoque,
+      status: ev.status === 'ativo' ? 'disponivel' : 'pendente_aprovacao',
+      fonte_url: ev.fonte_url || null,
+      criado_por: 'admin',
+      metadata: { criado_no_admin: true },
+    })
+    if (error) alert(error.message)
+    else carregar()
+  }
+
+  async function alternarLote(lote: TicketLot) {
+    const novo = lote.status === 'disponivel' ? 'pausado' : 'disponivel'
+    const { error } = await supabase.from('event_ticket_lots').update({ status: novo }).eq('id', lote.id)
+    if (error) alert(error.message)
+    else carregar()
+  }
+
+  async function marcarEntregue(orderId: string) {
+    const { error } = await supabase
+      .from('event_ticket_orders')
+      .update({ status: 'entregue', delivery_status: 'enviado', delivered_at: new Date().toISOString() })
+      .eq('id', orderId)
+    if (error) alert(error.message)
+    else carregar()
+  }
+
+  async function aprovarReembolso(refundId: string) {
+    const resposta = prompt('Resposta para registrar no pedido', 'Reembolso aprovado pelo admin.')
+    const { error } = await supabase.functions.invoke('evento-ticket-refund', {
+      body: { acao: 'aprovar', refund_id: refundId, resposta_admin: resposta || 'Reembolso aprovado pelo admin.' },
+    })
+    if (error) alert(error.message)
+    else carregar()
+  }
+
+  async function negarReembolso(refundId: string) {
+    const resposta = prompt('Motivo para negar o reembolso', 'Solicitacao fora da politica de reembolso.')
+    if (!resposta) return
+    const { error } = await supabase.functions.invoke('evento-ticket-refund', {
+      body: { acao: 'negar', refund_id: refundId, resposta_admin: resposta },
+    })
+    if (error) alert(error.message)
+    else carregar()
+  }
+
+  async function processarReembolso(refundId: string) {
+    if (!confirm('Processar reembolso no Mercado Pago agora?')) return
+    const { error } = await supabase.functions.invoke('evento-ticket-refund', {
+      body: { acao: 'processar', refund_id: refundId },
+    })
+    if (error) alert(error.message)
+    else carregar()
   }
 
   async function excluir(id: string) {
@@ -127,6 +272,8 @@ export default function EventosPage() {
 
   const set = (k: keyof typeof vazio, v: string | boolean) => setForm(f => ({ ...f, [k]: v }))
   const pendentes = eventos.filter(ev => ev.status === 'pendente').length
+  const pedidosPendentes = orders.filter(o => o.status === 'entrega_pendente')
+  const reembolsosPendentes = refunds.filter(r => ['pendente_admin', 'aprovado', 'processando'].includes(r.status))
 
   return (
     <div className="space-y-6">
@@ -156,6 +303,106 @@ export default function EventosPage() {
         <div className="glass-panel rounded-xl px-4 py-3 border border-emerald-500/20 text-emerald-300 text-sm font-semibold flex items-center gap-2">
           <Bot size={15} /> {cacaMsg}
         </div>
+      )}
+
+      {pedidosPendentes.length > 0 && (
+        <section className="glass-panel rounded-2xl p-5 border border-emerald-500/20">
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <div>
+              <h2 className="text-lg font-black text-slate-100 flex items-center gap-2">
+                <ShoppingCart size={18} className="text-emerald-400" /> Ingressos para entregar
+              </h2>
+              <p className="text-xs text-slate-500 font-semibold">Pagamentos aprovados no Mercado Pago aguardando envio do ingresso.</p>
+            </div>
+            <span className="text-xs font-black text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-2.5 py-1">
+              {pedidosPendentes.length} pendente(s)
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+            {pedidosPendentes.map(order => {
+              const evento = firstRelation(order.eventos)
+              const lote = firstRelation(order.event_ticket_lots)
+              return (
+                <div key={order.id} className="rounded-xl border border-slate-800/70 bg-slate-950/35 p-4 flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-emerald-500/15 text-emerald-300 flex items-center justify-center shrink-0">
+                    <Ticket size={17} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-black text-slate-100 truncate">{evento?.titulo || 'Evento'}</div>
+                    <div className="text-xs text-slate-400 mt-1">
+                      {order.quantidade}x {lote?.nome || 'Ingresso'} · {fmtMoney(order.total)}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                      {order.cliente_nome} {order.cliente_email ? `· ${order.cliente_email}` : ''} {order.cliente_telefone ? `· ${order.cliente_telefone}` : ''}
+                    </div>
+                  </div>
+                  <button onClick={() => marcarEntregue(order.id)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 transition-all shrink-0">
+                    <Send size={13} /> Entregue
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
+      {reembolsosPendentes.length > 0 && (
+        <section className="glass-panel rounded-2xl p-5 border border-amber-500/20">
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <div>
+              <h2 className="text-lg font-black text-slate-100 flex items-center gap-2">
+                <Clock3 size={18} className="text-amber-300" /> Reembolsos de ingressos
+              </h2>
+              <p className="text-xs text-slate-500 font-semibold">Somente admin ou bot autorizado aprova e processa reembolso.</p>
+            </div>
+            <span className="text-xs font-black text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-1">
+              {reembolsosPendentes.length} em análise
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+            {reembolsosPendentes.map(refund => {
+              const order = firstRelation(refund.event_ticket_orders)
+              const evento = firstRelation(order?.eventos)
+              const lote = firstRelation(order?.event_ticket_lots)
+              return (
+                <div key={refund.id} className="rounded-xl border border-slate-800/70 bg-slate-950/35 p-4 flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-amber-500/15 text-amber-300 flex items-center justify-center shrink-0">
+                    <Ticket size={17} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-black text-slate-100 truncate">{evento?.titulo || 'Evento'}</div>
+                    <div className="text-xs text-slate-400 mt-1">
+                      {order?.cliente_nome || 'Cliente'} · {lote?.nome || 'Ingresso'} · {fmtMoney(refund.valor || order?.total || 0)}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1 line-clamp-2">
+                      {refund.motivo || 'Sem motivo detalhado.'}
+                    </div>
+                    <div className="text-[10px] font-black text-amber-300 mt-2 uppercase">{refund.status}</div>
+                  </div>
+                  <div className="flex flex-col gap-2 shrink-0">
+                    {refund.status === 'pendente_admin' && (
+                      <>
+                        <button onClick={() => aprovarReembolso(refund.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 transition-all">
+                          <CheckCircle2 size={13} /> Aprovar
+                        </button>
+                        <button onClick={() => negarReembolso(refund.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all">
+                          <X size={13} /> Negar
+                        </button>
+                      </>
+                    )}
+                    {refund.status === 'aprovado' && (
+                      <button onClick={() => processarReembolso(refund.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 transition-all">
+                        <Send size={13} /> Processar
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </section>
       )}
 
       {/* Formulário */}
@@ -206,6 +453,7 @@ export default function EventosPage() {
           {eventos.map(ev => {
             const per = PERIODOS.find(p => p.id === ev.periodo)
             const PerIcon = per?.icon ?? Moon
+            const lotes = [...(ev.event_ticket_lots || [])].sort((a, b) => Number(a.preco_venda) - Number(b.preco_venda))
             return (
               <motion.div key={ev.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                 className={`glass-panel rounded-2xl p-5 border ${
@@ -241,7 +489,7 @@ export default function EventosPage() {
                       <span className="flex items-center gap-1"><PerIcon size={12} />{per?.label}</span>
                       {ev.data && <span>{format(new Date(ev.data + 'T00:00:00'), 'dd/MM', { locale: ptBR })}{ev.hora ? ` · ${ev.hora}` : ''}</span>}
                       {ev.local_nome && <span className="flex items-center gap-1 truncate"><MapPin size={12} />{ev.local_nome}</span>}
-                      <span className="flex items-center gap-1 text-amber-400"><Ticket size={12} />{ev.preco > 0 ? `R$ ${ev.preco}` : 'Grátis'}</span>
+                      <span className="flex items-center gap-1 text-amber-400"><Ticket size={12} />{ev.preco > 0 ? fmtMoney(ev.preco) : 'Grátis'}</span>
                     </div>
                     {(ev.descricao_curta || ev.descricao) && (
                       <p className="text-xs text-slate-500 mt-3 line-clamp-2">
@@ -249,6 +497,45 @@ export default function EventosPage() {
                       </p>
                     )}
                   </div>
+                </div>
+                <div className="mt-4 pt-4 border-t border-slate-800/50 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Ingressos e margem PraiaGo</div>
+                    <button onClick={() => adicionarIngresso(ev)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 transition-all">
+                      <Plus size={12} /> Ingresso
+                    </button>
+                  </div>
+                  {lotes.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-slate-800 px-3 py-2 text-xs text-slate-500">
+                      Nenhum lote cadastrado ainda. Cadastre manualmente ou rode o robô.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {lotes.map(lote => (
+                        <div key={lote.id} className="rounded-xl bg-slate-950/35 border border-slate-800/70 px-3 py-2 flex items-center gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs font-black text-slate-200 truncate">{lote.nome}</div>
+                            <div className="text-[11px] text-slate-500 mt-0.5">
+                              Origem {fmtMoney(lote.preco_origem)} · venda {fmtMoney(lote.preco_venda)} · +{Number(lote.markup_percent || 25)}%
+                              {lote.estoque_disponivel != null ? ` · ${lote.estoque_disponivel} disp.` : ''}
+                            </div>
+                          </div>
+                          <span className={`text-[10px] font-black rounded px-2 py-1 uppercase ${
+                            lote.status === 'disponivel'
+                              ? 'bg-emerald-500/10 text-emerald-300'
+                              : lote.status === 'pendente_aprovacao'
+                                ? 'bg-amber-500/10 text-amber-300'
+                                : 'bg-slate-800/70 text-slate-400'
+                          }`}>
+                            {lote.status === 'pendente_aprovacao' ? 'Pendente' : lote.status}
+                          </span>
+                          <button onClick={() => alternarLote(lote)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800/70 text-slate-300 hover:bg-slate-700 transition-all">
+                            {lote.status === 'disponivel' ? <><PauseCircle size={12} /> Pausar</> : <><CheckCircle2 size={12} /> Liberar</>}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 mt-4 pt-4 border-t border-slate-800/50">
                   {ev.status === 'pendente' && (
@@ -277,7 +564,15 @@ export default function EventosPage() {
 
 const inp = "w-full bg-slate-950/50 border border-slate-800/50 rounded-lg px-3 py-2 text-sm text-slate-200 outline-none focus:border-purple-500/40 transition-colors"
 
-function Field({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
+function fmtMoney(value: number) {
+  return Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
+function firstRelation<T>(value: T | T[] | null | undefined): T | null {
+  return Array.isArray(value) ? value[0] || null : value || null
+}
+
+function Field({ label, children, full }: { label: string; children: ReactNode; full?: boolean }) {
   return (
     <div className={full ? 'col-span-2 md:col-span-3' : ''}>
       <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">{label}</label>
