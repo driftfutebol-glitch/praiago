@@ -13,6 +13,7 @@ import { type Vendedor } from '../lib/catalogo'
 import { criarCheckoutMercadoPago, isMercadoPagoMethod } from '../lib/mercadopago'
 import { useCatalogo } from '../store/useCatalogo'
 import { useStore, type Entrega } from '../store/useStore'
+import { confirmDialog, alertDialog } from '../lib/dialog'
 import { supabase } from '../lib/supabase'
 
 delete (L.Icon.Default.prototype as { _getIconUrl?: unknown })._getIconUrl
@@ -103,14 +104,16 @@ function RastreamentoModal({ vendedor, clientePos, pedidoId, onClose }: { vended
   const [segundos, setSegundos] = useState(0)
   const [atrasado, setAtrasado] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
+  const [codigoEntrega, setCodigoEntrega] = useState<string | null>(null)
+  const [denunciado, setDenunciado] = useState(false)
   const route = useRoute(pos, clientePos)
 
   // Status REAL: acompanha a linha do pedido no banco (o vendedor atualiza
   // pelo app dele e a etapa muda aqui na hora).
   useEffect(() => {
     if (!pedidoId) return
-    supabase.from('pedidos').select('status').eq('id', pedidoId).single()
-      .then(({ data }) => { if (data?.status && DB_STATUS[data.status]) setStatus(DB_STATUS[data.status]) })
+    supabase.from('pedidos').select('status, codigo_entrega').eq('id', pedidoId).single()
+      .then(({ data }) => { if (data?.status && DB_STATUS[data.status]) setStatus(DB_STATUS[data.status]); if (data?.codigo_entrega) setCodigoEntrega(data.codigo_entrega) })
     const ch = supabase.channel(`pedido_${pedidoId}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pedidos', filter: `id=eq.${pedidoId}` }, (payload) => {
         const st = (payload.new as { status?: string }).status
@@ -119,6 +122,27 @@ function RastreamentoModal({ vendedor, clientePos, pedidoId, onClose }: { vended
       .subscribe()
     return () => { supabase.removeChannel(ch) }
   }, [pedidoId])
+
+  // ANTI-MÁ-FÉ: cliente denuncia quem pede pra pagar por fora do app.
+  async function denunciar() {
+    if (!vendedor?.id) return
+    const ok = await confirmDialog({
+      title: 'Denunciar vendedor?',
+      message: 'Use isto se o vendedor pediu pra você pagar POR FORA do app (pra fugir da taxa). Denúncias repetidas suspendem o vendedor automaticamente.',
+      confirmText: 'Denunciar', cancelText: 'Voltar', tone: 'danger',
+    })
+    if (!ok) return
+    const sessao = useStore.getState().sessao
+    await supabase.from('fraude_flags').insert({
+      vendedor_id: vendedor.id,
+      cliente_id: sessao?.id ?? null,
+      cliente_nome: sessao?.nome ?? null,
+      pedido_id: pedidoId,
+      motivo: 'Cliente relatou pedido de pagamento por fora do app',
+    })
+    setDenunciado(true)
+    await alertDialog({ title: 'Denúncia registrada', message: 'Obrigado por avisar! Nosso time e o sistema anti-fraude vão analisar. 💙', tone: 'success' })
+  }
 
   // Avaliação ao final
   const [nota, setNota] = useState(0)
@@ -206,6 +230,26 @@ function RastreamentoModal({ vendedor, clientePos, pedidoId, onClose }: { vended
           <div style={{ background: sc.bg, color: sc.text, border: `1px solid ${sc.border}`, padding: '10px 16px', borderRadius: 24, fontSize: 12, fontWeight: 800 }}>{sc.label}</div>
         </div>
       </div>
+
+      {/* Código de entrega + denúncia (anti-má-fé) */}
+      {codigoEntrega && status !== 'chegou' && (
+        <div style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 12, background: 'linear-gradient(135deg,rgba(14,165,233,0.08),rgba(34,197,94,0.06))', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#0284c7', textTransform: 'uppercase', letterSpacing: 0.6 }}>Código de entrega</div>
+            <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Passe pro vendedor só na hora que receber. Pague sempre pelo app.</div>
+          </div>
+          <div style={{ fontSize: 26, fontWeight: 950, letterSpacing: 4, color: '#0f172a', background: '#fff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 12, padding: '6px 14px' }}>{codigoEntrega}</div>
+        </div>
+      )}
+      {!denunciado ? (
+        <button onClick={denunciar} style={{ width: '100%', border: 0, borderBottom: '1px solid rgba(0,0,0,0.05)', background: '#fff', color: '#dc2626', fontSize: 12.5, fontWeight: 800, padding: '10px', cursor: 'pointer' }}>
+          🚩 O vendedor pediu pra pagar por fora do app? Denuncie
+        </button>
+      ) : (
+        <div style={{ width: '100%', background: 'rgba(34,197,94,0.08)', color: '#16a34a', fontSize: 12.5, fontWeight: 800, padding: '10px', textAlign: 'center', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+          ✓ Denúncia registrada — obrigado por proteger a comunidade
+        </div>
+      )}
 
       {/* Área superior: MAPA DARK MODE */}
       <div style={{ flex: 1, position: 'relative', background: '#eef2f7' }}>

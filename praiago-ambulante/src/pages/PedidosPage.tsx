@@ -9,6 +9,7 @@ import { criarMonitorSentido, type SentidoStatus } from '../lib/trafego'
 import { useOrderNotifications, type IncomingOrder } from '../hooks/useOrderNotifications'
 import { supabase } from '../lib/supabase'
 import { getSessao } from '../lib/auth'
+import { promptDialog, alertDialog } from '../lib/dialog'
 import { ZoneAgent, type ZoneScore } from '../lib/zoneAgent'
 
 delete (L.Icon.Default.prototype as any)._getIconUrl
@@ -38,6 +39,7 @@ type Pedido = {
   clienteLat: number
   clienteLng: number
   pagamento: string
+  codigoEntrega?: string | null
   isLive?: boolean
 }
 
@@ -284,6 +286,7 @@ function rowToPedido(row: Record<string, unknown>): Pedido {
     clienteLat: Number(row.lat) || -24.0228,
     clienteLng: Number(row.lng) || -46.4305,
     pagamento: String(row.pagamento ?? 'pix'),
+    codigoEntrega: (row.codigo_entrega as string) ?? null,
   }
 }
 
@@ -358,9 +361,27 @@ export default function PedidosPage() {
     const atual = pedidos.find(p => p.id === id)
     if (!atual) return
     const novoStatus = map[atual.status]
+    const patch: Record<string, unknown> = { status: novoStatus }
+
+    // ANTI-MÁ-FÉ: pra marcar ENTREGUE, precisa do código que o cliente informa
+    // na entrega. Sem o código certo, não fecha (prova que a venda passou no app).
+    if (novoStatus === 'entregue' && atual.codigoEntrega) {
+      const codigo = await promptDialog({
+        title: 'Código de entrega',
+        message: 'Peça ao cliente o código de 4 dígitos que aparece no app dele e digite aqui pra confirmar a entrega.',
+        placeholder: '0000',
+      })
+      if (codigo === null) return
+      if (codigo.trim() !== atual.codigoEntrega) {
+        await alertDialog({ title: 'Código errado', message: 'O código não confere. Confirme com o cliente — a entrega só fecha com o código certo.', tone: 'danger' })
+        return
+      }
+      patch.entrega_confirmada = true
+    }
+
     // otimista na tela + grava no banco (o cliente acompanha em tempo real)
     setPedidos(prev => prev.map(p => (p.id === id ? { ...p, status: novoStatus } : p)))
-    const { error } = await supabase.from('pedidos').update({ status: novoStatus }).eq('id', id)
+    const { error } = await supabase.from('pedidos').update(patch).eq('id', id)
     if (error) {
       console.error('Falha ao atualizar status', error)
       setPedidos(prev => prev.map(p => (p.id === id ? { ...p, status: atual.status } : p)))
