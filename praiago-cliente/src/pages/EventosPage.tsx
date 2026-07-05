@@ -3,7 +3,7 @@ import { Calendar, MapPin, Clock, Ticket, Navigation, Share2, Loader2, CalendarX
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 
-type Periodo = 'manha' | 'tarde' | 'noite'
+type Periodo = 'manha' | 'tarde' | 'noite' | 'madrugada'
 
 type Evento = {
   id: string
@@ -25,10 +25,11 @@ type Evento = {
 }
 
 const PERIODOS: { id: Periodo | 'todos'; label: string; emoji: string }[] = [
-  { id: 'todos', label: 'Todos',  emoji: '✨' },
-  { id: 'manha', label: 'Manhã',  emoji: '🌅' },
-  { id: 'tarde', label: 'Tarde',  emoji: '☀️' },
-  { id: 'noite', label: 'Noite',  emoji: '🌙' },
+  { id: 'todos',     label: 'Todos',     emoji: '✨' },
+  { id: 'manha',     label: 'Manhã',     emoji: '🌅' },
+  { id: 'tarde',     label: 'Tarde',     emoji: '☀️' },
+  { id: 'noite',     label: 'Noite',     emoji: '🌙' },
+  { id: 'madrugada', label: 'Madrugada', emoji: '🌌' },
 ]
 
 function fmtData(d: string | null) {
@@ -85,7 +86,7 @@ export default function EventosPage() {
     <div style={{ minHeight: '100vh', background: '#ffffff', paddingBottom: 100 }}>
       <div style={{ padding: '20px 20px 12px' }}>
         <h1 style={{ fontSize: 26, fontWeight: 900, color: '#0f172a', letterSpacing: -0.5 }}>Eventos na Praia 🎉</h1>
-        <p style={{ fontSize: 13, color: '#64748b', marginTop: 4, fontWeight: 500 }}>Praia Grande, SP · o que rola de manhã, à tarde e à noite</p>
+        <p style={{ fontSize: 13, color: '#64748b', marginTop: 4, fontWeight: 500 }}>Praia Grande, SP · manhã, tarde, noite e madrugada</p>
       </div>
 
       {/* Filtros por período */}

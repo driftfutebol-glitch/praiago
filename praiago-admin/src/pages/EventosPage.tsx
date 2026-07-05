@@ -4,14 +4,17 @@ import { supabase } from '../lib/supabase'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import {
-  CalendarDays, Plus, Trash2, Star, Eye, EyeOff, Loader2, MapPin, Ticket, Sun, Sunset, Moon, X,
+  CalendarDays, Plus, Trash2, Star, Eye, EyeOff, Loader2, MapPin, Ticket, Sun, Sunset, Moon, MoonStar, X, Bot, ExternalLink,
+  CheckCircle2, Clock3,
 } from 'lucide-react'
+
+type EventoStatus = 'pendente' | 'ativo' | 'inativo'
 
 interface Evento {
   id: string
   titulo: string
   descricao: string | null
-  periodo: 'manha' | 'tarde' | 'noite'
+  periodo: 'manha' | 'tarde' | 'noite' | 'madrugada'
   data: string | null
   hora: string | null
   local_nome: string | null
@@ -22,8 +25,10 @@ interface Evento {
   categoria: string | null
   emoji: string | null
   destaque: boolean
-  status: string
+  status: EventoStatus
   fonte?: string | null
+  fonte_url?: string | null
+  descricao_curta?: string | null
   created_at: string
 }
 
@@ -31,6 +36,7 @@ const PERIODOS = [
   { id: 'manha', label: 'Manhã', icon: Sun },
   { id: 'tarde', label: 'Tarde', icon: Sunset },
   { id: 'noite', label: 'Noite', icon: Moon },
+  { id: 'madrugada', label: 'Madrugada', icon: MoonStar },
 ] as const
 
 const vazio = {
@@ -45,6 +51,27 @@ export default function EventosPage() {
   const [salvando, setSalvando] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [erro, setErro] = useState('')
+  const [cacando, setCacando] = useState(false)
+  const [cacaMsg, setCacaMsg] = useState('')
+
+  async function cacarEventos() {
+    setCacando(true); setCacaMsg('')
+    const { data, error } = await supabase.functions.invoke('caca-eventos', { body: { buscar: true } })
+    setCacando(false)
+    if (error) { setCacaMsg('O robô não conseguiu rodar agora: ' + error.message); return }
+    const ins = data?.inseridos ?? 0
+    const ign = data?.ignorados ?? 0
+    const fontes = data?.fontes_consultadas ?? 0
+    setCacaMsg(
+      ins > 0
+        ? `Robô achou ${ins} evento(s) novo(s) para aprovação! ${ign ? `(${ign} já existiam)` : ''}`
+        : fontes > 0
+          ? 'Robô consultou as fontes, mas nenhum evento novo entrou na fila.'
+          : 'Configure EVENTOS_SOURCE_URLS no Supabase para o robô buscar casas, baladas e organizadores automaticamente.'
+    )
+    carregar()
+    setTimeout(() => setCacaMsg(''), 8000)
+  }
 
   const carregar = useCallback(async () => {
     const { data } = await supabase.from('eventos').select('*').order('created_at', { ascending: false })
@@ -84,9 +111,13 @@ export default function EventosPage() {
     setForm({ ...vazio }); setShowForm(false)
   }
 
-  async function toggle(id: string, campo: 'status' | 'destaque', atual: string | boolean) {
+  async function toggle(id: string, campo: 'status' | 'destaque', atual: EventoStatus | boolean) {
     const novo = campo === 'status' ? (atual === 'ativo' ? 'inativo' : 'ativo') : !atual
     await supabase.from('eventos').update({ [campo]: novo }).eq('id', id)
+  }
+
+  async function aprovar(id: string) {
+    await supabase.from('eventos').update({ status: 'ativo' }).eq('id', id)
   }
 
   async function excluir(id: string) {
@@ -95,6 +126,7 @@ export default function EventosPage() {
   }
 
   const set = (k: keyof typeof vazio, v: string | boolean) => setForm(f => ({ ...f, [k]: v }))
+  const pendentes = eventos.filter(ev => ev.status === 'pendente').length
 
   return (
     <div className="space-y-6">
@@ -105,13 +137,26 @@ export default function EventosPage() {
           </div>
           <div>
             <h1 className="text-3xl font-black text-slate-100 tracking-tight">Eventos <span className="neon-text-purple">PraiaGo</span></h1>
-            <p className="text-slate-400 text-sm font-medium">{eventos.length} evento(s) · gerencie o que aparece no app do cliente</p>
+            <p className="text-slate-400 text-sm font-medium">
+              {eventos.length} evento(s) · {pendentes} pendente(s) para aprovar
+            </p>
           </div>
         </div>
-        <button onClick={() => setShowForm(v => !v)} className="flex items-center gap-2 px-4 py-2.5 bg-purple-500/15 text-purple-300 border border-purple-500/30 rounded-xl font-bold text-sm hover:bg-purple-500/25 transition-all">
-          {showForm ? <X size={16} /> : <Plus size={16} />} {showForm ? 'Fechar' : 'Novo evento'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={cacarEventos} disabled={cacando} className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 rounded-xl font-bold text-sm hover:bg-emerald-500/25 transition-all disabled:opacity-50">
+            {cacando ? <Loader2 size={16} className="animate-spin" /> : <Bot size={16} />} {cacando ? 'Caçando...' : 'Caçar eventos'}
+          </button>
+          <button onClick={() => setShowForm(v => !v)} className="flex items-center gap-2 px-4 py-2.5 bg-purple-500/15 text-purple-300 border border-purple-500/30 rounded-xl font-bold text-sm hover:bg-purple-500/25 transition-all">
+            {showForm ? <X size={16} /> : <Plus size={16} />} {showForm ? 'Fechar' : 'Novo evento'}
+          </button>
+        </div>
       </header>
+
+      {cacaMsg && (
+        <div className="glass-panel rounded-xl px-4 py-3 border border-emerald-500/20 text-emerald-300 text-sm font-semibold flex items-center gap-2">
+          <Bot size={15} /> {cacaMsg}
+        </div>
+      )}
 
       {/* Formulário */}
       <AnimatePresence>
@@ -163,13 +208,34 @@ export default function EventosPage() {
             const PerIcon = per?.icon ?? Moon
             return (
               <motion.div key={ev.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                className={`glass-panel rounded-2xl p-5 border ${ev.status === 'ativo' ? 'border-slate-800' : 'border-slate-800/50 opacity-60'}`}>
+                className={`glass-panel rounded-2xl p-5 border ${
+                  ev.status === 'pendente'
+                    ? 'border-amber-500/35'
+                    : ev.status === 'ativo'
+                      ? 'border-slate-800'
+                      : 'border-slate-800/50 opacity-60'
+                }`}>
                 <div className="flex items-start gap-4">
                   <div className="text-4xl">{ev.emoji ?? '🎉'}</div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <h3 className="text-lg font-black text-slate-100 truncate">{ev.titulo}</h3>
                       {ev.destaque && <Star size={14} className="text-amber-400 fill-amber-400" />}
+                      {ev.fonte === 'robo' && (
+                        <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded px-1.5 py-0.5 uppercase tracking-wide shrink-0">
+                          <Bot size={10} /> Robô
+                        </span>
+                      )}
+                      {ev.status === 'pendente' && (
+                        <span className="flex items-center gap-1 text-[10px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded px-1.5 py-0.5 uppercase tracking-wide shrink-0">
+                          <Clock3 size={10} /> Pendente
+                        </span>
+                      )}
+                      {ev.fonte_url && (
+                        <a href={ev.fonte_url} target="_blank" rel="noreferrer" className="text-slate-500 hover:text-slate-300 shrink-0" title="Ver fonte original">
+                          <ExternalLink size={13} />
+                        </a>
+                      )}
                     </div>
                     <div className="flex items-center gap-3 text-xs text-slate-400 mt-1 font-medium flex-wrap">
                       <span className="flex items-center gap-1"><PerIcon size={12} />{per?.label}</span>
@@ -177,11 +243,21 @@ export default function EventosPage() {
                       {ev.local_nome && <span className="flex items-center gap-1 truncate"><MapPin size={12} />{ev.local_nome}</span>}
                       <span className="flex items-center gap-1 text-amber-400"><Ticket size={12} />{ev.preco > 0 ? `R$ ${ev.preco}` : 'Grátis'}</span>
                     </div>
+                    {(ev.descricao_curta || ev.descricao) && (
+                      <p className="text-xs text-slate-500 mt-3 line-clamp-2">
+                        {ev.descricao_curta || ev.descricao}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 mt-4 pt-4 border-t border-slate-800/50">
+                  {ev.status === 'pendente' && (
+                    <button onClick={() => aprovar(ev.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 transition-all">
+                      <CheckCircle2 size={13} /> Aprovar
+                    </button>
+                  )}
                   <button onClick={() => toggle(ev.id, 'status', ev.status)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 transition-all">
-                    {ev.status === 'ativo' ? <><Eye size={13} /> Ativo</> : <><EyeOff size={13} /> Inativo</>}
+                    {ev.status === 'ativo' ? <><Eye size={13} /> Ativo</> : <><EyeOff size={13} /> Oculto</>}
                   </button>
                   <button onClick={() => toggle(ev.id, 'destaque', ev.destaque)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${ev.destaque ? 'bg-amber-500/15 text-amber-400' : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/50'}`}>
                     <Star size={13} /> Destaque
