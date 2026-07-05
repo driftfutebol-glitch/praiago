@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { Ban, RotateCcw, Trash2, UserCheck, ShieldCheck, ShieldX, Search } from 'lucide-react'
 import { format } from 'date-fns'
+import { confirmDialog, alertDialog, promptDialog } from '../lib/dialog'
 
 export default function UsuariosPage() {
   const [usuarios, setUsuarios] = useState<any[]>([])
@@ -48,7 +49,7 @@ export default function UsuariosPage() {
 
   async function alternarBanimento(u: any) {
     const jaBanido = u.status === 'banido'
-    const motivo = jaBanido ? null : window.prompt('Motivo do bloqueio:', 'Violacao das regras da plataforma')
+    const motivo = jaBanido ? null : await promptDialog({ title: 'Bloquear usuário', message: 'Qual o motivo do bloqueio?', defaultValue: 'Violação das regras da plataforma', tone: 'danger', confirmText: 'Bloquear' })
     if (!jaBanido && !motivo) return
 
     setAcaoId(u.id)
@@ -63,13 +64,13 @@ export default function UsuariosPage() {
     if (!error) {
       setUsuarios(prev => prev.map(item => item.id === u.id ? { ...item, ...atualizacao } : item))
     } else {
-      window.alert('Nao foi possivel atualizar este usuario: ' + error.message)
+      alertDialog({ title: 'Erro', message: 'Não foi possível atualizar este usuário: ' + error.message, tone: 'danger' })
     }
     setAcaoId(null)
   }
 
   async function resetarPerfil(u: any) {
-    if (!window.confirm(`Resetar dados operacionais de ${u.nome || u.email}?`)) return
+    if (!await confirmDialog({ title: 'Resetar usuário?', message: `Resetar os dados operacionais de ${u.nome || u.email}?`, confirmText: 'Resetar' })) return
     setAcaoId(u.id)
     const atualizacao = {
       status: 'ativo',
@@ -88,14 +89,14 @@ export default function UsuariosPage() {
     if (!error) {
       setUsuarios(prev => prev.map(item => item.id === u.id ? { ...item, ...atualizacao } : item))
     } else {
-      window.alert('Nao foi possivel resetar este usuario: ' + error.message)
+      alertDialog({ title: 'Erro', message: 'Não foi possível resetar este usuário: ' + error.message, tone: 'danger' })
     }
     setAcaoId(null)
   }
 
   async function excluirPerfil(u: any) {
     const alvo = u.email || u.nome || u.id
-    if (!window.confirm(`Excluir o perfil de ${alvo} do sistema? Esta acao remove dados publicos, mas nao apaga o usuario do Supabase Auth.`)) return
+    if (!await confirmDialog({ title: 'Excluir perfil?', message: `Excluir o perfil de ${alvo}? Isso remove os dados públicos, mas não apaga o usuário do login (Auth).`, confirmText: 'Excluir', tone: 'danger' })) return
     setAcaoId(u.id)
     await supabase.from('verificacoes').delete().eq('user_id', u.id)
     await supabase.from('produtos').delete().eq('vendedor_id', u.id)
@@ -103,7 +104,7 @@ export default function UsuariosPage() {
     if (!error) {
       setUsuarios(prev => prev.filter(item => item.id !== u.id))
     } else {
-      window.alert('Nao foi possivel excluir este perfil: ' + error.message)
+      alertDialog({ title: 'Erro', message: 'Não foi possível excluir este perfil: ' + error.message, tone: 'danger' })
     }
     setAcaoId(null)
   }

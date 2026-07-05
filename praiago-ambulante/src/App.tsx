@@ -12,6 +12,7 @@ import PerfilPage from './pages/PerfilPage'
 import ZonasPage from './pages/ZonasPage'
 import BottomNav from './components/BottomNav'
 import VerificationBar from './components/VerificationBar'
+import { DialogHost } from './lib/dialog'
 import AiChatbot from './components/AiChatbot'
 import PasswordRecoveryHandler from './components/PasswordRecoveryHandler'
 import { useGPS } from './hooks/useGPS'
@@ -281,6 +282,7 @@ export default function App() {
           <GlobalAvisoToast />
         </AnimatePresence>
       )}
+      <DialogHost />
     </div>
   )
 }

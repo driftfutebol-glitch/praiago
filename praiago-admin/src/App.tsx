@@ -15,6 +15,7 @@ import CuponsPage from './pages/CuponsPage'
 import PromocoesPage from './pages/PromocoesPage'
 import FinanceiroPage from './pages/FinanceiroPage'
 import Sidebar from './components/Sidebar'
+import { DialogHost } from './lib/dialog'
 
 function NotificationSystem() {
   const [notifications, setNotifications] = useState<any[]>([])
@@ -185,6 +186,7 @@ export default function App() {
           </Routes>
         </main>
       </div>
+      <DialogHost />
     </BrowserRouter>
   )
 }

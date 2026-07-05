@@ -5,6 +5,7 @@ import {
   Store, Trash2, X,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { confirmDialog } from '../lib/dialog'
 
 type CupomTipo = 'percentual' | 'valor_fixo' | 'frete_gratis'
 
@@ -125,7 +126,7 @@ export default function CuponsPage() {
   }
 
   async function excluir(id: string) {
-    if (!confirm('Excluir este cupom?')) return
+    if (!await confirmDialog({ title: 'Excluir cupom?', message: 'Essa ação não pode ser desfeita.', confirmText: 'Excluir', tone: 'danger' })) return
     await supabase.from('cupons').delete().eq('id', id)
   }
 

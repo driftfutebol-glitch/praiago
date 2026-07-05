@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { ShoppingBag, Clock, Bike, CheckCircle2, RotateCcw, XCircle, LifeBuoy, Trash2 } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { theme } from '../lib/theme'
+import { confirmDialog, alertDialog } from '../lib/dialog'
 
 const STATUS_CFG = {
   preparando: { label: 'Preparando', cor: '#f59e0b', bg: 'rgba(245,158,11,0.12)', icon: Clock },
@@ -25,13 +26,24 @@ export default function MeusPedidosPage() {
   const solicitarAjudaPedido = useStore(s => s.solicitarAjudaPedido)
 
   async function cancelar(id: string) {
-    if (!window.confirm('Cancelar este pedido? O suporte tambem sera avisado para acompanhar o caso.')) return
+    const ok = await confirmDialog({
+      title: 'Cancelar pedido?',
+      message: 'O suporte também será avisado para acompanhar o caso.',
+      confirmText: 'Sim, cancelar',
+      cancelText: 'Voltar',
+      tone: 'danger',
+    })
+    if (!ok) return
     await cancelarPedido(id)
   }
 
   async function pedirAjuda(id: string, tipo: 'ajuda' | 'reembolso') {
     await solicitarAjudaPedido(id, tipo)
-    window.alert(tipo === 'reembolso' ? 'Pedido enviado para analise de reembolso.' : 'Atendimento aberto para este pedido.')
+    await alertDialog({
+      title: tipo === 'reembolso' ? 'Reembolso solicitado' : 'Atendimento aberto',
+      message: tipo === 'reembolso' ? 'Seu pedido foi enviado para análise de reembolso. 💙' : 'Abrimos um atendimento para este pedido — já vamos te ajudar.',
+      tone: 'success',
+    })
   }
 
   return (

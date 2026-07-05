@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { criarCheckoutIngresso } from '../lib/eventTickets'
 import { useStore, type Sessao } from '../store/useStore'
+import { alertDialog } from '../lib/dialog'
 
 type Periodo = 'manha' | 'tarde' | 'noite' | 'madrugada'
 
@@ -80,7 +81,7 @@ async function compartilhar(ev: Evento) {
   const url = ev.lat != null && ev.lng != null ? `https://www.google.com/maps/search/?api=1&query=${ev.lat},${ev.lng}` : ''
   try {
     if (navigator.share) await navigator.share({ title: ev.titulo, text: texto, url })
-    else { await navigator.clipboard.writeText(`${texto} ${url}`); alert('Link do evento copiado!') }
+    else { await navigator.clipboard.writeText(`${texto} ${url}`); await alertDialog({ title: 'Link copiado! 🔗', message: 'Cole onde quiser pra convidar a galera.', tone: 'success' }) }
   } catch { /* cancelado */ }
 }
 

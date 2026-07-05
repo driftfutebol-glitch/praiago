@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { confirmDialog } from '../lib/dialog'
 import { Search, Ban } from 'lucide-react'
 import { format } from 'date-fns'
 
@@ -24,7 +25,7 @@ export default function PedidosPage() {
   }, [])
 
   async function cancelarPedido(id: string) {
-    if (!confirm('FORÇAR CANCELAMENTO: Tem certeza que deseja cancelar este pedido?')) return
+    if (!await confirmDialog({ title: 'Forçar cancelamento', message: 'Tem certeza que deseja cancelar este pedido?', confirmText: 'Cancelar pedido', tone: 'danger' })) return
     await supabase.from('pedidos').update({ status: 'cancelado' }).eq('id', id)
   }
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
+import { confirmDialog, alertDialog, promptDialog } from '../lib/dialog'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import {
@@ -194,15 +195,15 @@ export default function EventosPage() {
   }
 
   async function adicionarIngresso(ev: Evento) {
-    const nome = prompt('Nome do ingresso/lote', 'Entrada')
+    const nome = await promptDialog({ title: 'Novo ingresso/lote', message: 'Nome do ingresso ou lote', defaultValue: 'Entrada' })
     if (!nome?.trim()) return
-    const precoRaw = prompt('Preco original do ingresso em R$', String(ev.preco || ''))
+    const precoRaw = await promptDialog({ title: 'Preço do ingresso', message: 'Preço original em R$', defaultValue: String(ev.preco || '') })
     const preco = Number((precoRaw || '').replace(',', '.'))
     if (!Number.isFinite(preco) || preco < 0) {
-      alert('Preco invalido.')
+      await alertDialog({ title: 'Preço inválido', message: 'Confira o valor e tente de novo.', tone: 'danger' })
       return
     }
-    const estoqueRaw = prompt('Quantidade disponivel. Deixe vazio se for manual/sem limite.')
+    const estoqueRaw = await promptDialog({ title: 'Estoque', message: 'Quantidade disponível. Deixe vazio se for manual/sem limite.', placeholder: 'Ex: 100' })
     const estoque = estoqueRaw?.trim() ? Math.max(0, Math.floor(Number(estoqueRaw.replace(',', '.')) || 0)) : null
 
     const { error } = await supabase.from('event_ticket_lots').insert({
@@ -217,14 +218,14 @@ export default function EventosPage() {
       criado_por: 'admin',
       metadata: { criado_no_admin: true },
     })
-    if (error) alert(error.message)
+    if (error) alertDialog({ title: 'Erro', message: error.message, tone: 'danger' })
     else carregar()
   }
 
   async function alternarLote(lote: TicketLot) {
     const novo = lote.status === 'disponivel' ? 'pausado' : 'disponivel'
     const { error } = await supabase.from('event_ticket_lots').update({ status: novo }).eq('id', lote.id)
-    if (error) alert(error.message)
+    if (error) alertDialog({ title: 'Erro', message: error.message, tone: 'danger' })
     else carregar()
   }
 
@@ -233,40 +234,40 @@ export default function EventosPage() {
       .from('event_ticket_orders')
       .update({ status: 'entregue', delivery_status: 'enviado', delivered_at: new Date().toISOString() })
       .eq('id', orderId)
-    if (error) alert(error.message)
+    if (error) alertDialog({ title: 'Erro', message: error.message, tone: 'danger' })
     else carregar()
   }
 
   async function aprovarReembolso(refundId: string) {
-    const resposta = prompt('Resposta para registrar no pedido', 'Reembolso aprovado pelo admin.')
+    const resposta = await promptDialog({ title: 'Aprovar reembolso', message: 'Resposta para registrar no pedido', defaultValue: 'Reembolso aprovado pelo admin.', tone: 'success', confirmText: 'Aprovar' })
     const { error } = await supabase.functions.invoke('evento-ticket-refund', {
       body: { acao: 'aprovar', refund_id: refundId, resposta_admin: resposta || 'Reembolso aprovado pelo admin.' },
     })
-    if (error) alert(error.message)
+    if (error) alertDialog({ title: 'Erro', message: error.message, tone: 'danger' })
     else carregar()
   }
 
   async function negarReembolso(refundId: string) {
-    const resposta = prompt('Motivo para negar o reembolso', 'Solicitacao fora da politica de reembolso.')
+    const resposta = await promptDialog({ title: 'Negar reembolso', message: 'Motivo para negar o reembolso', defaultValue: 'Solicitação fora da política de reembolso.', tone: 'danger', confirmText: 'Negar' })
     if (!resposta) return
     const { error } = await supabase.functions.invoke('evento-ticket-refund', {
       body: { acao: 'negar', refund_id: refundId, resposta_admin: resposta },
     })
-    if (error) alert(error.message)
+    if (error) alertDialog({ title: 'Erro', message: error.message, tone: 'danger' })
     else carregar()
   }
 
   async function processarReembolso(refundId: string) {
-    if (!confirm('Processar reembolso no Mercado Pago agora?')) return
+    if (!await confirmDialog({ title: 'Processar reembolso', message: 'Processar o reembolso no Mercado Pago agora?', confirmText: 'Processar', tone: 'danger' })) return
     const { error } = await supabase.functions.invoke('evento-ticket-refund', {
       body: { acao: 'processar', refund_id: refundId },
     })
-    if (error) alert(error.message)
+    if (error) alertDialog({ title: 'Erro', message: error.message, tone: 'danger' })
     else carregar()
   }
 
   async function excluir(id: string) {
-    if (!confirm('Excluir este evento?')) return
+    if (!await confirmDialog({ title: 'Excluir evento?', message: 'Essa ação não pode ser desfeita.', confirmText: 'Excluir', tone: 'danger' })) return
     await supabase.from('eventos').delete().eq('id', id)
   }
 

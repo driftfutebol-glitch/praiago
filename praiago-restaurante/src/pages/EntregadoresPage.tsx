@@ -6,6 +6,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { useSessao } from '../lib/auth'
+import { alertDialog } from '../lib/dialog'
 
 type Veiculo = 'moto' | 'bicicleta' | 'carro' | 'a_pe'
 type StatusEntregador = 'disponivel' | 'em_entrega' | 'offline'
@@ -127,7 +128,7 @@ function VerificationModal({ entregador, restaurante_id, onClose }: {
       onClose()
     } catch (err) {
       console.error('Erro ao enviar verificação:', err)
-      alert('Erro ao enviar. Tente novamente.')
+      alertDialog({ title: 'Não deu pra enviar', message: 'Tente novamente em instantes.', tone: 'danger' })
     } finally {
       setSubmitting(false)
     }
@@ -439,7 +440,7 @@ export default function EntregadoresPage() {
 
     if (error) {
       console.error(error)
-      alert('Erro ao criar entregador')
+      alertDialog({ title: 'Não deu pra criar', message: 'Não conseguimos cadastrar o entregador agora. Tente novamente.', tone: 'danger' })
       return
     }
 

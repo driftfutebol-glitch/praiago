@@ -19,6 +19,7 @@ import PerfilPage       from './pages/PerfilPage'
 import VerificationBar  from './components/VerificationBar'
 import AiChatbot        from './components/AiChatbot'
 import PasswordRecoveryHandler from './components/PasswordRecoveryHandler'
+import { DialogHost } from './lib/dialog'
 
 const navItems = [
   { to: '/',             icon: LayoutDashboard, label: 'Painel',        badge: null },
@@ -400,6 +401,7 @@ export default function App() {
           </AnimatePresence>
         )}
       </main>
+      <DialogHost />
     </div>
   )
 }

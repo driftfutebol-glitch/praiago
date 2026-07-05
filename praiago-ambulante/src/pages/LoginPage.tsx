@@ -3,6 +3,7 @@ import { Eye, EyeOff, LogIn } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { login } from '../lib/auth'
+import { promptDialog } from '../lib/dialog'
 
 export default function LoginPage() {
   const [tab, setTab] = useState<'entrar' | 'cadastro'>('entrar')
@@ -29,9 +30,9 @@ export default function LoginPage() {
   async function confirmarCodigoSenha() {
     const alvo = emailNormalizado()
     if (!/^\S+@\S+\.\S+$/.test(alvo)) { setErro('Informe seu e-mail valido para confirmar o codigo.'); return }
-    const codigo = window.prompt('Digite o codigo recebido por e-mail:')
+    const codigo = await promptDialog({ title: 'Código do e-mail', message: 'Digite o código que enviamos para o seu e-mail.', placeholder: '000000' })
     if (!codigo?.trim()) return
-    const novaSenha = window.prompt('Digite a nova senha com pelo menos 6 caracteres:')
+    const novaSenha = await promptDialog({ title: 'Nova senha', message: 'Crie uma senha com pelo menos 6 caracteres.', placeholder: 'Nova senha', secret: true })
     if (!novaSenha || novaSenha.length < 6) { setErro('A nova senha precisa ter ao menos 6 caracteres.'); return }
 
     const { error: otpError } = await supabase.auth.verifyOtp({ email: alvo, token: codigo.trim(), type: 'recovery' })

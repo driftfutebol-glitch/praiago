@@ -15,6 +15,7 @@ import { useGPS } from '../hooks/useGPS'
 import { useNearbyAmbulantes, type AmbulanteLive } from '../hooks/useNearbyAmbulantes'
 import { useCatalogo } from '../store/useCatalogo'
 import { getZone, BEACH_ZONES } from '../lib/praiagoZones'
+import { alertDialog } from '../lib/dialog'
 
 import 'leaflet/dist/leaflet.css'
 
@@ -135,7 +136,7 @@ export default function AmbulantesPage() {
     if (vendedor) {
       navigate(`/pedir?v=${vendedor.id}`)
     } else {
-      alert('Esse vendedor ainda não publicou um cardápio.')
+      alertDialog({ title: 'Cardápio a caminho', message: 'Esse vendedor ainda não publicou o cardápio dele. Volte já já! 🏖️' })
     }
   }
 

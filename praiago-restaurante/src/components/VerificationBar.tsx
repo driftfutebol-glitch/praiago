@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { ShieldAlert, CheckCircle, ChevronDown, ChevronUp, Camera, UploadCloud } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useSessao } from '../lib/auth'
+import { alertDialog } from '../lib/dialog'
 
 type Status = 'pendente' | 'aprovado' | 'rejeitado' | null
 
@@ -87,7 +88,7 @@ export default function VerificationBar() {
       setStatus('pendente')
       setExpanded(false)
     } else {
-      alert('Erro ao enviar verificação.')
+      alertDialog({ title: 'Não deu pra enviar', message: 'Tivemos um problema ao enviar sua verificação. Tente de novo em instantes.', tone: 'danger' })
     }
   }
 

@@ -13,6 +13,7 @@ import AmbulantesPage from './pages/AmbulantesPage'
 import PerfilPage from './pages/PerfilPage'
 import EmailVerificationBanner from './components/EmailVerificationBanner'
 import AiChatbot from './components/AiChatbot'
+import { DialogHost } from './lib/dialog'
 import PasswordRecoveryHandler from './components/PasswordRecoveryHandler'
 
 const navItems = [
@@ -232,6 +233,7 @@ export default function App() {
       <AnimatePresence>
         <NotificationToast />
       </AnimatePresence>
+      <DialogHost />
 
       {/* Floating Bottom Nav - Glassmorphism Pill */}
       <div style={{

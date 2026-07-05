@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore } from '../store/useStore'
 import { supabase } from '../lib/supabase'
+import { alertDialog, promptDialog } from '../lib/dialog'
 
 function fmtData(ts: number) {
   const diff = Date.now() - ts
@@ -73,7 +74,7 @@ function TelaLogada() {
         <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }} className="glass-panel" style={{ borderRadius: 20, overflow: 'hidden', border: '1px solid rgba(0,0,0,0.05)', marginBottom: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}>
           {[
             { icon: Bell, label: 'Notificações', onClick: () => navigate('/') },
-            { icon: HelpCircle, label: 'Ajuda e Suporte', onClick: () => alert('Suporte PraiaGo: (13) 99999-9999') },
+            { icon: HelpCircle, label: 'Ajuda e Suporte', onClick: () => alertDialog({ title: 'Suporte PraiaGo', message: 'Fale com a gente: (13) 99999-9999 💙' }) },
           ].map(({ icon: Icon, label, onClick }, i) => (
             <motion.button whileHover={{ background: 'rgba(0,0,0,0.05)' }} whileTap={{ scale: 0.98 }} key={label} onClick={onClick} style={{ width: '100%', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 16, padding: '18px 20px', borderTop: i > 0 ? '1px solid rgba(0,0,0,0.05)' : 'none' }}>
               <Icon size={20} color="#94a3b8" />
@@ -116,9 +117,9 @@ export default function PerfilPage() {
   async function confirmarCodigoSenha() {
     const alvo = emailNormalizado()
     if (!/^\S+@\S+\.\S+$/.test(alvo)) { setErro('Informe seu e-mail valido para confirmar o codigo.'); return }
-    const codigo = window.prompt('Digite o codigo recebido por e-mail:')
+    const codigo = await promptDialog({ title: 'Código do e-mail', message: 'Digite o código que enviamos para o seu e-mail.', placeholder: '000000' })
     if (!codigo?.trim()) return
-    const novaSenha = window.prompt('Digite a nova senha com pelo menos 6 caracteres:')
+    const novaSenha = await promptDialog({ title: 'Nova senha', message: 'Crie uma senha com pelo menos 6 caracteres.', placeholder: 'Nova senha', secret: true })
     if (!novaSenha || novaSenha.length < 6) { setErro('A nova senha precisa ter ao menos 6 caracteres.'); return }
 
     const { error: otpError } = await supabase.auth.verifyOtp({ email: alvo, token: codigo.trim(), type: 'recovery' })

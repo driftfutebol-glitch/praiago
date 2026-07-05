@@ -6,6 +6,7 @@ import {
   Percent, Plus, Send, Store, Ticket, Trash2, X,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { confirmDialog } from '../lib/dialog'
 
 type Aviso = {
   id: string
@@ -230,7 +231,7 @@ export default function PromocoesPage() {
   }
 
   async function excluirPromocao(id: string) {
-    if (!confirm('Excluir esta campanha? O produto volta ao preco normal.')) return
+    if (!await confirmDialog({ title: 'Excluir campanha?', message: 'O produto volta ao preço normal.', confirmText: 'Excluir', tone: 'danger' })) return
     await supabase.from('promocoes').delete().eq('id', id)
   }
 

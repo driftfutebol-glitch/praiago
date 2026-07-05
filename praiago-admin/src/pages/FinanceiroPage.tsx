@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
 import { CheckCircle2, CreditCard, DollarSign, Percent, RefreshCw, Search, WalletCards } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { confirmDialog } from '../lib/dialog'
 
 type PedidoFinanceiro = {
   id: string
@@ -115,7 +116,7 @@ export default function FinanceiroPage() {
   }
 
   async function marcarRepassePago(pedido: PedidoFinanceiro) {
-    if (!confirm(`Marcar repasse de ${money(pedido.vendor_amount)} para ${pedido.vendedor_nome || 'vendedor'} como pago?`)) return
+    if (!await confirmDialog({ title: 'Confirmar repasse', message: `Marcar o repasse de ${money(pedido.vendor_amount)} para ${pedido.vendedor_nome || 'vendedor'} como pago?`, confirmText: 'Marcar pago', tone: 'success' })) return
     const now = new Date().toISOString()
     await Promise.all([
       supabase.from('pedidos').update({ settlement_status: 'repasse_manual_pago' }).eq('id', pedido.id),
