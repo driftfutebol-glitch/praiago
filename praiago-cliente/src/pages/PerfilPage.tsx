@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore } from '../store/useStore'
 import { supabase } from '../lib/supabase'
-import { alertDialog, promptDialog } from '../lib/dialog'
+import { promptDialog } from '../lib/dialog'
+import SuportePanel from '../components/SuportePanel'
 
 function fmtData(ts: number) {
   const diff = Date.now() - ts
@@ -19,6 +20,7 @@ function TelaLogada() {
   const pedidos = useStore(s => s.pedidos)
   const favoritos = useStore(s => s.favoritos)
   const logout = useStore(s => s.logout)
+  const [suporteAberto, setSuporteAberto] = useState(false)
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ minHeight: '100vh', background: '#ffffff', paddingBottom: 24 }}>
@@ -74,7 +76,7 @@ function TelaLogada() {
         <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }} className="glass-panel" style={{ borderRadius: 20, overflow: 'hidden', border: '1px solid rgba(0,0,0,0.05)', marginBottom: 24, boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}>
           {[
             { icon: Bell, label: 'Notificações', onClick: () => navigate('/') },
-            { icon: HelpCircle, label: 'Ajuda e Suporte', onClick: () => alertDialog({ title: 'Suporte PraiaGo', message: 'Fale com a gente: (13) 99999-9999 💙' }) },
+            { icon: HelpCircle, label: 'Ajuda e Suporte', onClick: () => setSuporteAberto(true) },
           ].map(({ icon: Icon, label, onClick }, i) => (
             <motion.button whileHover={{ background: 'rgba(0,0,0,0.05)' }} whileTap={{ scale: 0.98 }} key={label} onClick={onClick} style={{ width: '100%', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 16, padding: '18px 20px', borderTop: i > 0 ? '1px solid rgba(0,0,0,0.05)' : 'none' }}>
               <Icon size={20} color="#94a3b8" />
@@ -89,6 +91,18 @@ function TelaLogada() {
           <span style={{ fontSize: 15, fontWeight: 800, color: '#f87171' }}>Sair da conta</span>
         </motion.button>
       </div>
+
+      <AnimatePresence>
+        {suporteAberto && (
+          <SuportePanel
+            onClose={() => setSuporteAberto(false)}
+            usuarioId={sessao.id}
+            usuarioNome={sessao.nome || 'Cliente PraiaGo'}
+            usuarioEmail={sessao.email || ''}
+            plataforma="cliente"
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }

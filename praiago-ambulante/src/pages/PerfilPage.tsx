@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Star, MapPin, Package, TrendingUp, ChevronRight, LogOut, Bell, Shield, HelpCircle, CreditCard, Loader2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { logout, useSessao } from '../lib/auth'
 import { buscarStatusMercadoPago, iniciarVinculoMercadoPago, type MercadoPagoLinkStatus } from '../lib/mercadopago'
+import SuportePanel from '../components/SuportePanel'
 
 const menuItems = [
   { icon: TrendingUp, label: 'Resumo de vendas', desc: 'Quanto você vendeu, dia a dia', to: '/vendas' },
@@ -19,6 +20,7 @@ export default function PerfilPage() {
   const [mpStatus, setMpStatus] = useState<MercadoPagoLinkStatus | null>(null)
   const [mpLoading, setMpLoading] = useState(false)
   const [mpErro, setMpErro] = useState('')
+  const [suporteAberto, setSuporteAberto] = useState(false)
 
   useEffect(() => {
     if (!sessao) return
@@ -150,7 +152,7 @@ export default function PerfilPage() {
           borderRadius: 24, overflow: 'hidden', marginBottom: 20,
         }}>
           {menuItems.map(({ icon: Icon, label, desc, to }, i) => (
-            <motion.button whileTap={{ backgroundColor: 'rgba(0,0,0,0.05)' }} key={label} onClick={() => to && navigate(to)} style={{
+            <motion.button whileTap={{ backgroundColor: 'rgba(0,0,0,0.05)' }} key={label} onClick={() => { if (label === 'Suporte') setSuporteAberto(true); else if (to) navigate(to) }} style={{
               width: '100%', background: 'transparent', border: 'none', cursor: 'pointer',
               display: 'flex', alignItems: 'center', gap: 16, padding: '16px 20px',
               borderTop: i > 0 ? '1px solid rgba(0,0,0,0.05)' : 'none',
@@ -187,6 +189,18 @@ export default function PerfilPage() {
           <span style={{ fontSize: 15, fontWeight: 900, color: '#f87171', textTransform: 'uppercase', letterSpacing: 0.5 }}>Sair da conta</span>
         </motion.button>
       </div>
+
+      <AnimatePresence>
+        {suporteAberto && sessao && (
+          <SuportePanel
+            onClose={() => setSuporteAberto(false)}
+            usuarioId={sessao.id}
+            usuarioNome={sessao.nome || 'Ambulante'}
+            usuarioEmail={sessao.email || ''}
+            plataforma="ambulante"
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

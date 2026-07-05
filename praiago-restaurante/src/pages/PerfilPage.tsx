@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Bell, ChevronRight, CreditCard, HelpCircle, Loader2, LogOut, MapPin, Phone, Shield, Star, Store, TrendingUp } from 'lucide-react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { getSessao, logout } from '../lib/auth'
+import SuportePanel from '../components/SuportePanel'
 import { buscarStatusMercadoPago, iniciarVinculoMercadoPago, type MercadoPagoLinkStatus } from '../lib/mercadopago'
 
 type PerfilInfo = {
@@ -59,6 +60,7 @@ export default function PerfilPage() {
   const [pedidosMes, setPedidosMes] = useState(0)
   const [faturamentoMes, setFaturamentoMes] = useState(0)
   const [painelAberto, setPainelAberto] = useState<Painel | null>(null)
+  const [suporteAberto, setSuporteAberto] = useState(false)
   const [mpStatus, setMpStatus] = useState<MercadoPagoLinkStatus | null>(null)
   const [mpLoading, setMpLoading] = useState(false)
   const [mpErro, setMpErro] = useState('')
@@ -238,6 +240,11 @@ export default function PerfilPage() {
               </div>
             ))}
           </div>
+          {painelAberto === 'ajuda' && (
+            <button onClick={() => setSuporteAberto(true)} style={{ width: '100%', marginTop: 14, border: 0, background: 'linear-gradient(135deg,#f97316,#f59e0b)', color: '#fff', borderRadius: 14, padding: 14, fontSize: 14, fontWeight: 900, cursor: 'pointer' }}>
+              Falar com o suporte
+            </button>
+          )}
         </motion.div>
       )}
 
@@ -256,6 +263,18 @@ export default function PerfilPage() {
         <LogOut size={20} color="#ef4444" />
         <span style={{ fontSize: 15, fontWeight: 900, color: '#ef4444', letterSpacing: 1 }}>ENCERRAR SESSAO</span>
       </motion.button>
+
+      <AnimatePresence>
+        {suporteAberto && sessao && (
+          <SuportePanel
+            onClose={() => setSuporteAberto(false)}
+            usuarioId={sessao.id}
+            usuarioNome={sessao.nome || 'Restaurante'}
+            usuarioEmail={sessao.email || ''}
+            plataforma="restaurante"
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

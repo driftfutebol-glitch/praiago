@@ -259,6 +259,7 @@ export const useStore = create<State>()(
 
         await supabase.from('tickets').insert({
           plataforma: 'cliente',
+          usuario_id: get().sessao?.id ?? null,
           usuario_nome: get().sessao?.nome || 'Cliente PraiaGo',
           usuario_email: get().sessao?.email || 'N/A',
           assunto: `Cancelamento do pedido ${pedidoId}`,
@@ -300,6 +301,7 @@ export const useStore = create<State>()(
 
         const { error } = await supabase.from('tickets').insert({
           plataforma: 'cliente',
+          usuario_id: get().sessao?.id ?? null,
           usuario_nome: get().sessao?.nome || 'Cliente PraiaGo',
           usuario_email: get().sessao?.email || 'N/A',
           assunto,

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
@@ -54,6 +54,35 @@ export default function AtendimentoPage() {
   const [respostas, setRespostas] = useState<Record<string, string>>({})
   const [sendingReply, setSendingReply] = useState<string | null>(null)
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null)
+  const [mensagens, setMensagens] = useState<Record<string, { id: string; autor: string; mensagem: string; created_at: string }[]>>({})
+  const fimRef = useRef<HTMLDivElement>(null)
+
+  const carregarMensagens = useCallback(async (ticketId: string) => {
+    const { data } = await supabase.from('ticket_mensagens').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true })
+    setMensagens(prev => ({ ...prev, [ticketId]: (data as { id: string; autor: string; mensagem: string; created_at: string }[]) ?? [] }))
+  }, [])
+
+  async function abrirTicket(ticketId: string) {
+    const abrindo = expandedTicket !== ticketId
+    setExpandedTicket(abrindo ? ticketId : null)
+    if (abrindo) {
+      carregarMensagens(ticketId)
+      // marca como lido pelo admin
+      await supabase.from('tickets').update({ nao_lida_admin: false }).eq('id', ticketId)
+    }
+  }
+
+  // realtime das mensagens do ticket aberto
+  useEffect(() => {
+    if (!expandedTicket) return
+    const ch = supabase.channel(`tm_${expandedTicket}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ticket_mensagens', filter: `ticket_id=eq.${expandedTicket}` }, () => {
+        carregarMensagens(expandedTicket)
+        setTimeout(() => fimRef.current?.scrollIntoView({ behavior: 'smooth' }), 60)
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [expandedTicket, carregarMensagens])
 
   const platformLabel = platformLabels[plataforma || ''] || plataforma || 'Todas as Plataformas'
   const isTodas = !plataforma || plataforma === 'todas'
@@ -90,15 +119,17 @@ export default function AtendimentoPage() {
     if (!resposta?.trim()) return
     setSendingReply(ticketId)
     try {
-      await supabase
-        .from('tickets')
-        .update({
-          resposta: resposta.trim(),
-          status: 'em_andamento',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', ticketId)
+      await supabase.from('ticket_mensagens').insert({ ticket_id: ticketId, autor: 'admin', mensagem: resposta.trim() })
+      // avisa o usuário (não-lida) e mantém o atendimento em andamento
+      await supabase.from('tickets').update({
+        status: 'em_andamento',
+        resposta: resposta.trim(),
+        nao_lida_usuario: true,
+        nao_lida_admin: false,
+        updated_at: new Date().toISOString(),
+      }).eq('id', ticketId)
       setRespostas(prev => ({ ...prev, [ticketId]: '' }))
+      carregarMensagens(ticketId)
     } catch (err) {
       console.error('Erro ao enviar resposta:', err)
     }
@@ -197,7 +228,7 @@ export default function AtendimentoPage() {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ delay: i * 0.02 }}
-                      onClick={() => setExpandedTicket(isExpanded ? null : ticket.id)}
+                      onClick={() => abrirTicket(ticket.id)}
                       className={`cursor-pointer transition-colors ${
                         isExpanded ? 'bg-slate-800/30' : 'hover:bg-slate-800/15'
                       } ${ticket.prioridade === 'urgente' ? 'border-l-2 border-l-red-500/50' : ''}`}
@@ -253,34 +284,37 @@ export default function AtendimentoPage() {
                             className="overflow-hidden"
                           >
                             <div className="p-6 bg-slate-900/40 border-t border-slate-800/30 space-y-4">
-                              {/* Original Message */}
+                              {/* Conversa (thread) */}
                               <div>
                                 <div className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-2 font-mono">
-                                  Mensagem do Usuário
+                                  Conversa
                                 </div>
-                                <div className="bg-slate-950/50 rounded-xl p-4 border border-slate-800/50 text-sm text-slate-300 leading-relaxed">
-                                  {ticket.mensagem}
+                                <div className="bg-slate-950/40 rounded-xl p-4 border border-slate-800/50 max-h-72 overflow-y-auto space-y-3" onClick={e => e.stopPropagation()}>
+                                  {/* primeira mensagem = a que abriu o ticket */}
+                                  <div className="flex justify-start">
+                                    <div className="max-w-[75%] bg-slate-800/60 rounded-2xl rounded-tl-sm px-4 py-2.5 text-sm text-slate-200">
+                                      {ticket.mensagem}
+                                      <div className="text-[10px] text-slate-500 mt-1">{ticket.usuario_nome} · {format(new Date(ticket.created_at), 'dd/MM HH:mm')}</div>
+                                    </div>
+                                  </div>
+                                  {(mensagens[ticket.id] || []).map(m => (
+                                    <div key={m.id} className={`flex ${m.autor === 'admin' ? 'justify-end' : 'justify-start'}`}>
+                                      <div className={`max-w-[75%] px-4 py-2.5 text-sm ${m.autor === 'admin' ? 'bg-purple-500/20 text-purple-100 rounded-2xl rounded-tr-sm' : 'bg-slate-800/60 text-slate-200 rounded-2xl rounded-tl-sm'}`}>
+                                        {m.mensagem}
+                                        <div className={`text-[10px] mt-1 ${m.autor === 'admin' ? 'text-purple-300/70' : 'text-slate-500'}`}>{m.autor === 'admin' ? 'Suporte' : ticket.usuario_nome} · {format(new Date(m.created_at), 'dd/MM HH:mm')}</div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                  <div ref={fimRef} />
                                 </div>
                               </div>
-
-                              {/* Previous Response */}
-                              {ticket.resposta && (
-                                <div>
-                                  <div className="text-[10px] font-bold text-purple-500 uppercase tracking-wider mb-2 font-mono">
-                                    Resposta do Suporte
-                                  </div>
-                                  <div className="bg-purple-500/5 rounded-xl p-4 border border-purple-500/10 text-sm text-slate-300 leading-relaxed">
-                                    {ticket.resposta}
-                                  </div>
-                                </div>
-                              )}
 
                               {/* Reply + Status Controls */}
                               <div className="flex gap-4">
                                 {/* Reply */}
                                 <div className="flex-1">
                                   <div className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-2 font-mono">
-                                    Escrever Resposta
+                                    Responder
                                   </div>
                                   <div className="flex gap-2">
                                     <textarea
