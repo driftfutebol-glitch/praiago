@@ -231,15 +231,26 @@ Deno.serve(async req => {
     }
 
     if (approved && !manualRepass) {
+      const paidAt = payment.date_approved || new Date().toISOString()
+      // janela de repasse (padrão 7 dias): o repasse do vendedor fica "em espera"
+      // e só vira disponível para saque N dias após o pagamento.
+      const { data: cfg } = await supabase.from('payment_settings').select('repasse_dias').eq('id', true).maybeSingle()
+      const dias = Number(cfg?.repasse_dias ?? 7)
+      const disponivelEm = new Date(new Date(paidAt).getTime() + dias * 86400000).toISOString()
+
+      // taxa da plataforma: receita confirmada na hora
       await supabase
         .from('financial_ledger')
-        .update({
-          status: 'pago',
-          provider: 'mercadopago',
-          external_reference: String(payment.id),
-          settled_at: new Date().toISOString(),
-        })
+        .update({ status: 'pago', provider: 'mercadopago', external_reference: String(payment.id), settled_at: paidAt })
         .eq('pedido_id', pedidoId)
+        .eq('tipo', 'taxa_plataforma')
+
+      // repasse do vendedor: entra na janela de espera de N dias
+      await supabase
+        .from('financial_ledger')
+        .update({ status: 'em_espera', provider: 'mercadopago', external_reference: String(payment.id), disponivel_em: disponivelEm, settled_at: null })
+        .eq('pedido_id', pedidoId)
+        .eq('tipo', 'repasse_vendedor')
     }
 
     return json({ ok: true })

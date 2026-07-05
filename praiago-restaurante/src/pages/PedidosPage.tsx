@@ -130,9 +130,11 @@ export default function PedidosPage() {
           )}
 
           {filtrados.map((p, idx) => {
-            const s = STATUS_CFG[p.status]
+            // guarda contra status vindos de outros apps (ex: 'saiu_entrega') —
+            // sem isso um status fora do mapa quebrava a tela inteira (tela branca)
+            const s = STATUS_CFG[p.status] ?? STATUS_CFG.entregando ?? STATUS_CFG.novo
             const SIcon = s.icon
-            const canAdv = NEXT[p.status] !== null
+            const canAdv = NEXT[p.status] != null
 
             return (
               <motion.div layout initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }} transition={{ duration: 0.3 }} key={p.id} className="glass-panel" style={{

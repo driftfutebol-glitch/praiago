@@ -25,6 +25,7 @@ type Settings = {
   platform_fee_percent: number
   platform_fee_fixed: number
   presencial_fee_mode: string
+  repasse_dias: number
 }
 
 const money = (value: unknown) => `R$ ${Number(value || 0).toFixed(2).replace('.', ',')}`
@@ -38,7 +39,7 @@ function statusClass(status?: string | null) {
 
 export default function FinanceiroPage() {
   const [pedidos, setPedidos] = useState<PedidoFinanceiro[]>([])
-  const [settings, setSettings] = useState<Settings>({ platform_fee_percent: 10, platform_fee_fixed: 0, presencial_fee_mode: 'cobrar_vendedor' })
+  const [settings, setSettings] = useState<Settings>({ platform_fee_percent: 10, platform_fee_fixed: 0, presencial_fee_mode: 'cobrar_vendedor', repasse_dias: 7 })
   const [busca, setBusca] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -52,7 +53,7 @@ export default function FinanceiroPage() {
         .order('created_at', { ascending: false }),
       supabase
         .from('payment_settings')
-        .select('platform_fee_percent,platform_fee_fixed,presencial_fee_mode')
+        .select('platform_fee_percent,platform_fee_fixed,presencial_fee_mode,repasse_dias')
         .eq('id', true)
         .maybeSingle(),
     ])
@@ -62,6 +63,7 @@ export default function FinanceiroPage() {
         platform_fee_percent: Number(settingsData.platform_fee_percent ?? 10),
         platform_fee_fixed: Number(settingsData.platform_fee_fixed ?? 0),
         presencial_fee_mode: String(settingsData.presencial_fee_mode ?? 'cobrar_vendedor'),
+        repasse_dias: Number(settingsData.repasse_dias ?? 7),
       })
     }
     setLoading(false)
@@ -109,6 +111,7 @@ export default function FinanceiroPage() {
       platform_fee_percent: settings.platform_fee_percent,
       platform_fee_fixed: settings.platform_fee_fixed,
       presencial_fee_mode: settings.presencial_fee_mode,
+      repasse_dias: settings.repasse_dias,
       updated_at: new Date().toISOString(),
     })
     setSalvando(false)
@@ -179,6 +182,10 @@ export default function FinanceiroPage() {
               <option value="isento">Isento</option>
               <option value="mensalidade">Mensalidade</option>
             </select>
+          </label>
+          <label className="space-y-1">
+            <span className="text-[10px] uppercase font-bold text-slate-500">Dias p/ repasse</span>
+            <input type="number" min={0} max={60} step="1" value={settings.repasse_dias} onChange={e => setSettings(s => ({ ...s, repasse_dias: Math.max(0, Math.floor(Number(e.target.value) || 0)) }))} className="w-32 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-100 outline-none focus:border-purple-500/50" />
           </label>
           <button onClick={salvarTaxa} disabled={salvando} className="inline-flex items-center justify-center gap-2 bg-green-500/10 text-green-400 border border-green-500/20 px-4 py-2 rounded-xl font-black text-sm hover:bg-green-500/20 disabled:opacity-60 transition-colors">
             <CheckCircle2 size={16} /> {salvando ? 'Salvando...' : 'Salvar taxa'}

@@ -10,7 +10,7 @@ import { getSessao } from '../lib/auth'
 const TAXA_PLATAFORMA = 0 // % — lançamento sem taxa; ajuste quando definir o modelo
 
 type PedidoRow = { total: number | string; status: string; created_at: string }
-type LedgerRow = { id: string; valor: number | string; status: string; descricao: string | null; created_at: string; settled_at: string | null; provider: string | null }
+type LedgerRow = { id: string; tipo: string; valor: number | string; status: string; descricao: string | null; created_at: string; settled_at: string | null; provider: string | null; metodo: string | null; disponivel_em: string | null }
 
 const DIAS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 const fmtBRL = (v: number) => `R$ ${v.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`
@@ -43,11 +43,11 @@ export default function VendasPage() {
 
     const carregarCarteira = () => {
       supabase.from('financial_ledger')
-        .select('id, valor, status, descricao, created_at, settled_at, provider')
+        .select('id, tipo, valor, status, descricao, created_at, settled_at, provider, metodo, disponivel_em')
         .eq('vendedor_id', sessao.id)
-        .eq('tipo', 'repasse_vendedor')
+        .in('tipo', ['repasse_vendedor', 'comissao_devida'])
         .order('created_at', { ascending: false })
-        .limit(40)
+        .limit(60)
         .then(({ data }) => setRepasses((data as LedgerRow[]) ?? []))
     }
     carregarCarteira()
@@ -74,12 +74,20 @@ export default function VendasPage() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const carteira = useMemo(() => {
+    const agora = Date.now()
     const soma = (filtro: (r: LedgerRow) => boolean) =>
       repasses.filter(filtro).reduce((a, r) => a + (Number(r.valor) || 0), 0)
-    return {
-      aReceber: soma(r => r.status === 'pendente'),
-      recebido: soma(r => r.status === 'pago'),
-    }
+    const repasse = (r: LedgerRow) => r.tipo === 'repasse_vendedor'
+    const disponivel = (r: LedgerRow) => r.disponivel_em ? new Date(r.disponivel_em).getTime() <= agora : false
+    // vendas online: em espera (janela de 7 dias) vs já liberado pra saque
+    const emEspera = soma(r => repasse(r) && r.status === 'em_espera' && !disponivel(r))
+    const disponivelSaque = soma(r => repasse(r) && r.status === 'em_espera' && disponivel(r))
+    const recebido = soma(r => repasse(r) && r.status === 'pago')
+    // vendas no dinheiro: comissão que o vendedor deve à empresa
+    const aPagarEmpresa = soma(r => r.tipo === 'comissao_devida' && r.status === 'pendente')
+    // o que sobra pra receber depois de abater a comissão do dinheiro
+    const liquidoAReceber = Math.max(0, disponivelSaque - aPagarEmpresa)
+    return { emEspera, disponivelSaque, recebido, aPagarEmpresa, liquidoAReceber }
   }, [repasses])
 
   async function salvarPix() {
@@ -170,21 +178,33 @@ export default function VendasPage() {
           <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: '#64748b' }}>vendas pagas pelo app</span>
         </div>
 
+        {/* Destaque: quanto tem pra sacar já, depois de abater a comissão do dinheiro */}
+        <div style={{ background: 'linear-gradient(135deg, rgba(34,197,94,0.12), rgba(14,165,233,0.10))', border: '1px solid rgba(34,197,94,0.22)', borderRadius: 18, padding: 18, marginBottom: 14 }}>
+          <div style={{ fontSize: 11, fontWeight: 800, color: '#16a34a', textTransform: 'uppercase', letterSpacing: 0.8 }}>Disponível pra sacar</div>
+          <div style={{ fontSize: 30, fontWeight: 950, color: '#0f172a', marginTop: 2 }}>{fmtBRL(carteira.liquidoAReceber)}</div>
+          {carteira.aPagarEmpresa > 0 && (
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#b45309', marginTop: 4 }}>
+              já descontamos {fmtBRL(carteira.aPagarEmpresa)} de comissão das suas vendas no dinheiro
+            </div>
+          )}
+        </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 18 }}>
-          <div style={{ background: 'rgba(14,165,233,0.08)', border: '1px solid rgba(14,165,233,0.18)', borderRadius: 18, padding: 16 }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#0284c7', textTransform: 'uppercase', letterSpacing: 0.8 }}>A receber</div>
-            <div style={{ fontSize: 24, fontWeight: 950, color: '#0f172a', marginTop: 4 }}>{fmtBRL(carteira.aReceber)}</div>
+          <div style={{ background: 'rgba(251,191,36,0.10)', border: '1px solid rgba(251,191,36,0.22)', borderRadius: 18, padding: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#b45309', textTransform: 'uppercase', letterSpacing: 0.8 }}>A liberar (7 dias)</div>
+            <div style={{ fontSize: 22, fontWeight: 950, color: '#0f172a', marginTop: 4 }}>{fmtBRL(carteira.emEspera)}</div>
           </div>
-          <div style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.18)', borderRadius: 18, padding: 16 }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#16a34a', textTransform: 'uppercase', letterSpacing: 0.8 }}>Já repassado</div>
-            <div style={{ fontSize: 24, fontWeight: 950, color: '#0f172a', marginTop: 4 }}>{fmtBRL(carteira.recebido)}</div>
+          <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.18)', borderRadius: 18, padding: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#dc2626', textTransform: 'uppercase', letterSpacing: 0.8 }}>Deve à empresa</div>
+            <div style={{ fontSize: 22, fontWeight: 950, color: '#0f172a', marginTop: 4 }}>{fmtBRL(carteira.aPagarEmpresa)}</div>
           </div>
         </div>
 
         <div style={{ fontSize: 12.5, color: '#64748b', fontWeight: 600, lineHeight: 1.5, marginBottom: 16 }}>
           {mpVinculado
-            ? '✅ Conta Mercado Pago vinculada: sua parte cai direto na sua conta, sem esperar repasse.'
-            : 'Vendas pagas pelo app ficam guardadas aqui e são repassadas pra sua chave PIX. Quer receber na hora? Vincule sua conta Mercado Pago no Perfil.'}
+            ? '✅ Conta Mercado Pago vinculada: sua parte da venda online cai direto na sua conta.'
+            : 'Vendas online são repassadas pra sua chave PIX 7 dias após o pagamento. Nas vendas no dinheiro, a comissão da PraiaGo fica registrada aqui e é descontada do seu repasse.'}
+          {carteira.recebido > 0 && <> Você já recebeu <b>{fmtBRL(carteira.recebido)}</b> no total.</>}
         </div>
 
         {/* Chave PIX pra depósito — só depois da verificação */}
@@ -233,25 +253,47 @@ export default function VendasPage() {
         {repasses.length > 0 && (
           <div style={{ marginTop: 20 }}>
             <div style={{ fontSize: 12, fontWeight: 900, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 }}>Extrato</div>
-            {repasses.slice(0, 10).map(r => (
-              <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {r.descricao || 'Repasse de venda'}
+            {repasses.slice(0, 12).map(r => {
+              const deve = r.tipo === 'comissao_devida'
+              const liberado = r.disponivel_em ? new Date(r.disponivel_em).getTime() <= Date.now() : false
+              const rotulo = deve
+                ? 'Comissão'
+                : r.status === 'pago' ? 'Pago'
+                : r.status === 'cancelado' ? 'Cancelado'
+                : r.status === 'em_espera' && !liberado ? 'A liberar'
+                : r.status === 'em_espera' ? 'Disponível'
+                : 'Aguardando'
+              const cor = deve ? '#dc2626'
+                : r.status === 'pago' ? '#16a34a'
+                : r.status === 'cancelado' ? '#94a3b8'
+                : r.status === 'em_espera' && !liberado ? '#b45309'
+                : '#16a34a'
+              const bg = deve ? 'rgba(239,68,68,0.12)'
+                : r.status === 'pago' ? 'rgba(34,197,94,0.12)'
+                : r.status === 'cancelado' ? 'rgba(100,116,139,0.12)'
+                : r.status === 'em_espera' && !liberado ? 'rgba(251,191,36,0.14)'
+                : 'rgba(34,197,94,0.12)'
+              return (
+                <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {r.descricao || (deve ? 'Comissão da venda no dinheiro' : 'Repasse de venda')}
+                    </div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8' }}>
+                      {new Date(r.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                      {!deve && r.status === 'em_espera' && !liberado && r.disponivel_em ? ` · libera ${new Date(r.disponivel_em).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}` : ''}
+                      {r.status === 'pago' && r.settled_at ? ` · pago em ${new Date(r.settled_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}` : ''}
+                    </div>
                   </div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8' }}>
-                    {new Date(r.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
-                    {r.status === 'pago' && r.settled_at ? ` · pago em ${new Date(r.settled_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}` : ''}
+                  <div style={{ fontSize: 14, fontWeight: 900, color: cor }}>
+                    {deve ? '− ' : ''}{fmtBRL(Number(r.valor) || 0)}
                   </div>
+                  <span style={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', padding: '3px 8px', borderRadius: 8, background: bg, color: cor }}>
+                    {rotulo}
+                  </span>
                 </div>
-                <div style={{ fontSize: 14, fontWeight: 900, color: r.status === 'pago' ? '#16a34a' : r.status === 'cancelado' ? '#94a3b8' : '#0284c7' }}>
-                  {fmtBRL(Number(r.valor) || 0)}
-                </div>
-                <span style={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', padding: '3px 8px', borderRadius: 8, background: r.status === 'pago' ? 'rgba(34,197,94,0.12)' : r.status === 'cancelado' ? 'rgba(100,116,139,0.12)' : 'rgba(14,165,233,0.12)', color: r.status === 'pago' ? '#16a34a' : r.status === 'cancelado' ? '#64748b' : '#0284c7' }}>
-                  {r.status === 'pago' ? 'Pago' : r.status === 'cancelado' ? 'Cancelado' : 'A receber'}
-                </span>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </motion.div>
