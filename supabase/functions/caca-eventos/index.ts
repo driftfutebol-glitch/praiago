@@ -375,6 +375,19 @@ function dentroDePraiaGrande(ev: EventoNormalizado) {
   return false
 }
 
+// Mesmo filtro de dentroDePraiaGrande, mas aplicado no evento BRUTO (antes de
+// normalizar) — usado pra decidir quais eventos VALE A PENA detalhar (buscar
+// preço/estoque real na página do evento). Sem isso o robô gastava a cota de
+// requisições em eventos de outras cidades e cortava antes de chegar nos de PG.
+function pareceSerPraiaGrande(e: EventoBruto): boolean {
+  const blob = semAcento(`${text(e.titulo, e.title, e.name, e.nome)} ${text(e.local_nome, e.venue, e.local)} ${text(e.endereco, e.address)} ${text(e.fonte_url, e.url)}`)
+  if (!blob) return false
+  if (blob.includes('praia grande')) return true
+  if (/\b(pg|boqueirao|canto do forte|guilhermina|aviacao|tupi|ocian|caicara|solemar)\b/.test(blob)) return true
+  if (/(rocket beach|rocket sea|blue house|casa do pig|pig praia grande|porks praia grande|portinho forro do mato|forro do mato|stand ipa|beach lounge|arena pg|embaixador bar|ocian restaurante|confraria do forte|marechal mallet)/.test(blob)) return true
+  return false
+}
+
 function dedupeKey(ev: EventoNormalizado) {
   return `${ev.titulo.toLowerCase()}|${ev.data || ''}|${ev.local_nome || ''}`
 }
@@ -619,7 +632,7 @@ function mesclarDetalheArticket(base: EventoBruto, detalhes: EventoBruto[], ingr
 }
 
 async function enriquecerDetalhesArticket(eventos: EventoBruto[], fonte: Fonte) {
-  const maxDetalhes = Math.max(1, Math.min(60, number(env('ARTICKET_DETAIL_MAX')) || 20))
+  const maxDetalhes = Math.max(1, Math.min(150, number(env('ARTICKET_DETAIL_MAX')) || 80))
   const enriquecidos: EventoBruto[] = []
   let consultados = 0
 
@@ -798,7 +811,15 @@ async function buscarFonte(fonte: Fonte) {
   const roleAgora = parsedUrl.hostname.includes('roleagora.com.br') ? extrairRoleAgoraNextData(body, fonte) : []
   let eventos = [...roleAgora, ...extrairJsonLd(body, fonte), ...extrairCardsArticket(body, fonte), ...extrairDetalheHtmlGenerico(body, fonte)]
   if (parsedUrl.hostname.includes('articket.com.br') && !parsedUrl.pathname.startsWith('/e/')) {
-    eventos = await enriquecerDetalhesArticket(eventos, fonte)
+    // A home do articket lista eventos do Brasil inteiro (~100+ cards). Detalhar
+    // (buscar preço/estoque real) TODOS estouraria a cota de requisições antes
+    // de chegar nos de Praia Grande. Por isso filtra ANTES de detalhar: só
+    // enriquece quem já parece ser de PG pelo título/local do card; o resto
+    // segue sem detalhe e é descartado depois pelo filtro final da cidade.
+    const candidatosPG = eventos.filter(pareceSerPraiaGrande)
+    const outros = eventos.filter(ev => !pareceSerPraiaGrande(ev))
+    const enriquecidos = await enriquecerDetalhesArticket(candidatosPG, fonte)
+    eventos = [...enriquecidos, ...outros]
   }
   const ingressosArticket = parsedUrl.hostname.includes('articket.com.br') ? extrairIngressosArticket(body, fonte) : []
   return anexarIngressos(eventos, ingressosArticket)
@@ -827,11 +848,12 @@ async function localizarEvento(supabase: ReturnType<typeof createClient>, ev: Ev
   return null
 }
 
-// Markup do ingresso na revenda. Padrão 0 = mostra o PREÇO REAL do evento
-// ("preços certos"). Ajuste EVENTOS_MARKUP_PERCENT se quiser cobrar uma taxa.
+// Margem do PraiaGo na revenda do ingresso (nosso lucro). Padrão 25% — mesmo
+// valor usado pelos lotes criados manualmente pelo admin (markup_percent
+// default no banco). Ajustável via EVENTOS_MARKUP_PERCENT se precisar mudar.
 function markupPercent() {
   const m = Number(env('EVENTOS_MARKUP_PERCENT'))
-  return Number.isFinite(m) && m >= 0 && m <= 500 ? m : 0
+  return Number.isFinite(m) && m >= 0 && m <= 500 ? m : 25
 }
 
 async function salvarIngressos(supabase: ReturnType<typeof createClient>, eventoId: string, ingressos: IngressoNormalizado[] | undefined) {
