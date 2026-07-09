@@ -2,7 +2,7 @@
 // O admin responde pelo painel dele; aqui o usuário vê e responde, em tempo real.
 import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Send, ChevronLeft, Plus, Headphones, MessageSquare } from 'lucide-react'
+import { X, Send, ChevronLeft, Plus, Headphones, MessageSquare, Star, CheckCircle2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 type Ticket = {
@@ -12,6 +12,8 @@ type Ticket = {
   status: string
   created_at: string
   nao_lida_usuario?: boolean
+  avaliacao_nota?: number | null
+  avaliacao_comentario?: string | null
 }
 type Msg = { id: string; autor: string; mensagem: string; created_at: string }
 
@@ -27,16 +29,19 @@ export default function SuportePanel({
   plataforma: string
 }) {
   const [tickets, setTickets] = useState<Ticket[]>([])
-  const [aberto, setAberto] = useState<Ticket | null>(null)
+  const [abertoId, setAbertoId] = useState<string | null>(null)
+  const aberto = tickets.find(t => t.id === abertoId) || null
   const [mensagens, setMensagens] = useState<Msg[]>([])
   const [texto, setTexto] = useState('')
   const [novo, setNovo] = useState(false)
   const [assunto, setAssunto] = useState('')
   const [enviando, setEnviando] = useState(false)
+  const [nota, setNota] = useState(0)
+  const [comentario, setComentario] = useState('')
   const fimRef = useRef<HTMLDivElement>(null)
 
   const carregarTickets = () => {
-    supabase.from('tickets').select('id, assunto, mensagem, status, created_at, nao_lida_usuario')
+    supabase.from('tickets').select('id, assunto, mensagem, status, created_at, nao_lida_usuario, avaliacao_nota, avaliacao_comentario')
       .eq('usuario_id', usuarioId).order('updated_at', { ascending: false }).limit(30)
       .then(({ data }) => setTickets((data as Ticket[]) ?? []))
   }
@@ -52,7 +57,7 @@ export default function SuportePanel({
     const ch = supabase.channel(`suporte_${usuarioId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ticket_mensagens' }, (payload) => {
         const m = payload.new as Msg & { ticket_id: string }
-        if (aberto && m.ticket_id === aberto.id) {
+        if (abertoId && m.ticket_id === abertoId) {
           setMensagens(prev => prev.some(x => x.id === m.id) ? prev : [...prev, m])
           setTimeout(() => fimRef.current?.scrollIntoView({ behavior: 'smooth' }), 60)
         }
@@ -61,12 +66,26 @@ export default function SuportePanel({
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets', filter: `usuario_id=eq.${usuarioId}` }, carregarTickets)
       .subscribe()
     return () => { supabase.removeChannel(ch) }
-  }, [usuarioId, aberto]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [usuarioId, abertoId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function abrir(t: Ticket) {
-    setAberto(t); setNovo(false)
+    setAbertoId(t.id); setNovo(false)
     carregarMensagens(t.id)
     if (t.nao_lida_usuario) await supabase.from('tickets').update({ nao_lida_usuario: false }).eq('id', t.id)
+  }
+
+  async function enviarAvaliacao() {
+    if (!aberto || nota < 1) return
+    setEnviando(true)
+    await supabase.from('tickets').update({
+      avaliacao_nota: nota,
+      avaliacao_comentario: comentario.trim() || null,
+      avaliado_em: new Date().toISOString(),
+      nao_lida_admin: true,
+    }).eq('id', aberto.id)
+    setEnviando(false)
+    setNota(0); setComentario('')
+    carregarTickets()
   }
 
   async function criarTicket() {
@@ -104,7 +123,7 @@ export default function SuportePanel({
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 18px', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
           {(aberto || novo)
-            ? <button onClick={() => { setAberto(null); setNovo(false) }} aria-label="Voltar" style={{ width: 36, height: 36, borderRadius: 12, border: 0, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ChevronLeft size={18} color="#334155" /></button>
+            ? <button onClick={() => { setAbertoId(null); setNovo(false) }} aria-label="Voltar" style={{ width: 36, height: 36, borderRadius: 12, border: 0, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ChevronLeft size={18} color="#334155" /></button>
             : <div style={{ width: 36, height: 36, borderRadius: 12, background: ACCENT, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Headphones size={18} color="#fff" /></div>}
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 16, fontWeight: 900, color: '#0f172a' }}>{aberto ? aberto.assunto : novo ? 'Novo atendimento' : 'Suporte PraiaGo'}</div>
@@ -149,21 +168,57 @@ export default function SuportePanel({
         )}
 
         {/* Thread */}
-        {aberto && (
+        {aberto && (() => {
+          const resolvido = aberto.status === 'resolvido' || aberto.status === 'fechado'
+          return (
           <>
             <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
               <Bolha autor="usuario" texto={aberto.mensagem} quando={aberto.created_at} nome={usuarioNome} />
               <AnimatePresence initial={false}>
                 {mensagens.map(m => <Bolha key={m.id} autor={m.autor} texto={m.mensagem} quando={m.created_at} nome={m.autor === 'admin' ? 'Suporte PraiaGo' : usuarioNome} />)}
               </AnimatePresence>
+              {resolvido && (
+                <div style={{ alignSelf: 'center', display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(34,197,94,0.1)', color: '#16a34a', border: '1px solid rgba(34,197,94,0.25)', borderRadius: 20, padding: '6px 14px', fontSize: 12.5, fontWeight: 800, margin: '4px 0' }}>
+                  <CheckCircle2 size={14} /> Atendimento resolvido pelo suporte
+                </div>
+              )}
               <div ref={fimRef} />
             </div>
-            <div style={{ padding: 12, borderTop: '1px solid rgba(0,0,0,0.06)', display: 'flex', gap: 8 }}>
-              <input value={texto} onChange={e => setTexto(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') responder() }} placeholder="Escreva sua mensagem…" style={{ flex: 1, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 14, padding: '13px 14px', fontSize: 15, fontWeight: 500, color: '#0f172a', outline: 'none' }} />
-              <button onClick={responder} disabled={enviando || !texto.trim()} aria-label="Enviar" style={{ width: 50, borderRadius: 14, border: 0, background: ACCENT, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: (enviando || !texto.trim()) ? 0.5 : 1 }}><Send size={18} /></button>
-            </div>
+
+            {resolvido ? (
+              aberto.avaliacao_nota ? (
+                <div style={{ padding: 16, borderTop: '1px solid rgba(0,0,0,0.06)', textAlign: 'center' }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: '#334155' }}>Você avaliou este atendimento</div>
+                  <div style={{ display: 'flex', gap: 4, justifyContent: 'center', margin: '8px 0' }}>
+                    {[1, 2, 3, 4, 5].map(i => <Star key={i} size={22} color={i <= (aberto.avaliacao_nota || 0) ? '#f59e0b' : '#e2e8f0'} fill={i <= (aberto.avaliacao_nota || 0) ? '#f59e0b' : '#e2e8f0'} />)}
+                  </div>
+                  {aberto.avaliacao_comentario && <div style={{ fontSize: 12.5, color: '#64748b', fontStyle: 'italic' }}>"{aberto.avaliacao_comentario}"</div>}
+                </div>
+              ) : (
+                <div style={{ padding: 16, borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 800, color: '#0f172a', textAlign: 'center', marginBottom: 8 }}>Como foi o atendimento?</div>
+                  <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginBottom: 10 }}>
+                    {[1, 2, 3, 4, 5].map(i => (
+                      <button key={i} onClick={() => setNota(i)} aria-label={`${i} estrelas`} style={{ border: 0, background: 'none', cursor: 'pointer', padding: 2 }}>
+                        <Star size={30} color={i <= nota ? '#f59e0b' : '#e2e8f0'} fill={i <= nota ? '#f59e0b' : '#e2e8f0'} />
+                      </button>
+                    ))}
+                  </div>
+                  <input value={comentario} onChange={e => setComentario(e.target.value)} placeholder="Deixe um comentário (opcional)" style={{ width: '100%', boxSizing: 'border-box', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 14, padding: '12px 14px', fontSize: 14, fontWeight: 500, color: '#0f172a', outline: 'none', marginBottom: 10 }} />
+                  <button onClick={enviarAvaliacao} disabled={enviando || nota < 1} style={{ width: '100%', border: 0, background: ACCENT, color: '#fff', borderRadius: 14, padding: 13, fontSize: 14.5, fontWeight: 900, cursor: nota < 1 ? 'not-allowed' : 'pointer', opacity: (enviando || nota < 1) ? 0.5 : 1 }}>
+                    {enviando ? 'Enviando…' : 'Enviar avaliação'}
+                  </button>
+                </div>
+              )
+            ) : (
+              <div style={{ padding: 12, borderTop: '1px solid rgba(0,0,0,0.06)', display: 'flex', gap: 8 }}>
+                <input value={texto} onChange={e => setTexto(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') responder() }} placeholder="Escreva sua mensagem…" style={{ flex: 1, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 14, padding: '13px 14px', fontSize: 15, fontWeight: 500, color: '#0f172a', outline: 'none' }} />
+                <button onClick={responder} disabled={enviando || !texto.trim()} aria-label="Enviar" style={{ width: 50, borderRadius: 14, border: 0, background: ACCENT, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: (enviando || !texto.trim()) ? 0.5 : 1 }}><Send size={18} /></button>
+              </div>
+            )}
           </>
-        )}
+          )
+        })()}
       </motion.div>
     </div>
   )

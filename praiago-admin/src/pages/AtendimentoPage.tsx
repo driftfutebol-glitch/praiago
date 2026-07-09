@@ -7,7 +7,7 @@ import { ptBR } from 'date-fns/locale'
 import {
   Headphones, ChevronDown, ChevronUp, Send, Clock,
   CheckCircle2, AlertCircle, Loader2, MessageSquare,
-  XCircle, CircleDot
+  XCircle, CircleDot, Star
 } from 'lucide-react'
 
 interface Ticket {
@@ -22,6 +22,9 @@ interface Ticket {
   prioridade: string // 'baixa' | 'media' | 'alta' | 'urgente'
   created_at: string
   updated_at?: string
+  avaliacao_nota?: number | null
+  avaliacao_comentario?: string | null
+  avaliado_em?: string | null
 }
 
 const platformLabels: Record<string, string> = {
@@ -140,9 +143,11 @@ export default function AtendimentoPage() {
     setUpdatingStatus(ticketId)
     try {
       await supabase
-        .from('tickets') // BUG FIX AQUI (era tickets_suporte)
+        .from('tickets')
         .update({
           status: novoStatus,
+          // ao resolver/fechar, avisa o usuário (pra ele ver "resolvido" e avaliar)
+          ...(novoStatus === 'resolvido' || novoStatus === 'fechado' ? { nao_lida_usuario: true } : {}),
           updated_at: new Date().toISOString(),
         })
         .eq('id', ticketId)
@@ -157,6 +162,8 @@ export default function AtendimentoPage() {
   }
 
   const abertos = tickets.filter(t => t.status === 'aberto' || t.status === 'em_andamento').length
+  const avaliados = tickets.filter(t => typeof t.avaliacao_nota === 'number')
+  const mediaAvaliacao = avaliados.length ? (avaliados.reduce((a, t) => a + (t.avaliacao_nota || 0), 0) / avaliados.length) : 0
 
   return (
     <div className="space-y-6">
@@ -189,6 +196,14 @@ export default function AtendimentoPage() {
           <span className="text-xs font-bold text-slate-400">Abertos:</span>
           <span className="text-sm font-black text-amber-400 font-mono">{abertos}</span>
         </div>
+        {avaliados.length > 0 && (
+          <div className="glass-panel px-4 py-2.5 rounded-xl border-slate-800 flex items-center gap-2">
+            <Star size={14} className="text-yellow-400 fill-yellow-400" />
+            <span className="text-xs font-bold text-slate-400">Avaliação:</span>
+            <span className="text-sm font-black text-yellow-400 font-mono">{mediaAvaliacao.toFixed(1)}</span>
+            <span className="text-[10px] text-slate-500 font-mono">({avaliados.length})</span>
+          </div>
+        )}
       </div>
 
       {/* Loading */}
@@ -308,6 +323,24 @@ export default function AtendimentoPage() {
                                   <div ref={fimRef} />
                                 </div>
                               </div>
+
+                              {/* Avaliação do atendimento (feita pelo usuário) */}
+                              {typeof ticket.avaliacao_nota === 'number' && (
+                                <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-4">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[10px] font-bold text-yellow-500 uppercase tracking-wider font-mono">Avaliação do usuário</span>
+                                    <div className="flex gap-0.5">
+                                      {[1, 2, 3, 4, 5].map(i => (
+                                        <Star key={i} size={14} className={i <= (ticket.avaliacao_nota || 0) ? 'text-yellow-400 fill-yellow-400' : 'text-slate-700'} />
+                                      ))}
+                                    </div>
+                                    <span className="text-xs font-black text-yellow-400 font-mono">{ticket.avaliacao_nota}/5</span>
+                                  </div>
+                                  {ticket.avaliacao_comentario && (
+                                    <p className="text-sm text-slate-300 italic mt-2">"{ticket.avaliacao_comentario}"</p>
+                                  )}
+                                </div>
+                              )}
 
                               {/* Reply + Status Controls */}
                               <div className="flex gap-4">
