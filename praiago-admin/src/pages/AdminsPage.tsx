@@ -17,7 +17,7 @@ const SECOES = [
   { key: 'cupons', label: 'Cupons' },
   { key: 'promocoes', label: 'Promoções' },
   { key: 'atendimento', label: 'Atendimento' },
-  { key: 'erros', label: 'Log de Erros' },
+  { key: 'erros', label: 'Seguranca & Logs' },
 ]
 const TODAS_SECOES = SECOES.map(s => s.key)
 

@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useStore } from '../store/useStore'
 import { supabase } from '../lib/supabase'
 import { promptDialog } from '../lib/dialog'
+import { logSecurityEvent } from '../lib/securityAudit'
 import SuportePanel from '../components/SuportePanel'
 
 function fmtData(ts: number) {
@@ -125,6 +126,7 @@ export default function PerfilPage() {
     const alvo = emailNormalizado()
     if (!/^\S+@\S+\.\S+$/.test(alvo)) { setErro('Informe seu e-mail valido para redefinir a senha.'); return }
     const { error } = await supabase.auth.resetPasswordForEmail(alvo, { redirectTo: window.location.origin })
+    if (!error) await logSecurityEvent('password_reset_requested', alvo)
     setErro(error ? `Nao foi possivel enviar redefinicao: ${error.message}` : 'Enviamos o e-mail de redefinicao. Use o link ou o codigo recebido.')
   }
 
@@ -160,9 +162,11 @@ export default function PerfilPage() {
     setLoading(true)
 
     try {
+      const alvo = emailNormalizado()
       if (tab === 'entrar') {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password: senha })
+        const { data, error } = await supabase.auth.signInWithPassword({ email: alvo, password: senha })
         if (error) {
+          await logSecurityEvent('login_failed', alvo, { status: error.status ?? null, message: error.message })
           if (error.status === 429) throw new Error('Limite de tentativas excedido! Aguarde alguns minutos.')
           if (error.message.includes('Email not confirmed')) throw new Error('E-mail não confirmado! Por favor, confirme seu e-mail ou desative a confirmação no painel do Supabase.')
           if (error.message.includes('Invalid login credentials')) throw new Error('E-mail ou senha incorretos.')
@@ -178,13 +182,15 @@ export default function PerfilPage() {
         if (data.user) {
           if (profile?.status === 'banido') {
             await supabase.auth.signOut()
+            await logSecurityEvent('access_denied', alvo, { reason: 'banned', ban_motivo: profile.ban_motivo ?? null })
             throw new Error(`Conta bloqueada pelo suporte.${profile.ban_motivo ? ` Motivo: ${profile.ban_motivo}` : ''}`)
           }
-          useStore.getState().login(data.user.id, email, profile?.nome || 'Cliente PraiaGo')
+          await logSecurityEvent('login_success', alvo, { user_id: data.user.id })
+          useStore.getState().login(data.user.id, alvo, profile?.nome || 'Cliente PraiaGo')
         }
       } else {
         const { data, error } = await supabase.auth.signUp({
-          email,
+          email: alvo,
           password: senha,
           options: { data: { nome, role: 'cliente' } }
         })
@@ -204,11 +210,13 @@ export default function PerfilPage() {
         }
 
         if (data.session && data.user) {
-          useStore.getState().login(data.user.id, email, nome)
+          await logSecurityEvent('signup_created', alvo, { user_id: data.user.id })
+          useStore.getState().login(data.user.id, alvo, nome)
           return
         }
 
         if (data.user && !data.session) {
+          await logSecurityEvent('signup_created', alvo, { user_id: data.user.id, email_confirmation_required: true })
           setErro('Conta criada! Enviamos um link de confirmação para o seu e-mail.')
           setTab('entrar')
         }

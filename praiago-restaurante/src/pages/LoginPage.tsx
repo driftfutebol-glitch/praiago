@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { login } from '../lib/auth'
 import { promptDialog } from '../lib/dialog'
+import { logSecurityEvent } from '../lib/securityAudit'
 import { motion } from 'framer-motion'
 import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
@@ -126,6 +127,7 @@ export default function LoginPage() {
     const alvo = normalizarEmail()
     if (!emailValido(alvo)) { setErro('Informe seu e-mail valido para redefinir a senha.'); return }
     const { error } = await supabase.auth.resetPasswordForEmail(alvo, { redirectTo: window.location.origin })
+    if (!error) await logSecurityEvent('password_reset_requested', alvo)
     setErro(error ? `Nao foi possivel enviar redefinicao: ${error.message}` : 'Enviamos o e-mail de redefinicao. Use o link ou o codigo recebido.')
   }
 
@@ -314,6 +316,7 @@ export default function LoginPage() {
       if (isLogin) {
         const { data, error } = await supabase.auth.signInWithPassword({ email: emailNormalizado, password: senha })
         if (error) {
+          await logSecurityEvent('login_failed', emailNormalizado, { status: error.status ?? null, message: error.message })
           if (error.status === 429) throw new Error('Limite de tentativas excedido. Aguarde alguns minutos e tente novamente.')
           if (error.message.includes('Email not confirmed')) throw new Error('E-mail não confirmado! Verifique sua caixa de entrada.')
           if (error.message.includes('Invalid login credentials')) throw new Error('E-mail ou senha incorretos.')
@@ -329,9 +332,11 @@ export default function LoginPage() {
 
           if (perfil?.status === 'banido') {
             await supabase.auth.signOut()
+            await logSecurityEvent('access_denied', emailNormalizado, { reason: 'banned', ban_motivo: perfil.ban_motivo ?? null })
             throw new Error(`Conta bloqueada pelo suporte.${perfil.ban_motivo ? ` Motivo: ${perfil.ban_motivo}` : ''}`)
           }
 
+          await logSecurityEvent('login_success', emailNormalizado, { user_id: data.user.id })
           login(data.user.id, emailNormalizado, perfil?.nome || undefined);
           navigate('/');
         }
@@ -374,12 +379,14 @@ export default function LoginPage() {
         }
 
         if (data.session && data.user && data.user.email_confirmed_at) {
+          await logSecurityEvent('signup_created', emailNormalizado, { user_id: data.user.id })
           login(data.user.id, emailNormalizado);
           navigate('/');
           return;
         }
 
         if (data.user && !data.session) {
+          await logSecurityEvent('signup_created', emailNormalizado, { user_id: data.user.id, email_confirmation_required: true })
           setErro('Conta criada com sucesso! Enviamos um link de confirmação para o seu e-mail.')
           setIsLogin(true)
           setLoading(false)

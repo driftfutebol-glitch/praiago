@@ -228,7 +228,7 @@ export default function Sidebar({ onLogout, perfil }: { onLogout: () => void; pe
         {verErros && (
           <NavLink to="/erros" className={linkClass}>
             <AlertOctagon size={18} />
-            Log de Erros
+            Seguranca & Logs
           </NavLink>
         )}
 

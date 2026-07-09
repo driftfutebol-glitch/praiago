@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { ShieldAlert, Terminal } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { logSecurityEvent } from '../lib/securityAudit'
 
 export default function LoginPage({ onLogin }: { onLogin: () => void }) {
   const [user, setUser] = useState('')
@@ -10,21 +11,29 @@ export default function LoginPage({ onLogin }: { onLogin: () => void }) {
 
   async function handleLogin() {
     setErro('')
+    const email = user.trim().toLowerCase()
 
-    if (/^\S+@\S+\.\S+$/.test(user)) {
-      const { data, error } = await supabase.auth.signInWithPassword({ email: user.trim().toLowerCase(), password: pass })
+    if (/^\S+@\S+\.\S+$/.test(email)) {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass })
       if (!error && data.user) {
         const { data: perfil } = await supabase.from('profiles').select('role,status,nome').eq('id', data.user.id).maybeSingle()
         if ((perfil?.role === 'admin' || perfil?.role === 'sysadmin') && perfil?.status !== 'banido') {
+          await logSecurityEvent('login_success', email, { role: perfil.role })
           onLogin()
           return
         }
         await supabase.auth.signOut()
+        await logSecurityEvent('access_denied', email, { reason: 'not_admin_or_banned', role: perfil?.role ?? null, status: perfil?.status ?? null })
         setErro('ACESSO NEGADO. ESTE USUARIO NAO E ADMIN.')
         return
       }
+
+      await logSecurityEvent('login_failed', email, { reason: error?.message || 'invalid_credentials', status: error?.status ?? null })
     }
 
+    if (!/^\S+@\S+\.\S+$/.test(email)) {
+      await logSecurityEvent('suspicious_activity', null, { reason: 'admin_login_invalid_identifier', identifier_length: user.length })
+    }
     setErro('ACESSO NEGADO. USE UMA CONTA ADMIN DO SUPABASE AUTH.')
   }
 
