@@ -12,6 +12,11 @@ const corsHeaders = {
 const ALVOS_SUGERIDOS = [
   { nome: 'Rocket Blue', foco: 'balada, shows, madrugada, ingressos' },
   { nome: 'Blue House', foco: 'balada, noite, madrugada, ingressos' },
+  { nome: 'Arena PG / Arena Torcida PG', foco: 'shows, esporte, telão, festas e eventos de dia/noite' },
+  { nome: 'Donna G / Dona Gê Beach Bar', foco: 'pagode, música ao vivo, agenda semanal, quiosque Guilhermina' },
+  { nome: 'Ocian Restaurante', foco: 'música ao vivo, eventos familiares, reinauguração, datas especiais' },
+  { nome: 'Major Quiosque / Mojor Quiosque', foco: 'quiosques, praia, música ao vivo, agenda de fim de semana' },
+  { nome: 'Atlântico Quiosque', foco: 'quiosque, praia, música ao vivo, eventos ao pôr do sol' },
   { nome: 'PIG / Casa do Pig / Porks', foco: 'shows, noite, comida, ingressos' },
   { nome: 'Adegas de Praia Grande', foco: 'pagode, funk, resenha, noite, madrugada' },
   { nome: 'Portinho Forro do Mato', foco: 'forro, flashback, shows, noite' },
@@ -19,6 +24,39 @@ const ALVOS_SUGERIDOS = [
   { nome: 'RoleAgora Praia Grande', foco: 'bares, pubs, shows locais, agenda da cidade' },
   { nome: 'Vila Junina / festas sazonais', foco: 'familia, comida, tarde, noite' },
   { nome: 'Agenda cultural Praia Grande', foco: 'eventos publicos, esportes, shows' },
+]
+
+const ALVOS_PG = [
+  'rocket beach',
+  'rocket sea',
+  'blue house',
+  'casa do pig',
+  'pig praia grande',
+  'porks praia grande',
+  'portinho forro do mato',
+  'forro do mato',
+  'stand ipa',
+  'beach lounge',
+  'arena pg',
+  'arena torcida pg',
+  'arenapg13',
+  'donna g',
+  'dona ge',
+  'dona gê',
+  'donnaguilherminabar',
+  'donna guilhermina',
+  'ocian restaurante',
+  'ocianrestaurante',
+  'major quiosque',
+  'mojor quiosque',
+  'atlantico quiosque',
+  'atlântico quiosque',
+  'quiosque atlantico',
+  'quiosque atlântico',
+  'quiosque ocian',
+  'embaixador bar',
+  'confraria do forte',
+  'marechal mallet',
 ]
 
 type Periodo = 'manha' | 'tarde' | 'noite' | 'madrugada'
@@ -158,6 +196,11 @@ function semAcento(value: string) {
   return value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
 }
 
+function mencionaAlvoPg(value: string) {
+  const blob = semAcento(value)
+  return ALVOS_PG.some(alvo => blob.includes(semAcento(alvo)))
+}
+
 function absolutizarUrl(value?: string, base?: string) {
   const raw = (value || '').trim()
   if (!raw) return ''
@@ -202,7 +245,7 @@ function splitDataHora(value?: string) {
   const dataMatch = raw.match(/(\d{4}-\d{2}-\d{2})/)
   const brMatches = [...raw.matchAll(/(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?/g)]
   const brMatch = brMatches.length > 1 && temFaixa ? brMatches[brMatches.length - 1] : brMatches[0]
-  const mesMatches = [...rawAscii.matchAll(/\b(\d{1,2})\s+([a-z]{3,})\s+(\d{4})?/g)]
+  const mesMatches = [...rawAscii.matchAll(/\b(?:dia\s+)?(\d{1,2})\s+(?:de\s+)?([a-z]{3,})(?:\s+(?:de\s+)?)?(\d{4})?/g)]
   const mesMatch = mesMatches.length > 1 && temFaixa ? mesMatches[mesMatches.length - 1] : mesMatches[0]
   const mesNumero = mesMatch ? mesPt(mesMatch[2]) : ''
   const horaMatch = raw.match(/(\d{1,2}):(\d{2})/)
@@ -371,20 +414,22 @@ function dentroDePraiaGrande(ev: EventoNormalizado) {
   if (!blob) return false
   if (blob.includes('praia grande')) return true
   if (/\b(pg|boqueirao|canto do forte|guilhermina|aviacao|tupi|ocian|caicara|solemar)\b/.test(blob)) return true
-  if (/(rocket beach|rocket sea|blue house|casa do pig|pig praia grande|porks praia grande|portinho forro do mato|forro do mato|stand ipa|beach lounge|arena pg|embaixador bar|ocian restaurante|confraria do forte|marechal mallet)/.test(blob)) return true
+  if (mencionaAlvoPg(blob)) return true
   return false
 }
 
 // Mesmo filtro de dentroDePraiaGrande, mas aplicado no evento BRUTO (antes de
-// normalizar) — usado pra decidir quais eventos VALE A PENA detalhar (buscar
-// preço/estoque real na página do evento). Sem isso o robô gastava a cota de
-// requisições em eventos de outras cidades e cortava antes de chegar nos de PG.
+// normalizar) — usado só pra ORDENAR quem detalha primeiro (não pra excluir
+// ninguém — a exclusão de verdade é sempre dentroDePraiaGrande no final, com
+// dados completos da página do evento). Fica mais solto de propósito: um
+// falso positivo aqui custa 1 requisição extra; um falso negativo aqui
+// significava um evento de PG nunca ganhar preço (foi o bug do "MC Daniel").
 function pareceSerPraiaGrande(e: EventoBruto): boolean {
   const blob = semAcento(`${text(e.titulo, e.title, e.name, e.nome)} ${text(e.local_nome, e.venue, e.local)} ${text(e.endereco, e.address)} ${text(e.fonte_url, e.url)}`)
   if (!blob) return false
   if (blob.includes('praia grande')) return true
-  if (/\b(pg|boqueirao|canto do forte|guilhermina|aviacao|tupi|ocian|caicara|solemar)\b/.test(blob)) return true
-  if (/(rocket beach|rocket sea|blue house|casa do pig|pig praia grande|porks praia grande|portinho forro do mato|forro do mato|stand ipa|beach lounge|arena pg|embaixador bar|ocian restaurante|confraria do forte|marechal mallet)/.test(blob)) return true
+  if (/\b(pg|boqueirao|canto do forte|guilhermina|aviacao|tupi|ocian|caicara|solemar|rocket|porks|embaixador|quiosque)\b/.test(blob)) return true
+  if (mencionaAlvoPg(blob)) return true
   return false
 }
 
@@ -512,6 +557,94 @@ function extrairJsonLd(html: string, fonte: Fonte) {
   return eventos
 }
 
+function metaContent(html: string, key: string) {
+  const prop = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const match =
+    html.match(new RegExp(`<meta[^>]+(?:property|name)=["']${prop}["'][^>]+content=["']([^"']+)["']`, 'i'))
+    || html.match(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${prop}["']`, 'i'))
+  return htmlText(match?.[1] || '')
+}
+
+function pareceChamadaDeEvento(value: string) {
+  const blob = semAcento(value)
+  return /\b(agenda|show|musica ao vivo|pagode|samba|dj|festa|evento|open|reinauguracao|aniversario|matine|reservas?|ingressos?|convites?|sabado|domingo|sexta|feriado)\b/.test(blob)
+}
+
+function extrairSocialHtml(html: string, fonte: Fonte): EventoBruto[] {
+  const title = metaContent(html, 'og:title') || metaContent(html, 'twitter:title')
+  const description = metaContent(html, 'og:description') || metaContent(html, 'description') || metaContent(html, 'twitter:description')
+  const visible = htmlText(html)
+  const combined = `${title} ${description} ${visible}`.slice(0, 6000)
+  const dataHora = splitDataHora(combined)
+  if (!dataHora.data || !pareceChamadaDeEvento(combined)) return []
+
+  const alvoNoTexto = mencionaAlvoPg(`${combined} ${fonte.nome || ''} ${fonte.local_nome || ''} ${fonte.url}`)
+  const mencionaPg = semAcento(combined).includes('praia grande') || semAcento(combined).includes('guilhermina') || semAcento(combined).includes('ocian') || alvoNoTexto
+  if (!mencionaPg) return []
+
+  const tituloBase = title
+    .replace(/\s*\(@[^)]+\).*/i, '')
+    .replace(/\s*on Instagram.*/i, '')
+    .replace(/\s*\|.*$/, '')
+    .trim()
+
+  return [{
+    titulo: tituloBase || `Agenda ${fonte.nome || fonte.local_nome || 'PraiaGo'}`,
+    descricao: resumo(description || visible),
+    data: dataHora.data,
+    hora: dataHora.hora || undefined,
+    local_nome: fonte.local_nome || fonte.nome || (alvoNoTexto ? 'Praia Grande' : undefined),
+    endereco: semAcento(combined).includes('praia grande') ? 'Praia Grande, SP' : undefined,
+    categoria: fonte.categoria || 'Agenda social',
+    emoji: '🎶',
+    fonte_url: fonte.url,
+    url: fonte.url,
+  }]
+}
+
+function extrairLinksSociais(html: string, fonte: Fonte) {
+  const links = new Set<string>()
+  const host = new URL(fonte.url).hostname
+  const instagram = host.includes('instagram.com')
+  const facebook = host.includes('facebook.com')
+  if (!instagram && !facebook) return []
+
+  const regex = instagram
+    ? /(?:https?:\/\/(?:www\.)?instagram\.com)?\/(p|reel)\/([A-Za-z0-9_-]+)/g
+    : /https?:\/\/(?:www\.)?facebook\.com\/[^"'<>\s]+/g
+
+  for (const match of html.matchAll(regex)) {
+    const raw = match[0]
+    const url = instagram
+      ? `https://www.instagram.com/${match[1]}/${match[2]}/`
+      : raw.replace(/\\u0025/g, '%').replace(/\\\//g, '/')
+    links.add(url)
+  }
+
+  return [...links].slice(0, Math.max(1, Math.min(30, number(env('SOCIAL_DETAIL_MAX')) || 12)))
+}
+
+async function buscarDetalhesSociais(html: string, fonte: Fonte) {
+  const eventos = [...extrairSocialHtml(html, fonte)]
+  for (const url of extrairLinksSociais(html, fonte)) {
+    try {
+      const res = await fetchComRetry(url, {
+        signal: AbortSignal.timeout(12000),
+        headers: {
+          Accept: 'text/html,*/*;q=0.8',
+          'User-Agent': 'PraiaGoCacaEventos/1.0',
+        },
+      }, 1)
+      if (!res.ok) continue
+      const detalheFonte = { ...fonte, url }
+      eventos.push(...extrairSocialHtml(await res.text(), detalheFonte))
+    } catch {
+      // Rede social pode bloquear scraping; o robo segue com as outras fontes.
+    }
+  }
+  return eventos
+}
+
 function extrairCardsArticket(html: string, fonte: Fonte) {
   const eventos: EventoBruto[] = []
   const cards = html.matchAll(/<a\s+href=["']([^"']+)["'][^>]*class=["'][^"']*home-card[\s\S]*?<\/a>/gi)
@@ -631,22 +764,111 @@ function mesclarDetalheArticket(base: EventoBruto, detalhes: EventoBruto[], ingr
   } as EventoBruto
 }
 
-async function enriquecerDetalhesArticket(eventos: EventoBruto[], fonte: Fonte) {
-  const maxDetalhes = Math.max(1, Math.min(150, number(env('ARTICKET_DETAIL_MAX')) || 80))
+// Busca com 1 retry curto pra falha transitória de rede (timeout, DNS,
+// conexão resetada). NÃO reage a 4xx/5xx do servidor com retry — se a página
+// não existe, tentar de novo não muda nada.
+async function fetchComRetry(url: string, init: RequestInit, tentativas = 2): Promise<Response> {
+  let ultimoErro: unknown
+  for (let i = 0; i < tentativas; i++) {
+    try {
+      const res = await fetch(url, init)
+      return res
+    } catch (err) {
+      ultimoErro = err
+      if (i < tentativas - 1) await new Promise(r => setTimeout(r, 400 * (i + 1)))
+    }
+  }
+  throw ultimoErro instanceof Error ? ultimoErro : new Error('Falha de rede desconhecida.')
+}
+
+// Normaliza + filtra (futuro, Praia Grande, dedupe) + grava UM evento no banco
+// na hora. Usado tanto durante o detalhamento (salva incrementalmente, pra não
+// perder tudo se a função for interrompida no meio) quanto no loop final.
+// Idempotente: rodar duas vezes pro mesmo evento não duplica nada (unique
+// index em fonte_url/titulo+data, upsert nos lotes).
+async function salvarEventoBruto(
+  supabase: ReturnType<typeof createClient>,
+  bruto: EventoBruto,
+  vistos: Set<string>,
+): Promise<{ estado: 'salvo' | 'ja_visto' | 'fora_de_escopo' | 'erro'; ingressosSalvos: number }> {
+  const ev = normalizar(bruto)
+  if (!ev) return { estado: 'fora_de_escopo', ingressosSalvos: 0 }
+  if (!futuroOuSemData(ev) || !dentroDePraiaGrande(ev)) return { estado: 'fora_de_escopo', ingressosSalvos: 0 }
+
+  const key = dedupeKey(ev)
+  if (vistos.has(key)) return { estado: 'ja_visto', ingressosSalvos: 0 }
+  vistos.add(key)
+
+  try {
+    const { ingressos, ...eventoRow } = ev
+    const { data: inserido, error } = await supabase.from('eventos').insert(eventoRow).select('id').maybeSingle()
+    const eventoId = inserido?.id || await localizarEvento(supabase, ev)
+
+    let ingressosSalvos = 0
+    if (eventoId) {
+      const { salvos } = await salvarIngressos(supabase, eventoId, ingressos)
+      ingressosSalvos = salvos
+    }
+    return { estado: error && !eventoId ? 'erro' : 'salvo', ingressosSalvos }
+  } catch {
+    return { estado: 'erro', ingressosSalvos: 0 }
+  }
+}
+
+type StatsEnriquecimento = {
+  candidatos: number
+  detalhesConsultados: number
+  detalhesOk: number
+  detalhesFalhos: number
+  salvosIncrementais: number
+  ingressosIncrementais: number
+  tempoEsgotado: boolean
+}
+
+async function enriquecerDetalhesArticket(
+  eventos: EventoBruto[],
+  fonte: Fonte,
+  ctx: { supabase: ReturnType<typeof createClient>; vistos: Set<string>; deadlineAt: number; stats: StatsEnriquecimento },
+) {
+  const maxDetalhes = Math.max(1, Math.min(150, number(env('ARTICKET_DETAIL_MAX')) || 100))
+
+  // Dedupe por URL absoluta ANTES de gastar requisição — carrosséis costumam
+  // repetir o mesmo card várias vezes no HTML.
+  const vistosUrl = new Set<string>()
+  const candidatosBrutos = eventos.filter(evento => {
+    const url = absolutizarUrl(text(evento.fonte_url, evento.url), fonte.url)
+    if (!url || !url.includes('articket.com.br/e/')) return true // não é da articket, segue sem dedupe por url
+    if (vistosUrl.has(url)) return false
+    vistosUrl.add(url)
+    return true
+  })
+
+  // Prioriza quem já parece ser de Praia Grande — assim, se o orçamento de
+  // tempo/requisições acabar, os eventos que IMPORTAM já foram detalhados.
+  const candidatos = [...candidatosBrutos].sort((a, b) => Number(pareceSerPraiaGrande(b)) - Number(pareceSerPraiaGrande(a)))
+  ctx.stats.candidatos += candidatos.filter(c => {
+    const url = absolutizarUrl(text(c.fonte_url, c.url), fonte.url)
+    return url.includes('articket.com.br/e/')
+  }).length
+
   const enriquecidos: EventoBruto[] = []
   let consultados = 0
 
-  for (const evento of eventos) {
+  for (const evento of candidatos) {
     const url = absolutizarUrl(text(evento.fonte_url, evento.url), fonte.url)
-    if (!url || !url.includes('articket.com.br/e/') || consultados >= maxDetalhes) {
+    const esgotouTempo = Date.now() >= ctx.deadlineAt
+    if (esgotouTempo) ctx.stats.tempoEsgotado = true
+
+    if (!url || !url.includes('articket.com.br/e/') || consultados >= maxDetalhes || esgotouTempo) {
       enriquecidos.push(evento)
       continue
     }
 
     try {
       consultados++
+      ctx.stats.detalhesConsultados++
       const detalheFonte = { ...fonte, url }
-      const res = await fetch(url, {
+      const res = await fetchComRetry(url, {
         signal: AbortSignal.timeout(12000),
         headers: {
           Accept: 'text/html,application/json;q=0.9,*/*;q=0.8',
@@ -657,8 +879,19 @@ async function enriquecerDetalhesArticket(eventos: EventoBruto[], fonte: Fonte) 
       const html = await res.text()
       const detalhes = [...extrairJsonLd(html, detalheFonte), ...extrairDetalheHtmlGenerico(html, detalheFonte)]
       const ingressos = extrairIngressosArticket(html, detalheFonte)
-      enriquecidos.push(mesclarDetalheArticket(evento, detalhes, ingressos))
+      const mesclado = mesclarDetalheArticket(evento, detalhes, ingressos)
+      ctx.stats.detalhesOk++
+
+      // Salva JÁ — não espera terminar os outros ~100 eventos. Se a função
+      // parar no meio (timeout da plataforma), o que já foi detalhado fica
+      // gravado. O loop final ainda roda por cima, mas o dedupe (vistos) faz
+      // ele pular quem já foi salvo aqui — sem duplicar nem retrabalhar.
+      const salvo = await salvarEventoBruto(ctx.supabase, mesclado, ctx.vistos)
+      if (salvo.estado === 'salvo') ctx.stats.salvosIncrementais++
+      ctx.stats.ingressosIncrementais += salvo.ingressosSalvos
+      enriquecidos.push(mesclado)
     } catch {
+      ctx.stats.detalhesFalhos++
       enriquecidos.push(evento)
     }
   }
@@ -787,13 +1020,16 @@ async function buscarGuicheWeb(fonte: Fonte) {
   return eventos
 }
 
-async function buscarFonte(fonte: Fonte) {
+async function buscarFonte(
+  fonte: Fonte,
+  ctx: { supabase: ReturnType<typeof createClient>; vistos: Set<string>; deadlineAt: number; stats: StatsEnriquecimento },
+) {
   const parsedUrl = new URL(fonte.url)
   if (parsedUrl.hostname.includes('guicheweb.com.br') && (parsedUrl.pathname === '/' || parsedUrl.pathname === '')) {
     return buscarGuicheWeb(fonte)
   }
 
-  const res = await fetch(fonte.url, {
+  const res = await fetchComRetry(fonte.url, {
     headers: {
       Accept: 'application/json, text/html;q=0.9, */*;q=0.8',
       'User-Agent': 'PraiaGoCacaEventos/1.0',
@@ -809,17 +1045,15 @@ async function buscarFonte(fonte: Fonte) {
   }
 
   const roleAgora = parsedUrl.hostname.includes('roleagora.com.br') ? extrairRoleAgoraNextData(body, fonte) : []
-  let eventos = [...roleAgora, ...extrairJsonLd(body, fonte), ...extrairCardsArticket(body, fonte), ...extrairDetalheHtmlGenerico(body, fonte)]
+  const sociais = parsedUrl.hostname.includes('instagram.com') || parsedUrl.hostname.includes('facebook.com')
+    ? await buscarDetalhesSociais(body, fonte)
+    : []
+  let eventos = [...roleAgora, ...sociais, ...extrairJsonLd(body, fonte), ...extrairCardsArticket(body, fonte), ...extrairDetalheHtmlGenerico(body, fonte)]
   if (parsedUrl.hostname.includes('articket.com.br') && !parsedUrl.pathname.startsWith('/e/')) {
-    // A home do articket lista eventos do Brasil inteiro (~100+ cards). Detalhar
-    // (buscar preço/estoque real) TODOS estouraria a cota de requisições antes
-    // de chegar nos de Praia Grande. Por isso filtra ANTES de detalhar: só
-    // enriquece quem já parece ser de PG pelo título/local do card; o resto
-    // segue sem detalhe e é descartado depois pelo filtro final da cidade.
-    const candidatosPG = eventos.filter(pareceSerPraiaGrande)
-    const outros = eventos.filter(ev => !pareceSerPraiaGrande(ev))
-    const enriquecidos = await enriquecerDetalhesArticket(candidatosPG, fonte)
-    eventos = [...enriquecidos, ...outros]
+    // A home do articket lista eventos do Brasil inteiro (~100 cards). O
+    // dedupe/priorização/limite de tempo já acontecem dentro de
+    // enriquecerDetalhesArticket — aqui só repassa todo mundo pra lá.
+    eventos = await enriquecerDetalhesArticket(eventos, fonte, ctx)
   }
   const ingressosArticket = parsedUrl.hostname.includes('articket.com.br') ? extrairIngressosArticket(body, fonte) : []
   return anexarIngressos(eventos, ingressosArticket)
@@ -973,16 +1207,31 @@ Deno.serve(async (req: Request) => {
     const brutos: EventoBruto[] = Array.isArray(body.eventos) ? body.eventos as EventoBruto[] : []
     const fontes = body.buscar ? fontesDoPedido(body) : []
     const erros_fontes: Array<{ url: string; erro: string }> = []
+    const vistos = new Set<string>()
+    const stats: StatsEnriquecimento = {
+      candidatos: 0,
+      detalhesConsultados: 0,
+      detalhesOk: 0,
+      detalhesFalhos: 0,
+      salvosIncrementais: 0,
+      ingressosIncrementais: 0,
+      tempoEsgotado: false,
+    }
+    const ctx = {
+      supabase,
+      vistos,
+      deadlineAt: Date.now() + Math.max(15000, Math.min(240000, number(env('CACA_EVENTOS_DEADLINE_MS')) || 180000)),
+      stats,
+    }
 
     for (const fonte of fontes) {
       try {
-        brutos.push(...await buscarFonte(fonte))
+        brutos.push(...await buscarFonte(fonte, ctx))
       } catch (error) {
         erros_fontes.push({ url: fonte.url, erro: error instanceof Error ? error.message : 'falha desconhecida' })
       }
     }
 
-    const vistos = new Set<string>()
     const validos = brutos
       .map(ev => normalizar(ev))
       .filter((ev): ev is EventoNormalizado => !!ev)
@@ -1039,14 +1288,15 @@ Deno.serve(async (req: Request) => {
 
     return json({
       ok: true,
-      recebidos: validos.length,
-      inseridos,
+      recebidos: validos.length + stats.salvosIncrementais,
+      inseridos: inseridos + stats.salvosIncrementais,
       ignorados,
-      ingressos_salvos,
+      ingressos_salvos: ingressos_salvos + stats.ingressosIncrementais,
       eventos_encerrados,
       status: 'pendente',
       fontes_consultadas: fontes.length,
       erros_fontes,
+      enriquecimento: stats,
       alvos_sugeridos: ALVOS_SUGERIDOS,
     })
   } catch (error) {

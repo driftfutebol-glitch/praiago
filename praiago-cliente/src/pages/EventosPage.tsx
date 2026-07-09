@@ -76,13 +76,70 @@ function abrirNoMapa(ev: Evento) {
   window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, '_blank')
 }
 
-async function compartilhar(ev: Evento) {
-  const texto = `${ev.emoji ?? '🎉'} ${ev.titulo} — ${ev.local_nome ?? 'Praia Grande'} ${ev.data ? `· ${fmtData(ev.data)}` : ''} ${ev.hora ? `às ${ev.hora}` : ''}`
-  const url = ev.lat != null && ev.lng != null ? `https://www.google.com/maps/search/?api=1&query=${ev.lat},${ev.lng}` : ''
+async function copiarParaClipboard(texto: string): Promise<boolean> {
   try {
-    if (navigator.share) await navigator.share({ title: ev.titulo, text: texto, url })
-    else { await navigator.clipboard.writeText(`${texto} ${url}`); await alertDialog({ title: 'Link copiado! 🔗', message: 'Cole onde quiser pra convidar a galera.', tone: 'success' }) }
-  } catch { /* cancelado */ }
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(texto)
+      return true
+    }
+  } catch { /* tenta o fallback abaixo */ }
+  // WebView antigo/sem permissão: fallback via textarea temporário + execCommand
+  try {
+    const el = document.createElement('textarea')
+    el.value = texto
+    el.style.position = 'fixed'
+    el.style.opacity = '0'
+    document.body.appendChild(el)
+    el.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(el)
+    return ok
+  } catch {
+    return false
+  }
+}
+
+// Compartilhar evento: no app instalado (Android/iOS) usa o menu nativo de
+// compartilhamento do celular (@capacitor/share) — navigator.share do
+// navegador não funciona dentro do WebView do Capacitor sem esse plugin, por
+// isso o botão parecia "não fazer nada". Na web usa Web Share API, e por
+// último cai pra copiar o link — sempre avisando o usuário do resultado.
+async function compartilhar(ev: Evento) {
+  const texto = `${ev.emoji ?? '🎉'} ${ev.titulo} — ${ev.local_nome ?? 'Praia Grande'} ${ev.data ? `· ${fmtData(ev.data)}` : ''} ${ev.hora ? `às ${ev.hora}` : ''}`.trim()
+  const url = ev.lat != null && ev.lng != null ? `https://www.google.com/maps/search/?api=1&query=${ev.lat},${ev.lng}` : undefined
+
+  const capacitor = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor
+  if (capacitor?.isNativePlatform?.()) {
+    try {
+      const { Share } = await import('@capacitor/share')
+      await Share.share({ title: ev.titulo, text: texto, url, dialogTitle: 'Compartilhar evento' })
+      return
+    } catch (err) {
+      // usuário cancelou o menu de compartilhar — não é erro, não avisa nada
+      if (err instanceof Error && /cancell?ed/i.test(err.message)) return
+      // plugin falhou de verdade: cai pro clipboard em vez de morrer em silêncio
+      const copiou = await copiarParaClipboard(url ? `${texto} ${url}` : texto)
+      await alertDialog(copiou
+        ? { title: 'Link copiado! 🔗', message: 'Cole onde quiser pra convidar a galera.', tone: 'success' }
+        : { title: 'Não deu pra compartilhar', message: 'Tente novamente em instantes.', tone: 'danger' })
+      return
+    }
+  }
+
+  if (navigator.share) {
+    try {
+      await navigator.share(url ? { title: ev.titulo, text: texto, url } : { title: ev.titulo, text: texto })
+      return
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return // usuário cancelou
+      // segue pro fallback de clipboard abaixo
+    }
+  }
+
+  const copiou = await copiarParaClipboard(url ? `${texto} ${url}` : texto)
+  await alertDialog(copiou
+    ? { title: 'Link copiado! 🔗', message: 'Cole onde quiser pra convidar a galera.', tone: 'success' }
+    : { title: 'Não deu pra copiar', message: 'Seu navegador bloqueou a área de transferência. Copie manualmente: ' + texto, tone: 'danger' })
 }
 
 function ComprarIngressoModal({ evento, onClose, sessao }: { evento: Evento; onClose: () => void; sessao: Sessao }) {
