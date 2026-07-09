@@ -552,7 +552,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
         {erro && <div style={{ fontSize: 13, color: '#ef4444', fontWeight: 800, marginBottom: 16, textAlign: 'center', background: 'rgba(239,68,68,0.1)', padding: 12, borderRadius: 12 }}>{erro}</div>}
 
         <motion.button whileTap={{ scale: 0.96 }} onClick={handleConfirm} disabled={confirming} style={{ width: '100%', background: confirming ? '#22c55e' : 'linear-gradient(135deg, #0ea5e9, #22c55e)', border: 'none', borderRadius: 20, padding: '20px', color: '#fff', fontSize: 18, fontWeight: 900, cursor: confirming ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, boxShadow: confirming ? '0 0 20px rgba(34,197,94,0.6)' : '0 10px 30px rgba(14,165,233,0.4)', transition: 'all 0.3s' }}>
-          {confirming ? <><Check size={24} /> Pedido Enviado!</> : <><Send size={20} /> Fechar Pedido</>}
+          {confirming ? <><Check size={24} /> {isMercadoPagoMethod(pagamento) ? 'Abrindo Mercado Pago...' : 'Pedido Enviado!'}</> : <><Send size={20} /> Fechar Pedido</>}
         </motion.button>
       </motion.div>
     </div>

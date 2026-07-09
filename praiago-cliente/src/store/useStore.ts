@@ -39,7 +39,7 @@ export type Pedido = {
   itens: PedidoItem[]
   total: number
   data: number
-  status: 'preparando' | 'a_caminho' | 'entregue' | 'cancelado'
+  status: 'aguardando_pagamento' | 'enviado' | 'preparando' | 'a_caminho' | 'entregue' | 'cancelado'
   entrega?: Entrega
 }
 
@@ -76,6 +76,7 @@ type State = {
 
   // pedidos
   criarPedido: (entrega?: Entrega, options?: { limparCarrinho?: boolean }) => Promise<Pedido | null>
+  sincronizarPedidos: () => Promise<void>
   cancelarPedido: (pedidoId: string) => Promise<boolean>
   removerPedido: (pedidoId: string) => void
   solicitarAjudaPedido: (pedidoId: string, tipo: 'ajuda' | 'reembolso') => Promise<boolean>
@@ -128,6 +129,16 @@ async function getPaymentSettings() {
 
 function isPresencialPayment(method?: string) {
   return method === 'dinheiro' || method === 'cartao_fisico' || method === 'debito_fisico' || method === 'credito_fisico'
+}
+
+function mapDbStatusToPedidoStatus(status?: string): Pedido['status'] {
+  if (status === 'aguardando_pagamento') return 'aguardando_pagamento'
+  if (status === 'novo') return 'enviado'
+  if (status === 'preparando' || status === 'pronto') return 'preparando'
+  if (status === 'saiu_entrega' || status === 'entregando') return 'a_caminho'
+  if (status === 'entregue') return 'entregue'
+  if (status === 'cancelado') return 'cancelado'
+  return 'enviado'
 }
 
 export const useStore = create<State>()(
@@ -234,13 +245,36 @@ export const useStore = create<State>()(
 
         const pedido: Pedido = {
           id: inserted.id, vendedorId: vend.id, vendedorNome: vend.nome,
-          itens, total, data: new Date(inserted.created_at).getTime(), status: 'preparando', entrega,
+          itens, total, data: new Date(inserted.created_at).getTime(), status: presencial ? 'enviado' : 'aguardando_pagamento', entrega,
         }
         set(s => ({
           pedidos: [pedido, ...s.pedidos],
           ...(options.limparCarrinho === false ? {} : { carrinho: {}, carrinhoVendedor: null }),
         }))
         return pedido
+      },
+
+      sincronizarPedidos: async () => {
+        const ids = get().pedidos.map(p => p.id).filter(Boolean)
+        if (ids.length === 0) return
+
+        const { data, error } = await supabase
+          .from('pedidos')
+          .select('id,status')
+          .in('id', ids)
+
+        if (error || !data) {
+          if (error) console.error('Erro ao sincronizar pedidos', error)
+          return
+        }
+
+        const statusById = new Map(data.map(row => [String(row.id), mapDbStatusToPedidoStatus(String(row.status ?? 'novo'))]))
+        set(s => ({
+          pedidos: s.pedidos.map(p => {
+            const status = statusById.get(p.id)
+            return status ? { ...p, status } : p
+          }),
+        }))
       },
 
       cancelarPedido: async (pedidoId) => {
