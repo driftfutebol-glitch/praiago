@@ -827,42 +827,79 @@ async function localizarEvento(supabase: ReturnType<typeof createClient>, ev: Ev
   return null
 }
 
+// Markup do ingresso na revenda. Padrão 0 = mostra o PREÇO REAL do evento
+// ("preços certos"). Ajuste EVENTOS_MARKUP_PERCENT se quiser cobrar uma taxa.
+function markupPercent() {
+  const m = Number(env('EVENTOS_MARKUP_PERCENT'))
+  return Number.isFinite(m) && m >= 0 && m <= 500 ? m : 0
+}
+
 async function salvarIngressos(supabase: ReturnType<typeof createClient>, eventoId: string, ingressos: IngressoNormalizado[] | undefined) {
   if (!ingressos?.length) return { salvos: 0 }
 
+  const markup = markupPercent()
   let salvos = 0
-  let menorPrecoVenda = Number.POSITIVE_INFINITY
+  let menorPreco = Number.POSITIVE_INFINITY
+
   for (const ingresso of ingressos) {
-    const precoVenda = Math.round((ingresso.preco_origem * 1.25) * 100) / 100
-    menorPrecoVenda = Math.min(menorPrecoVenda, precoVenda)
-    const row = {
-      evento_id: eventoId,
-      source_ticket_id: ingresso.source_ticket_id,
-      nome: ingresso.nome,
-      descricao: ingresso.descricao,
-      preco_origem: ingresso.preco_origem,
-      markup_percent: 25,
-      taxa_origem: ingresso.taxa_origem,
-      moeda: ingresso.moeda,
-      estoque_total: ingresso.estoque_disponivel,
-      estoque_disponivel: ingresso.estoque_disponivel,
-      status: 'pendente_aprovacao',
-      fonte_url: ingresso.fonte_url,
-      metadata: ingresso.metadata,
-      criado_por: 'robo',
+    const precoVenda = Math.round((ingresso.preco_origem * (1 + markup / 100)) * 100) / 100
+    // "a partir de R$": menor preço PAGO com estoque (ignora cortesia/R$0 pra
+    // não mostrar "a partir de R$0" quando existe ingresso pago)
+    if (precoVenda > 0 && (ingresso.estoque_disponivel === null || ingresso.estoque_disponivel > 0)) {
+      menorPreco = Math.min(menorPreco, precoVenda)
     }
 
-    const onConflict = ingresso.source_ticket_id ? 'evento_id,source_ticket_id' : 'evento_id,nome,preco_origem'
-    const { error } = await supabase
-      .from('event_ticket_lots')
-      .upsert(row, { onConflict })
+    // Procura o lote existente pra PRESERVAR a aprovação do admin quando o robô
+    // roda de novo (monitoramento de estoque). Sem isso, re-caçar zeraria a
+    // aprovação. O gatilho do banco marca 'esgotado' sozinho quando estoque = 0.
+    let existenteId: string | null = null
+    let existenteStatus: string | null = null
+    if (ingresso.source_ticket_id) {
+      const { data } = await supabase.from('event_ticket_lots').select('id,status').eq('evento_id', eventoId).eq('source_ticket_id', ingresso.source_ticket_id).maybeSingle()
+      if (data) { existenteId = data.id as string; existenteStatus = data.status as string }
+    }
+    if (!existenteId) {
+      const { data } = await supabase.from('event_ticket_lots').select('id,status').eq('evento_id', eventoId).eq('nome', ingresso.nome).eq('preco_origem', ingresso.preco_origem).maybeSingle()
+      if (data) { existenteId = data.id as string; existenteStatus = data.status as string }
+    }
 
-    if (!error) salvos++
+    if (existenteId) {
+      const patch: Record<string, unknown> = {
+        preco_origem: ingresso.preco_origem,
+        markup_percent: markup,
+        taxa_origem: ingresso.taxa_origem,
+        estoque_disponivel: ingresso.estoque_disponivel,
+      }
+      // se estava esgotado e voltou a ter estoque, reabre a venda
+      if (existenteStatus === 'esgotado' && (ingresso.estoque_disponivel === null || ingresso.estoque_disponivel > 0)) {
+        patch.status = 'disponivel'
+      }
+      const { error } = await supabase.from('event_ticket_lots').update(patch).eq('id', existenteId)
+      if (!error) salvos++
+    } else {
+      const { error } = await supabase.from('event_ticket_lots').insert({
+        evento_id: eventoId,
+        source_ticket_id: ingresso.source_ticket_id,
+        nome: ingresso.nome,
+        descricao: ingresso.descricao,
+        preco_origem: ingresso.preco_origem,
+        markup_percent: markup,
+        taxa_origem: ingresso.taxa_origem,
+        moeda: ingresso.moeda,
+        estoque_total: ingresso.estoque_disponivel,
+        estoque_disponivel: ingresso.estoque_disponivel,
+        status: 'pendente_aprovacao',
+        fonte_url: ingresso.fonte_url,
+        metadata: ingresso.metadata,
+        criado_por: 'robo',
+      })
+      if (!error) salvos++
+    }
   }
 
   if (salvos > 0) {
     const update: Record<string, unknown> = { ingressos_enabled: true }
-    if (Number.isFinite(menorPrecoVenda)) update.preco = menorPrecoVenda
+    if (Number.isFinite(menorPreco)) update.preco = menorPreco
     await supabase.from('eventos').update(update).eq('id', eventoId)
   }
 
@@ -961,12 +998,30 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // O robô "vê que acabou": eventos aprovados do robô que já passaram viram
+    // inativos (somem do app), e os lotes ficam esgotados.
+    const hojeSp = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+    let eventos_encerrados = 0
+    {
+      const { data: passados } = await supabase
+        .from('eventos')
+        .update({ status: 'inativo' })
+        .eq('fonte', 'robo').eq('status', 'ativo').not('data', 'is', null).lt('data', hojeSp)
+        .select('id')
+      const ids = (passados ?? []).map((e: { id: string }) => e.id)
+      eventos_encerrados = ids.length
+      if (ids.length) {
+        await supabase.from('event_ticket_lots').update({ status: 'esgotado' }).in('evento_id', ids).eq('status', 'disponivel')
+      }
+    }
+
     return json({
       ok: true,
       recebidos: validos.length,
       inseridos,
       ignorados,
       ingressos_salvos,
+      eventos_encerrados,
       status: 'pendente',
       fontes_consultadas: fontes.length,
       erros_fontes,
