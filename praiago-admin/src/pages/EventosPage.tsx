@@ -88,6 +88,15 @@ const vazio = {
   endereco: '', lat: '', lng: '', preco: '0', categoria: 'Festa', emoji: '🎉', destaque: false,
 }
 
+function hojeSpIso() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date())
+}
+
 export default function EventosPage() {
   const [eventos, setEventos] = useState<Evento[]>([])
   const [orders, setOrders] = useState<TicketOrder[]>([])
@@ -121,10 +130,14 @@ export default function EventosPage() {
   }
 
   const carregar = useCallback(async () => {
+    const hoje = hojeSpIso()
+    await supabase.functions.invoke('caca-eventos', { body: { cleanup: true } }).catch(() => null)
     const [{ data }, { data: pedidos }, { data: reembolsos }] = await Promise.all([
       supabase
         .from('eventos')
         .select('*, event_ticket_lots(id,nome,preco_origem,markup_percent,preco_venda,estoque_disponivel,status,fonte_url)')
+        .neq('status', 'inativo')
+        .or(`data.is.null,data.gte.${hoje}`)
         .order('created_at', { ascending: false }),
       supabase
         .from('event_ticket_orders')
@@ -199,7 +212,7 @@ export default function EventosPage() {
     if (!nome?.trim()) return
     const precoRaw = await promptDialog({ title: 'Preço do ingresso', message: 'Preço original em R$', defaultValue: String(ev.preco || '') })
     const preco = Number((precoRaw || '').replace(',', '.'))
-    if (!Number.isFinite(preco) || preco < 0) {
+    if (!Number.isFinite(preco) || preco <= 0) {
       await alertDialog({ title: 'Preço inválido', message: 'Confira o valor e tente de novo.', tone: 'danger' })
       return
     }

@@ -192,6 +192,40 @@ function number(...values: unknown[]) {
   return null
 }
 
+function money(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    if (typeof value !== 'string') continue
+
+    const raw = value.trim()
+    if (!raw) continue
+    const cleaned = raw.replace(/\s/g, '').replace(/[^\d,.-]/g, '')
+    if (!/\d/.test(cleaned)) continue
+
+    const negative = cleaned.startsWith('-')
+    const unsigned = cleaned.replace(/-/g, '')
+    const lastComma = unsigned.lastIndexOf(',')
+    const lastDot = unsigned.lastIndexOf('.')
+    let normalized = unsigned
+
+    if (lastComma >= 0 && lastDot >= 0) {
+      const decimalSep = lastComma > lastDot ? ',' : '.'
+      const thousandSep = decimalSep === ',' ? '.' : ','
+      normalized = unsigned.split(thousandSep).join('').replace(decimalSep, '.')
+    } else if (lastComma >= 0) {
+      const cents = unsigned.length - lastComma - 1
+      normalized = cents === 3 ? unsigned.replace(/,/g, '') : unsigned.replace(',', '.')
+    } else if (lastDot >= 0) {
+      const cents = unsigned.length - lastDot - 1
+      normalized = cents === 3 ? unsigned.replace(/\./g, '') : unsigned
+    }
+
+    const n = Number(`${negative ? '-' : ''}${normalized}`)
+    if (Number.isFinite(n)) return n
+  }
+  return null
+}
+
 function semAcento(value: string) {
   return value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
 }
@@ -328,8 +362,8 @@ function normalizarIngressos(items: IngressoBruto[] | undefined, fonteUrl: strin
   const vistos = new Set<string>()
   const ingressos: IngressoNormalizado[] = []
   for (const item of candidatos) {
-    const preco = number(item.preco, item.price)
-    if (preco === null || preco < 0) continue
+    const preco = money(item.preco, item.price)
+    if (preco === null || preco <= 0) continue
     const nome = text(item.nome, item.title, item.name, 'Entrada')
     const sourceTicketId = text(item.source_ticket_id, item.id) || null
     const key = `${sourceTicketId || nome}|${preco}`
@@ -342,7 +376,7 @@ function normalizarIngressos(items: IngressoBruto[] | undefined, fonteUrl: strin
       nome,
       descricao: resumo(text(item.descricao, item.description)),
       preco_origem: Math.round(preco * 100) / 100,
-      taxa_origem: Math.max(0, Math.round((number(item.taxa, item.fee) || 0) * 100) / 100),
+      taxa_origem: Math.max(0, Math.round((money(item.taxa, item.fee) || 0) * 100) / 100),
       moeda: text(item.moeda, item.currency, 'BRL') || 'BRL',
       estoque_disponivel: estoque === null ? null : Math.max(0, Math.floor(estoque)),
       fonte_url: absolutizarUrl(text(item.fonte_url, fonteUrl), fonteUrl || undefined) || fonteUrl,
@@ -377,7 +411,7 @@ function normalizar(e: EventoBruto, fonte?: Fonte): EventoNormalizado | null {
   const titulo = text(e.titulo, e.title, e.name, e.nome)
   if (titulo.length < 3) return null
   const fonteUrl = absolutizarUrl(text(e.fonte_url, e.url, e.url_amigavel, fonte?.url), fonte?.url)
-  const fallbackPreco = number(e.preco, e.price)
+  const fallbackPreco = money(e.preco, e.price)
   const ingressos = normalizarIngressos(e.ingressos, fonteUrl || null, fallbackPreco)
 
   return {
@@ -519,7 +553,7 @@ function brutoDeObjeto(obj: Record<string, unknown>, fonte: Fonte): EventoBruto 
       availability: text(offer.availability),
       fonte_url: absolutizarUrl(text(offer.url, fonte.url), fonte.url),
     }))
-    .filter(item => number(item.preco) !== null)
+    .filter(item => money(item.preco) !== null)
 
   return {
     titulo: text(obj.titulo, obj.title, obj.name, obj.nome),
@@ -532,7 +566,7 @@ function brutoDeObjeto(obj: Record<string, unknown>, fonte: Fonte): EventoBruto 
     endereco: text(obj.endereco, obj.address, obj.cidade, location?.addressFormatted, address?.streetAddress, address?.addressLocality),
     lat: number(obj.lat, obj.latitude, geo?.latitude),
     lng: number(obj.lng, obj.longitude, geo?.longitude),
-    preco: number(obj.preco, obj.price, offers?.price) || undefined,
+    preco: money(obj.preco, obj.price, offers?.price) || undefined,
     categoria: text(obj.categoria, obj.category, obj.genre, fonte.categoria),
     emoji: text(obj.emoji),
     url: absolutizarUrl(text(obj.url, obj.url_amigavel, offers?.url, fonte.url), fonte.url),
@@ -725,13 +759,16 @@ function extrairIngressosArticket(html: string, fonte: Fonte): IngressoBruto[] {
         id,
         source_ticket_id: id,
         nome: text(item.title, item.name, 'Entrada'),
-        preco: number(item.price),
-        taxa: number(item.fee),
+        preco: money(item.price),
+        taxa: money(item.fee),
         moeda: 'BRL',
         fonte_url: fonte.url,
         metadata: item,
       } as IngressoBruto & { metadata?: Record<string, unknown> }
-    }).filter(item => number(item.preco) !== null)
+    }).filter(item => {
+      const preco = money(item.preco)
+      return preco !== null && preco > 0
+    })
   } catch {
     return []
   }
@@ -1091,13 +1128,14 @@ function markupPercent() {
 }
 
 async function salvarIngressos(supabase: ReturnType<typeof createClient>, eventoId: string, ingressos: IngressoNormalizado[] | undefined) {
-  if (!ingressos?.length) return { salvos: 0 }
+  const ingressosValidos = (ingressos || []).filter(ingresso => Number.isFinite(ingresso.preco_origem) && ingresso.preco_origem > 0)
+  if (!ingressosValidos.length) return { salvos: 0 }
 
   const markup = markupPercent()
   let salvos = 0
   let menorPreco = Number.POSITIVE_INFINITY
 
-  for (const ingresso of ingressos) {
+  for (const ingresso of ingressosValidos) {
     const precoVenda = Math.round((ingresso.preco_origem * (1 + markup / 100)) * 100) / 100
     // "a partir de R$": menor preço PAGO com estoque (ignora cortesia/R$0 pra
     // não mostrar "a partir de R$0" quando existe ingresso pago)
@@ -1175,6 +1213,13 @@ async function aplicarCicloDeVidaEventos(supabase: ReturnType<typeof createClien
     .lte('estoque_disponivel', 0)
     .select('id')
 
+  const { data: lotesPrecoInvalido } = await supabase
+    .from('event_ticket_lots')
+    .update({ status: 'pausado', updated_at: new Date().toISOString() })
+    .in('status', ['disponivel', 'pendente_aprovacao'])
+    .or('preco_origem.lte.0,preco_venda.lte.0')
+    .select('id')
+
   const { data: passados } = await supabase
     .from('eventos')
     .update({ status: 'inativo', destaque: false })
@@ -1221,6 +1266,7 @@ async function aplicarCicloDeVidaEventos(supabase: ReturnType<typeof createClien
     amanha_sp: amanhaSp,
     eventos_encerrados: ids.length,
     lotes_esgotados: lotesZerados?.length || 0,
+    lotes_preco_invalido: lotesPrecoInvalido?.length || 0,
     lotes_encerrados_por_evento: lotesEncerrados,
     eventos_destacados: idsDestaque.length,
   }
