@@ -3,6 +3,7 @@ import { CheckCircle2, ChevronRight, Zap, ChefHat, Bike,
          Search, MapPin, Truck, Package, QrCode, CreditCard, Banknote } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useOrders, type Status } from '../store/useOrders'
+import { alertDialog, promptDialog } from '../lib/dialog'
 
 const STATUS_CFG: Record<Status, { label: string; bg: string; cor: string; icon: any; glow: string }> = {
   novo:       { label: 'Novo',       bg: 'rgba(239,68,68,0.15)',   cor: '#f87171', icon: Zap,         glow: 'rgba(239,68,68,0.3)'   },
@@ -54,6 +55,19 @@ export default function PedidosPage() {
 
   const count = (s: Status | 'todos') =>
     s === 'todos' ? pedidos.length : pedidos.filter(p => p.status === s).length
+
+  async function finalizarEntrega(id: string) {
+    const codigo = await promptDialog({
+      title: 'Codigo de entrega',
+      message: 'Peca ao cliente o codigo de 4 digitos exibido no app dele para finalizar a entrega.',
+      placeholder: '0000',
+    })
+    if (codigo === null) return
+    const ok = await avancar(id, codigo.trim())
+    if (!ok) {
+      await alertDialog({ title: 'Entrega nao confirmada', message: 'O codigo nao conferiu ou o pedido ainda nao esta em rota.', tone: 'danger' })
+    }
+  }
 
   return (
     <div style={{ padding: '32px 40px 48px', minHeight: '100vh', position: 'relative' }}>
@@ -237,9 +251,16 @@ export default function PedidosPage() {
                   )}
 
                   {p.status === 'entregando' && (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '12px 0', color: '#fb923c', fontSize: 14, fontWeight: 800, background: 'rgba(249,115,22,0.05)', borderRadius: 16, border: '1px solid rgba(249,115,22,0.1)' }}>
-                      <Bike size={18} className="animate-pulse-neon" /> ENTREGANDO NA PRAIA...
-                    </div>
+                    <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => finalizarEntrega(p.id)} style={{
+                      width: '100%', padding: '14px 0', borderRadius: 16, border: 'none',
+                      background: 'linear-gradient(135deg,#22c55e,#16a34a)',
+                      color: '#fff', fontSize: 15, fontWeight: 900, cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+                      boxShadow: '0 8px 25px rgba(34,197,94,0.35)',
+                      letterSpacing: 0.5
+                    }}>
+                      <Bike size={18} className="animate-pulse-neon" /> MARCAR ENTREGUE COM CODIGO
+                    </motion.button>
                   )}
 
                   {p.status === 'entregue' && (

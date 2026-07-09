@@ -139,10 +139,6 @@ Deno.serve(async req => {
     }
 
     if (approved && !manualRepass) {
-      const { data: cfg } = await supabase.from('payment_settings').select('repasse_dias').eq('id', true).maybeSingle()
-      const dias = Number(cfg?.repasse_dias ?? 7)
-      const disponivelEm = new Date(new Date(paidAt).getTime() + dias * 86400000).toISOString()
-
       await supabase
         .from('financial_ledger')
         .update({ status: 'pago', provider: 'mercadopago', external_reference: String(payment.id), settled_at: paidAt })
@@ -151,7 +147,14 @@ Deno.serve(async req => {
 
       await supabase
         .from('financial_ledger')
-        .update({ status: 'em_espera', provider: 'mercadopago', external_reference: String(payment.id), disponivel_em: disponivelEm, settled_at: null })
+        .update({
+          status: 'pendente',
+          provider: 'mercadopago',
+          external_reference: String(payment.id),
+          disponivel_em: null,
+          settled_at: null,
+          descricao: 'Aguardando entrega confirmada para liberar repasse',
+        })
         .eq('pedido_id', pedido.id)
         .eq('tipo', 'repasse_vendedor')
     }

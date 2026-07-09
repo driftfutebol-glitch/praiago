@@ -93,7 +93,7 @@ type StatusPedido = 'aguardando' | 'enviado' | 'preparando' | 'a_caminho' | 'che
 // status na tabela `pedidos` → etapa da linha do tempo
 const DB_STATUS: Record<string, StatusPedido> = {
   aguardando_pagamento: 'aguardando',
-  novo: 'enviado', preparando: 'preparando', saiu_entrega: 'a_caminho', entregue: 'chegou',
+  novo: 'enviado', preparando: 'preparando', pronto: 'preparando', saiu_entrega: 'a_caminho', entregando: 'a_caminho', entregue: 'chegou',
 }
 
 function RastreamentoModal({ vendedor, clientePos, pedidoId, onClose }: { vendedor: Vendedor; clientePos: [number, number]; entrega: Entrega | null; pedidoId: string | null; onClose: () => void }) {
@@ -116,8 +116,10 @@ function RastreamentoModal({ vendedor, clientePos, pedidoId, onClose }: { vended
       .then(({ data }) => { if (data?.status && DB_STATUS[data.status]) setStatus(DB_STATUS[data.status]); if (data?.codigo_entrega) setCodigoEntrega(data.codigo_entrega) })
     const ch = supabase.channel(`pedido_${pedidoId}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pedidos', filter: `id=eq.${pedidoId}` }, (payload) => {
-        const st = (payload.new as { status?: string }).status
+        const row = payload.new as { status?: string; codigo_entrega?: string | null }
+        const st = row.status
         if (st && DB_STATUS[st]) setStatus(DB_STATUS[st])
+        if (row.codigo_entrega) setCodigoEntrega(row.codigo_entrega)
       })
       .subscribe()
     return () => { supabase.removeChannel(ch) }
