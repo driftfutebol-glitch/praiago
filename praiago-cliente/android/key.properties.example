@@ -1,0 +1,16 @@
+# ─────────────────────────────────────────────────────────────
+# EXEMPLO. Copie para android/key.properties e preencha.
+# O key.properties REAL está no .gitignore — NUNCA suba pro git.
+#
+# 1) Gere a keystore (uma vez, serve pros dois apps):
+#    keytool -genkeypair -v -keystore C:\Users\User\Desktop\praiago-keystore\upload.jks \
+#            -alias upload -keyalg RSA -keysize 2048 -validity 10000
+#    (ele pede uma senha — ESCOLHA UMA FORTE e GUARDE. Se perder, nunca mais
+#     atualiza o app na Play Store.)
+#
+# 2) Preencha os 4 campos abaixo com o caminho e as senhas que você usou.
+# ─────────────────────────────────────────────────────────────
+storeFile=C:/Users/User/Desktop/praiago-keystore/upload.jks
+storePassword=SUA_SENHA_DA_KEYSTORE
+keyAlias=upload
+keyPassword=SUA_SENHA_DA_CHAVE

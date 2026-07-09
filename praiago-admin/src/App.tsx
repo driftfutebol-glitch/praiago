@@ -14,8 +14,17 @@ import EventosPage from './pages/EventosPage'
 import CuponsPage from './pages/CuponsPage'
 import PromocoesPage from './pages/PromocoesPage'
 import FinanceiroPage from './pages/FinanceiroPage'
+import AdminsPage from './pages/AdminsPage'
 import Sidebar from './components/Sidebar'
 import { DialogHost } from './lib/dialog'
+
+export type PerfilAdmin = {
+  id: string
+  nome: string | null
+  email: string | null
+  role: string
+  permissions: string[] | null
+}
 
 function NotificationSystem() {
   const [notifications, setNotifications] = useState<any[]>([])
@@ -136,6 +145,26 @@ export default function App() {
       return false
     }
   })
+  const [perfil, setPerfil] = useState<PerfilAdmin | null>(null)
+
+  // Carrega o perfil do admin logado (role + permissões) pra montar o menu
+  // e liberar/bloquear a página de Administradores.
+  useEffect(() => {
+    if (!isAdmin) { setPerfil(null); return }
+    let cancelado = false
+    async function carregar() {
+      const { data: u } = await supabase.auth.getUser()
+      if (!u.user) return
+      const { data } = await supabase
+        .from('profiles')
+        .select('id,nome,email,role,permissions')
+        .eq('id', u.user.id)
+        .maybeSingle()
+      if (!cancelado && data) setPerfil(data as PerfilAdmin)
+    }
+    carregar()
+    return () => { cancelado = true }
+  }, [isAdmin])
 
   function entrarAdmin() {
     try {
@@ -168,7 +197,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <div className="flex h-screen overflow-hidden">
-        <Sidebar onLogout={sairAdmin} />
+        <Sidebar onLogout={sairAdmin} perfil={perfil} />
         <main className="flex-1 overflow-y-auto bg-slate-950 p-8 relative">
           <NotificationSystem />
           <Routes>
@@ -182,6 +211,7 @@ export default function App() {
             <Route path="/promocoes" element={<PromocoesPage />} />
             <Route path="/financeiro" element={<FinanceiroPage />} />
             <Route path="/erros" element={<ErrorsPage />} />
+            <Route path="/admins" element={perfil?.role === 'sysadmin' ? <AdminsPage /> : <Navigate to="/" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
