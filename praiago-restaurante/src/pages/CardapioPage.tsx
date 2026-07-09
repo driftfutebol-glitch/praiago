@@ -3,6 +3,7 @@ import { Plus, Trash2, Edit2, Check, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { getSessao } from '../lib/auth'
+import { alertDialog } from '../lib/dialog'
 
 type Produto = {
   id: string
@@ -29,12 +30,17 @@ export default function CardapioPage() {
   const [editPreco, setEditPreco] = useState('')
   const [adicionando, setAdicionando] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [verificado, setVerificado] = useState<boolean | null>(null)
   const [novo, setNovo] = useState<NovoForm>({ nome: '', preco: '', descricao: '', categoria: 'Pratos', emoji: '🍽️' })
-  
+
   const sessao = getSessao()
 
   useEffect(() => {
     fetchProdutos()
+    if (sessao) {
+      supabase.from('profiles').select('verificado').eq('id', sessao.id).maybeSingle()
+        .then(({ data }) => setVerificado(Boolean(data?.verificado)))
+    }
   }, [])
 
   async function fetchProdutos() {
@@ -90,7 +96,12 @@ export default function CardapioPage() {
 
   async function adicionarProduto() {
     if (!novo.nome.trim() || !sessao) return
-    
+    if (!verificado) {
+      setAdicionando(false)
+      await alertDialog({ title: 'Verificacao obrigatoria', message: 'Complete o KYC para criar produtos. Enquanto nao aprovar, o restaurante nao aparece no mapa.', tone: 'danger' })
+      return
+    }
+
     const prod = {
       vendedor_id: sessao.id,
       nome: novo.nome,
@@ -108,6 +119,7 @@ export default function CardapioPage() {
       setAdicionando(false)
     } else {
       console.error("Erro ao adicionar produto:", error)
+      await alertDialog({ title: 'Nao deu pra criar', message: error?.message || 'Confira sua verificacao e tente novamente.', tone: 'danger' })
     }
   }
 
@@ -122,11 +134,22 @@ export default function CardapioPage() {
           <h1 style={{ fontSize: 32, fontWeight: 900, color: '#0f172a', letterSpacing: -1, marginBottom: 8 }}>Cardápio</h1>
           <p style={{ color: '#64748b', fontSize: 16 }}>Gerencie seus pratos, bebidas e combos.</p>
         </div>
-        <button onClick={() => setAdicionando(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'linear-gradient(135deg, #f97316, #ea580c)', color: '#fff', border: 'none', padding: '12px 24px', borderRadius: 16, fontSize: 15, fontWeight: 700, cursor: 'pointer', boxShadow: '0 10px 25px rgba(249,115,22,0.3)', transition: 'transform 0.2s, box-shadow 0.2s' }} onMouseOver={e => e.currentTarget.style.transform = 'translateY(-2px)'} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
+        <button onClick={() => { if (verificado) setAdicionando(true) }} disabled={!verificado} style={{ display: 'flex', alignItems: 'center', gap: 8, background: verificado ? 'linear-gradient(135deg, #f97316, #ea580c)' : '#cbd5e1', color: '#fff', border: 'none', padding: '12px 24px', borderRadius: 16, fontSize: 15, fontWeight: 700, cursor: verificado ? 'pointer' : 'not-allowed', boxShadow: verificado ? '0 10px 25px rgba(249,115,22,0.3)' : 'none', transition: 'transform 0.2s, box-shadow 0.2s' }} onMouseOver={e => { if (verificado) e.currentTarget.style.transform = 'translateY(-2px)' }} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
           <Plus size={20} />
           Adicionar Item
         </button>
       </motion.div>
+
+      {/* Gate de verificação: sem CNPJ aprovado, não anuncia produto e não aparece pro cliente */}
+      {verificado === false && (
+        <div style={{ margin: '0 40px 24px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 16, padding: '16px 20px' }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: '#b45309', marginBottom: 4 }}>⚠️ Verificação pendente</div>
+          <p style={{ fontSize: 14, color: '#92400e', margin: 0, lineHeight: 1.5 }}>
+            Você precisa <strong>completar a verificação (CNPJ + documento)</strong> antes de anunciar produtos.
+            Enquanto não verificar, seu restaurante <strong>não aparece no mapa</strong> pros clientes. Envie sua verificação no topo do painel.
+          </p>
+        </div>
+      )}
 
       {/* Tabs / Filters */}
       <div style={{ padding: '0 40px', marginBottom: 32, display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 8 }} className="hide-scrollbar">

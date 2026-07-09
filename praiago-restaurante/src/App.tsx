@@ -114,6 +114,19 @@ function GlobalAvisoToast() {
   )
 }
 
+function KycLockedPanel() {
+  return (
+    <div style={{ padding: 32 }}>
+      <div style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: 18, padding: 20, maxWidth: 760, margin: '0 auto' }}>
+        <div style={{ fontSize: 20, fontWeight: 900, color: '#92400e', marginBottom: 8 }}>KYC obrigatorio do restaurante</div>
+        <p style={{ margin: 0, color: '#92400e', fontSize: 14, lineHeight: 1.55, fontWeight: 600 }}>
+          O painel operacional fica bloqueado ate a verificacao ser aprovada. Envie nome real do responsavel, CPF, CNPJ real, documento, selfie e comprovacao do local. Enquanto isso o restaurante nao aparece no mapa e nao pode criar produtos.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   const location    = useLocation()
   const navigate    = useNavigate()
@@ -121,6 +134,7 @@ export default function App() {
   const sessao      = useSessao()
   const [aberto, setAberto]       = useState(true)
   const [notifOpen, setNotifOpen] = useState(false)
+  const [kycLocked, setKycLocked] = useState(false)
 
   const pedidos = useOrders(s => s.pedidos)            // referência estável
   const pedidosNovos = pedidos.filter(p => p.status === 'novo')
@@ -133,23 +147,28 @@ export default function App() {
     if (!sessao?.id || isPublic) return
 
     let ativo = true
-    const bloquearSeBanido = (perfil?: { status?: string; ban_motivo?: string | null } | null) => {
+    const bloquearSeBanido = (perfil?: { status?: string; ban_motivo?: string | null; verificado?: boolean | null } | null) => {
       if (!ativo || perfil?.status !== 'banido') return
       logout()
       navigate('/login', { replace: true })
     }
+    const atualizarGate = (perfil?: { status?: string; ban_motivo?: string | null; verificado?: boolean | null } | null) => {
+      if (!ativo) return
+      bloquearSeBanido(perfil)
+      setKycLocked(perfil?.status !== 'banido' && perfil?.verificado !== true)
+    }
 
     supabase
       .from('profiles')
-      .select('status,ban_motivo')
+      .select('status,ban_motivo,verificado')
       .eq('id', sessao.id)
       .maybeSingle()
-      .then(({ data }) => bloquearSeBanido(data))
+      .then(({ data }) => atualizarGate(data))
 
     const channel = supabase
       .channel(`restaurante_status_${sessao.id}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${sessao.id}` }, payload => {
-        bloquearSeBanido(payload.new as { status?: string; ban_motivo?: string | null })
+        atualizarGate(payload.new as { status?: string; ban_motivo?: string | null; verificado?: boolean | null })
       })
       .subscribe()
 
@@ -175,7 +194,7 @@ export default function App() {
       <PasswordRecoveryHandler />
 
       {/* ══ SIDEBAR ══════════════════════════════════════════ */}
-      {!isPublic && (
+      {!isPublic && !kycLocked && (
         <aside style={{
           width: 256,
           background: 'rgba(255,255,255,0.92)',
@@ -350,9 +369,9 @@ export default function App() {
       )}
 
       {/* ══ MAIN ═════════════════════════════════════════════ */}
-      <main style={{ flex: 1, marginLeft: isPublic ? 0 : 256, overflowY: 'auto', minHeight: '100vh', position: 'relative' }}>
+      <main style={{ flex: 1, marginLeft: isPublic || kycLocked ? 0 : 256, overflowY: 'auto', minHeight: '100vh', position: 'relative' }}>
         <AnimatePresence mode="wait">
-          {!isPublic && (
+          {!isPublic && !kycLocked && (
             <motion.div initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} style={{
               position: 'sticky', top: 0, zIndex: 30,
               background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(16px)',
@@ -382,19 +401,23 @@ export default function App() {
             style={{ height: isPublic ? '100vh' : 'calc(100vh - 60px)' }}
           >
             {!isPublic && <VerificationBar />}
-            <Routes location={location}>
-              <Route path="/login"         element={<LoginPage />} />
-              <Route path="/"              element={<DashboardPage />} />
-              <Route path="/pedidos"       element={<PedidosPage />} />
-              <Route path="/vendas"        element={<VendasPage />} />
-              <Route path="/cardapio"      element={<CardapioPage />} />
-              <Route path="/entregadores"  element={<EntregadoresPage />} />
-              <Route path="/mapa"          element={<MapaPage />} />
-              <Route path="/perfil"        element={<PerfilPage />} />
-            </Routes>
+            {!isPublic && kycLocked ? (
+              <KycLockedPanel />
+            ) : (
+              <Routes location={location}>
+                <Route path="/login"         element={<LoginPage />} />
+                <Route path="/"              element={<DashboardPage />} />
+                <Route path="/pedidos"       element={<PedidosPage />} />
+                <Route path="/vendas"        element={<VendasPage />} />
+                <Route path="/cardapio"      element={<CardapioPage />} />
+                <Route path="/entregadores"  element={<EntregadoresPage />} />
+                <Route path="/mapa"          element={<MapaPage />} />
+                <Route path="/perfil"        element={<PerfilPage />} />
+              </Routes>
+            )}
           </motion.div>
         </AnimatePresence>
-        {!isPublic && <AiChatbot plataforma="restaurante" />}
+        {!isPublic && !kycLocked && <AiChatbot plataforma="restaurante" />}
         {!isPublic && (
           <AnimatePresence>
             <GlobalAvisoToast />

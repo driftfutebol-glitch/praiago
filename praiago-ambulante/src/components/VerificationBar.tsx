@@ -7,6 +7,51 @@ import { alertDialog } from '../lib/dialog'
 
 type Status = 'pendente' | 'aprovado' | 'rejeitado' | null
 
+function onlyDigits(value: string) {
+  return value.replace(/\D/g, '')
+}
+
+function isValidCpf(value: string) {
+  const cpf = onlyDigits(value)
+  if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false
+  let sum = 0
+  for (let i = 0; i < 9; i++) sum += Number(cpf[i]) * (10 - i)
+  let digit = 11 - (sum % 11)
+  if (digit >= 10) digit = 0
+  if (digit !== Number(cpf[9])) return false
+  sum = 0
+  for (let i = 0; i < 10; i++) sum += Number(cpf[i]) * (11 - i)
+  digit = 11 - (sum % 11)
+  if (digit >= 10) digit = 0
+  return digit === Number(cpf[10])
+}
+
+function isValidCnpj(value: string) {
+  const cnpj = onlyDigits(value)
+  if (!cnpj) return true
+  if (cnpj.length !== 14 || /^(\d)\1{13}$/.test(cnpj)) return false
+  const calc = (base: string, weights: number[]) => {
+    const sum = weights.reduce((acc, weight, i) => acc + Number(base[i]) * weight, 0)
+    const rest = sum % 11
+    return rest < 2 ? 0 : 11 - rest
+  }
+  const d1 = calc(cnpj.slice(0, 12), [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2])
+  const d2 = calc(cnpj.slice(0, 13), [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2])
+  return d1 === Number(cnpj[12]) && d2 === Number(cnpj[13])
+}
+
+function isAdult(date: string) {
+  const birth = new Date(date)
+  if (Number.isNaN(birth.getTime())) return false
+  const age18 = new Date()
+  age18.setFullYear(age18.getFullYear() - 18)
+  return birth <= age18 && birth.getFullYear() >= 1900
+}
+
+function hasFullName(value: string) {
+  return /^[A-Za-zÀ-ÿ]{2,}([ '-][A-Za-zÀ-ÿ]{2,})+$/.test(value.trim())
+}
+
 export default function VerificationBar() {
   const sessao = useSessao()
   const [status, setStatus] = useState<Status>(null)
@@ -16,6 +61,7 @@ export default function VerificationBar() {
   const [loading, setLoading] = useState(false)
 
   // Form state
+  const [nomeCompleto, setNomeCompleto] = useState('')
   const [cpf, setCpf] = useState('')
   const [nascimento, setNascimento] = useState('')
   const [rgFrente, setRgFrente] = useState('')
@@ -65,19 +111,39 @@ export default function VerificationBar() {
 
   const submit = async () => {
     if (!sessao) return
+    if (!hasFullName(nomeCompleto)) {
+      await alertDialog({ title: 'Nome real obrigatorio', message: 'Informe nome e sobrenome reais do responsavel.', tone: 'danger' })
+      return
+    }
+    if (!isValidCpf(cpf)) {
+      await alertDialog({ title: 'CPF invalido', message: 'Informe um CPF real antes de enviar a verificacao.', tone: 'danger' })
+      return
+    }
+    if (!isAdult(nascimento)) {
+      await alertDialog({ title: 'Data invalida', message: 'A data precisa ser real e o responsavel deve ter pelo menos 18 anos.', tone: 'danger' })
+      return
+    }
+    if (!rgFrente || !rgVerso || !selfie) {
+      await alertDialog({ title: 'Documentos obrigatorios', message: 'Envie frente, verso do documento e selfie segurando o documento.', tone: 'danger' })
+      return
+    }
+    if (!isValidCnpj(cnpj)) {
+      await alertDialog({ title: 'CNPJ invalido', message: 'Se informar CNPJ/MEI, ele precisa ser valido.', tone: 'danger' })
+      return
+    }
     setLoading(true)
     const { error } = await supabase.from('verificacoes').insert({
       user_id: sessao.id,
       tipo: 'ambulante',
-      nome_completo: sessao.nome, // Mocking from session for now
-      cpf,
+      nome_completo: nomeCompleto.trim(),
+      cpf: onlyDigits(cpf),
       data_nascimento: nascimento,
       rg_frente_url: rgFrente,
       rg_verso_url: rgVerso,
       selfie_url: selfie,
       licenca_ambulante: licenca,
       praia_principal: praia,
-      cnpj,
+      cnpj: onlyDigits(cnpj) || null,
       status: 'pendente'
     })
     setLoading(false)
@@ -158,6 +224,7 @@ export default function VerificationBar() {
               {step === 1 && (
                 <div style={stepContainer}>
                   <div style={stepTitle}>Passo 1: Dados Pessoais</div>
+                  <input style={inputStyle} placeholder="Nome completo real" value={nomeCompleto} onChange={e => setNomeCompleto(e.target.value)} />
                   <input style={inputStyle} placeholder="CPF (Apenas números)" value={cpf} onChange={e => setCpf(e.target.value)} />
                   <input style={inputStyle} type="date" value={nascimento} onChange={e => setNascimento(e.target.value)} />
                   <button style={btnStyle} onClick={() => setStep(2)}>Próximo</button>

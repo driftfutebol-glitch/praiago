@@ -42,6 +42,8 @@ type ProfileRow = {
   lat: number | null
   lng: number | null
   zona: string | null
+  verificado: boolean | null
+  status: string | null
 }
 
 function hero(emoji: string): string {
@@ -109,6 +111,9 @@ export const useCatalogo = create<State>((set, get) => ({
     const byVend = new Map<string, Vendedor>()
     for (const r of rows) {
       const vid = r.vendedor_id ?? 'sem-vendedor'
+      // Vendedor só aparece pro cliente se estiver verificado (CNPJ/CPF aprovado)
+      if (profs[vid]?.verificado !== true) continue
+      if (profs[vid]?.status === 'banido' || (profs[vid]?.status && profs[vid]?.status !== 'ativo')) continue
       if (!byVend.has(vid)) {
         const pf = profs[vid]
         const vendedorEmoji = r.vendedor_emoji || pf?.emoji || '🥥'

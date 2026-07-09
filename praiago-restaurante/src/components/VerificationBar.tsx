@@ -7,6 +7,42 @@ import { alertDialog } from '../lib/dialog'
 
 type Status = 'pendente' | 'aprovado' | 'rejeitado' | null
 
+function onlyDigits(value: string) {
+  return value.replace(/\D/g, '')
+}
+
+function hasFullName(value: string) {
+  return /^[A-Za-zÀ-ÿ]{2,}([ '-][A-Za-zÀ-ÿ]{2,})+$/.test(value.trim())
+}
+
+function isValidCpf(value: string) {
+  const cpf = onlyDigits(value)
+  if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false
+  let sum = 0
+  for (let i = 0; i < 9; i++) sum += Number(cpf[i]) * (10 - i)
+  let digit = 11 - (sum % 11)
+  if (digit >= 10) digit = 0
+  if (digit !== Number(cpf[9])) return false
+  sum = 0
+  for (let i = 0; i < 10; i++) sum += Number(cpf[i]) * (11 - i)
+  digit = 11 - (sum % 11)
+  if (digit >= 10) digit = 0
+  return digit === Number(cpf[10])
+}
+
+function isValidCnpj(value: string) {
+  const cnpj = onlyDigits(value)
+  if (cnpj.length !== 14 || /^(\d)\1{13}$/.test(cnpj)) return false
+  const calc = (base: string, weights: number[]) => {
+    const sum = weights.reduce((acc, weight, i) => acc + Number(base[i]) * weight, 0)
+    const rest = sum % 11
+    return rest < 2 ? 0 : 11 - rest
+  }
+  const d1 = calc(cnpj.slice(0, 12), [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2])
+  const d2 = calc(cnpj.slice(0, 13), [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2])
+  return d1 === Number(cnpj[12]) && d2 === Number(cnpj[13])
+}
+
 export default function VerificationBar() {
   const sessao = useSessao()
   const [status, setStatus] = useState<Status>(null)
@@ -67,16 +103,32 @@ export default function VerificationBar() {
 
   const submit = async () => {
     if (!sessao) return
+    if (!hasFullName(nomeResp)) {
+      await alertDialog({ title: 'Nome real obrigatorio', message: 'Informe nome e sobrenome reais do responsavel legal.', tone: 'danger' })
+      return
+    }
+    if (!isValidCpf(cpf)) {
+      await alertDialog({ title: 'CPF invalido', message: 'Informe um CPF real do responsavel legal.', tone: 'danger' })
+      return
+    }
+    if (!isValidCnpj(cnpj)) {
+      await alertDialog({ title: 'CNPJ invalido', message: 'Informe um CNPJ real e valido do restaurante/empresa.', tone: 'danger' })
+      return
+    }
+    if (!rg || !selfie || !fotoLoja) {
+      await alertDialog({ title: 'Arquivos obrigatorios', message: 'Envie documento, selfie com documento e foto real do local.', tone: 'danger' })
+      return
+    }
     setLoading(true)
     const { error } = await supabase.from('verificacoes').insert({
       user_id: sessao.id,
       tipo: 'restaurante',
       nome_completo: nomeResp,
-      cpf,
+      cpf: onlyDigits(cpf),
       rg_frente_url: rg,
       selfie_url: selfie,
       foto_loja_url: fotoLoja,
-      cnpj,
+      cnpj: onlyDigits(cnpj),
       razao_social: razao,
       num_funcionarios: parseInt(funcionarios),
       horario_funcionamento: horario,
