@@ -1162,6 +1162,70 @@ async function salvarIngressos(supabase: ReturnType<typeof createClient>, evento
   return { salvos }
 }
 
+async function aplicarCicloDeVidaEventos(supabase: ReturnType<typeof createClient>) {
+  const hojeSp = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+  const amanha = new Date(new Date(`${hojeSp}T00:00:00`).getTime() + 24 * 60 * 60 * 1000)
+  const amanhaSp = amanha.toISOString().slice(0, 10)
+
+  const { data: lotesZerados } = await supabase
+    .from('event_ticket_lots')
+    .update({ status: 'esgotado', updated_at: new Date().toISOString() })
+    .in('status', ['disponivel', 'pausado', 'pendente_aprovacao'])
+    .not('estoque_disponivel', 'is', null)
+    .lte('estoque_disponivel', 0)
+    .select('id')
+
+  const { data: passados } = await supabase
+    .from('eventos')
+    .update({ status: 'inativo', destaque: false })
+    .in('status', ['ativo', 'pendente'])
+    .not('data', 'is', null)
+    .lt('data', hojeSp)
+    .select('id')
+
+  const ids = (passados ?? []).map((e: { id: string }) => e.id)
+  let lotesEncerrados = 0
+  if (ids.length) {
+    const { data } = await supabase
+      .from('event_ticket_lots')
+      .update({ status: 'esgotado', updated_at: new Date().toISOString() })
+      .in('evento_id', ids)
+      .in('status', ['disponivel', 'pausado', 'pendente_aprovacao'])
+      .select('id')
+    lotesEncerrados = data?.length || 0
+  }
+
+  const { data: candidatosDestaque } = await supabase
+    .from('eventos')
+    .select('id,event_ticket_lots(status)')
+    .eq('status', 'ativo')
+    .gte('data', hojeSp)
+    .lte('data', amanhaSp)
+
+  const idsDestaque = (candidatosDestaque ?? [])
+    .filter((ev: { event_ticket_lots?: Array<{ status?: string }> }) => {
+      const lotes = ev.event_ticket_lots || []
+      return lotes.length === 0 || lotes.some(lote => lote.status !== 'esgotado')
+    })
+    .map((ev: { id: string }) => ev.id)
+
+  if (idsDestaque.length) {
+    await supabase
+      .from('eventos')
+      .update({ destaque: true })
+      .in('id', idsDestaque)
+  }
+
+  return {
+    hoje_sp: hojeSp,
+    amanha_sp: amanhaSp,
+    eventos_encerrados: ids.length,
+    lotes_esgotados: lotesZerados?.length || 0,
+    lotes_encerrados_por_evento: lotesEncerrados,
+    eventos_destacados: idsDestaque.length,
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -1269,22 +1333,8 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // O robô "vê que acabou": eventos aprovados do robô que já passaram viram
-    // inativos (somem do app), e os lotes ficam esgotados.
-    const hojeSp = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
-    let eventos_encerrados = 0
-    {
-      const { data: passados } = await supabase
-        .from('eventos')
-        .update({ status: 'inativo' })
-        .eq('fonte', 'robo').eq('status', 'ativo').not('data', 'is', null).lt('data', hojeSp)
-        .select('id')
-      const ids = (passados ?? []).map((e: { id: string }) => e.id)
-      eventos_encerrados = ids.length
-      if (ids.length) {
-        await supabase.from('event_ticket_lots').update({ status: 'esgotado' }).in('evento_id', ids).eq('status', 'disponivel')
-      }
-    }
+    // Ciclo automatico: destaca hoje/amanha, encerra passado e esgota lotes.
+    const lifecycle = await aplicarCicloDeVidaEventos(supabase)
 
     return json({
       ok: true,
@@ -1292,7 +1342,8 @@ Deno.serve(async (req: Request) => {
       inseridos: inseridos + stats.salvosIncrementais,
       ignorados,
       ingressos_salvos: ingressos_salvos + stats.ingressosIncrementais,
-      eventos_encerrados,
+      eventos_encerrados: lifecycle.eventos_encerrados,
+      lifecycle,
       status: 'pendente',
       fontes_consultadas: fontes.length,
       erros_fontes,
