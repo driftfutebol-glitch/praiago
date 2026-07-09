@@ -76,6 +76,10 @@ function abrirNoMapa(ev: Evento) {
   window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, '_blank')
 }
 
+function linkDoEvento(ev: Evento) {
+  return `${window.location.origin}/eventos?evento=${encodeURIComponent(ev.id)}`
+}
+
 async function copiarParaClipboard(texto: string): Promise<boolean> {
   try {
     if (navigator.clipboard?.writeText) {
@@ -105,8 +109,22 @@ async function copiarParaClipboard(texto: string): Promise<boolean> {
 // isso o botão parecia "não fazer nada". Na web usa Web Share API, e por
 // último cai pra copiar o link — sempre avisando o usuário do resultado.
 async function compartilhar(ev: Evento) {
-  const texto = `${ev.emoji ?? '🎉'} ${ev.titulo} — ${ev.local_nome ?? 'Praia Grande'} ${ev.data ? `· ${fmtData(ev.data)}` : ''} ${ev.hora ? `às ${ev.hora}` : ''}`.trim()
-  const url = ev.lat != null && ev.lng != null ? `https://www.google.com/maps/search/?api=1&query=${ev.lat},${ev.lng}` : undefined
+  return compartilharEvento(ev)
+}
+
+async function compartilharEvento(ev: Evento) {
+  const dataHora = [ev.data ? fmtData(ev.data) : '', ev.hora ? `as ${ev.hora}` : ''].filter(Boolean).join(' ')
+  const local = ev.local_nome ?? ev.endereco ?? 'Praia Grande'
+  const url = linkDoEvento(ev)
+  const texto = `${ev.titulo}\n${local}${dataHora ? ` - ${dataHora}` : ''}\nPraiaGo Eventos`
+  const textoComLink = `${texto}\n${url}`
+
+  async function copiarFallback() {
+    const copiou = await copiarParaClipboard(textoComLink)
+    await alertDialog(copiou
+      ? { title: 'Evento copiado!', message: 'Agora e so colar no WhatsApp, Instagram ou onde quiser.', tone: 'success' }
+      : { title: 'Nao deu pra copiar', message: 'Copie manualmente: ' + textoComLink, tone: 'danger' })
+  }
 
   const capacitor = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor
   if (capacitor?.isNativePlatform?.()) {
@@ -115,31 +133,22 @@ async function compartilhar(ev: Evento) {
       await Share.share({ title: ev.titulo, text: texto, url, dialogTitle: 'Compartilhar evento' })
       return
     } catch (err) {
-      // usuário cancelou o menu de compartilhar — não é erro, não avisa nada
       if (err instanceof Error && /cancell?ed/i.test(err.message)) return
-      // plugin falhou de verdade: cai pro clipboard em vez de morrer em silêncio
-      const copiou = await copiarParaClipboard(url ? `${texto} ${url}` : texto)
-      await alertDialog(copiou
-        ? { title: 'Link copiado! 🔗', message: 'Cole onde quiser pra convidar a galera.', tone: 'success' }
-        : { title: 'Não deu pra compartilhar', message: 'Tente novamente em instantes.', tone: 'danger' })
+      await copiarFallback()
       return
     }
   }
 
   if (navigator.share) {
     try {
-      await navigator.share(url ? { title: ev.titulo, text: texto, url } : { title: ev.titulo, text: texto })
+      await navigator.share({ title: ev.titulo, text: texto, url })
       return
     } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') return // usuário cancelou
-      // segue pro fallback de clipboard abaixo
+      if (err instanceof Error && err.name === 'AbortError') return
     }
   }
 
-  const copiou = await copiarParaClipboard(url ? `${texto} ${url}` : texto)
-  await alertDialog(copiou
-    ? { title: 'Link copiado! 🔗', message: 'Cole onde quiser pra convidar a galera.', tone: 'success' }
-    : { title: 'Não deu pra copiar', message: 'Seu navegador bloqueou a área de transferência. Copie manualmente: ' + texto, tone: 'danger' })
+  await copiarFallback()
 }
 
 function ComprarIngressoModal({ evento, onClose, sessao }: { evento: Evento; onClose: () => void; sessao: Sessao }) {
@@ -362,7 +371,7 @@ export default function EventosPage() {
                       <button onClick={() => abrirNoMapa(ev)} style={{ flex: 1, background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', border: 'none', borderRadius: 12, padding: '10px 0', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                         <Navigation size={14} /> Ver local
                       </button>
-                      <button aria-label="Compartilhar" onClick={() => compartilhar(ev)} style={{ width: 42, background: 'rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 12, color: '#334155', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <button type="button" aria-label="Compartilhar evento" onClick={() => compartilhar(ev)} style={{ width: 42, background: 'rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 12, color: '#334155', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <Share2 size={15} />
                       </button>
                     </div>
@@ -402,6 +411,9 @@ export default function EventosPage() {
                           <ShoppingCart size={12} /> Comprar
                         </button>
                       )}
+                      <button type="button" aria-label="Compartilhar evento" onClick={() => compartilhar(ev)} style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(15,23,42,0.06)', border: '1px solid rgba(15,23,42,0.08)', color: '#334155', borderRadius: 10, padding: '5px 8px', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
+                        <Share2 size={12} /> Compartilhar
+                      </button>
                       <button aria-label="Ver no mapa" onClick={() => abrirNoMapa(ev)} style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: '#38bdf8', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
                         <Navigation size={12} /> Local
                       </button>

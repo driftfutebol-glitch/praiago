@@ -132,6 +132,14 @@ export default function DashboardPage() {
   const navigate = useNavigate()
   const hora = new Date().getHours()
   const saudacao = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite'
+  const sessao = getSessao()
+  const nomeRestaurante = sessao?.nome?.trim() || 'seu restaurante'
+  const dataHoje = new Intl.DateTimeFormat('pt-BR', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(new Date())
 
   const [liveOrders, setLiveOrders] = useState<OrderPayload[]>([])
   const [latestOrder, setLatestOrder] = useState<OrderPayload | null>(null)
@@ -195,7 +203,7 @@ export default function DashboardPage() {
 
       {/* ── Cabeçalho ────────────────────────────────────────── */}
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} style={{ marginBottom: 36 }}>
-        <p style={{ fontSize: 15, color: '#64748b', fontWeight: 700, marginBottom: 8, letterSpacing: 0.5 }}>{saudacao}, Restaurante Maré 👋</p>
+        <p style={{ fontSize: 15, color: '#64748b', fontWeight: 700, marginBottom: 8, letterSpacing: 0.5 }}>{saudacao}, {nomeRestaurante} 👋</p>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <h1 style={{ fontSize: 38, fontWeight: 900, color: '#0f172a', letterSpacing: -1, margin: 0, textShadow: '0 0 30px rgba(0,0,0,0.08)' }}>Painel de Controle</h1>
           <AnimatePresence>
@@ -208,7 +216,7 @@ export default function DashboardPage() {
           </AnimatePresence>
         </div>
         <p style={{ fontSize: 14, color: '#64748b', marginTop: 8, fontWeight: 500 }}>
-          Quarta-feira, 25 Jun 2026 · Praia Grande, SP
+          {dataHoje} · Praia Grande, SP
         </p>
       </motion.div>
 
