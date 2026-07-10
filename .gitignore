@@ -48,3 +48,5 @@ AuthKey_*.p8
 *.log
 npm-debug.log*
 .codex/
+.vercel-token
+.vercel-token.txt
