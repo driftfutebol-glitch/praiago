@@ -46,6 +46,7 @@ type ProfileAmbulanteRow = {
   lng: number | null
   zona: string | null
   status?: string | null
+  verificado?: boolean | null
 }
 
 // ── Haversine ────────────────────────────────────────────────
@@ -97,7 +98,7 @@ export function useNearbyAmbulantes(clientePos: [number, number]) {
   }, [])
 
   const upsertProfile = useCallback((row: ProfileAmbulanteRow) => {
-    if (row.role !== 'ambulante' || row.status === 'banido' || !row.online || typeof row.lat !== 'number' || typeof row.lng !== 'number') {
+    if (row.role !== 'ambulante' || row.status === 'banido' || row.verificado !== true || !row.online || typeof row.lat !== 'number' || typeof row.lng !== 'number') {
       mapRef.current.delete(row.id)
       recalcAndSort()
       return
@@ -163,8 +164,9 @@ export function useNearbyAmbulantes(clientePos: [number, number]) {
 
     supabase
       .from('profiles')
-      .select('id,nome,emoji,categoria,role,online,lat,lng,zona,status')
+      .select('id,nome,emoji,categoria,role,online,lat,lng,zona,status,verificado')
       .eq('role', 'ambulante')
+      .eq('verificado', true)
       .eq('online', true)
       .not('lat', 'is', null)
       .not('lng', 'is', null)

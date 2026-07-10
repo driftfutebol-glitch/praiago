@@ -38,11 +38,24 @@ export default function DashboardPage() {
   const sessao = getSessao()
   const [pedidosHoje, setPedidosHoje] = useState(0)
   const [faturamentoHoje, setFaturamentoHoje] = useState(0)
+  const [verificado, setVerificado] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    if (sessao) {
+      supabase.from('profiles').select('verificado').eq('id', sessao.id).maybeSingle()
+        .then(({ data }) => setVerificado(Boolean(data?.verificado)))
+    }
+  }, [sessao])
+
+  // Sem verificação aprovada, não deixa ficar online (não aparece no mapa).
+  useEffect(() => {
+    if (verificado === false && online) setOnline(false)
+  }, [verificado, online])
 
   useEffect(() => {
     async function loadStats() {
       if (!sessao) return
-      
+
       const hojeStr = new Date().toISOString().split('T')[0]
       const { data } = await supabase
         .from('pedidos')
@@ -147,12 +160,12 @@ export default function DashboardPage() {
               <div style={{ fontSize: 18, fontWeight: 900, color: '#0f172a' }}>
                 Ponto {online ? <span style={{ color: '#4ade80' }}>Aberto</span> : <span style={{ color: '#64748b' }}>Fechado</span>}
               </div>
-              <div style={{ fontSize: 12, color: '#64748b', marginTop: 4, fontWeight: 500 }}>
-                {online ? 'Radar transmitindo aos clientes' : 'Você está invisível no mapa'}
+              <div style={{ fontSize: 12, color: verificado === false ? '#b45309' : '#64748b', marginTop: 4, fontWeight: verificado === false ? 700 : 500 }}>
+                {verificado === false ? '🔒 Verifique sua conta pra aparecer no mapa' : (online ? 'Radar transmitindo aos clientes' : 'Você está invisível no mapa')}
               </div>
             </div>
           </div>
-          <button onClick={() => setOnline(v => !v)} style={{
+          <button onClick={() => { if (verificado) setOnline(v => !v) }} disabled={!verificado} style={{
             width: 72, height: 40, borderRadius: 20,
             background: online ? 'linear-gradient(135deg, #22c55e, #16a34a)' : 'rgba(0,0,0,0.08)',
             border: online ? 'none' : '1px solid rgba(255,255,255,0.2)', position: 'relative', cursor: 'pointer', transition: 'background 0.3s',
