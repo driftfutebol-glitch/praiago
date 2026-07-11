@@ -45,19 +45,16 @@ Deno.serve(async (req: Request) => {
     if (pedido.payment_status === 'aprovado') return json({ error: 'Este pedido ja foi pago.' }, { status: 409 })
 
     const sellerAccessToken = await getSellerAccessToken(pedido.vendedor_id)
-    const accessToken = sellerAccessToken || env('MERCADOPAGO_ACCESS_TOKEN')
-    if (!accessToken) return json({ error: 'Pagamento online indisponivel no momento.' }, { status: 409 })
-    const automaticSplit = Boolean(sellerAccessToken)
+    const platformToken = env('MERCADOPAGO_ACCESS_TOKEN')
+    if (!sellerAccessToken && !platformToken) return json({ error: 'Pagamento online indisponivel no momento.' }, { status: 409 })
 
     const total = money(pedido.total)
     if (total <= 0) return json({ error: 'Valor do pedido invalido.' }, { status: 400 })
     const fee = Math.min(total, Math.max(0, money(pedido.platform_fee_amount ?? 0)))
     const expiraEm = new Date(Date.now() + 30 * 60 * 1000)
 
-    const payment = await mpRequest<PixPayment>('/v1/payments', accessToken, {
-      method: 'POST',
-      headers: { 'X-Idempotency-Key': crypto.randomUUID() },
-      body: JSON.stringify({
+    function corpoPagamento(split: boolean) {
+      return JSON.stringify({
         transaction_amount: total,
         payment_method_id: 'pix',
         description: `Pedido PraiaGo - ${pedido.vendedor_nome || 'Vendedor'}`,
@@ -72,15 +69,43 @@ Deno.serve(async (req: Request) => {
           pedido_id: pedido.id,
           vendedor_id: pedido.vendedor_id,
           platform: 'praiago',
-          split_mode: automaticSplit ? 'automatico_marketplace' : 'repasse_manual',
+          split_mode: split ? 'automatico_marketplace' : 'repasse_manual',
           platform_fee_amount: fee,
           vendor_amount: Math.max(0, money(total - fee)),
         },
-        ...(automaticSplit ? { application_fee: fee } : {}),
+        ...(split ? { application_fee: fee } : {}),
         notification_url: env('MERCADOPAGO_WEBHOOK_URL') || undefined,
         date_of_expiration: expiraEm.toISOString(),
-      }),
-    })
+      })
+    }
+
+    // 1ª tentativa: split automático na conta do vendedor (quando vinculada).
+    // Se o MP recusar o application_fee (ex: vendedor e plataforma são a mesma
+    // conta), cai pro modo plataforma-recebe + repasse manual — o cliente nunca
+    // fica travado por causa disso.
+    let automaticSplit = Boolean(sellerAccessToken)
+    let payment: PixPayment
+    try {
+      payment = await mpRequest<PixPayment>('/v1/payments', (sellerAccessToken || platformToken) as string, {
+        method: 'POST',
+        headers: { 'X-Idempotency-Key': crypto.randomUUID() },
+        body: corpoPagamento(automaticSplit),
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : ''
+      if (!automaticSplit || !/application_fee/i.test(msg) || !platformToken) throw err
+      automaticSplit = false
+      payment = await mpRequest<PixPayment>('/v1/payments', platformToken, {
+        method: 'POST',
+        headers: { 'X-Idempotency-Key': crypto.randomUUID() },
+        body: corpoPagamento(false),
+      })
+    }
+
+    // Marca no pedido como o dinheiro vai fluir (o admin/financeiro usa isso).
+    await supabase.from('pedidos').update({
+      settlement_status: automaticSplit ? 'pendente' : 'repasse_manual_pendente',
+    }).eq('id', pedido.id)
 
     const dados = payment.point_of_interaction?.transaction_data
     if (!dados?.qr_code) throw new Error('Mercado Pago nao devolveu o QR Code PIX.')
