@@ -10,7 +10,8 @@ import { useGPS, type GPSFonte, type GPSStatus } from '../hooks/useGPS'
 import { criarMonitorSentido, type SentidoStatus } from '../lib/trafego'
 import { broadcastOrder } from '../hooks/useOrderBroadcast'
 import { type Vendedor } from '../lib/catalogo'
-import { criarCheckoutMercadoPago, criarPixMercadoPago, isMercadoPagoMethod, type PixCobranca } from '../lib/mercadopago'
+import { criarPixMercadoPago, isMercadoPagoMethod, pagarComCartao, mensagemRecusaCartao, type PixCobranca } from '../lib/mercadopago'
+import { tokenizarCartao } from '../lib/mpsdk'
 import { labelHorario } from '../lib/horario'
 import { useCatalogo } from '../store/useCatalogo'
 import { useStore, type Entrega } from '../store/useStore'
@@ -507,6 +508,174 @@ function PixPagamentoModal({ cobranca, pedidoId, total, onPago, onClose }: {
   )
 }
 
+/* ─── CARTÃO DENTRO DO APP ──────────────────────────────── */
+function formatarNumeroCartao(v: string) {
+  return v.replace(/\D/g, '').slice(0, 16).replace(/(\d{4})(?=\d)/g, '$1 ').trim()
+}
+function formatarValidade(v: string) {
+  const d = v.replace(/\D/g, '').slice(0, 4)
+  return d.length > 2 ? `${d.slice(0, 2)}/${d.slice(2)}` : d
+}
+function formatarCpf(v: string) {
+  const d = v.replace(/\D/g, '').slice(0, 11)
+  return d.replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d{1,2})$/, '.$1-$2')
+}
+
+function CartaoPagamentoModal({ tipo, pedidoId, total, emailCliente, onPago, onClose }: {
+  tipo: 'credit' | 'debit'
+  pedidoId: string
+  total: number
+  emailCliente?: string | null
+  onPago: () => void
+  onClose: () => void
+}) {
+  const [numero, setNumero] = useState('')
+  const [nome, setNome] = useState('')
+  const [validade, setValidade] = useState('')
+  const [cvv, setCvv] = useState('')
+  const [cpf, setCpf] = useState('')
+  const [processando, setProcessando] = useState(false)
+  const [erro, setErro] = useState('')
+  const [aprovado, setAprovado] = useState(false)
+  const [emAnalise, setEmAnalise] = useState(false)
+  const aprovadoRef = useRef(false)
+
+  // Segurança extra: se cair em "em análise", o realtime avisa quando aprovar.
+  useEffect(() => {
+    if (!emAnalise) return
+    const ch = supabase
+      .channel(`card_${pedidoId}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pedidos', filter: `id=eq.${pedidoId}` }, payload => {
+        const novo = payload.new as { payment_status?: string | null }
+        if (novo?.payment_status === 'aprovado' && !aprovadoRef.current) {
+          aprovadoRef.current = true
+          setAprovado(true)
+          setTimeout(onPago, 2000)
+        }
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [emAnalise, pedidoId, onPago])
+
+  async function pagar() {
+    const digitosNumero = numero.replace(/\D/g, '')
+    const digitosCpf = cpf.replace(/\D/g, '')
+    if (digitosNumero.length < 13) { setErro('Número do cartão incompleto.'); return }
+    if (!nome.trim()) { setErro('Digite o nome como está no cartão.'); return }
+    if (validade.length < 5) { setErro('Validade incompleta (MM/AA).'); return }
+    if (cvv.length < 3) { setErro('CVV incompleto.'); return }
+    if (digitosCpf.length !== 11) { setErro('CPF incompleto.'); return }
+
+    setErro('')
+    setProcessando(true)
+    try {
+      const { token, paymentMethodId } = await tokenizarCartao({
+        numero: digitosNumero, nome, validade, cvv, cpf: digitosCpf,
+      }, tipo)
+      const resultado = await pagarComCartao(pedidoId, { token, paymentMethodId, cpf: digitosCpf, email: emailCliente || undefined })
+      if (resultado.status === 'approved') {
+        aprovadoRef.current = true
+        setAprovado(true)
+        setTimeout(onPago, 2000)
+      } else if (resultado.status === 'in_process' || resultado.status === 'pending') {
+        setEmAnalise(true)
+      } else {
+        setErro(mensagemRecusaCartao(resultado.status_detail))
+      }
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : 'Não foi possível processar o cartão.')
+    }
+    setProcessando(false)
+  }
+
+  async function fechar() {
+    if (aprovadoRef.current) return
+    const sair = await confirmDialog({
+      title: 'Sair sem pagar?',
+      message: 'O pedido só é enviado ao vendedor depois do pagamento.',
+      confirmText: 'Sair mesmo assim',
+      tone: 'danger',
+    })
+    if (sair) onClose()
+  }
+
+  const inputCartao: React.CSSProperties = { width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 14, padding: '14px 14px', fontSize: 16, fontWeight: 700, color: '#0f172a', background: '#f8fafc', outline: 'none' }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'flex-end' }}>
+      <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} transition={{ type: 'spring', damping: 26, stiffness: 240 }} style={{ width: '100%', background: '#ffffff', borderTopLeftRadius: 36, borderTopRightRadius: 36, padding: '22px 24px 34px', maxHeight: '94vh', overflowY: 'auto' }}>
+        <div style={{ width: 48, height: 6, background: '#e2e8f0', borderRadius: 10, margin: '0 auto 18px' }} />
+
+        {aprovado ? (
+          <motion.div initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} style={{ textAlign: 'center', padding: '34px 10px 40px' }}>
+            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', damping: 12, stiffness: 200, delay: 0.1 }} style={{ width: 92, height: 92, borderRadius: '50%', background: 'linear-gradient(135deg, #22c55e, #16a34a)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', boxShadow: '0 18px 44px rgba(34,197,94,0.45)' }}>
+              <Check size={46} color="#fff" strokeWidth={3.5} />
+            </motion.div>
+            <div style={{ fontSize: 24, fontWeight: 900, color: '#0f172a' }}>Pagamento aprovado! 🎉</div>
+            <p style={{ fontSize: 14.5, color: '#64748b', fontWeight: 600, marginTop: 8 }}>Enviando seu pedido pro vendedor…</p>
+          </motion.div>
+        ) : emAnalise ? (
+          <div style={{ textAlign: 'center', padding: '30px 10px 36px' }}>
+            <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.6, ease: 'linear' }} style={{ width: 64, height: 64, borderRadius: '50%', border: '5px solid rgba(14,165,233,0.15)', borderTopColor: '#0ea5e9', margin: '0 auto 18px' }} />
+            <div style={{ fontSize: 20, fontWeight: 900, color: '#0f172a' }}>Pagamento em análise ⏳</div>
+            <p style={{ fontSize: 14, color: '#64748b', fontWeight: 600, marginTop: 8 }}>O banco tá conferindo. Assim que aprovar, seu pedido vai sozinho pro vendedor — pode deixar essa tela aberta.</p>
+          </div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+              <h2 style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <CreditCard size={22} color="#0ea5e9" /> {tipo === 'debit' ? 'Cartão de Débito' : 'Cartão de Crédito'}
+              </h2>
+              <button aria-label="Fechar" onClick={fechar} style={{ background: '#f8fafc', border: 'none', borderRadius: 14, padding: 10, cursor: 'pointer' }}><X size={18} color="#94a3b8" /></button>
+            </div>
+            <p style={{ fontSize: 13, color: '#64748b', fontWeight: 600, margin: '0 0 16px' }}>
+              Pagamento seguro sem sair do app 🔒 · Total <strong style={{ color: '#16a34a' }}>R$ {total.toFixed(2).replace('.', ',')}</strong>
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 6 }}>NÚMERO DO CARTÃO</label>
+                <input inputMode="numeric" autoComplete="cc-number" placeholder="0000 0000 0000 0000" value={numero} onChange={e => setNumero(formatarNumeroCartao(e.target.value))} style={inputCartao} />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 6 }}>NOME (como está no cartão)</label>
+                <input autoComplete="cc-name" placeholder="MARIA A SILVA" value={nome} onChange={e => setNome(e.target.value.toUpperCase())} style={inputCartao} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 6 }}>VALIDADE</label>
+                  <input inputMode="numeric" autoComplete="cc-exp" placeholder="MM/AA" value={validade} onChange={e => setValidade(formatarValidade(e.target.value))} style={inputCartao} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 6 }}>CVV</label>
+                  <input inputMode="numeric" autoComplete="cc-csc" placeholder="123" value={cvv} onChange={e => setCvv(e.target.value.replace(/\D/g, '').slice(0, 4))} style={inputCartao} />
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 6 }}>CPF DO TITULAR</label>
+                <input inputMode="numeric" placeholder="000.000.000-00" value={cpf} onChange={e => setCpf(formatarCpf(e.target.value))} style={inputCartao} />
+              </div>
+            </div>
+
+            {erro && (
+              <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} style={{ marginTop: 14, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', color: '#dc2626', borderRadius: 14, padding: '12px 14px', fontSize: 13.5, fontWeight: 800, textAlign: 'center' }}>
+                {erro}
+              </motion.div>
+            )}
+
+            <motion.button whileTap={{ scale: processando ? 1 : 0.97 }} disabled={processando} onClick={pagar} style={{ width: '100%', marginTop: 16, border: 'none', borderRadius: 20, padding: '17px 20px', fontSize: 15.5, fontWeight: 900, cursor: processando ? 'wait' : 'pointer', color: '#fff', background: processando ? '#94a3b8' : 'linear-gradient(135deg, #0ea5e9, #22c55e)', boxShadow: processando ? 'none' : '0 14px 30px rgba(14,165,233,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+              {processando ? 'Processando…' : `Pagar R$ ${total.toFixed(2).replace('.', ',')} 🔒`}
+            </motion.button>
+            <p style={{ fontSize: 11.5, color: '#94a3b8', fontWeight: 600, textAlign: 'center', marginTop: 10 }}>
+              Processado pelo Mercado Pago. Seus dados vão criptografados direto pro banco.
+            </p>
+          </>
+        )}
+      </motion.div>
+    </div>
+  )
+}
+
 /* ─── CHECKOUT MODAL ────────────────────────────────────── */
 function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gpsFonte }: { vendedor: Vendedor; onConfirm: (e: Entrega, pedidoId: string) => void; onClose: () => void; clientePos: [number, number]; gpsStatus: GPSStatus; gpsFonte: GPSFonte }) {
   const [confirming, setConfirming] = useState(false)
@@ -516,6 +685,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
   const [pagamento, setPagamento] = useState<Entrega['pagamento']>('pix')
   const [erro, setErro] = useState('')
   const [pix, setPix] = useState<{ cobranca: PixCobranca; pedidoId: string; entrega: Entrega; valor: number } | null>(null)
+  const [cartao, setCartao] = useState<{ tipo: 'credit' | 'debit'; pedidoId: string; entrega: Entrega; valor: number } | null>(null)
   const carrinho = useStore(s => s.carrinho)
   const criarPedido = useStore(s => s.criarPedido)
   const setQtd = useStore(s => s.setQtd)
@@ -568,17 +738,12 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
         }
         return
       }
-      addNotif({ titulo: 'Falta só o pagamento 💳', texto: 'Finalize no Mercado Pago para o pedido ser enviado ao vendedor.' })
-      try {
-        const checkout = await criarCheckoutMercadoPago(pedido.id)
-        limparCarrinho()
-        window.location.assign(checkout.checkout_url)
-        return
-      } catch (err) {
-        setErro(err instanceof Error ? err.message : 'Nao foi possivel abrir o Mercado Pago.')
-        setConfirming(false)
-        return
-      }
+      // Cartão transparente: formulário DENTRO do app (token via SDK do MP).
+      const valor = total
+      limparCarrinho()
+      setConfirming(false)
+      setCartao({ tipo: pagamento === 'debito_online' ? 'debit' : 'credit', pedidoId: pedido.id, entrega, valor })
+      return
     }
     broadcastOrder({
       id: pedido.id,
@@ -609,6 +774,20 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
         pedidoId={pix.pedidoId}
         total={pix.valor}
         onPago={() => onConfirm(pix.entrega, pix.pedidoId)}
+        onClose={onClose}
+      />
+    )
+  }
+
+  // Cartão: formulário dentro do app.
+  if (cartao) {
+    return (
+      <CartaoPagamentoModal
+        tipo={cartao.tipo}
+        pedidoId={cartao.pedidoId}
+        total={cartao.valor}
+        emailCliente={sessao?.email}
+        onPago={() => onConfirm(cartao.entrega, cartao.pedidoId)}
         onClose={onClose}
       />
     )
@@ -660,25 +839,28 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
           <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
             <CreditCard size={18} color="#0ea5e9" /> Forma de Pagamento
           </div>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: '#16a34a', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+            🔒 Tudo dentro do app — sem sair pra outro site
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
             {([
-              ['pix', QrCode, 'PIX MP'],
-              ['credito_online', CreditCard, 'Credito MP'],
-              ['debito_online', CreditCard, 'Debito MP'],
-              ['mercadopago', CreditCard, 'Saldo MP'],
-              ['dinheiro', Banknote, 'Dinheiro'],
-              ['cartao_fisico', CreditCard, 'Maquininha'],
-            ] as const).map(([key, Icon, label]) => {
+              ['pix', QrCode, 'PIX', 'no app'],
+              ['credito_online', CreditCard, 'Crédito', 'no app'],
+              ['debito_online', CreditCard, 'Débito', 'no app'],
+              ['dinheiro', Banknote, 'Dinheiro', 'na entrega'],
+              ['cartao_fisico', CreditCard, 'Maquininha', 'na entrega'],
+            ] as const).map(([key, Icon, label, hint]) => {
               const sel = pagamento === key
               return (
                 <button key={key} onClick={() => setPagamento(key)} style={{
                   background: sel ? 'rgba(14,165,233,0.15)' : '#f1f5f9',
                   border: `1.5px solid ${sel ? '#0ea5e9' : 'rgba(0,0,0,0.06)'}`,
-                  borderRadius: 16, padding: '16px 8px', color: sel ? '#0ea5e9' : '#64748b',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, cursor: 'pointer', transition: 'all 0.2s'
+                  borderRadius: 16, padding: '14px 8px', color: sel ? '#0ea5e9' : '#64748b',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', transition: 'all 0.2s'
                 }}>
-                  <Icon size={24} />
-                  <span style={{ fontSize: 12, fontWeight: 800 }}>{label}</span>
+                  <Icon size={22} />
+                  <span style={{ fontSize: 12.5, fontWeight: 800 }}>{label}</span>
+                  <span style={{ fontSize: 10, fontWeight: 700, opacity: 0.75 }}>{hint}</span>
                 </button>
               )
             })}
