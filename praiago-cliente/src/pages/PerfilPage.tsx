@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Eye, EyeOff, LogIn, LogOut, User, Package, MapPin, ChevronRight, Bell, HelpCircle, Star } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Eye, EyeOff, LogIn, LogOut, User, Package, MapPin, ChevronRight, Bell, HelpCircle, Star, Shield, Mail, CheckCircle2, AlertCircle, Edit3 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore } from '../store/useStore'
@@ -7,12 +7,19 @@ import { supabase } from '../lib/supabase'
 import { promptDialog } from '../lib/dialog'
 import { logSecurityEvent } from '../lib/securityAudit'
 import SuportePanel from '../components/SuportePanel'
+import { apenasDigitosCpf, formatarCpf, validarCpf } from '../lib/cpf'
 
 function fmtData(ts: number) {
   const diff = Date.now() - ts
   if (diff < 86_400_000) return 'Hoje'
   if (diff < 172_800_000) return 'Ontem'
   return new Date(ts).toLocaleDateString('pt-BR')
+}
+
+type VerificacaoCliente = {
+  cpf?: string | null
+  cpf_check_status?: string | null
+  email_verificado?: boolean | null
 }
 
 function TelaLogada() {
@@ -22,6 +29,72 @@ function TelaLogada() {
   const favoritos = useStore(s => s.favoritos)
   const logout = useStore(s => s.logout)
   const [suporteAberto, setSuporteAberto] = useState(false)
+  const [verificacao, setVerificacao] = useState<VerificacaoCliente | null>(null)
+  const [emailConfirmado, setEmailConfirmado] = useState(false)
+  const [reenviandoEmail, setReenviandoEmail] = useState(false)
+
+  async function carregarVerificacao() {
+    const [{ data: authData }, { data: profile }] = await Promise.all([
+      supabase.auth.getUser(),
+      supabase.from('profiles').select('cpf,cpf_check_status,email_verificado').eq('id', sessao.id).maybeSingle(),
+    ])
+    setVerificacao(profile as VerificacaoCliente | null)
+    setEmailConfirmado(Boolean(authData.user?.email_confirmed_at || profile?.email_verificado))
+  }
+
+  useEffect(() => {
+    carregarVerificacao()
+  }, [sessao.id])
+
+  async function reenviarEmailConfirmacao() {
+    setReenviandoEmail(true)
+    const { data: authData } = await supabase.auth.getUser()
+    if (authData.user?.email_confirmed_at) {
+      setEmailConfirmado(true)
+      setReenviandoEmail(false)
+      return
+    }
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: sessao.email,
+      options: { emailRedirectTo: `${window.location.origin}/perfil` },
+    })
+    setReenviandoEmail(false)
+    useStore.getState().addNotif({
+      titulo: error ? 'Falha no envio' : 'E-mail enviado',
+      texto: error ? error.message : `Confira sua caixa de entrada em ${sessao.email}.`,
+    })
+  }
+
+  async function editarCpf() {
+    const atual = formatarCpf(verificacao?.cpf || '')
+    const novo = await promptDialog({
+      title: 'Validar CPF',
+      message: 'Digite o CPF do cliente. O banco aprova automaticamente se o numero for valido.',
+      placeholder: '000.000.000-00',
+      defaultValue: atual,
+      confirmText: 'Validar',
+    })
+    if (!novo) return
+    if (!validarCpf(novo)) {
+      useStore.getState().addNotif({ titulo: 'CPF invalido', texto: 'Confira os numeros e tente novamente.' })
+      return
+    }
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ cpf: apenasDigitosCpf(novo) })
+      .eq('id', sessao.id)
+      .select('cpf,cpf_check_status,email_verificado')
+      .maybeSingle()
+    if (error) {
+      useStore.getState().addNotif({ titulo: 'Erro ao validar CPF', texto: error.message })
+      return
+    }
+    setVerificacao(data as VerificacaoCliente)
+    useStore.getState().addNotif({ titulo: 'CPF atualizado', texto: 'Validacao do CPF conferida pelo PraiaGo.' })
+  }
+
+  const cpfOk = verificacao?.cpf_check_status === 'aprovado'
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ minHeight: '100vh', background: '#ffffff', paddingBottom: 24 }}>
@@ -54,6 +127,48 @@ function TelaLogada() {
             </motion.div>
           ))}
         </div>
+
+        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.16 }} className="glass-panel" style={{ borderRadius: 22, padding: 18, border: '1px solid rgba(0,0,0,0.05)', marginBottom: 20, boxShadow: '0 10px 30px rgba(0,0,0,0.22)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+            <div style={{ width: 38, height: 38, borderRadius: 14, background: 'linear-gradient(135deg,#0ea5e9,#22c55e)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Shield size={19} color="#fff" />
+            </div>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 900, color: '#0f172a' }}>Verificacao para pedidos</div>
+              <div style={{ fontSize: 12, fontWeight: 650, color: '#64748b', marginTop: 2 }}>E-mail confirmado + CPF valido libera checkout e cupons.</div>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: emailConfirmado ? '#ecfdf5' : '#fffbeb', border: `1px solid ${emailConfirmado ? '#bbf7d0' : '#fde68a'}`, borderRadius: 16, padding: 12 }}>
+              {emailConfirmado ? <CheckCircle2 size={20} color="#16a34a" /> : <AlertCircle size={20} color="#d97706" />}
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 900, color: '#0f172a' }}>E-mail</div>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: emailConfirmado ? '#15803d' : '#a16207', marginTop: 2 }}>
+                  {emailConfirmado ? 'Confirmado no Supabase Auth' : `Pendente em ${sessao.email}`}
+                </div>
+              </div>
+              {!emailConfirmado && (
+                <button type="button" disabled={reenviandoEmail} onClick={reenviarEmailConfirmacao} style={{ border: 0, background: '#fff', color: '#92400e', borderRadius: 12, padding: '9px 11px', fontSize: 11.5, fontWeight: 900, display: 'inline-flex', alignItems: 'center', gap: 6, cursor: reenviandoEmail ? 'wait' : 'pointer' }}>
+                  <Mail size={13} /> {reenviandoEmail ? 'Enviando' : 'Enviar'}
+                </button>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: cpfOk ? '#ecfdf5' : '#fff7ed', border: `1px solid ${cpfOk ? '#bbf7d0' : '#fed7aa'}`, borderRadius: 16, padding: 12 }}>
+              {cpfOk ? <CheckCircle2 size={20} color="#16a34a" /> : <AlertCircle size={20} color="#ea580c" />}
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 900, color: '#0f172a' }}>CPF</div>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: cpfOk ? '#15803d' : '#c2410c', marginTop: 2 }}>
+                  {cpfOk ? `${formatarCpf(verificacao?.cpf || '')} validado` : 'Informe um CPF valido para fazer pedido'}
+                </div>
+              </div>
+              <button type="button" onClick={editarCpf} style={{ border: 0, background: '#fff', color: cpfOk ? '#15803d' : '#c2410c', borderRadius: 12, padding: '9px 11px', fontSize: 11.5, fontWeight: 900, display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <Edit3 size={13} /> {cpfOk ? 'Trocar' : 'Validar'}
+              </button>
+            </div>
+          </div>
+        </motion.div>
 
         <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }} className="glass-panel" style={{ borderRadius: 20, padding: '20px', border: '1px solid rgba(0,0,0,0.05)', marginBottom: 20, boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}>
           <div style={{ fontSize: 13, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 16 }}>Pedidos Recentes</div>
@@ -114,6 +229,7 @@ export default function PerfilPage() {
   const [verSenha, setVerSenha] = useState(false)
   const [email, setEmail] = useState('')
   const [nome, setNome] = useState('')
+  const [cpf, setCpf] = useState('')
   const [senha, setSenha] = useState('')
   const [erro, setErro] = useState('')
   const [loading, setLoading] = useState(false)
@@ -125,7 +241,7 @@ export default function PerfilPage() {
   async function enviarResetSenha() {
     const alvo = emailNormalizado()
     if (!/^\S+@\S+\.\S+$/.test(alvo)) { setErro('Informe seu e-mail valido para redefinir a senha.'); return }
-    const { error } = await supabase.auth.resetPasswordForEmail(alvo, { redirectTo: window.location.origin })
+    const { error } = await supabase.auth.resetPasswordForEmail(alvo, { redirectTo: `${window.location.origin}/perfil` })
     if (!error) await logSecurityEvent('password_reset_requested', alvo)
     setErro(error ? `Nao foi possivel enviar redefinicao: ${error.message}` : 'Enviamos o e-mail de redefinicao. Use o link ou o codigo recebido.')
   }
@@ -148,7 +264,11 @@ export default function PerfilPage() {
   async function reenviarVerificacao() {
     const alvo = emailNormalizado()
     if (!/^\S+@\S+\.\S+$/.test(alvo)) { setErro('Informe seu e-mail valido para reenviar a verificacao.'); return }
-    const { error } = await supabase.auth.resend({ type: 'signup', email: alvo })
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: alvo,
+      options: { emailRedirectTo: `${window.location.origin}/perfil` },
+    })
     setErro(error ? `Nao foi possivel reenviar verificacao: ${error.message}` : 'Enviamos um novo e-mail de verificacao.')
   }
 
@@ -158,6 +278,7 @@ export default function PerfilPage() {
     if (!/^\S+@\S+\.\S+$/.test(email)) { setErro('Informe um e-mail válido.'); return }
     if (senha.length < 6) { setErro('A senha precisa ter ao menos 6 caracteres.'); return }
     if (tab === 'cadastro' && !nome.trim()) { setErro('Informe seu nome.'); return }
+    if (tab === 'cadastro' && !validarCpf(cpf)) { setErro('Informe um CPF valido para liberar pedidos e o cupom de boas-vindas.'); return }
     setErro('')
     setLoading(true)
 
@@ -192,23 +313,16 @@ export default function PerfilPage() {
         const { data, error } = await supabase.auth.signUp({
           email: alvo,
           password: senha,
-          options: { data: { nome, role: 'cliente' } }
+          options: {
+            emailRedirectTo: `${window.location.origin}/perfil`,
+            data: { nome, role: 'cliente', cpf: apenasDigitosCpf(cpf) },
+          }
         })
         if (error) {
           if (error.status === 429) throw new Error('Limite de e-mails excedido. Aguarde alguns minutos e tente novamente.')
           throw new Error('Erro ao criar conta: ' + error.message)
         }
         
-        if (data.user) {
-          await supabase.from('profiles').insert({
-            id: data.user.id,
-            nome,
-            email: email.trim().toLowerCase(),
-            role: 'cliente',
-            email_verificado: false,
-          })
-        }
-
         if (data.session && data.user) {
           await logSecurityEvent('signup_created', alvo, { user_id: data.user.id })
           useStore.getState().login(data.user.id, alvo, nome)
@@ -259,6 +373,16 @@ export default function PerfilPage() {
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }}>
                 <label htmlFor="cli-nome" style={{ fontSize: 13, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Nome Completo</label>
                 <input id="cli-nome" value={nome} onChange={e => setNome(e.target.value)} placeholder="Como gosta de ser chamado" style={inputStyle} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence mode="popLayout">
+            {tab === 'cadastro' && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }}>
+                <label htmlFor="cli-cpf" style={{ fontSize: 13, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>CPF</label>
+                <input id="cli-cpf" inputMode="numeric" value={cpf} onChange={e => setCpf(formatarCpf(e.target.value))} placeholder="000.000.000-00" style={inputStyle} />
+                <div style={{ fontSize: 11.5, color: '#16a34a', fontWeight: 800, marginTop: 8 }}>CPF valido + e-mail confirmado libera 20% na primeira compra.</div>
               </motion.div>
             )}
           </AnimatePresence>

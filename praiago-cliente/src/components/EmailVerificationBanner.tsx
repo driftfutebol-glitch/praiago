@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { AlertCircle, CheckCircle2 } from 'lucide-react'
+import { AlertCircle, Mail } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useStore } from '../store/useStore'
 
@@ -9,51 +9,60 @@ export default function EmailVerificationBanner() {
   const [verificado, setVerificado] = useState<boolean | null>(null)
   const [loading, setLoading] = useState(false)
 
-  // Checa no banco se o e-mail está verificado
   useEffect(() => {
-    if (!sessao?.email) {
+    if (!sessao?.id) {
       setVerificado(null)
       return
     }
 
+    let vivo = true
     async function checkStatus() {
-      const { data } = await supabase
-        .from('profiles')
-        .select('email_verificado')
-        .eq('email', sessao!.email)
-        .maybeSingle()
-      
-      if (data) {
-        setVerificado(data.email_verificado)
-      }
+      const [{ data: authData }, { data: profile }] = await Promise.all([
+        supabase.auth.getUser(),
+        supabase.from('profiles').select('email_verificado').eq('id', sessao!.id).maybeSingle(),
+      ])
+      if (!vivo) return
+      setVerificado(Boolean(authData.user?.email_confirmed_at || profile?.email_verificado))
     }
     checkStatus()
 
-    // Ouve mudanças em tempo real no perfil
-    const ch = supabase.channel('profile_changes')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `email=eq.${sessao.email}` }, (payload) => {
-        if (payload.new && payload.new.email_verificado !== undefined) {
-          setVerificado(payload.new.email_verificado)
-        }
+    const ch = supabase.channel(`cliente_email_verificacao_${sessao.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${sessao.id}` }, payload => {
+        const novo = payload.new as { email_verificado?: boolean }
+        if (typeof novo.email_verificado === 'boolean') setVerificado(novo.email_verificado)
       })
       .subscribe()
 
-    return () => { supabase.removeChannel(ch) }
-  }, [sessao?.email])
+    return () => {
+      vivo = false
+      supabase.removeChannel(ch)
+    }
+  }, [sessao?.id])
 
-  async function forcarVerificacao() {
+  async function reenviarVerificacao() {
     if (!sessao?.email) return
     setLoading(true)
-    
-    // Mock: Na vida real isso seria feito clicando no link do e-mail.
-    // Aqui estamos simulando que o usuário clicou no link e o banco foi atualizado.
-    await supabase.from('profiles').update({ email_verificado: true }).eq('email', sessao.email)
-    
-    setVerificado(true)
+
+    const { data: authData } = await supabase.auth.getUser()
+    if (authData.user?.email_confirmed_at) {
+      setVerificado(true)
+      setLoading(false)
+      return
+    }
+
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: sessao.email,
+      options: { emailRedirectTo: `${window.location.origin}/perfil` },
+    })
+
+    useStore.getState().addNotif({
+      titulo: error ? 'Nao foi possivel enviar' : 'E-mail enviado',
+      texto: error ? error.message : `Mandamos a confirmacao para ${sessao.email}.`,
+    })
     setLoading(false)
   }
 
-  // Se não estiver logado, ou se já estiver verificado, não mostra nada
   if (!sessao || verificado === null || verificado === true) return null
 
   return (
@@ -63,55 +72,50 @@ export default function EmailVerificationBanner() {
         animate={{ height: 'auto', opacity: 1 }}
         exit={{ height: 0, opacity: 0 }}
         style={{
-          background: 'linear-gradient(90deg, rgba(245, 158, 11, 0.2), rgba(217, 119, 6, 0.2))',
-          borderBottom: '1px solid rgba(245, 158, 11, 0.4)',
+          background: '#fffbeb',
+          borderBottom: '1px solid #fde68a',
           padding: '12px 20px',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           gap: 12,
-          boxShadow: '0 4px 20px rgba(245, 158, 11, 0.1)',
-          backdropFilter: 'blur(10px)',
           zIndex: 50,
-          position: 'relative'
+          position: 'relative',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, width: '100%' }}>
-          <AlertCircle color="#f59e0b" size={20} style={{ flexShrink: 0, marginTop: 2 }} />
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, width: '100%', maxWidth: 460 }}>
+          <AlertCircle color="#d97706" size={20} style={{ flexShrink: 0, marginTop: 2 }} />
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#fcd34d', marginBottom: 2 }}>Verifique seu e-mail</div>
-            <div style={{ fontSize: 12, color: 'rgba(252, 211, 77, 0.8)', lineHeight: 1.4 }}>
-              Enviamos um link de confirmação para <b>{sessao.email}</b>. Você precisa confirmar para fazer pedidos.
+            <div style={{ fontSize: 13, fontWeight: 900, color: '#92400e', marginBottom: 2 }}>Confirme seu e-mail</div>
+            <div style={{ fontSize: 12, color: '#a16207', lineHeight: 1.4, fontWeight: 650 }}>
+              Enviamos um link para <b>{sessao.email}</b>. Voce precisa confirmar para fechar pedidos e usar cupons.
             </div>
           </div>
         </div>
-        
+
         <motion.button
           whileTap={{ scale: 0.95 }}
-          onClick={forcarVerificacao}
+          onClick={reenviarVerificacao}
           disabled={loading}
           style={{
-            background: 'rgba(245, 158, 11, 0.2)',
-            border: '1px solid rgba(245, 158, 11, 0.5)',
-            color: '#fcd34d',
-            padding: '8px 16px',
-            borderRadius: 8,
+            background: '#ffffff',
+            border: '1px solid #fbbf24',
+            color: '#92400e',
+            padding: '9px 16px',
+            borderRadius: 12,
             fontSize: 12,
-            fontWeight: 700,
+            fontWeight: 900,
             cursor: loading ? 'wait' : 'pointer',
             display: 'flex',
             alignItems: 'center',
-            gap: 6,
+            gap: 7,
             width: '100%',
-            justifyContent: 'center'
+            maxWidth: 460,
+            justifyContent: 'center',
           }}
         >
-          {loading ? 'Verificando...' : (
-            <>
-              <CheckCircle2 size={14} />
-              Simular clique no e-mail (Dev)
-            </>
-          )}
+          <Mail size={14} />
+          {loading ? 'Enviando...' : 'Reenviar e-mail de confirmacao'}
         </motion.button>
       </motion.div>
     </AnimatePresence>

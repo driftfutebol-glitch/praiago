@@ -31,6 +31,7 @@ export type Entrega = {
   pagamento: 'pix' | 'cartao' | 'credito_online' | 'debito_online' | 'mercadopago' | 'dinheiro' | 'cartao_fisico' | 'debito_fisico' | 'credito_fisico'
   lat?: number
   lng?: number
+  cpfNota?: string // CPF na nota (opcional, só dígitos)
 }
 export type Pedido = {
   id: string
@@ -38,6 +39,9 @@ export type Pedido = {
   vendedorNome: string
   itens: PedidoItem[]
   total: number
+  subtotal?: number
+  desconto?: number
+  cupom?: string | null
   data: number
   status: 'aguardando_pagamento' | 'enviado' | 'preparando' | 'a_caminho' | 'entregue' | 'cancelado'
   entrega?: Entrega
@@ -75,7 +79,7 @@ type State = {
   totalPreco: () => number
 
   // pedidos
-  criarPedido: (entrega?: Entrega, options?: { limparCarrinho?: boolean }) => Promise<Pedido | null>
+  criarPedido: (entrega?: Entrega, options?: { limparCarrinho?: boolean; desconto?: { codigo: string; valor: number; motivo?: string } }) => Promise<Pedido | null>
   sincronizarPedidos: () => Promise<void>
   cancelarPedido: (pedidoId: string) => Promise<boolean>
   removerPedido: (pedidoId: string) => void
@@ -197,6 +201,7 @@ export const useStore = create<State>()(
 
       criarPedido: async (entrega, options = {}) => {
         const { carrinho, carrinhoVendedor, sessao } = get()
+        if (!sessao?.id) return null
         if (!carrinhoVendedor) return null
         const vend = getVendedor(carrinhoVendedor)
         if (!vend) return null
@@ -204,7 +209,9 @@ export const useStore = create<State>()(
           const p = getProduto(carrinhoVendedor, pid)!
           return { nome: p.nome, qtd, preco: p.preco }
         })
-        const total = itens.reduce((a, i) => a + i.preco * i.qtd, 0)
+        const subtotal = itens.reduce((a, i) => a + i.preco * i.qtd, 0)
+        const discountAmount = Math.max(0, Math.min(subtotal, Math.round(Number(options.desconto?.valor ?? 0) * 100) / 100))
+        const total = Math.max(0, Math.round((subtotal - discountAmount) * 100) / 100)
         const paymentSettings = await getPaymentSettings()
         const platformFeeAmount = Math.round((total * paymentSettings.platformFeePercent / 100 + paymentSettings.platformFeeFixed) * 100) / 100
         const vendorAmount = Math.max(0, Math.round((total - platformFeeAmount) * 100) / 100)
@@ -214,7 +221,7 @@ export const useStore = create<State>()(
         // Insere no banco
         const { data: inserted, error } = await supabase.from('pedidos').insert({
           cliente_nome: sessao?.nome || 'Anônimo',
-          cliente_id: sessao?.id ?? null,
+          cliente_id: sessao.id,
           vendedor_id: vend.id,
           vendedor_nome: vend.nome,
           zona: entrega?.reta ? `Reta ${entrega.reta} - Barraca ${entrega.barraca || 'Sem Barraca'}` : (vend.zona || 'Desconhecida'),
@@ -222,8 +229,13 @@ export const useStore = create<State>()(
           barraca: entrega?.barraca ?? null,
           lat: entrega?.lat ?? null,
           lng: entrega?.lng ?? null,
+          cpf_nota: entrega?.cpfNota || null,
           itens: itens.map(i => `${i.qtd}x ${i.nome}`),
           total: total,
+          subtotal_amount: subtotal,
+          discount_amount: discountAmount,
+          discount_code: options.desconto?.codigo ?? null,
+          discount_reason: options.desconto?.motivo ?? null,
           // Pagamento online: o pedido NASCE travado e só vira 'novo' (visível
           // pro vendedor) quando o webhook do Mercado Pago confirmar o pagamento.
           status: presencial ? 'novo' : 'aguardando_pagamento',
@@ -245,7 +257,7 @@ export const useStore = create<State>()(
 
         const pedido: Pedido = {
           id: inserted.id, vendedorId: vend.id, vendedorNome: vend.nome,
-          itens, total, data: new Date(inserted.created_at).getTime(), status: presencial ? 'enviado' : 'aguardando_pagamento', entrega,
+          itens, total, subtotal, desconto: discountAmount, cupom: options.desconto?.codigo ?? null, data: new Date(inserted.created_at).getTime(), status: presencial ? 'enviado' : 'aguardando_pagamento', entrega,
         }
         set(s => ({
           pedidos: [pedido, ...s.pedidos],

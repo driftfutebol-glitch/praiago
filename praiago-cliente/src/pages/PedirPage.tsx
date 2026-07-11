@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { ArrowLeft, MapPin, X, WifiOff, Star, Check, Zap, Send, Heart, Shield, Navigation, CreditCard, Banknote, QrCode, Trash2, Clock, Search, UtensilsCrossed, Umbrella, Store } from 'lucide-react'
+import { ArrowLeft, MapPin, X, WifiOff, Star, Check, Zap, Send, Heart, Shield, Navigation, CreditCard, Banknote, QrCode, Trash2, Clock, Search, UtensilsCrossed, Umbrella, Store, TicketPercent, SlidersHorizontal, Sparkles, FileText } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, Polyline, Circle, useMap } from 'react-leaflet'
 import L from 'leaflet'
@@ -17,6 +17,7 @@ import { useCatalogo } from '../store/useCatalogo'
 import { useStore, type Entrega } from '../store/useStore'
 import { confirmDialog, alertDialog } from '../lib/dialog'
 import { supabase } from '../lib/supabase'
+import { apenasDigitosCpf, formatarCpf as formatarCpfCliente, validarCpf } from '../lib/cpf'
 
 delete (L.Icon.Default.prototype as { _getIconUrl?: unknown })._getIconUrl
 L.Icon.Default.mergeOptions({
@@ -477,7 +478,7 @@ function PixPagamentoModal({ cobranca, pedidoId, total, onPago, onClose }: {
                 <h2 style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8 }}><QrCode size={22} color="#0ea5e9" /> Pague com PIX</h2>
                 <button aria-label="Fechar" onClick={fechar} style={{ background: '#f8fafc', border: 'none', borderRadius: 14, padding: 10, cursor: 'pointer' }}><X size={18} color="#94a3b8" /></button>
               </div>
-              <p style={{ fontSize: 13.5, color: '#64748b', fontWeight: 600, margin: '0 0 18px' }}>Sem sair do app: escaneia o QR ou copia o código 👇</p>
+              <p style={{ fontSize: 13.5, color: '#64748b', fontWeight: 600, margin: '0 0 18px' }}>Escaneia o QR ou copia o código pra pagar 👇</p>
 
               <div style={{ textAlign: 'center', background: '#f8fafc', borderRadius: 24, border: '1px solid rgba(0,0,0,0.06)', padding: '18px 16px', marginBottom: 14 }}>
                 <div style={{ fontSize: 12, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1 }}>Total a pagar</div>
@@ -629,7 +630,7 @@ function CartaoPagamentoModal({ tipo, pedidoId, total, emailCliente, onPago, onC
               <button aria-label="Fechar" onClick={fechar} style={{ background: '#f8fafc', border: 'none', borderRadius: 14, padding: 10, cursor: 'pointer' }}><X size={18} color="#94a3b8" /></button>
             </div>
             <p style={{ fontSize: 13, color: '#64748b', fontWeight: 600, margin: '0 0 16px' }}>
-              Pagamento seguro sem sair do app 🔒 · Total <strong style={{ color: '#16a34a' }}>R$ {total.toFixed(2).replace('.', ',')}</strong>
+              Pagamento 100% seguro e criptografado 🔒 · Total <strong style={{ color: '#16a34a' }}>R$ {total.toFixed(2).replace('.', ',')}</strong>
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -667,7 +668,7 @@ function CartaoPagamentoModal({ tipo, pedidoId, total, emailCliente, onPago, onC
               {processando ? 'Processando…' : `Pagar R$ ${total.toFixed(2).replace('.', ',')} 🔒`}
             </motion.button>
             <p style={{ fontSize: 11.5, color: '#94a3b8', fontWeight: 600, textAlign: 'center', marginTop: 10 }}>
-              Processado pelo Mercado Pago. Seus dados vão criptografados direto pro banco.
+              🔒 Seus dados são criptografados e protegidos. Não guardamos o número do seu cartão.
             </p>
           </>
         )}
@@ -677,15 +678,64 @@ function CartaoPagamentoModal({ tipo, pedidoId, total, emailCliente, onPago, onC
 }
 
 /* ─── CHECKOUT MODAL ────────────────────────────────────── */
+type PromoCheckout = {
+  codigo: string
+  titulo: string
+  valor: number
+  motivo: string
+  automatico?: boolean
+}
+
+type CupomCheckout = {
+  codigo: string
+  titulo: string
+  descricao?: string | null
+  tipo: 'percentual' | 'valor_fixo' | 'frete_gratis'
+  valor: number
+  valor_minimo?: number | null
+  limite_uso?: number | null
+  usos?: number | null
+  vendedor_id?: string | null
+  vendedor_tipo?: string | null
+  data_inicio?: string | null
+  validade?: string | null
+}
+
+type PerfilClienteCheckout = {
+  cpf?: string | null
+  cpf_check_status?: string | null
+  email_verificado?: boolean | null
+}
+
+function dinheiro(v: number) {
+  return v.toFixed(2).replace('.', ',')
+}
+
 function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gpsFonte }: { vendedor: Vendedor; onConfirm: (e: Entrega, pedidoId: string) => void; onClose: () => void; clientePos: [number, number]; gpsStatus: GPSStatus; gpsFonte: GPSFonte }) {
+  const navigate = useNavigate()
   const [confirming, setConfirming] = useState(false)
   const [reta, setReta] = useState('')
   const [barraca, setBarraca] = useState('')
   const [modo, setModo] = useState<'fixa' | 'tempo_real'>('fixa')
   const [pagamento, setPagamento] = useState<Entrega['pagamento']>('pix')
   const [erro, setErro] = useState('')
+  const [cpfCliente, setCpfCliente] = useState('')
+  const [salvandoCpf, setSalvandoCpf] = useState(false)
+  const [perfilCliente, setPerfilCliente] = useState<PerfilClienteCheckout | null>(null)
+  const [emailConfirmado, setEmailConfirmado] = useState(false)
+  const [primeiraCompra, setPrimeiraCompra] = useState(false)
+  const [carregandoBeneficio, setCarregandoBeneficio] = useState(false)
+  const [cupomTexto, setCupomTexto] = useState('')
+  const [mostrarCodigoManual, setMostrarCodigoManual] = useState(false)
+  const [cuponsDisponiveis, setCuponsDisponiveis] = useState<CupomCheckout[]>([])
+  const [cuponsUsados, setCuponsUsados] = useState<Set<string>>(new Set())
+  const [carregandoCupons, setCarregandoCupons] = useState(false)
+  const [cupomAplicado, setCupomAplicado] = useState<PromoCheckout | null>(null)
+  const [cupomErro, setCupomErro] = useState('')
   const [pix, setPix] = useState<{ cobranca: PixCobranca; pedidoId: string; entrega: Entrega; valor: number } | null>(null)
   const [cartao, setCartao] = useState<{ tipo: 'credit' | 'debit'; pedidoId: string; entrega: Entrega; valor: number } | null>(null)
+  const [querCpfNota, setQuerCpfNota] = useState(false)
+  const [cpfNota, setCpfNota] = useState('')
   const carrinho = useStore(s => s.carrinho)
   const criarPedido = useStore(s => s.criarPedido)
   const setQtd = useStore(s => s.setQtd)
@@ -694,8 +744,191 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
   const sessao = useStore(s => s.sessao)
 
   const itensList = vendedor.produtos.filter(p => (carrinho[p.id] ?? 0) > 0)
-  const total = itensList.reduce((acc, p) => acc + p.preco * carrinho[p.id], 0)
+  const subtotal = itensList.reduce((acc, p) => acc + p.preco * carrinho[p.id], 0)
+  const desconto = Math.max(0, Math.min(subtotal, cupomAplicado?.valor ?? 0))
+  const total = Math.max(0, Math.round((subtotal - desconto) * 100) / 100)
   const radarReal = gpsFonte === 'gps' || gpsFonte === 'manual' || gpsFonte === 'memoria'
+  const cpfOk = perfilCliente?.cpf_check_status === 'aprovado'
+  const beneficioElegivel = Boolean(sessao?.id && emailConfirmado && cpfOk && primeiraCompra)
+  const cuponsParaMostrar = useMemo(() => cuponsDisponiveis
+    .map(c => {
+      const usado = cuponsUsados.has(c.codigo)
+      const minimo = Number(c.valor_minimo || 0)
+      const limiteEsgotado = c.limite_uso != null && Number(c.usos || 0) >= Number(c.limite_uso)
+      const naoIniciado = c.data_inicio ? new Date(c.data_inicio).getTime() > Date.now() : false
+      const expirado = c.validade ? new Date(c.validade).getTime() < Date.now() : false
+      const lojaOk = !c.vendedor_id || c.vendedor_id === vendedor.id
+      const tipoOk = !c.vendedor_tipo || c.vendedor_tipo === vendedor.tipo
+      const bemVindoBloqueado = c.codigo === 'BEMVINDO20' && !beneficioElegivel
+      const minimoBloqueado = subtotal < minimo
+      const bloqueado = usado || limiteEsgotado || naoIniciado || expirado || !lojaOk || !tipoOk || bemVindoBloqueado || minimoBloqueado
+      const motivo = usado
+        ? 'Ja usado nessa conta'
+        : limiteEsgotado
+          ? 'Cupom esgotado'
+          : expirado
+            ? 'Cupom expirado'
+            : naoIniciado
+              ? 'Cupom ainda nao liberado'
+              : bemVindoBloqueado
+                ? 'Exige primeira compra, CPF e e-mail'
+                : minimoBloqueado
+                  ? `Minimo R$ ${dinheiro(minimo)}`
+                  : 'Pronto para usar'
+      return { ...c, bloqueado, motivo }
+    })
+    .sort((a, b) => Number(a.bloqueado) - Number(b.bloqueado) || a.codigo.localeCompare(b.codigo)), [cuponsDisponiveis, cuponsUsados, subtotal, beneficioElegivel, vendedor.id, vendedor.tipo])
+
+  useEffect(() => {
+    let alive = true
+    async function carregarBeneficio() {
+      if (!sessao?.id) {
+        setPerfilCliente(null)
+        setCpfCliente('')
+        setEmailConfirmado(false)
+        setPrimeiraCompra(false)
+        setCupomAplicado(null)
+        return
+      }
+      setCarregandoBeneficio(true)
+      const [{ data: userData }, { data: profile }, { data: pedidos }] = await Promise.all([
+        supabase.auth.getUser(),
+        supabase.from('profiles').select('cpf,cpf_check_status,email_verificado').eq('id', sessao.id).maybeSingle(),
+        supabase.from('pedidos').select('id,status').eq('cliente_id', sessao.id).neq('status', 'cancelado').limit(1),
+      ])
+      if (!alive) return
+      const perfil = (profile || {}) as PerfilClienteCheckout
+      setPerfilCliente(perfil)
+      setCpfCliente(formatarCpfCliente(perfil.cpf || ''))
+      setEmailConfirmado(Boolean(userData.user?.email_confirmed_at || perfil.email_verificado))
+      setPrimeiraCompra(!pedidos || pedidos.length === 0)
+      setCarregandoBeneficio(false)
+    }
+    carregarBeneficio()
+    return () => { alive = false }
+  }, [sessao?.id])
+
+  useEffect(() => {
+    if (beneficioElegivel && subtotal > 0 && (!cupomAplicado || cupomAplicado.automatico)) {
+      setCupomAplicado({
+        codigo: 'BEMVINDO20',
+        titulo: 'Boas-vindas PraiaGo',
+        valor: Math.round(subtotal * 0.2 * 100) / 100,
+        motivo: 'Primeira compra: e-mail confirmado + CPF valido',
+        automatico: true,
+      })
+    }
+    if (!beneficioElegivel && cupomAplicado?.automatico) setCupomAplicado(null)
+  }, [beneficioElegivel, subtotal])
+
+  useEffect(() => {
+    let alive = true
+    async function carregarCuponsCheckout() {
+      setCarregandoCupons(true)
+      const { data } = await supabase
+        .from('cupons')
+        .select('codigo,titulo,descricao,tipo,valor,valor_minimo,limite_uso,usos,vendedor_id,vendedor_tipo,data_inicio,validade')
+        .eq('ativo', true)
+        .eq('publico', true)
+        .or(`vendedor_id.is.null,vendedor_id.eq.${vendedor.id}`)
+        .or(`vendedor_tipo.is.null,vendedor_tipo.eq.${vendedor.tipo}`)
+        .order('created_at', { ascending: false })
+
+      let usados = new Set<string>()
+      if (sessao?.id) {
+        const { data: usos } = await supabase
+          .from('cupom_usos')
+          .select('cupom_codigo')
+          .eq('cliente_id', sessao.id)
+        usados = new Set((usos || []).map(u => String((u as { cupom_codigo?: string }).cupom_codigo || '').toUpperCase()).filter(Boolean))
+      }
+
+      if (!alive) return
+      setCuponsDisponiveis(((data as CupomCheckout[] | null) || []).map(c => ({ ...c, codigo: c.codigo.toUpperCase() })))
+      setCuponsUsados(usados)
+      setCarregandoCupons(false)
+    }
+    carregarCuponsCheckout()
+    return () => { alive = false }
+  }, [sessao?.id, vendedor.id, vendedor.tipo])
+
+  async function salvarCpfCliente() {
+    if (!sessao?.id) return
+    if (!validarCpf(cpfCliente)) { setErro('CPF invalido. Confira os numeros para liberar o pedido.'); return }
+    setSalvandoCpf(true)
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ cpf: apenasDigitosCpf(cpfCliente) })
+      .eq('id', sessao.id)
+      .select('cpf,cpf_check_status,email_verificado')
+      .maybeSingle()
+    setSalvandoCpf(false)
+    if (error || !data) {
+      setErro('Nao foi possivel confirmar o CPF agora.')
+      return
+    }
+    setPerfilCliente(data as PerfilClienteCheckout)
+    setCpfCliente(formatarCpfCliente(String(data.cpf || '')))
+    setErro('')
+  }
+
+  async function aplicarCupom(codigoSelecionado?: string) {
+    const codigo = (codigoSelecionado || cupomTexto).trim().toUpperCase()
+    setCupomErro('')
+    if (!codigo) return
+    if (!sessao?.id) {
+      setCupomErro('Entre na sua conta para usar cupom.')
+      return
+    }
+    const { data: usoExistente } = await supabase
+      .from('cupom_usos')
+      .select('id')
+      .eq('cliente_id', sessao.id)
+      .eq('cupom_codigo', codigo)
+      .maybeSingle()
+    if (usoExistente) {
+      setCupomErro('Esse cupom ja foi usado nessa conta.')
+      return
+    }
+    if (codigo === 'BEMVINDO20') {
+      if (!beneficioElegivel) {
+        setCupomErro('Esse cupom libera com e-mail confirmado, CPF valido e primeira compra.')
+        return
+      }
+      setCupomAplicado({
+        codigo,
+        titulo: 'Boas-vindas PraiaGo',
+        valor: Math.round(subtotal * 0.2 * 100) / 100,
+        motivo: 'Primeira compra: e-mail confirmado + CPF valido',
+      })
+      return
+    }
+
+    const { data, error } = await supabase
+      .from('cupons')
+      .select('codigo,titulo,tipo,valor,valor_minimo,vendedor_id,vendedor_tipo,ativo,publico,data_inicio,validade,limite_uso,usos')
+      .eq('codigo', codigo)
+      .maybeSingle()
+    if (error || !data) {
+      setCupomErro('Cupom nao encontrado ou expirado.')
+      return
+    }
+    const cupom = data as { codigo: string; titulo?: string | null; tipo: string; valor: number; valor_minimo?: number | null; vendedor_id?: string | null; vendedor_tipo?: string | null; ativo?: boolean | null; publico?: boolean | null; data_inicio?: string | null; validade?: string | null; limite_uso?: number | null; usos?: number | null }
+    if (!cupom.ativo || cupom.publico === false) { setCupomErro('Cupom indisponivel.'); return }
+    if (cupom.data_inicio && new Date(cupom.data_inicio).getTime() > Date.now()) { setCupomErro('Cupom ainda nao liberado.'); return }
+    if (cupom.validade && new Date(cupom.validade).getTime() < Date.now()) { setCupomErro('Cupom expirado.'); return }
+    if (cupom.limite_uso != null && Number(cupom.usos || 0) >= Number(cupom.limite_uso)) { setCupomErro('Cupom esgotado.'); return }
+    if (cupom.vendedor_id && cupom.vendedor_id !== vendedor.id) { setCupomErro('Esse cupom nao vale para esta loja.'); return }
+    if (cupom.vendedor_tipo && cupom.vendedor_tipo !== vendedor.tipo) { setCupomErro('Esse cupom nao vale para este tipo de loja.'); return }
+    if (subtotal < Number(cupom.valor_minimo || 0)) { setCupomErro(`Pedido minimo R$ ${dinheiro(Number(cupom.valor_minimo || 0))}.`); return }
+    const valor = cupom.tipo === 'valor_fixo'
+      ? Number(cupom.valor || 0)
+      : cupom.tipo === 'percentual'
+        ? subtotal * Number(cupom.valor || 0) / 100
+        : 0
+    if (valor <= 0) { setCupomErro('Cupom sem desconto aplicado para este pedido.'); return }
+    setCupomAplicado({ codigo, titulo: cupom.titulo || codigo, valor: Math.round(valor * 100) / 100, motivo: `Cupom ${codigo}` })
+  }
 
   function removerItem(produtoId: string) {
     setQtd(produtoId, 0)
@@ -708,14 +941,26 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
   }
 
   async function handleConfirm() {
+    if (!sessao?.id) {
+      setErro('Entre ou crie sua conta para fechar pedido no PraiaGo.')
+      await alertDialog({ title: 'Login necessario', message: 'Para sua seguranca, pedido agora so com conta cadastrada.', tone: 'default' })
+      navigate('/perfil')
+      return
+    }
     if (itensList.length === 0) { setErro('Seu pedido esta vazio.'); return }
+    if (!cpfOk) { setErro('Confirme um CPF valido antes de fechar o pedido.'); return }
+    if (!emailConfirmado) { setErro('Confirme seu e-mail antes de usar o checkout. Reenvie a verificacao em Perfil.'); return }
     if (modo === 'fixa' && !reta.trim() && !barraca.trim()) { setErro('Informe a reta ou barraca para te acharmos.'); return }
     if (modo === 'tempo_real' && !radarReal) { setErro('Ative a localizacao do celular para usar o Radar GPS real.'); return }
+    if (querCpfNota && !validarCpf(cpfNota)) { setErro('CPF da nota invalido. Confira os numeros ou desmarque a opcao.'); return }
     setErro('')
     setConfirming(true)
-    const entrega: Entrega = { reta: reta.trim(), barraca: barraca.trim(), modo, pagamento, lat: clientePos[0], lng: clientePos[1] }
+    const entrega: Entrega = { reta: reta.trim(), barraca: barraca.trim(), modo, pagamento, lat: clientePos[0], lng: clientePos[1], cpfNota: querCpfNota ? cpfNota.replace(/\D/g, '') : undefined }
     const usaMercadoPago = isMercadoPagoMethod(pagamento)
-    const pedido = await criarPedido(entrega, { limparCarrinho: !usaMercadoPago })
+    const pedido = await criarPedido(entrega, {
+      limparCarrinho: !usaMercadoPago,
+      desconto: cupomAplicado ? { codigo: cupomAplicado.codigo, valor: desconto, motivo: cupomAplicado.motivo } : undefined,
+    })
     if (!pedido) {
       setErro('Erro ao criar pedido. Tente novamente.')
       setConfirming(false)
@@ -803,6 +1048,41 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
           <button aria-label="Fechar" onClick={onClose} style={{ background: '#f8fafc', border: 'none', borderRadius: 14, padding: 10, cursor: 'pointer' }}><X size={20} color="#94a3b8" /></button>
         </div>
 
+        {/* Conta e CPF */}
+        <div style={{ background: sessao ? '#f8fafc' : '#fff7ed', border: `1px solid ${sessao ? 'rgba(0,0,0,0.06)' : '#fed7aa'}`, borderRadius: 22, padding: 16, marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 900, color: '#0f172a' }}>
+                <Shield size={16} color={sessao ? '#16a34a' : '#ea580c'} /> Pedido seguro PraiaGo
+              </div>
+              <div style={{ fontSize: 12.5, color: '#64748b', fontWeight: 700, marginTop: 4 }}>
+                {sessao ? `${sessao.nome || 'Cliente'} · ${emailConfirmado ? 'e-mail confirmado' : 'confirme seu e-mail'}` : 'Entre ou crie sua conta para fechar pedido.'}
+              </div>
+            </div>
+            {!sessao && (
+              <button type="button" onClick={() => navigate('/perfil')} style={{ border: 'none', background: 'linear-gradient(135deg,#0ea5e9,#22c55e)', color: '#fff', borderRadius: 14, padding: '10px 12px', fontSize: 12, fontWeight: 900, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                Entrar
+              </button>
+            )}
+          </div>
+          {sessao && (
+            <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'end' }}>
+              <div>
+                <label style={{ fontSize: 10.5, fontWeight: 900, color: '#64748b', display: 'block', marginBottom: 6, letterSpacing: 0.6 }}>CPF DO CLIENTE</label>
+                <input inputMode="numeric" value={cpfCliente} onChange={e => setCpfCliente(formatarCpfCliente(e.target.value))} placeholder="000.000.000-00" style={darkInput} />
+              </div>
+              <button type="button" disabled={salvandoCpf || cpfOk} onClick={salvarCpfCliente} style={{ height: 48, border: 'none', background: cpfOk ? '#dcfce7' : '#0ea5e9', color: cpfOk ? '#15803d' : '#fff', borderRadius: 15, padding: '0 14px', fontSize: 12, fontWeight: 900, cursor: cpfOk ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
+                {cpfOk ? 'Validado' : salvandoCpf ? 'Salvando' : 'Validar'}
+              </button>
+            </div>
+          )}
+          {sessao && (
+            <div style={{ marginTop: 10, fontSize: 11.5, color: beneficioElegivel ? '#15803d' : '#64748b', fontWeight: 800 }}>
+              {carregandoBeneficio ? 'Conferindo beneficio...' : beneficioElegivel ? '20% de boas-vindas liberado para este pedido.' : 'Primeira compra tem 20% com e-mail confirmado e CPF valido.'}
+            </div>
+          )}
+        </div>
+
         {/* Resumo */}
         <div style={{ background: '#f8fafc', borderRadius: 24, padding: '20px', marginBottom: 20, border: '1px solid rgba(0,0,0,0.05)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 16 }}>
@@ -828,10 +1108,103 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
               </div>
             </div>
           ))}
-          <div style={{ borderTop: '1px solid rgba(0,0,0,0.08)', paddingTop: 16, marginTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 16, fontWeight: 800, color: '#64748b' }}>Total</span>
-            <span style={{ fontSize: 22, fontWeight: 900, color: '#22c55e', textShadow: '0 0 10px rgba(34,197,94,0.4)' }}>R$ {total.toFixed(2)}</span>
+          <div style={{ borderTop: '1px solid rgba(0,0,0,0.08)', paddingTop: 16, marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 13, fontWeight: 800, color: '#64748b' }}>Subtotal</span>
+              <span style={{ fontSize: 14, fontWeight: 900, color: '#0f172a' }}>R$ {dinheiro(subtotal)}</span>
+            </div>
+            {desconto > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#16a34a' }}>
+                <span style={{ fontSize: 13, fontWeight: 900 }}>{cupomAplicado?.codigo}</span>
+                <span style={{ fontSize: 14, fontWeight: 900 }}>- R$ {dinheiro(desconto)}</span>
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8 }}>
+              <span style={{ fontSize: 16, fontWeight: 900, color: '#64748b' }}>Total</span>
+              <span style={{ fontSize: 22, fontWeight: 900, color: '#22c55e', textShadow: '0 0 10px rgba(34,197,94,0.4)' }}>R$ {dinheiro(total)}</span>
+            </div>
           </div>
+        </div>
+
+        {/* Cupom */}
+        <div style={{ background: 'linear-gradient(135deg, rgba(14,165,233,0.08), rgba(34,197,94,0.08))', border: '1px solid rgba(14,165,233,0.14)', borderRadius: 22, padding: 16, marginBottom: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 900, color: '#0f172a' }}>Cupom PraiaGo</div>
+              <div style={{ fontSize: 11.5, color: '#64748b', fontWeight: 700 }}>{cupomAplicado ? `${cupomAplicado.titulo} aplicado.` : 'Escolha um cupom disponivel ou digite codigo de sorteio.'}</div>
+            </div>
+            {cupomAplicado && (
+              <button type="button" onClick={() => setCupomAplicado(null)} style={{ border: 'none', background: '#ffffff', color: '#ef4444', borderRadius: 12, padding: '8px 10px', fontSize: 11.5, fontWeight: 900, cursor: 'pointer' }}>
+                Remover
+              </button>
+            )}
+          </div>
+
+          <div style={{ display: 'grid', gap: 10 }}>
+            {carregandoCupons ? (
+              <div style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 16, padding: 14, fontSize: 12.5, fontWeight: 800, color: '#64748b' }}>
+                Buscando cupons pra voce...
+              </div>
+            ) : cuponsParaMostrar.length === 0 ? (
+              <div style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 16, padding: 14, fontSize: 12.5, fontWeight: 800, color: '#64748b' }}>
+                Nenhum cupom automatico disponivel agora.
+              </div>
+            ) : cuponsParaMostrar.map(c => {
+              const selecionado = cupomAplicado?.codigo === c.codigo
+              const valorTexto = c.tipo === 'percentual' ? `${Number(c.valor || 0)}% OFF` : c.tipo === 'valor_fixo' ? `R$ ${dinheiro(Number(c.valor || 0))} OFF` : 'Beneficio'
+              return (
+                <button
+                  key={c.codigo}
+                  type="button"
+                  disabled={c.bloqueado}
+                  onClick={() => aplicarCupom(c.codigo)}
+                  style={{
+                    width: '100%',
+                    textAlign: 'left',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    border: `1.5px solid ${selecionado ? '#16a34a' : c.bloqueado ? 'rgba(100,116,139,0.16)' : 'rgba(14,165,233,0.24)'}`,
+                    background: selecionado ? '#ecfdf5' : c.bloqueado ? '#f8fafc' : '#ffffff',
+                    opacity: c.bloqueado ? 0.68 : 1,
+                    borderRadius: 18,
+                    padding: 13,
+                    cursor: c.bloqueado ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  <div style={{ width: 42, height: 42, borderRadius: 15, background: c.bloqueado ? '#e2e8f0' : 'linear-gradient(135deg,#0ea5e9,#22c55e)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    {selecionado ? <Check size={18} /> : <TicketPercent size={18} />}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 950, color: '#0f172a' }}>{c.codigo}</span>
+                      <span style={{ fontSize: 10.5, fontWeight: 950, color: c.bloqueado ? '#64748b' : '#15803d', background: c.bloqueado ? '#e2e8f0' : '#dcfce7', borderRadius: 999, padding: '3px 7px' }}>{valorTexto}</span>
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: '#475569', marginTop: 3 }}>{c.titulo}</div>
+                    <div style={{ fontSize: 11, fontWeight: 750, color: c.bloqueado ? '#94a3b8' : '#0ea5e9', marginTop: 3 }}>{selecionado ? `Aplicado: economia de R$ ${dinheiro(desconto)}` : c.motivo}</div>
+                  </div>
+                </button>
+              )
+            })}
+
+            <button type="button" onClick={() => setMostrarCodigoManual(v => !v)} style={{ border: '1px dashed rgba(14,165,233,0.35)', background: '#ffffff', color: '#0284c7', borderRadius: 15, padding: '12px 14px', fontSize: 12.5, fontWeight: 900, cursor: 'pointer' }}>
+              {mostrarCodigoManual ? 'Ocultar codigo manual' : 'Tenho um codigo de cupom'}
+            </button>
+
+            {mostrarCodigoManual && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10 }}>
+                <input value={cupomTexto} onChange={e => setCupomTexto(e.target.value.toUpperCase())} placeholder="Digite seu codigo" style={darkInput} />
+                <button type="button" onClick={() => aplicarCupom()} style={{ border: 'none', background: '#0ea5e9', color: '#fff', borderRadius: 15, padding: '0 14px', fontSize: 12, fontWeight: 900, cursor: 'pointer' }}>
+                  Aplicar
+                </button>
+              </div>
+            )}
+          </div>
+          {(cupomErro || cupomAplicado) && (
+            <div style={{ marginTop: 10, fontSize: 12, fontWeight: 800, color: cupomErro ? '#dc2626' : '#15803d' }}>
+              {cupomErro || `${cupomAplicado?.codigo}: economia de R$ ${dinheiro(desconto)}.`}
+            </div>
+          )}
         </div>
 
         {/* Pagamento */}
@@ -839,14 +1212,11 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
           <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
             <CreditCard size={18} color="#0ea5e9" /> Forma de Pagamento
           </div>
-          <div style={{ fontSize: 11.5, fontWeight: 700, color: '#16a34a', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-            🔒 Tudo dentro do app — sem sair pra outro site
-          </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
             {([
-              ['pix', QrCode, 'PIX', 'no app'],
-              ['credito_online', CreditCard, 'Crédito', 'no app'],
-              ['debito_online', CreditCard, 'Débito', 'no app'],
+              ['pix', QrCode, 'PIX', 'na hora'],
+              ['credito_online', CreditCard, 'Crédito', 'na hora'],
+              ['debito_online', CreditCard, 'Débito', 'na hora'],
               ['dinheiro', Banknote, 'Dinheiro', 'na entrega'],
               ['cartao_fisico', CreditCard, 'Maquininha', 'na entrega'],
             ] as const).map(([key, Icon, label, hint]) => {
@@ -867,10 +1237,53 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
           </div>
         </div>
 
+        {/* CPF na nota (opcional) */}
+        <div style={{ marginBottom: 24 }}>
+          <button
+            type="button"
+            onClick={() => {
+              const abrindo = !querCpfNota
+              setQuerCpfNota(abrindo)
+              // Pré-preenche com o CPF do perfil, se já tiver
+              if (abrindo && !cpfNota && perfilCliente?.cpf) setCpfNota(formatarCpf(perfilCliente.cpf))
+            }}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: querCpfNota ? 'rgba(14,165,233,0.08)' : '#f8fafc', border: `1.5px solid ${querCpfNota ? '#0ea5e9' : 'rgba(0,0,0,0.06)'}`, borderRadius: 16, padding: '14px 16px', cursor: 'pointer', textAlign: 'left' }}
+          >
+            <div style={{ width: 22, height: 22, borderRadius: 7, border: `2px solid ${querCpfNota ? '#0ea5e9' : '#cbd5e1'}`, background: querCpfNota ? '#0ea5e9' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              {querCpfNota && <Check size={14} color="#fff" strokeWidth={3.5} />}
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>Adicionar CPF na nota</div>
+              <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Quer o CPF no comprovante do pedido? (opcional)</div>
+            </div>
+            <FileText size={20} color={querCpfNota ? '#0ea5e9' : '#94a3b8'} />
+          </button>
+          <AnimatePresence>
+            {querCpfNota && (
+              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} style={{ overflow: 'hidden' }}>
+                <input
+                  inputMode="numeric"
+                  placeholder="000.000.000-00"
+                  value={cpfNota}
+                  onChange={e => setCpfNota(formatarCpf(e.target.value))}
+                  style={{ width: '100%', marginTop: 10, border: '1px solid rgba(0,0,0,0.1)', borderRadius: 14, padding: '14px', fontSize: 16, fontWeight: 700, color: '#0f172a', background: '#f8fafc', outline: 'none' }}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
         {/* Localização */}
         <div style={{ marginBottom: 24 }}>
           <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
             <MapPin size={18} color="#f43f5e" /> Onde te encontrar
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 18, padding: '12px 14px', marginBottom: 14 }}>
+            <Navigation size={18} color="#ea580c" />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12, fontWeight: 900, color: '#9a3412' }}>Entrega na praia</div>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: '#64748b' }}>Use reta/barraca ou Radar GPS para o vendedor te achar rapido.</div>
+            </div>
           </div>
           <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
             <div style={{ flex: 1 }}>
@@ -883,7 +1296,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
             </div>
           </div>
           <div style={{ display: 'flex', gap: 12 }}>
-            {([['fixa', '📍 Ponto Fixo'], ['tempo_real', '🛰️ Radar GPS']] as const).map(([key, titulo]) => {
+            {([['fixa', 'Ponto fixo'], ['tempo_real', 'Radar GPS']] as const).map(([key, titulo]) => {
               const sel = modo === key
               return (
                 <button key={key} onClick={() => setModo(key)} style={{
@@ -909,7 +1322,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
         {erro && <div style={{ fontSize: 13, color: '#ef4444', fontWeight: 800, marginBottom: 16, textAlign: 'center', background: 'rgba(239,68,68,0.1)', padding: 12, borderRadius: 12 }}>{erro}</div>}
 
         <motion.button whileTap={{ scale: 0.96 }} onClick={handleConfirm} disabled={confirming} style={{ width: '100%', background: confirming ? '#22c55e' : 'linear-gradient(135deg, #0ea5e9, #22c55e)', border: 'none', borderRadius: 20, padding: '20px', color: '#fff', fontSize: 18, fontWeight: 900, cursor: confirming ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, boxShadow: confirming ? '0 0 20px rgba(34,197,94,0.6)' : '0 10px 30px rgba(14,165,233,0.4)', transition: 'all 0.3s' }}>
-          {confirming ? <><Check size={24} /> {isMercadoPagoMethod(pagamento) ? 'Abrindo Mercado Pago...' : 'Pedido Enviado!'}</> : <><Send size={20} /> Fechar Pedido</>}
+          {confirming ? <><Check size={24} /> {isMercadoPagoMethod(pagamento) ? 'Preparando pagamento...' : 'Pedido Enviado!'}</> : <><Send size={20} /> Fechar Pedido · R$ {dinheiro(total)}</>}
         </motion.button>
       </motion.div>
     </div>
@@ -926,7 +1339,14 @@ const darkInput: React.CSSProperties = {
 type Step = 'menu' | 'checkout' | 'rastreando'
 
 /* ─── LISTA DE LOJAS (estilo iFood) ─────────────────────── */
+function tempoMinutos(tempo: string) {
+  const n = Number(String(tempo).match(/\d+/)?.[0] ?? 999)
+  return Number.isFinite(n) ? n : 999
+}
+
 function LojaCard({ v, index, onOpen }: { v: Vendedor; index: number; onOpen: () => void }) {
+  const rapido = tempoMinutos(v.tempo) <= 30
+  const temPromocao = v.produtos.some(p => p.promocao || (p.precoOriginal && p.precoOriginal > p.preco))
   return (
     <motion.button
       initial={{ opacity: 0, y: 24 }}
@@ -943,6 +1363,11 @@ function LojaCard({ v, index, onOpen }: { v: Vendedor; index: number; onOpen: ()
         <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', alignItems: 'center', gap: 6, background: v.aberto ? 'rgba(34,197,94,0.95)' : 'rgba(100,116,139,0.95)', color: '#fff', borderRadius: 999, padding: '6px 12px', fontSize: 11, fontWeight: 900, boxShadow: '0 6px 16px rgba(0,0,0,0.18)' }}>
           <Clock size={12} /> {labelHorario(v.aberto, v.horarioAbre, v.horarioFecha)}
         </div>
+        {(temPromocao || rapido) && (
+          <div style={{ position: 'absolute', top: 12, left: 12, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.96)', color: temPromocao ? '#16a34a' : '#0284c7', borderRadius: 999, padding: '6px 11px', fontSize: 11, fontWeight: 900, boxShadow: '0 6px 16px rgba(0,0,0,0.12)' }}>
+            {temPromocao ? <TicketPercent size={12} /> : <Zap size={12} />} {temPromocao ? 'Promo ativa' : 'Rapida'}
+          </div>
+        )}
         <div style={{ position: 'absolute', left: 16, bottom: -22, width: 56, height: 56, borderRadius: 18, background: v.gradiente, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, border: '3px solid #ffffff', boxShadow: '0 8px 20px rgba(14,165,233,0.35)' }}>
           {v.emoji}
         </div>
@@ -963,6 +1388,14 @@ function LojaCard({ v, index, onOpen }: { v: Vendedor; index: number; onOpen: ()
           <span style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />
           <span>{v.tempo}</span>
         </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 12 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#ecfdf5', color: '#15803d', border: '1px solid #bbf7d0', borderRadius: 999, padding: '5px 9px', fontSize: 11, fontWeight: 900 }}>
+            <CreditCard size={11} /> Pix/cartao no app
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#eff6ff', color: '#0284c7', border: '1px solid #bfdbfe', borderRadius: 999, padding: '5px 9px', fontSize: 11, fontWeight: 900 }}>
+            <TicketPercent size={11} /> BEMVINDO20
+          </span>
+        </div>
         <div style={{ marginTop: 10, fontSize: 12, fontWeight: 800, color: v.aberto ? '#0ea5e9' : '#94a3b8' }}>
           {v.aberto ? `Ver cardápio · ${v.produtos.length} ite${v.produtos.length === 1 ? 'm' : 'ns'} →` : 'Loja fechada — toque pra espiar o cardápio'}
         </div>
@@ -976,21 +1409,35 @@ function LojasList({ vendedores, loading, tipoInicial }: { vendedores: Vendedor[
   const [filtro, setFiltro] = useState<'todos' | 'restaurante' | 'ambulante'>(
     tipoInicial === 'restaurante' || tipoInicial === 'ambulante' ? tipoInicial : 'todos'
   )
+  const [atalho, setAtalho] = useState<'todos' | 'abertas' | 'cupom' | 'rapidas' | 'avaliadas'>('todos')
   const [busca, setBusca] = useState('')
 
   const filtrados = useMemo(() => {
     const q = busca.trim().toLowerCase()
-    return vendedores
+    const base = vendedores
       .filter(v => filtro === 'todos' || v.tipo === filtro)
       .filter(v => !q || v.nome.toLowerCase().includes(q) || v.categoria.toLowerCase().includes(q) || v.produtos.some(p => p.nome.toLowerCase().includes(q)))
-      .sort((a, b) => Number(b.aberto) - Number(a.aberto) || b.avaliacao - a.avaliacao)
-  }, [vendedores, filtro, busca])
+      .filter(v => atalho !== 'abertas' || v.aberto)
+      .filter(v => atalho !== 'rapidas' || tempoMinutos(v.tempo) <= 35)
+    return base.sort((a, b) => {
+      if (atalho === 'avaliadas') return b.avaliacao - a.avaliacao || Number(b.aberto) - Number(a.aberto)
+      if (atalho === 'rapidas') return tempoMinutos(a.tempo) - tempoMinutos(b.tempo) || Number(b.aberto) - Number(a.aberto)
+      return Number(b.aberto) - Number(a.aberto) || b.avaliacao - a.avaliacao
+    })
+  }, [vendedores, filtro, busca, atalho])
 
   const abertas = filtrados.filter(v => v.aberto).length
   const chips: Array<{ key: 'todos' | 'restaurante' | 'ambulante'; label: string; icon: React.ReactNode }> = [
     { key: 'todos', label: 'Todas', icon: <Store size={13} /> },
     { key: 'restaurante', label: 'Restaurantes', icon: <UtensilsCrossed size={13} /> },
     { key: 'ambulante', label: 'Ambulantes', icon: <Umbrella size={13} /> },
+  ]
+  const atalhos: Array<{ key: typeof atalho; label: string; icon: React.ReactNode }> = [
+    { key: 'todos', label: 'Relevancia', icon: <SlidersHorizontal size={13} /> },
+    { key: 'abertas', label: 'Aberto agora', icon: <Clock size={13} /> },
+    { key: 'cupom', label: 'Com cupom', icon: <TicketPercent size={13} /> },
+    { key: 'rapidas', label: 'Mais rapidas', icon: <Zap size={13} /> },
+    { key: 'avaliadas', label: 'Melhor nota', icon: <Star size={13} /> },
   ]
 
   return (
@@ -1025,10 +1472,38 @@ function LojasList({ vendedores, loading, tipoInicial }: { vendedores: Vendedor[
         </div>
       </div>
 
+      {/* Beneficio PraiaGo */}
+      <div style={{ padding: '14px 20px 0' }}>
+        <motion.button
+          whileTap={{ scale: 0.98 }}
+          onClick={() => setAtalho('cupom')}
+          style={{ width: '100%', textAlign: 'left', border: 'none', cursor: 'pointer', borderRadius: 24, padding: 0, background: 'linear-gradient(135deg,#0ea5e9,#22c55e)', overflow: 'hidden', boxShadow: '0 14px 34px rgba(14,165,233,0.22)' }}
+        >
+          <div style={{ padding: 18, display: 'flex', alignItems: 'center', gap: 14, color: '#fff', position: 'relative' }}>
+            <div style={{ width: 46, height: 46, borderRadius: 16, background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.26)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <TicketPercent size={23} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 17, fontWeight: 950, letterSpacing: -0.2 }}>20% na primeira compra</div>
+              <div style={{ marginTop: 3, fontSize: 12.5, fontWeight: 700, opacity: 0.92 }}>Use BEMVINDO20 uma vez por conta com CPF e e-mail confirmados.</div>
+            </div>
+            <Sparkles size={21} />
+          </div>
+        </motion.button>
+      </div>
+
       {/* Chips de filtro */}
       <div style={{ display: 'flex', gap: 8, padding: '16px 20px 6px', overflowX: 'auto' }}>
         {chips.map(c => (
           <motion.button key={c.key} whileTap={{ scale: 0.94 }} onClick={() => setFiltro(c.key)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 999, fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap', cursor: 'pointer', border: filtro === c.key ? '1px solid rgba(14,165,233,0.4)' : '1px solid rgba(0,0,0,0.08)', background: filtro === c.key ? 'linear-gradient(135deg, rgba(14,165,233,0.14), rgba(34,197,94,0.14))' : '#ffffff', color: filtro === c.key ? '#0284c7' : '#64748b' }}>
+            {c.icon} {c.label}
+          </motion.button>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, padding: '6px 20px 4px', overflowX: 'auto' }}>
+        {atalhos.map(c => (
+          <motion.button key={c.key} whileTap={{ scale: 0.94 }} onClick={() => setAtalho(c.key)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 999, fontSize: 12.5, fontWeight: 850, whiteSpace: 'nowrap', cursor: 'pointer', border: atalho === c.key ? '1px solid rgba(14,165,233,0.42)' : '1px solid rgba(0,0,0,0.08)', background: atalho === c.key ? '#e0f2fe' : '#ffffff', color: atalho === c.key ? '#0284c7' : '#64748b' }}>
             {c.icon} {c.label}
           </motion.button>
         ))}
@@ -1127,9 +1602,23 @@ export default function PedirPage() {
               <MapPin size={14} /> {vendedor.distancia}
             </div>
           </div>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 16, background: 'rgba(168,85,247,0.15)', border: '1px solid rgba(168,85,247,0.3)', borderRadius: 14, padding: '8px 16px' }}>
-            <Zap size={14} color="#c084fc" className="animate-pulse-neon" style={{ boxShadow: 'none' }} />
-            <span style={{ fontSize: 12, fontWeight: 800, color: '#d8b4fe', textShadow: '0 0 8px rgba(168,85,247,0.5)' }}>Zona {vendedor.zona} · Alta Demanda</span>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 16, background: 'rgba(14,165,233,0.12)', border: '1px solid rgba(14,165,233,0.24)', borderRadius: 14, padding: '8px 16px' }}>
+            <Zap size={14} color="#0ea5e9" className="animate-pulse-neon" style={{ boxShadow: 'none' }} />
+            <span style={{ fontSize: 12, fontWeight: 800, color: '#0284c7' }}>Cupom BEMVINDO20 · 1 uso por conta</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 18 }}>
+            {[
+              { icon: <Navigation size={16} color="#0ea5e9" />, title: 'Radar PraiaGo', text: 'GPS, reta ou barraca' },
+              { icon: <Shield size={16} color="#16a34a" />, title: 'Pagamento seguro', text: 'Pix e cartao no app' },
+            ].map(item => (
+              <div key={item.title} style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 18, padding: 12, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                <div style={{ width: 34, height: 34, borderRadius: 12, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{item.icon}</div>
+                <div>
+                  <div style={{ fontSize: 12.5, fontWeight: 900, color: '#0f172a' }}>{item.title}</div>
+                  <div style={{ fontSize: 11, fontWeight: 650, color: '#64748b', marginTop: 2, lineHeight: 1.25 }}>{item.text}</div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -1138,15 +1627,26 @@ export default function PedirPage() {
         <h3 style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 10 }}>Cardápio <span style={{ fontSize: 24 }}>🔥</span></h3>
         {vendedor.produtos.map(p => {
           const qtd = meuCarrinho[p.id] ?? 0
+          const precoOriginal = p.precoOriginal && p.precoOriginal > p.preco ? p.precoOriginal : null
+          const promocaoLabel = p.promocao?.selo || (precoOriginal ? 'Oferta PraiaGo' : null)
           return (
             <div key={p.id} style={{ display: 'flex', gap: 20, marginBottom: 32, alignItems: 'center' }}>
               <div style={{ flex: 1 }}>
+                {promocaoLabel && (
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#fff7ed', color: '#ea580c', border: '1px solid #fed7aa', borderRadius: 999, padding: '4px 9px', fontSize: 10.5, fontWeight: 950, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.35 }}>
+                    <TicketPercent size={11} /> {promocaoLabel}
+                  </div>
+                )}
                 <h4 style={{ fontSize: 17, fontWeight: 800, color: '#0f172a' }}>{p.nome}</h4>
                 <p style={{ fontSize: 14, color: '#64748b', marginTop: 6, lineHeight: 1.5 }}>{p.desc}</p>
-                <div style={{ fontSize: 18, fontWeight: 900, color: '#4ade80', marginTop: 10, textShadow: '0 0 10px rgba(74,222,128,0.2)' }}>R$ {p.preco.toFixed(2).replace('.', ',')}</div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 10 }}>
+                  <div style={{ fontSize: 18, fontWeight: 900, color: '#16a34a', textShadow: '0 0 10px rgba(74,222,128,0.16)' }}>R$ {p.preco.toFixed(2).replace('.', ',')}</div>
+                  {precoOriginal && <div style={{ fontSize: 12, fontWeight: 800, color: '#94a3b8', textDecoration: 'line-through' }}>R$ {precoOriginal.toFixed(2).replace('.', ',')}</div>}
+                </div>
               </div>
               <div style={{ position: 'relative', flexShrink: 0 }}>
                 <div style={{ width: 100, height: 100, borderRadius: 24, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 44, border: '1px solid rgba(0,0,0,0.05)', boxShadow: 'inset 0 4px 20px rgba(0,0,0,0.2)', overflow: 'hidden' }}>{p.foto ? <img src={p.foto} alt={p.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : p.emoji}</div>
+                {promocaoLabel && <div style={{ position: 'absolute', top: -8, right: -8, background: '#ea580c', color: '#fff', borderRadius: 999, padding: '5px 8px', fontSize: 10, fontWeight: 950, boxShadow: '0 8px 18px rgba(234,88,12,0.35)' }}>OFF</div>}
                 <div style={{ position: 'absolute', bottom: -14, left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', background: '#0ea5e9', borderRadius: 16, boxShadow: '0 8px 20px rgba(14,165,233,0.4)' }}>
                   {qtd > 0 ? (
                     <>
