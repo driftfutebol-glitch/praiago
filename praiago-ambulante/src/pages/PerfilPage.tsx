@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Star, MapPin, Package, TrendingUp, ChevronRight, LogOut, Bell, Shield, HelpCircle, CreditCard, Loader2 } from 'lucide-react'
+import { Star, MapPin, Package, TrendingUp, ChevronRight, LogOut, Bell, Shield, HelpCircle, CreditCard, Loader2, Clock } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { logout, useSessao } from '../lib/auth'
+import { supabase } from '../lib/supabase'
 import { buscarStatusMercadoPago, iniciarVinculoMercadoPago, type MercadoPagoLinkStatus } from '../lib/mercadopago'
 import SuportePanel from '../components/SuportePanel'
 
@@ -21,11 +22,35 @@ export default function PerfilPage() {
   const [mpLoading, setMpLoading] = useState(false)
   const [mpErro, setMpErro] = useState('')
   const [suporteAberto, setSuporteAberto] = useState(false)
+  const [horaAbre, setHoraAbre] = useState('')
+  const [horaFecha, setHoraFecha] = useState('')
+  const [salvandoHorario, setSalvandoHorario] = useState(false)
+  const [horarioMsg, setHorarioMsg] = useState('')
 
   useEffect(() => {
     if (!sessao) return
     buscarStatusMercadoPago(sessao.id).then(setMpStatus)
+    supabase.from('profiles').select('horario_abre,horario_fecha').eq('id', sessao.id).maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setHoraAbre(data.horario_abre || '')
+          setHoraFecha(data.horario_fecha || '')
+        }
+      })
   }, [sessao])
+
+  async function salvarHorario() {
+    if (!sessao) return
+    setSalvandoHorario(true)
+    setHorarioMsg('')
+    const { error } = await supabase
+      .from('profiles')
+      .update({ horario_abre: horaAbre || null, horario_fecha: horaFecha || null })
+      .eq('id', sessao.id)
+    setSalvandoHorario(false)
+    setHorarioMsg(error ? 'Não deu pra salvar. Tenta de novo.' : 'Horário salvo! Já aparece pros clientes ✅')
+    setTimeout(() => setHorarioMsg(''), 3500)
+  }
 
   async function conectarMercadoPago() {
     if (!sessao) return
@@ -121,6 +146,31 @@ export default function PerfilPage() {
               <span style={{ fontSize: 11, fontWeight: 900, color: '#4ade80', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: 12, padding: '4px 12px', letterSpacing: 1, textTransform: 'uppercase' }}>Conectado</span>
             </div>
           </div>
+        </motion.div>
+
+        {/* Horário de funcionamento (o cliente vê "Aberto/Fechado" por isso) */}
+        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.52 }} className="glass-panel" style={{
+          borderRadius: 24, padding: '20px', marginBottom: 20,
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 900, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Clock size={14} color="#0ea5e9" /> HORÁRIO DE FUNCIONAMENTO
+          </div>
+          <p style={{ fontSize: 12.5, color: '#64748b', fontWeight: 500, margin: '0 0 14px' }}>Fora desse horário sua banca aparece como <strong>fechada</strong> pros clientes.</p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 6 }}>ABRE ÀS</label>
+              <input type="time" value={horaAbre} onChange={e => setHoraAbre(e.target.value)} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 14, padding: '12px 12px', fontSize: 16, fontWeight: 800, color: '#0f172a', background: '#f8fafc' }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 11, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 6 }}>FECHA ÀS</label>
+              <input type="time" value={horaFecha} onChange={e => setHoraFecha(e.target.value)} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 14, padding: '12px 12px', fontSize: 16, fontWeight: 800, color: '#0f172a', background: '#f8fafc' }} />
+            </div>
+          </div>
+          <button type="button" onClick={salvarHorario} disabled={salvandoHorario} style={{ width: '100%', border: 'none', background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', color: '#fff', borderRadius: 16, padding: 14, fontSize: 14, fontWeight: 900, cursor: salvandoHorario ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            {salvandoHorario ? <Loader2 size={17} className="animate-spin-slow" /> : <Clock size={17} />}
+            Salvar horário
+          </button>
+          {horarioMsg && <div style={{ marginTop: 10, fontSize: 13, fontWeight: 800, color: horarioMsg.includes('✅') ? '#16a34a' : '#ef4444', textAlign: 'center' }}>{horarioMsg}</div>}
         </motion.div>
 
         {/* Menu de opções */}

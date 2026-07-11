@@ -35,6 +35,33 @@ export async function criarCheckoutMercadoPago(pedidoId: string): Promise<Mercad
   return data
 }
 
+export type PixCobranca = {
+  ok: boolean
+  payment_id: number
+  status: string
+  qr_code: string
+  qr_code_base64: string | null
+  ticket_url: string | null
+  expires_at: string
+}
+
+/** PIX transparente: gera QR + copia-e-cola pra pagar SEM sair do app. */
+export async function criarPixMercadoPago(pedidoId: string): Promise<PixCobranca> {
+  const { data, error } = await supabase.functions.invoke<PixCobranca>('mercadopago-pix', {
+    body: { pedido_id: pedidoId },
+  })
+
+  if (error) {
+    if (error instanceof FunctionsHttpError) {
+      const payload = await error.context.json().catch(() => null)
+      throw new Error(payload?.error || 'Nao foi possivel gerar o PIX.')
+    }
+    throw new Error(error.message || 'Nao foi possivel gerar o PIX.')
+  }
+  if (!data?.qr_code) throw new Error('O Mercado Pago nao devolveu o codigo PIX.')
+  return data
+}
+
 export async function verificarPagamentoMercadoPago(pedidoId: string): Promise<MercadoPagoPaymentCheck> {
   const { data, error } = await supabase.functions.invoke<MercadoPagoPaymentCheck>('mercadopago-check-payment', {
     body: { pedido_id: pedidoId },

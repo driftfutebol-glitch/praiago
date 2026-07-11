@@ -44,7 +44,11 @@ type ProfileRow = {
   zona: string | null
   verificado: boolean | null
   status: string | null
+  horario_abre: string | null
+  horario_fecha: string | null
 }
+
+import { dentroDoHorario } from '../lib/horario'
 
 function hero(emoji: string): string {
   const svg =
@@ -117,6 +121,13 @@ export const useCatalogo = create<State>((set, get) => ({
       if (!byVend.has(vid)) {
         const pf = profs[vid]
         const vendedorEmoji = r.vendedor_emoji || pf?.emoji || '🥥'
+        const tipo = (pf?.role as VendedorTipo) || 'ambulante'
+        // Aberto de verdade: horário do vendedor manda; ambulante também precisa
+        // estar online (radar ligado). Sem horário definido → cai no online.
+        const noHorario = dentroDoHorario(pf?.horario_abre, pf?.horario_fecha)
+        const aberto = tipo === 'ambulante'
+          ? (pf?.online ?? false) && (noHorario ?? true)
+          : (noHorario ?? (pf?.online ?? true))
         byVend.set(vid, {
           id: vid,
           nome: r.vendedor_nome || pf?.nome || 'Vendedor PraiaGo',
@@ -127,12 +138,14 @@ export const useCatalogo = create<State>((set, get) => ({
           distancia: 'Perto de voce',
           emoji: vendedorEmoji,
           gradiente: 'linear-gradient(135deg,#0ea5e9,#22c55e)',
-          aberto: pf?.online ?? true,
+          aberto,
           image: hero(vendedorEmoji),
           pos: [pf?.lat ?? -24.0228, pf?.lng ?? -46.4305],
           zona: pf?.zona || 'Praia Grande',
           produtos: [],
-          tipo: (pf?.role as VendedorTipo) || 'ambulante',
+          tipo,
+          horarioAbre: pf?.horario_abre ?? null,
+          horarioFecha: pf?.horario_fecha ?? null,
         })
       }
 

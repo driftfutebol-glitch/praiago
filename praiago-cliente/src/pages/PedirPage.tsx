@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { ArrowLeft, MapPin, X, WifiOff, Star, Check, Zap, Send, Heart, Shield, Navigation, CreditCard, Banknote, QrCode, Trash2 } from 'lucide-react'
+import { ArrowLeft, MapPin, X, WifiOff, Star, Check, Zap, Send, Heart, Shield, Navigation, CreditCard, Banknote, QrCode, Trash2, Clock, Search, UtensilsCrossed, Umbrella, Store } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, Polyline, Circle, useMap } from 'react-leaflet'
 import L from 'leaflet'
@@ -10,7 +10,8 @@ import { useGPS, type GPSFonte, type GPSStatus } from '../hooks/useGPS'
 import { criarMonitorSentido, type SentidoStatus } from '../lib/trafego'
 import { broadcastOrder } from '../hooks/useOrderBroadcast'
 import { type Vendedor } from '../lib/catalogo'
-import { criarCheckoutMercadoPago, isMercadoPagoMethod } from '../lib/mercadopago'
+import { criarCheckoutMercadoPago, criarPixMercadoPago, isMercadoPagoMethod, type PixCobranca } from '../lib/mercadopago'
+import { labelHorario } from '../lib/horario'
 import { useCatalogo } from '../store/useCatalogo'
 import { useStore, type Entrega } from '../store/useStore'
 import { confirmDialog, alertDialog } from '../lib/dialog'
@@ -363,6 +364,149 @@ function RastreamentoModal({ vendedor, clientePos, pedidoId, onClose }: { vended
   )
 }
 
+/* ─── PIX DENTRO DO APP ─────────────────────────────────── */
+async function copiarTexto(texto: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(texto)
+      return true
+    }
+  } catch { /* tenta fallback abaixo */ }
+  try {
+    const el = document.createElement('textarea')
+    el.value = texto
+    el.style.position = 'fixed'
+    el.style.opacity = '0'
+    document.body.appendChild(el)
+    el.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(el)
+    return ok
+  } catch {
+    return false
+  }
+}
+
+function PixPagamentoModal({ cobranca, pedidoId, total, onPago, onClose }: {
+  cobranca: PixCobranca
+  pedidoId: string
+  total: number
+  onPago: () => void
+  onClose: () => void
+}) {
+  const [copiado, setCopiado] = useState(false)
+  const [pago, setPago] = useState(false)
+  const [restante, setRestante] = useState('30:00')
+  const pagoRef = useRef(false)
+
+  // Confirmação ao vivo: realtime na linha do pedido + poll de segurança.
+  // Quando o webhook aprovar o pagamento, o app comemora e segue sozinho.
+  useEffect(() => {
+    function confirmar(novo: { payment_status?: string | null }) {
+      if (pagoRef.current) return
+      if (novo?.payment_status === 'aprovado') {
+        pagoRef.current = true
+        setPago(true)
+        setTimeout(onPago, 2000)
+      }
+    }
+
+    const ch = supabase
+      .channel(`pix_${pedidoId}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pedidos', filter: `id=eq.${pedidoId}` }, payload => {
+        confirmar(payload.new as { payment_status?: string | null })
+      })
+      .subscribe()
+
+    const poll = setInterval(async () => {
+      if (pagoRef.current) return
+      const { data } = await supabase.from('pedidos').select('payment_status').eq('id', pedidoId).maybeSingle()
+      if (data) confirmar(data)
+    }, 5000)
+
+    return () => { supabase.removeChannel(ch); clearInterval(poll) }
+  }, [pedidoId, onPago])
+
+  // Contagem regressiva até o PIX expirar
+  useEffect(() => {
+    const fim = new Date(cobranca.expires_at).getTime()
+    const t = setInterval(() => {
+      const diff = Math.max(0, fim - Date.now())
+      const m = Math.floor(diff / 60000)
+      const s = Math.floor((diff % 60000) / 1000)
+      setRestante(`${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`)
+    }, 1000)
+    return () => clearInterval(t)
+  }, [cobranca.expires_at])
+
+  async function copiar() {
+    const ok = await copiarTexto(cobranca.qr_code)
+    setCopiado(ok)
+    if (ok) setTimeout(() => setCopiado(false), 2500)
+  }
+
+  async function fechar() {
+    if (pagoRef.current) return
+    const sair = await confirmDialog({
+      title: 'Sair sem pagar?',
+      message: 'O pedido só é enviado ao vendedor depois do pagamento. Você pode pagar depois em Meus Pedidos.',
+      confirmText: 'Sair mesmo assim',
+      tone: 'danger',
+    })
+    if (sair) onClose()
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'flex-end' }}>
+      <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} transition={{ type: 'spring', damping: 26, stiffness: 240 }} style={{ width: '100%', background: '#ffffff', borderTopLeftRadius: 36, borderTopRightRadius: 36, padding: '22px 24px 34px', maxHeight: '94vh', overflowY: 'auto' }}>
+        <div style={{ width: 48, height: 6, background: '#e2e8f0', borderRadius: 10, margin: '0 auto 18px' }} />
+
+        <AnimatePresence mode="wait">
+          {pago ? (
+            <motion.div key="pago" initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} style={{ textAlign: 'center', padding: '34px 10px 40px' }}>
+              <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', damping: 12, stiffness: 200, delay: 0.1 }} style={{ width: 92, height: 92, borderRadius: '50%', background: 'linear-gradient(135deg, #22c55e, #16a34a)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', boxShadow: '0 18px 44px rgba(34,197,94,0.45)' }}>
+                <Check size={46} color="#fff" strokeWidth={3.5} />
+              </motion.div>
+              <div style={{ fontSize: 24, fontWeight: 900, color: '#0f172a' }}>Pagamento aprovado! 🎉</div>
+              <p style={{ fontSize: 14.5, color: '#64748b', fontWeight: 600, marginTop: 8 }}>Enviando seu pedido pro vendedor…</p>
+            </motion.div>
+          ) : (
+            <motion.div key="aguardando" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <h2 style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8 }}><QrCode size={22} color="#0ea5e9" /> Pague com PIX</h2>
+                <button aria-label="Fechar" onClick={fechar} style={{ background: '#f8fafc', border: 'none', borderRadius: 14, padding: 10, cursor: 'pointer' }}><X size={18} color="#94a3b8" /></button>
+              </div>
+              <p style={{ fontSize: 13.5, color: '#64748b', fontWeight: 600, margin: '0 0 18px' }}>Sem sair do app: escaneia o QR ou copia o código 👇</p>
+
+              <div style={{ textAlign: 'center', background: '#f8fafc', borderRadius: 24, border: '1px solid rgba(0,0,0,0.06)', padding: '18px 16px', marginBottom: 14 }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1 }}>Total a pagar</div>
+                <div style={{ fontSize: 32, fontWeight: 900, color: '#16a34a', margin: '2px 0 12px' }}>R$ {total.toFixed(2).replace('.', ',')}</div>
+                {cobranca.qr_code_base64 ? (
+                  <motion.img initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} src={`data:image/png;base64,${cobranca.qr_code_base64}`} alt="QR Code PIX" style={{ width: 210, height: 210, borderRadius: 20, border: '1px solid rgba(0,0,0,0.08)', background: '#fff', padding: 8 }} />
+                ) : (
+                  <div style={{ fontSize: 13, color: '#64748b', padding: 20 }}>Use o código copia-e-cola abaixo 👇</div>
+                )}
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 12, background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)', color: '#b45309', borderRadius: 999, padding: '6px 14px', fontSize: 12, fontWeight: 900 }}>
+                  <Clock size={13} /> Expira em {restante}
+                </div>
+              </div>
+
+              <motion.button whileTap={{ scale: 0.97 }} onClick={copiar} style={{ width: '100%', border: 'none', borderRadius: 20, padding: '17px 20px', fontSize: 15, fontWeight: 900, cursor: 'pointer', color: '#fff', background: copiado ? 'linear-gradient(135deg, #16a34a, #15803d)' : 'linear-gradient(135deg, #0ea5e9, #22c55e)', boxShadow: '0 14px 30px rgba(14,165,233,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                {copiado ? <><Check size={19} /> Código copiado! Cola no app do banco</> : <>📋 Copiar código PIX</>}
+              </motion.button>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 18 }}>
+                <motion.div animate={{ scale: [1, 1.25, 1], opacity: [1, 0.55, 1] }} transition={{ repeat: Infinity, duration: 1.6 }} style={{ width: 10, height: 10, borderRadius: '50%', background: '#0ea5e9' }} />
+                <span style={{ fontSize: 13.5, fontWeight: 800, color: '#0284c7' }}>Aguardando pagamento… confirmamos na hora ⚡</span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
+    </div>
+  )
+}
+
 /* ─── CHECKOUT MODAL ────────────────────────────────────── */
 function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gpsFonte }: { vendedor: Vendedor; onConfirm: (e: Entrega, pedidoId: string) => void; onClose: () => void; clientePos: [number, number]; gpsStatus: GPSStatus; gpsFonte: GPSFonte }) {
   const [confirming, setConfirming] = useState(false)
@@ -371,6 +515,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
   const [modo, setModo] = useState<'fixa' | 'tempo_real'>('fixa')
   const [pagamento, setPagamento] = useState<Entrega['pagamento']>('pix')
   const [erro, setErro] = useState('')
+  const [pix, setPix] = useState<{ cobranca: PixCobranca; pedidoId: string; entrega: Entrega; valor: number } | null>(null)
   const carrinho = useStore(s => s.carrinho)
   const criarPedido = useStore(s => s.criarPedido)
   const setQtd = useStore(s => s.setQtd)
@@ -409,6 +554,20 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
     if (usaMercadoPago) {
       // Pagamento online: o vendedor SÓ recebe o pedido depois que o Mercado
       // Pago confirmar — nada de broadcast nem "pedido enviado" antes de pagar.
+      if (pagamento === 'pix') {
+        // PIX transparente: QR + copia-e-cola DENTRO do app, sem redirect.
+        try {
+          const cobranca = await criarPixMercadoPago(pedido.id)
+          const valor = total
+          limparCarrinho()
+          setConfirming(false)
+          setPix({ cobranca, pedidoId: pedido.id, entrega, valor })
+        } catch (err) {
+          setErro(err instanceof Error ? err.message : 'Nao foi possivel gerar o PIX.')
+          setConfirming(false)
+        }
+        return
+      }
       addNotif({ titulo: 'Falta só o pagamento 💳', texto: 'Finalize no Mercado Pago para o pedido ser enviado ao vendedor.' })
       try {
         const checkout = await criarCheckoutMercadoPago(pedido.id)
@@ -439,6 +598,20 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
     })
     addNotif({ titulo: 'Pedido enviado! 🎉', texto: `Pagamento via ${pagamento.toUpperCase()} na entrega.` })
     setTimeout(() => onConfirm(entrega, pedido.id), 900)
+  }
+
+  // PIX gerado: mostra só o modal de pagamento (o pedido já existe no banco,
+  // aguardando o webhook aprovar).
+  if (pix) {
+    return (
+      <PixPagamentoModal
+        cobranca={pix.cobranca}
+        pedidoId={pix.pedidoId}
+        total={pix.valor}
+        onPago={() => onConfirm(pix.entrega, pix.pedidoId)}
+        onClose={onClose}
+      />
+    )
   }
 
   return (
@@ -570,20 +743,150 @@ const darkInput: React.CSSProperties = {
 /* ─── PÁGINA PRINCIPAL ──────────────────────────────────── */
 type Step = 'menu' | 'checkout' | 'rastreando'
 
+/* ─── LISTA DE LOJAS (estilo iFood) ─────────────────────── */
+function LojaCard({ v, index, onOpen }: { v: Vendedor; index: number; onOpen: () => void }) {
+  return (
+    <motion.button
+      initial={{ opacity: 0, y: 24 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: Math.min(index * 0.06, 0.4), type: 'spring', damping: 22, stiffness: 260 }}
+      whileTap={{ scale: 0.97 }}
+      onClick={onOpen}
+      style={{ width: '100%', textAlign: 'left', background: '#ffffff', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 26, overflow: 'hidden', cursor: 'pointer', padding: 0, boxShadow: '0 10px 30px rgba(15,23,42,0.07)' }}
+    >
+      <div style={{ position: 'relative', height: 132 }}>
+        <img src={v.image} alt={v.nome} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: v.aberto ? 'none' : 'grayscale(0.9) brightness(0.9)' }} />
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(255,255,255,0.95), transparent 55%)' }} />
+        {/* Badge aberto/fechado com horário */}
+        <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', alignItems: 'center', gap: 6, background: v.aberto ? 'rgba(34,197,94,0.95)' : 'rgba(100,116,139,0.95)', color: '#fff', borderRadius: 999, padding: '6px 12px', fontSize: 11, fontWeight: 900, boxShadow: '0 6px 16px rgba(0,0,0,0.18)' }}>
+          <Clock size={12} /> {labelHorario(v.aberto, v.horarioAbre, v.horarioFecha)}
+        </div>
+        <div style={{ position: 'absolute', left: 16, bottom: -22, width: 56, height: 56, borderRadius: 18, background: v.gradiente, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, border: '3px solid #ffffff', boxShadow: '0 8px 20px rgba(14,165,233,0.35)' }}>
+          {v.emoji}
+        </div>
+      </div>
+      <div style={{ padding: '30px 16px 16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+          <div style={{ fontSize: 17, fontWeight: 900, color: '#0f172a', letterSpacing: -0.3 }}>{v.nome}</div>
+          {v.tipo === 'restaurante'
+            ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 900, color: '#ea580c', background: 'rgba(249,115,22,0.1)', border: '1px solid rgba(249,115,22,0.25)', borderRadius: 999, padding: '4px 10px', textTransform: 'uppercase', letterSpacing: 0.5 }}><UtensilsCrossed size={11} /> Restaurante</span>
+            : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 900, color: '#16a34a', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)', borderRadius: 999, padding: '4px 10px', textTransform: 'uppercase', letterSpacing: 0.5 }}><Umbrella size={11} /> Ambulante</span>}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 12.5, color: '#64748b', fontWeight: 600 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#b45309', fontWeight: 800 }}>
+            <Star size={13} fill="#fbbf24" color="#fbbf24" /> {v.avaliacao > 0 ? v.avaliacao.toFixed(1) : 'Novo'}
+          </span>
+          <span style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />
+          <span>{v.categoria}</span>
+          <span style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />
+          <span>{v.tempo}</span>
+        </div>
+        <div style={{ marginTop: 10, fontSize: 12, fontWeight: 800, color: v.aberto ? '#0ea5e9' : '#94a3b8' }}>
+          {v.aberto ? `Ver cardápio · ${v.produtos.length} ite${v.produtos.length === 1 ? 'm' : 'ns'} →` : 'Loja fechada — toque pra espiar o cardápio'}
+        </div>
+      </div>
+    </motion.button>
+  )
+}
+
+function LojasList({ vendedores, loading, tipoInicial }: { vendedores: Vendedor[]; loading: boolean; tipoInicial: string | null }) {
+  const navigate = useNavigate()
+  const [filtro, setFiltro] = useState<'todos' | 'restaurante' | 'ambulante'>(
+    tipoInicial === 'restaurante' || tipoInicial === 'ambulante' ? tipoInicial : 'todos'
+  )
+  const [busca, setBusca] = useState('')
+
+  const filtrados = useMemo(() => {
+    const q = busca.trim().toLowerCase()
+    return vendedores
+      .filter(v => filtro === 'todos' || v.tipo === filtro)
+      .filter(v => !q || v.nome.toLowerCase().includes(q) || v.categoria.toLowerCase().includes(q) || v.produtos.some(p => p.nome.toLowerCase().includes(q)))
+      .sort((a, b) => Number(b.aberto) - Number(a.aberto) || b.avaliacao - a.avaliacao)
+  }, [vendedores, filtro, busca])
+
+  const abertas = filtrados.filter(v => v.aberto).length
+  const chips: Array<{ key: 'todos' | 'restaurante' | 'ambulante'; label: string; icon: React.ReactNode }> = [
+    { key: 'todos', label: 'Todas', icon: <Store size={13} /> },
+    { key: 'restaurante', label: 'Restaurantes', icon: <UtensilsCrossed size={13} /> },
+    { key: 'ambulante', label: 'Ambulantes', icon: <Umbrella size={13} /> },
+  ]
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#f8fafc', paddingBottom: 120 }}>
+      {/* Header */}
+      <div style={{ background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', padding: '26px 20px 56px', borderBottomLeftRadius: 34, borderBottomRightRadius: 34, position: 'relative', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', top: -60, right: -40, width: 190, height: 190, borderRadius: '50%', background: 'rgba(255,255,255,0.14)', filter: 'blur(2px)' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button aria-label="Voltar" onClick={() => navigate('/')} style={{ width: 42, height: 42, borderRadius: 14, background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            <ArrowLeft size={19} color="#fff" />
+          </button>
+          <div>
+            <motion.h1 initial={{ opacity: 0, x: -14 }} animate={{ opacity: 1, x: 0 }} style={{ fontSize: 24, fontWeight: 900, color: '#fff', letterSpacing: -0.5, margin: 0 }}>Onde vamos pedir? 🏖️</motion.h1>
+            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }} style={{ fontSize: 13, color: 'rgba(255,255,255,0.9)', fontWeight: 600, margin: '4px 0 0' }}>
+              {loading ? 'Procurando lojas na areia…' : `${abertas} loja${abertas === 1 ? '' : 's'} aberta${abertas === 1 ? '' : 's'} agora`}
+            </motion.p>
+          </div>
+        </div>
+      </div>
+
+      {/* Busca flutuante */}
+      <div style={{ padding: '0 20px', marginTop: -26, position: 'relative', zIndex: 5 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#ffffff', borderRadius: 18, padding: '14px 16px', border: '1px solid rgba(0,0,0,0.06)', boxShadow: '0 14px 34px rgba(15,23,42,0.12)' }}>
+          <Search size={18} color="#94a3b8" />
+          <input
+            value={busca}
+            onChange={e => setBusca(e.target.value)}
+            placeholder="Buscar loja, comida, bebida…"
+            style={{ flex: 1, border: 'none', outline: 'none', fontSize: 15, fontWeight: 600, color: '#0f172a', background: 'transparent' }}
+          />
+          {busca && <button aria-label="Limpar" onClick={() => setBusca('')} style={{ border: 'none', background: '#f1f5f9', borderRadius: 10, width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={14} color="#64748b" /></button>}
+        </div>
+      </div>
+
+      {/* Chips de filtro */}
+      <div style={{ display: 'flex', gap: 8, padding: '16px 20px 6px', overflowX: 'auto' }}>
+        {chips.map(c => (
+          <motion.button key={c.key} whileTap={{ scale: 0.94 }} onClick={() => setFiltro(c.key)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 999, fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap', cursor: 'pointer', border: filtro === c.key ? '1px solid rgba(14,165,233,0.4)' : '1px solid rgba(0,0,0,0.08)', background: filtro === c.key ? 'linear-gradient(135deg, rgba(14,165,233,0.14), rgba(34,197,94,0.14))' : '#ffffff', color: filtro === c.key ? '#0284c7' : '#64748b' }}>
+            {c.icon} {c.label}
+          </motion.button>
+        ))}
+      </div>
+
+      {/* Lista */}
+      <div style={{ padding: '12px 20px 0', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {loading && vendedores.length === 0 && [0, 1, 2].map(i => (
+          <div key={i} style={{ height: 210, borderRadius: 26, background: 'linear-gradient(100deg, #f1f5f9 40%, #ffffff 50%, #f1f5f9 60%)', backgroundSize: '200% 100%', animation: 'shimmer 1.4s linear infinite' }} />
+        ))}
+        {!loading && filtrados.length === 0 && (
+          <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} style={{ textAlign: 'center', padding: '56px 24px', background: '#ffffff', borderRadius: 26, border: '1px dashed rgba(0,0,0,0.12)' }}>
+            <div style={{ fontSize: 52, marginBottom: 12 }}>🏖️</div>
+            <div style={{ fontSize: 17, fontWeight: 900, color: '#0f172a' }}>{busca ? 'Nada com esse nome por aqui' : 'Nenhuma loja disponível agora'}</div>
+            <p style={{ fontSize: 13.5, color: '#64748b', marginTop: 8, fontWeight: 500 }}>
+              {busca ? 'Tenta buscar outra coisa gostosa 😋' : 'Assim que um ambulante ou restaurante abrir, ele aparece aqui.'}
+            </p>
+          </motion.div>
+        )}
+        {filtrados.map((v, i) => (
+          <LojaCard key={v.id} v={v} index={i} onOpen={() => navigate(`/pedir?v=${v.id}`)} />
+        ))}
+      </div>
+      <style>{`@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
+    </div>
+  )
+}
+
 export default function PedirPage() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
   const { pos: clientePos, status: gpsStatus, fonte: gpsFonte } = useGPS()
 
   const vendedores = useCatalogo(s => s.vendedores)
+  const catalogoLoading = useCatalogo(s => s.loading)
+  // Loja específica SÓ quando escolhida (?v=id). Sem isso, mostra a LISTA de
+  // lojas disponíveis (antes caía direto na primeira loja — feio e confuso).
   const vendedor = useMemo<Vendedor | undefined>(() => {
     const id = params.get('v')
-    const tipo = params.get('tipo')
-    return vendedores.find(v => v.id === id) ??
-      (tipo === 'restaurante' || tipo === 'ambulante'
-        ? vendedores.find(v => v.tipo === tipo)
-        : undefined) ??
-      vendedores[0]
+    return id ? vendedores.find(v => v.id === id) : undefined
   }, [params, vendedores])
 
   const carrinho = useStore(s => s.carrinho)
@@ -596,16 +899,9 @@ export default function PedirPage() {
   const [entrega, setEntrega] = useState<Entrega | null>(null)
   const [pedidoId, setPedidoId] = useState<string | null>(null)
 
-  // Sem nenhuma loja disponível: mostra estado vazio em vez de quebrar (tela branca).
+  // Sem loja escolhida → lista de lojas disponíveis (estilo iFood).
   if (!vendedor) {
-    return (
-      <div style={{ minHeight: '100vh', background: '#ffffff', color: '#0f172a', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 24px', textAlign: 'center' }}>
-        <div style={{ fontSize: 56, marginBottom: 16 }}>🏖️</div>
-        <h2 style={{ fontSize: 20, fontWeight: 900, margin: 0 }}>Nenhuma loja por aqui ainda</h2>
-        <p style={{ fontSize: 14, color: '#64748b', marginTop: 8, maxWidth: 280 }}>Assim que um ambulante ou restaurante ficar online na sua área, ele aparece aqui.</p>
-        <button onClick={() => navigate('/')} style={{ marginTop: 24, background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', border: 'none', borderRadius: 16, padding: '14px 28px', color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer' }}>Voltar ao início</button>
-      </div>
-    )
+    return <LojasList vendedores={vendedores} loading={catalogoLoading} tipoInicial={params.get('tipo')} />
   }
 
   const meuCarrinho = carrinhoVendedor === vendedor.id ? carrinho : {}
@@ -622,7 +918,7 @@ export default function PedirPage() {
       <div style={{ position: 'relative', height: 260 }}>
         <img src={vendedor.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={vendedor.nome} />
         <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(255,255,255,0.4), transparent 40%, rgba(255,255,255,1) 98%)' }} />
-        <button aria-label="Voltar" onClick={() => navigate('/')} style={{ position: 'absolute', top: 20, left: 20, width: 44, height: 44, borderRadius: 16, background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(10px)', border: '1px solid rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+        <button aria-label="Voltar" onClick={() => navigate('/pedir')} style={{ position: 'absolute', top: 20, left: 20, width: 44, height: 44, borderRadius: 16, background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(10px)', border: '1px solid rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
           <ArrowLeft size={20} color="#0f172a" />
         </button>
         <button aria-label="Favoritar" onClick={() => toggleFavorito(vendedor.id)} style={{ position: 'absolute', top: 20, right: 20, width: 44, height: 44, borderRadius: 16, background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(10px)', border: '1px solid rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
@@ -634,8 +930,8 @@ export default function PedirPage() {
         <div style={{ background: '#f8fafc', borderRadius: 32, padding: '24px', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 20px 40px rgba(0,0,0,0.4)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <h1 style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', letterSpacing: -0.5 }}>{vendedor.nome}</h1>
-            <div style={{ background: vendedor.aberto ? 'rgba(34,197,94,0.15)' : 'rgba(244,63,94,0.15)', color: vendedor.aberto ? '#4ade80' : '#fb7185', padding: '6px 16px', borderRadius: 14, fontSize: 12, fontWeight: 800, border: `1px solid ${vendedor.aberto ? 'rgba(34,197,94,0.3)' : 'rgba(244,63,94,0.3)'}`, boxShadow: vendedor.aberto ? '0 0 10px rgba(34,197,94,0.2)' : 'none' }}>
-              {vendedor.aberto ? 'ONLINE' : 'OFFLINE'}
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: vendedor.aberto ? 'rgba(34,197,94,0.15)' : 'rgba(100,116,139,0.14)', color: vendedor.aberto ? '#16a34a' : '#64748b', padding: '6px 14px', borderRadius: 14, fontSize: 11.5, fontWeight: 900, border: `1px solid ${vendedor.aberto ? 'rgba(34,197,94,0.3)' : 'rgba(100,116,139,0.25)'}`, whiteSpace: 'nowrap' }}>
+              <Clock size={13} /> {labelHorario(vendedor.aberto, vendedor.horarioAbre, vendedor.horarioFecha)}
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 14 }}>
@@ -689,10 +985,10 @@ export default function PedirPage() {
       <AnimatePresence>
         {totalItens > 0 && (
           <motion.div initial={{ y: 100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 100, opacity: 0 }} style={{ position: 'fixed', bottom: 100, left: 24, right: 24, maxWidth: 400, margin: '0 auto', zIndex: 100 }}>
-            <motion.button whileTap={{ scale: 0.98 }} onClick={() => setStep('checkout')} style={{ width: '100%', background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', color: '#fff', border: 'none', borderRadius: 28, padding: '22px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 20px 40px rgba(34,197,94,0.4)', cursor: 'pointer' }}>
+            <motion.button whileTap={{ scale: vendedor.aberto ? 0.98 : 1 }} disabled={!vendedor.aberto} onClick={() => { if (vendedor.aberto) setStep('checkout') }} style={{ width: '100%', background: vendedor.aberto ? 'linear-gradient(135deg, #0ea5e9, #22c55e)' : '#94a3b8', color: '#fff', border: 'none', borderRadius: 28, padding: '22px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: vendedor.aberto ? '0 20px 40px rgba(34,197,94,0.4)' : 'none', cursor: vendedor.aberto ? 'pointer' : 'not-allowed' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: 14, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 900 }}>{totalItens}</div>
-                <span style={{ fontSize: 16, fontWeight: 900 }}>Finalizar Pedido</span>
+                <span style={{ fontSize: 16, fontWeight: 900 }}>{vendedor.aberto ? 'Finalizar Pedido' : 'Loja fechada agora 😴'}</span>
               </div>
               <span style={{ fontSize: 20, fontWeight: 900 }}>R$ {totalPreco.toFixed(2)}</span>
             </motion.button>
