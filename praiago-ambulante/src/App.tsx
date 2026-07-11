@@ -11,6 +11,7 @@ import AvaliacoesPage from './pages/AvaliacoesPage'
 import CardapioPage from './pages/CardapioPage'
 import PerfilPage from './pages/PerfilPage'
 import ZonasPage from './pages/ZonasPage'
+import CarteiraPage from './pages/CarteiraPage'
 import BottomNav from './components/BottomNav'
 import VerificationBar from './components/VerificationBar'
 import { DialogHost } from './lib/dialog'
@@ -295,6 +296,7 @@ export default function App() {
               <Route path="/cardapio" element={<PageWrapper><CardapioPage /></PageWrapper>} />
               <Route path="/zonas"    element={<PageWrapper><ZonasPage /></PageWrapper>} />
               <Route path="/perfil"   element={<PageWrapper><PerfilPage /></PageWrapper>} />
+              <Route path="/carteira" element={<PageWrapper><CarteiraPage /></PageWrapper>} />
             </Routes>
           </AnimatePresence>
         )}

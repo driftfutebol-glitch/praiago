@@ -46,6 +46,36 @@ export default function FinanceiroPage() {
   const [busca, setBusca] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [saques, setSaques] = useState<Array<{ id: string; valor: number; status: string; chave_pix: string | null; created_at: string; vendedor_nome: string }>>([])
+  const [processandoSaque, setProcessandoSaque] = useState<string | null>(null)
+
+  async function loadSaques() {
+    const { data } = await supabase
+      .from('payouts')
+      .select('id,valor,status,chave_pix,created_at,vendedor_id')
+      .in('status', ['solicitado', 'processando'])
+      .order('created_at', { ascending: true })
+    const rows = (data as Array<{ id: string; valor: number; status: string; chave_pix: string | null; created_at: string; vendedor_id: string }>) ?? []
+    const ids = [...new Set(rows.map(r => r.vendedor_id))]
+    const nomes: Record<string, string> = {}
+    if (ids.length) {
+      const { data: profs } = await supabase.from('profiles').select('id,nome').in('id', ids)
+      for (const p of (profs as Array<{ id: string; nome: string }>) ?? []) nomes[p.id] = p.nome
+    }
+    setSaques(rows.map(r => ({ ...r, vendedor_nome: nomes[r.vendedor_id] || 'Vendedor' })))
+  }
+
+  useEffect(() => { loadSaques() }, [])
+
+  async function marcarSaquePago(saque: { id: string; vendedor_nome: string; valor: number }) {
+    const ok = await confirmDialog({ title: 'Confirmar pagamento do saque?', message: `Confirma que o Pix de ${money(saque.valor)} para ${saque.vendedor_nome} foi enviado? (marca como pago no espelho)`, confirmText: 'Marcar pago' })
+    if (!ok) return
+    setProcessandoSaque(saque.id)
+    const { error } = await supabase.from('payouts').update({ status: 'pago', updated_at: new Date().toISOString() }).eq('id', saque.id)
+    setProcessandoSaque(null)
+    if (error) { alertDialog({ title: 'Erro', message: error.message, tone: 'danger' }); return }
+    loadSaques()
+  }
 
   async function load() {
     setLoading(true)
@@ -177,6 +207,31 @@ export default function FinanceiroPage() {
           </div>
         ))}
       </div>
+
+      {/* Saques solicitados (repasse via Pix) */}
+      {saques.length > 0 && (
+        <section className="glass-panel rounded-2xl border border-sky-500/20 p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <WalletCards size={16} className="text-sky-400" />
+            <h2 className="text-lg font-black text-slate-100">Saques solicitados</h2>
+            <span className="text-xs font-black text-sky-400 font-mono">({saques.length})</span>
+          </div>
+          <div className="space-y-3">
+            {saques.map(s => (
+              <div key={s.id} className="flex flex-col md:flex-row md:items-center gap-3 bg-slate-950/40 rounded-xl p-4 border border-slate-800/50">
+                <div className="flex-1">
+                  <div className="text-slate-200 font-bold">{s.vendedor_nome} <span className="text-sky-400 font-mono">{money(s.valor)}</span></div>
+                  <div className="text-xs text-slate-500 mt-0.5">Pix: {s.chave_pix || '—'} · {s.status} · {format(new Date(s.created_at), 'dd/MM/yyyy')}</div>
+                </div>
+                <button onClick={() => marcarSaquePago(s)} disabled={processandoSaque === s.id} className="inline-flex items-center gap-1.5 bg-green-500/10 text-green-400 border border-green-500/20 rounded-lg px-3 py-2 text-xs font-black hover:bg-green-500/20 disabled:opacity-50">
+                  <CheckCircle2 size={14} /> Marcar pago
+                </button>
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-slate-500 mt-3">Quando o provedor (Asaas) estiver ligado, o Pix sai automático e este painel só mostra o status. Por ora, confirme o pagamento manual aqui.</p>
+        </section>
+      )}
 
       {/* Reembolsos solicitados */}
       {reembolsos.length > 0 && (

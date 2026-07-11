@@ -16,6 +16,7 @@ import CardapioPage     from './pages/CardapioPage'
 import MapaPage         from './pages/MapaPage'
 import EntregadoresPage from './pages/EntregadoresPage'
 import PerfilPage       from './pages/PerfilPage'
+import CarteiraPage     from './pages/CarteiraPage'
 import VerificationBar  from './components/VerificationBar'
 import AiChatbot        from './components/AiChatbot'
 import PasswordRecoveryHandler from './components/PasswordRecoveryHandler'
@@ -413,6 +414,7 @@ export default function App() {
                 <Route path="/entregadores"  element={<EntregadoresPage />} />
                 <Route path="/mapa"          element={<MapaPage />} />
                 <Route path="/perfil"        element={<PerfilPage />} />
+                <Route path="/carteira"      element={<CarteiraPage />} />
               </Routes>
             )}
           </motion.div>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Bell, ChevronRight, Clock, CreditCard, HelpCircle, Loader2, LogOut, MapPin, Phone, Shield, Star, Store, TrendingUp } from 'lucide-react'
+import { Bell, ChevronRight, Clock, CreditCard, HelpCircle, Loader2, LogOut, MapPin, Phone, Shield, Star, Store, TrendingUp, Wallet } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
@@ -195,6 +195,22 @@ export default function PerfilPage() {
           <PublicInfo icon={<MapPin size={18} color="#64748b" />} label="Endereco da base" value={perfil.endereco || 'Adicione no cadastro'} />
         </InfoCard>
       </div>
+
+      <motion.button
+        initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
+        onClick={() => navigate('/carteira')}
+        className="glass-panel"
+        style={{ width: '100%', borderRadius: 24, padding: 20, border: '1px solid rgba(0,0,0,0.06)', background: 'linear-gradient(135deg, rgba(14,165,233,0.08), rgba(34,197,94,0.08))', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left', marginBottom: 4 }}
+      >
+        <div style={{ width: 46, height: 46, borderRadius: 14, background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Wallet size={22} color="#fff" />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 15, fontWeight: 900, color: '#0f172a' }}>Minha Carteira</div>
+          <div style={{ fontSize: 12.5, color: '#64748b', fontWeight: 600 }}>Saldo, repasses e saque via Pix</div>
+        </div>
+        <ChevronRight size={20} color="#94a3b8" />
+      </motion.button>
 
       <InfoCard title="Recebimentos Mercado Pago" icon={<CreditCard size={16} color="#0284c7" />}>
         <Metric

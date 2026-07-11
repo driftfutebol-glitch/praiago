@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Star, MapPin, Package, TrendingUp, ChevronRight, LogOut, Bell, Shield, HelpCircle, CreditCard, Loader2, Clock } from 'lucide-react'
+import { Star, MapPin, Package, TrendingUp, ChevronRight, LogOut, Bell, Shield, HelpCircle, CreditCard, Loader2, Clock, Wallet } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { logout, useSessao } from '../lib/auth'
@@ -8,6 +8,7 @@ import { buscarStatusMercadoPago, iniciarVinculoMercadoPago, type MercadoPagoLin
 import SuportePanel from '../components/SuportePanel'
 
 const menuItems = [
+  { icon: Wallet, label: 'Minha Carteira', desc: 'Saldo, repasses e saque via Pix', to: '/carteira' },
   { icon: TrendingUp, label: 'Resumo de vendas', desc: 'Quanto você vendeu, dia a dia', to: '/vendas' },
   { icon: Star, label: 'Avaliações', desc: 'O que os clientes acharam de você', to: '/avaliacoes' },
   { icon: Bell, label: 'Notificações', desc: 'Alertas de pedidos e novidades' },
