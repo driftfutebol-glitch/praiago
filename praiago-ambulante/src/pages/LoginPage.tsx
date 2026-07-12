@@ -89,30 +89,22 @@ export default function LoginPage() {
         }
 
       } else {
-        const { data, error } = await supabase.auth.signUp({
-          email: alvo,
-          password: senha,
-          options: { data: { nome, role: 'ambulante' } }
+        // Cadastro via edge function 'cadastro' (regra de 1 conta por IP).
+        const { data, error } = await supabase.functions.invoke('cadastro', {
+          body: { email: alvo, senha, metadata: { nome, role: 'ambulante' }, emailRedirectTo: `${window.location.origin}/` },
         })
         if (error) {
-          if (error.status === 429) throw new Error('Limite de e-mails do Supabase (429). Para testar: Authentication → Providers → Email → desligue "Confirm email". Ou aumente os Rate Limits.')
-          throw new Error(error.message)
+          let msg = 'Erro ao criar conta. Tente novamente.'
+          try { const p = await (error as { context?: { json?: () => Promise<{ error?: string }> } }).context?.json?.(); if (p?.error) msg = p.error } catch { /* usa msg padrão */ }
+          throw new Error(msg)
         }
-
-        if (data.session && data.user) {
-          await logSecurityEvent('signup_created', alvo, { user_id: data.user.id })
-          login(data.user.id, alvo);
-          navigate('/')
-          return
-        }
-
-        if (data.user && !data.session) {
-          await logSecurityEvent('signup_created', alvo, { user_id: data.user.id, email_confirmation_required: true })
-          setErro('Conta criada! Enviamos um link de confirmação para o seu e-mail.')
-          setTab('entrar')
-          setLoading(false)
-          return
-        }
+        const resp = data as { error?: string } | null
+        if (resp?.error) throw new Error(resp.error)
+        await logSecurityEvent('signup_created', alvo, { email_confirmation_required: true })
+        setErro('Conta criada! Enviamos um link de confirmação para o seu e-mail.')
+        setTab('entrar')
+        setLoading(false)
+        return
       }
     } catch (err: any) {
       let msg = err.message || 'Erro inesperado.'

@@ -310,30 +310,24 @@ export default function PerfilPage() {
           useStore.getState().login(data.user.id, alvo, profile?.nome || 'Cliente PraiaGo')
         }
       } else {
-        const { data, error } = await supabase.auth.signUp({
-          email: alvo,
-          password: senha,
-          options: {
+        // Cadastro passa pela edge function 'cadastro' (regra de 1 conta por IP).
+        const { data, error } = await supabase.functions.invoke('cadastro', {
+          body: {
+            email: alvo, senha,
+            metadata: { nome, role: 'cliente', cpf: apenasDigitosCpf(cpf) },
             emailRedirectTo: `${window.location.origin}/perfil`,
-            data: { nome, role: 'cliente', cpf: apenasDigitosCpf(cpf) },
-          }
+          },
         })
         if (error) {
-          if (error.status === 429) throw new Error('Limite de e-mails excedido. Aguarde alguns minutos e tente novamente.')
-          throw new Error('Erro ao criar conta: ' + error.message)
+          let msg = 'Erro ao criar conta. Tente novamente.'
+          try { const p = await (error as { context?: { json?: () => Promise<{ error?: string }> } }).context?.json?.(); if (p?.error) msg = p.error } catch { /* usa msg padrão */ }
+          throw new Error(msg)
         }
-        
-        if (data.session && data.user) {
-          await logSecurityEvent('signup_created', alvo, { user_id: data.user.id })
-          useStore.getState().login(data.user.id, alvo, nome)
-          return
-        }
-
-        if (data.user && !data.session) {
-          await logSecurityEvent('signup_created', alvo, { user_id: data.user.id, email_confirmation_required: true })
-          setErro('Conta criada! Enviamos um link de confirmação para o seu e-mail.')
-          setTab('entrar')
-        }
+        const resp = data as { error?: string } | null
+        if (resp?.error) throw new Error(resp.error)
+        await logSecurityEvent('signup_created', alvo, { email_confirmation_required: true })
+        setErro('Conta criada! Enviamos um link de confirmação para o seu e-mail.')
+        setTab('entrar')
       }
     } catch (err: any) {
       let msg = err.message || 'Erro inesperado.'

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, CheckCircle2, LockKeyhole, RefreshCw, Search, ShieldAlert, type LucideIcon } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import IpsAutorizados from '../components/IpsAutorizados'
 
 type SecurityLog = {
   id: string
@@ -109,6 +110,11 @@ export default function ErrorsPage() {
           <h1 className="text-3xl font-black text-slate-100 tracking-tight">Seguranca & Logs</h1>
           <p className="text-slate-400 font-medium">Auditoria de login, senha, fraude e acessos suspeitos.</p>
         </div>
+      </header>
+
+      <IpsAutorizados />
+
+      <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between mb-2"><div style={{ display: 'none' }} />
         <div className="flex gap-2">
           <div className="relative">
             <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />

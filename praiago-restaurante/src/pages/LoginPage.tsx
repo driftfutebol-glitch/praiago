@@ -352,46 +352,42 @@ export default function LoginPage() {
         if (!coords || (enderecoStatus !== 'confirmado' && enderecoStatus !== 'gps')) throw new Error('Verifique o endereco e selecione uma sugestao no mapa antes de cadastrar.')
         if (!endereco.trim() && !coords) throw new Error('Informe a localização da loja (endereço ou GPS).')
 
-        const { data, error } = await supabase.auth.signUp({
-          email: emailNormalizado,
-          password: senha,
-          options: { data: { role: 'restaurante', nome: nomeLoja.trim() } }
+        // Cadastro via edge function 'cadastro' (regra de 1 conta por IP).
+        const { data, error } = await supabase.functions.invoke('cadastro', {
+          body: {
+            email: emailNormalizado, senha,
+            metadata: {
+              role: 'restaurante', nome: nomeLoja.trim(),
+              cnpj: cnpj.replace(/\D/g, '') || null,
+              razao_social: razaoSocial || nomePessoa.trim(),
+              endereco: endereco.trim() || null,
+              lat: coords?.lat ?? null, lng: coords?.lng ?? null,
+            },
+            emailRedirectTo: `${window.location.origin}/`,
+          },
         })
-
         if (error) {
-          if (error.status === 429) throw new Error('LIMITE EXCEDIDO (Erro 429). Para continuar testando, vá no painel Supabase -> Authentication -> Rate Limits -> e aumente o "Email Signups" para 1000.')
-          throw new Error('Erro ao criar conta: ' + error.message)
+          let msg = 'Erro ao criar conta. Tente novamente.'
+          try { const p = await (error as { context?: { json?: () => Promise<{ error?: string }> } }).context?.json?.(); if (p?.error) msg = p.error } catch { /* usa msg padrão */ }
+          throw new Error(msg)
         }
-
-        if (data.user) {
-          // o trigger já criou o profile — completamos com os dados do negócio
+        const resp = data as { error?: string; user_id?: string } | null
+        if (resp?.error) throw new Error(resp.error)
+        // completa os dados do negócio (o trigger já criou o profile básico)
+        if (resp?.user_id) {
           await supabase.from('profiles').update({
-            nome: nomeLoja.trim(),
-            role: 'restaurante',
-            email: emailNormalizado,
+            nome: nomeLoja.trim(), role: 'restaurante', email: emailNormalizado,
             cnpj: cnpj.replace(/\D/g, '') || null,
             razao_social: razaoSocial || nomePessoa.trim(),
             endereco: endereco.trim() || null,
-            lat: coords?.lat ?? null,
-            lng: coords?.lng ?? null,
-            status: 'ativo',
-          }).eq('id', data.user.id)
+            lat: coords?.lat ?? null, lng: coords?.lng ?? null, status: 'ativo',
+          }).eq('id', resp.user_id)
         }
-
-        if (data.session && data.user && data.user.email_confirmed_at) {
-          await logSecurityEvent('signup_created', emailNormalizado, { user_id: data.user.id })
-          login(data.user.id, emailNormalizado);
-          navigate('/');
-          return;
-        }
-
-        if (data.user && !data.session) {
-          await logSecurityEvent('signup_created', emailNormalizado, { user_id: data.user.id, email_confirmation_required: true })
-          setErro('Conta criada com sucesso! Enviamos um link de confirmação para o seu e-mail.')
-          setIsLogin(true)
-          setLoading(false)
-          return
-        }
+        await logSecurityEvent('signup_created', emailNormalizado, { email_confirmation_required: true })
+        setErro('Conta criada com sucesso! Enviamos um link de confirmação para o seu e-mail.')
+        setIsLogin(true)
+        setLoading(false)
+        return
       }
 
     } catch (err: any) {
