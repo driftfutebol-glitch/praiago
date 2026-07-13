@@ -16,6 +16,9 @@ export async function logSecurityEvent(
   metadata: Record<string, unknown> = {},
 ) {
   try {
+    const { data } = await supabase.auth.getSession()
+    if (!data.session) return
+
     await supabase.rpc('log_security_event', {
       p_event_type: eventType,
       p_platform: 'cliente',
