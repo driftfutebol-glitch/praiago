@@ -163,7 +163,7 @@ export function useNearbyAmbulantes(clientePos: [number, number]) {
     let ativo = true
 
     supabase
-      .from('profiles')
+      .from('vendedores_publicos')
       .select('id,nome,emoji,categoria,role,online,lat,lng,zona,status,verificado')
       .eq('role', 'ambulante')
       .eq('verificado', true)

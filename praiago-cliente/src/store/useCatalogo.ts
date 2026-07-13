@@ -108,7 +108,8 @@ export const useCatalogo = create<State>((set, get) => ({
     const ids = [...new Set(rows.map(r => r.vendedor_id).filter((v): v is string => !!v))]
     const profs: Record<string, ProfileRow> = {}
     if (ids.length) {
-      const { data: p } = await supabase.from('profiles').select('*').in('id', ids)
+      // Tabela publica cacheada (so colunas seguras): profiles nao e legivel por outros.
+      const { data: p } = await supabase.from('vendedores_publicos').select('*').in('id', ids)
       for (const pr of (p ?? []) as ProfileRow[]) profs[pr.id] = pr
     }
 

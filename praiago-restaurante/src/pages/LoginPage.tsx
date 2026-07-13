@@ -108,19 +108,12 @@ export default function LoginPage() {
     return pedacos[pedacos.length - 1].length >= 2
   }
 
-  async function emailJaCadastrado(valor = email) {
-    const alvo = normalizarEmail(valor)
-    if (!emailValido(alvo)) return false
-    const { data } = await supabase.from('profiles').select('id').ilike('email', alvo).limit(1)
-    return (data?.length ?? 0) > 0
-  }
-
   async function checarEmail() {
     const alvo = normalizarEmail()
     if (!alvo) { setEmailStatus('idle'); return }
     if (!emailValido(alvo)) { setEmailStatus('invalido'); return }
     setEmailStatus('checando')
-    setEmailStatus(await emailJaCadastrado(alvo) ? 'duplicado' : 'ok')
+    setEmailStatus('ok')
   }
 
   async function enviarResetSenha() {
@@ -153,13 +146,6 @@ export default function LoginPage() {
     setErro(error ? `Nao foi possivel reenviar verificacao: ${error.message}` : 'Enviamos um novo e-mail de verificacao.')
   }
 
-  async function cnpjJaCadastrado(valor = cnpj) {
-    const d = valor.replace(/\D/g, '')
-    if (!d) return false
-    const { data } = await supabase.from('profiles').select('id,nome').eq('cnpj', d).limit(1)
-    return (data?.length ?? 0) > 0
-  }
-
   // Validação local dos dígitos verificadores do CNPJ
   function cnpjValido(v: string): boolean {
     const d = v.replace(/\D/g, '')
@@ -180,11 +166,6 @@ export default function LoginPage() {
     if (!cnpjValido(d)) { setCnpjStatus('invalido'); setRazaoSocial(''); return }
     setCnpjStatus('buscando')
     try {
-      if (await cnpjJaCadastrado(d)) {
-        setCnpjStatus('duplicado')
-        setRazaoSocial('')
-        return
-      }
       const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${d}`)
       if (!r.ok) throw new Error('nao encontrado')
       const j = await r.json()
@@ -345,9 +326,6 @@ export default function LoginPage() {
         // validações do cadastro real
         if (!nomePessoa.trim()) throw new Error('Informe o seu nome.')
         if (cnpj.trim() && cnpjStatus === 'invalido') throw new Error('CNPJ inválido — confira os números.')
-        if (cnpj.trim() && cnpjStatus === 'duplicado') throw new Error('Este CNPJ ja esta cadastrado no PraiaGo.')
-        if (cnpj.trim() && await cnpjJaCadastrado()) throw new Error('Este CNPJ ja esta cadastrado no PraiaGo.')
-        if (await emailJaCadastrado(emailNormalizado)) throw new Error('Este e-mail ja esta cadastrado. Use login ou outro e-mail.')
         if (!nomeLoja.trim()) throw new Error('Informe o nome do restaurante ou loja.')
         if (!coords || (enderecoStatus !== 'confirmado' && enderecoStatus !== 'gps')) throw new Error('Verifique o endereco e selecione uma sugestao no mapa antes de cadastrar.')
         if (!endereco.trim() && !coords) throw new Error('Informe a localização da loja (endereço ou GPS).')

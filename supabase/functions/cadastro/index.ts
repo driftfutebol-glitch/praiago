@@ -11,6 +11,10 @@ type Body = {
   emailRedirectTo?: string
 }
 
+function digits(value: unknown): string {
+  return String(value ?? '').replace(/\D/g, '')
+}
+
 function clientIp(req: Request): string {
   const xff = req.headers.get('x-forwarded-for') || ''
   const first = xff.split(',')[0]?.trim()
@@ -41,6 +45,8 @@ Deno.serve(async (req: Request) => {
     const email = String(body.email || '').trim().toLowerCase()
     const senha = String(body.senha || '')
     const metadata = body.metadata || {}
+    const cpf = digits(metadata.cpf)
+    const cnpj = digits(metadata.cnpj)
     const ip = clientIp(req)
 
     if (!/^\S+@\S+\.\S+$/.test(email)) return json({ error: 'E-mail inválido.' }, { status: 400 })
@@ -66,6 +72,37 @@ Deno.serve(async (req: Request) => {
         if ((count || 0) >= 1) {
           return json({ error: 'Já existe uma conta cadastrada nesta rede/dispositivo. Se precisar de outra, fale com o suporte.', code: 'ip_limit' }, { status: 429 })
         }
+      }
+    }
+
+    const { data: emailExistente } = await admin
+      .from('profiles')
+      .select('id')
+      .ilike('email', email)
+      .maybeSingle()
+    if (emailExistente?.id) {
+      return json({ error: 'Este e-mail ja esta cadastrado. Use login ou outro e-mail.', code: 'email_exists' }, { status: 409 })
+    }
+
+    if (cpf) {
+      const { data: cpfExistente } = await admin
+        .from('profiles')
+        .select('id')
+        .eq('cpf', cpf)
+        .maybeSingle()
+      if (cpfExistente?.id) {
+        return json({ error: 'Este CPF ja esta cadastrado no PraiaGo.', code: 'cpf_exists' }, { status: 409 })
+      }
+    }
+
+    if (cnpj) {
+      const { data: cnpjExistente } = await admin
+        .from('profiles')
+        .select('id')
+        .eq('cnpj', cnpj)
+        .maybeSingle()
+      if (cnpjExistente?.id) {
+        return json({ error: 'Este CNPJ ja esta cadastrado no PraiaGo.', code: 'cnpj_exists' }, { status: 409 })
       }
     }
 
