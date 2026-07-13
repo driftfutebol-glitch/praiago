@@ -17,6 +17,23 @@ function clientIp(req: Request): string {
   return first || req.headers.get('x-real-ip') || 'desconhecido'
 }
 
+// Verifica se o IP é de operadora MÓVEL (celular). Celular usa CGNAT — milhares
+// de pessoas dividem o mesmo IP — então esses NÃO devem ser limitados a 1 conta.
+async function ipEhMovel(ip: string): Promise<boolean> {
+  if (!ip || ip === 'desconhecido') return false
+  try {
+    const r = await fetch(`http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,mobile,isp,org`, { signal: AbortSignal.timeout(3500) })
+    const d = await r.json().catch(() => null)
+    if (d?.status === 'success' && d?.mobile === true) return true
+    // fallback SÓ com termos explicitamente móveis (evita falso positivo:
+    // "Claro/Vivo/Tim" sozinho também é banda larga FIXA — não vale).
+    const texto = `${d?.isp || ''} ${d?.org || ''}`.toUpperCase()
+    return /\b(M[OÓ]VEL|MOBILE|CELULAR|NEXTEL|4G|5G|LTE)\b/.test(texto)
+  } catch {
+    return false // se a checagem falhar, trata como fixo (aplica a regra normal)
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
   try {
@@ -33,12 +50,18 @@ Deno.serve(async (req: Request) => {
     const admin = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } })
 
     // Regra ligada? IP autorizado? Já existe conta nesse IP?
-    const { data: rules } = await admin.from('signup_rules').select('um_por_ip').eq('id', true).maybeSingle()
+    const { data: rules } = await admin.from('signup_rules').select('um_por_ip,exigir_em_movel').eq('id', true).maybeSingle()
     const limiteLigado = rules?.um_por_ip !== false
+    const exigirEmMovel = rules?.exigir_em_movel === true
+
+    // Detecta IP de celular (CGNAT). Se for móvel e o admin não exigir limite em
+    // móvel, o cadastro é liberado (não bloqueia gente legítima da operadora).
+    const isMobile = await ipEhMovel(ip)
 
     if (limiteLigado && ip !== 'desconhecido') {
       const { data: autorizado } = await admin.from('authorized_ips').select('ip').eq('ip', ip).maybeSingle()
-      if (!autorizado) {
+      const isentoPorMovel = isMobile && !exigirEmMovel
+      if (!autorizado && !isentoPorMovel) {
         const { count } = await admin.from('signup_ips').select('*', { count: 'exact', head: true }).eq('ip', ip)
         if ((count || 0) >= 1) {
           return json({ error: 'Já existe uma conta cadastrada nesta rede/dispositivo. Se precisar de outra, fale com o suporte.', code: 'ip_limit' }, { status: 429 })
@@ -59,9 +82,9 @@ Deno.serve(async (req: Request) => {
 
     // Registra o IP desse cadastro (fonte de verdade do limite)
     const userId = signUpData.user?.id ?? null
-    await admin.from('signup_ips').insert({ ip, user_id: userId, email, role: String(metadata.role || '') })
+    await admin.from('signup_ips').insert({ ip, user_id: userId, email, role: String(metadata.role || ''), is_mobile: isMobile })
 
-    return json({ ok: true, needsConfirmation: !signUpData.session, user_id: userId })
+    return json({ ok: true, needsConfirmation: !signUpData.session, user_id: userId, ip_movel: isMobile })
   } catch (e) {
     return json({ error: e instanceof Error ? e.message : 'Erro no cadastro.' }, { status: 500 })
   }

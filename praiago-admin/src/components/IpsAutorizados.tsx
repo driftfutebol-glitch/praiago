@@ -8,6 +8,7 @@ type IpRow = { ip: string; descricao: string | null; created_at: string | null }
 export default function IpsAutorizados() {
   const [ips, setIps] = useState<IpRow[]>([])
   const [umPorIp, setUmPorIp] = useState(true)
+  const [exigirEmMovel, setExigirEmMovel] = useState(false)
   const [novoIp, setNovoIp] = useState('')
   const [descricao, setDescricao] = useState('')
   const [meuIp, setMeuIp] = useState('')
@@ -17,10 +18,12 @@ export default function IpsAutorizados() {
   async function load() {
     const [{ data: rows }, { data: rule }] = await Promise.all([
       supabase.from('authorized_ips').select('ip,descricao,created_at').order('created_at', { ascending: false }),
-      supabase.from('signup_rules').select('um_por_ip').eq('id', true).maybeSingle(),
+      supabase.from('signup_rules').select('um_por_ip,exigir_em_movel').eq('id', true).maybeSingle(),
     ])
     setIps((rows as IpRow[]) ?? [])
-    setUmPorIp((rule as { um_por_ip?: boolean } | null)?.um_por_ip !== false)
+    const r = rule as { um_por_ip?: boolean; exigir_em_movel?: boolean } | null
+    setUmPorIp(r?.um_por_ip !== false)
+    setExigirEmMovel(r?.exigir_em_movel === true)
     setLoading(false)
   }
   useEffect(() => { load() }, [])
@@ -56,6 +59,13 @@ export default function IpsAutorizados() {
     if (error) { setUmPorIp(!novo); alertDialog({ title: 'Erro', message: error.message, tone: 'danger' }) }
   }
 
+  async function toggleMovel() {
+    const novo = !exigirEmMovel
+    setExigirEmMovel(novo)
+    const { error } = await supabase.from('signup_rules').update({ exigir_em_movel: novo, updated_at: new Date().toISOString() }).eq('id', true)
+    if (error) { setExigirEmMovel(!novo); alertDialog({ title: 'Erro', message: error.message, tone: 'danger' }) }
+  }
+
   const jaAutorizado = meuIp && ips.some(i => i.ip === meuIp)
 
   return (
@@ -71,9 +81,20 @@ export default function IpsAutorizados() {
         {umPorIp ? <ToggleRight size={26} className="text-green-400" /> : <ToggleLeft size={26} className="text-slate-500" />}
         <div>
           <div className="text-sm font-black text-slate-100">{umPorIp ? 'Regra ATIVA — 1 conta por IP' : 'Regra DESLIGADA — sem limite por IP'}</div>
-          <div className="text-xs text-slate-500">Toque pra {umPorIp ? 'desligar' : 'ligar'}. (Redes móveis compartilham IP — cuidado ao ativar.)</div>
+          <div className="text-xs text-slate-500">Toque pra {umPorIp ? 'desligar' : 'ligar'}.</div>
         </div>
       </button>
+
+      {/* Verificador de IP de celular: por padrão, celular (CGNAT) é ISENTO do limite */}
+      {umPorIp && (
+        <button onClick={toggleMovel} className="flex items-center gap-3 bg-slate-950/40 border border-slate-800 rounded-xl px-4 py-3 mb-4 w-full text-left hover:bg-slate-900/60">
+          {exigirEmMovel ? <ToggleRight size={26} className="text-amber-400" /> : <ToggleLeft size={26} className="text-green-400" />}
+          <div>
+            <div className="text-sm font-black text-slate-100">📱 {exigirEmMovel ? 'Limitando TAMBÉM celular (risco de bloquear cliente real)' : 'Celular ISENTO do limite (recomendado)'}</div>
+            <div className="text-xs text-slate-500">Detectamos IP de operadora móvel (CGNAT) e, por padrão, não aplicamos o limite nele. Toque pra {exigirEmMovel ? 'voltar a isentar' : 'passar a limitar também'}.</div>
+          </div>
+        </button>
+      )}
 
       {/* Meu IP */}
       {meuIp && (
