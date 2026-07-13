@@ -864,7 +864,12 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
       .maybeSingle()
     setSalvandoCpf(false)
     if (error || !data) {
-      setErro('Nao foi possivel confirmar o CPF agora.')
+      // 23505 = unique violation → CPF já cadastrado em outra conta
+      if ((error as { code?: string } | null)?.code === '23505') {
+        setErro('Esse CPF já está cadastrado em outra conta. Cada CPF vale para uma conta só.')
+      } else {
+        setErro('Nao foi possivel confirmar o CPF agora.')
+      }
       return
     }
     setPerfilCliente(data as PerfilClienteCheckout)

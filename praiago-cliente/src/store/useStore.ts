@@ -155,10 +155,18 @@ export const useStore = create<State>()(
       pedidos: [],
       notificacoes: [],
 
-      login: (id, email, nome = '', telefone = '') => set({ 
-        sessao: { id, email, nome, telefone } 
+      // Ao logar: se for OUTRA conta (ou não havia sessão), zera TUDO que é por
+      // usuário — senão a conta nova herdaria pedidos/carrinho/notificações da
+      // conta anterior no mesmo aparelho (vazamento). Mesma conta (restart) preserva.
+      login: (id, email, nome = '', telefone = '') => set(s => {
+        const outraConta = !s.sessao || s.sessao.id !== id
+        return {
+          sessao: { id, email, nome, telefone },
+          ...(outraConta ? { pedidos: [], carrinho: {}, carrinhoVendedor: null, notificacoes: [], favoritos: [] } : {}),
+        }
       }),
-      logout: () => set({ sessao: null }),
+      // Ao sair: limpa TUDO que é por usuário (não deixa rastro pra próxima conta).
+      logout: () => set({ sessao: null, pedidos: [], carrinho: {}, carrinhoVendedor: null, notificacoes: [], favoritos: [] }),
 
       toggleFavorito: (vendedorId) => set(s => ({
         favoritos: s.favoritos.includes(vendedorId)
