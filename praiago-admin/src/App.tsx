@@ -92,15 +92,6 @@ function NotificationSystem() {
           origem: p.cliente_nome || p.cliente || 'Cliente',
         })
       })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'event_ticket_notifications' }, (payload) => {
-        const n = payload.new
-        pushNotification({
-          id: n.id,
-          titulo: n.titulo || 'Ingresso vendido',
-          texto: n.mensagem || 'Pagamento aprovado. Entregue o ingresso pelo painel de eventos.',
-          origem: n.tipo || 'Ingressos',
-        })
-      })
       .subscribe()
 
     return () => {

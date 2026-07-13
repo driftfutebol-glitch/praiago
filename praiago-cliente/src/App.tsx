@@ -123,23 +123,20 @@ export default function App() {
       navigate('/perfil', { replace: true })
     }
 
-    supabase
-      .from('profiles')
-      .select('status')
-      .eq('id', sessao.id)
-      .maybeSingle()
-      .then(({ data }) => bloquearSeBanido(data))
-
-    const channel = supabase
-      .channel(`cliente_status_${sessao.id}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${sessao.id}` }, payload => {
-        bloquearSeBanido(payload.new as { status?: string })
-      })
-      .subscribe()
+    const checarStatus = () => {
+      supabase
+        .from('profiles')
+        .select('status')
+        .eq('id', sessao.id)
+        .maybeSingle()
+        .then(({ data }) => bloquearSeBanido(data))
+    }
+    checarStatus()
+    const timer = window.setInterval(checarStatus, 30000)
 
     return () => {
       ativo = false
-      supabase.removeChannel(channel)
+      window.clearInterval(timer)
     }
   }, [sessao?.id, navigate])
 

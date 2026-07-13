@@ -193,7 +193,7 @@ export function iniciarCatalogo() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'produtos' }, () => {
       useCatalogo.getState().carregar()
     })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'vendedores_publicos' }, () => {
       useCatalogo.getState().carregar()
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'promocoes' }, () => {

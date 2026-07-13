@@ -25,17 +25,11 @@ export default function EmailVerificationBanner() {
       setVerificado(Boolean(authData.user?.email_confirmed_at || profile?.email_verificado))
     }
     checkStatus()
-
-    const ch = supabase.channel(`cliente_email_verificacao_${sessao.id}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${sessao.id}` }, payload => {
-        const novo = payload.new as { email_verificado?: boolean }
-        if (typeof novo.email_verificado === 'boolean') setVerificado(novo.email_verificado)
-      })
-      .subscribe()
+    const timer = window.setInterval(checkStatus, 30000)
 
     return () => {
       vivo = false
-      supabase.removeChannel(ch)
+      window.clearInterval(timer)
     }
   }, [sessao?.id])
 

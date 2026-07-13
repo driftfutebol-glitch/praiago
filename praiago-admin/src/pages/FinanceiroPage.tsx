@@ -106,7 +106,6 @@ export default function FinanceiroPage() {
     load()
     const channel = supabase.channel('admin_financeiro')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos' }, () => load())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'payment_settings' }, () => load())
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [])

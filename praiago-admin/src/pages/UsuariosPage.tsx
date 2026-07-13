@@ -18,14 +18,6 @@ export default function UsuariosPage() {
       if (data) setUsuarios(data)
     }
     load()
-
-    const channel = supabase.channel('admin_usuarios')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
-        load()
-      })
-      .subscribe()
-
-    return () => { supabase.removeChannel(channel) }
   }, [])
 
   const roleConfig: Record<string, { color: string; bg: string; border: string; bar: string }> = {

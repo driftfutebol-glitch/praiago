@@ -56,10 +56,6 @@ export default function AdminsPage() {
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setMeuId(data.user?.id ?? null))
     load()
-    const ch = supabase.channel('admin_admins')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => load())
-      .subscribe()
-    return () => { supabase.removeChannel(ch) }
   }, [])
 
   async function criarAdmin() {

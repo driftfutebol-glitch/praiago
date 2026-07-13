@@ -66,11 +66,8 @@ export default function VendasPage() {
         setMpVinculado(!!data.mercadopago_user_id)
       })
 
-    // saldo atualiza sozinho quando o admin paga ou entra repasse novo
-    const ch = supabase.channel(`carteira_${sessao.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'financial_ledger', filter: `vendedor_id=eq.${sessao.id}` }, carregarCarteira)
-      .subscribe()
-    return () => { supabase.removeChannel(ch) }
+    const timer = window.setInterval(carregarCarteira, 30000)
+    return () => { window.clearInterval(timer) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const carteira = useMemo(() => {

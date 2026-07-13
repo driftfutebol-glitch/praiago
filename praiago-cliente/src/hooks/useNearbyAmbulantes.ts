@@ -176,8 +176,8 @@ export function useNearbyAmbulantes(clientePos: [number, number]) {
       })
 
     const dbChannel = supabase
-      .channel('cliente_ambulantes_profiles')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, payload => {
+      .channel('cliente_ambulantes_publicos')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'vendedores_publicos' }, payload => {
         if (payload.eventType === 'DELETE') {
           mapRef.current.delete((payload.old as { id?: string }).id || '')
           recalcAndSort()

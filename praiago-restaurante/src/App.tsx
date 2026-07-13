@@ -159,23 +159,20 @@ export default function App() {
       setKycLocked(perfil?.status !== 'banido' && perfil?.verificado !== true)
     }
 
-    supabase
-      .from('profiles')
-      .select('status,ban_motivo,verificado')
-      .eq('id', sessao.id)
-      .maybeSingle()
-      .then(({ data }) => atualizarGate(data))
-
-    const channel = supabase
-      .channel(`restaurante_status_${sessao.id}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${sessao.id}` }, payload => {
-        atualizarGate(payload.new as { status?: string; ban_motivo?: string | null; verificado?: boolean | null })
-      })
-      .subscribe()
+    const checarStatus = () => {
+      supabase
+        .from('profiles')
+        .select('status,ban_motivo,verificado')
+        .eq('id', sessao.id)
+        .maybeSingle()
+        .then(({ data }) => atualizarGate(data))
+    }
+    checarStatus()
+    const timer = window.setInterval(checarStatus, 30000)
 
     return () => {
       ativo = false
-      supabase.removeChannel(channel)
+      window.clearInterval(timer)
     }
   }, [sessao?.id, isPublic, navigate])
 
