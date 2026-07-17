@@ -239,6 +239,9 @@ export const useStore = create<State>()(
           lng: entrega?.lng ?? null,
           cpf_nota: entrega?.cpfNota || null,
           itens: itens.map(i => `${i.qtd}x ${i.nome}`),
+          // itens com ID do produto — o SERVIDOR recalcula o preço real por aqui
+          // (o total/subtotal abaixo são só palpite; o trigger sobrescreve).
+          itens_detalhe: Object.entries(carrinho).map(([pid, qtd]) => ({ produto_id: pid, qtd })),
           total: total,
           subtotal_amount: subtotal,
           discount_amount: discountAmount,
