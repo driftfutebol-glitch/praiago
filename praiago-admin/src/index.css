@@ -182,3 +182,19 @@ input:focus, select:focus, textarea:focus {
   pointer-events: none;
   z-index: 1;
 }
+/* ============ PraiaGo · camada de animações polidas (2026-07) ============ */
+@keyframes prgFadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes prgFloatSoft { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes prgSheen { 0% { background-position: -180% 0; } 100% { background-position: 180% 0; } }
+.prg-fade-up { animation: prgFadeUp .5s cubic-bezier(.22,1,.36,1) both; }
+.prg-float { animation: prgFloatSoft 4s ease-in-out infinite; }
+.prg-stagger > * { animation: prgFadeUp .5s cubic-bezier(.22,1,.36,1) both; }
+.prg-stagger > *:nth-child(1){animation-delay:.04s}.prg-stagger > *:nth-child(2){animation-delay:.09s}
+.prg-stagger > *:nth-child(3){animation-delay:.14s}.prg-stagger > *:nth-child(4){animation-delay:.19s}
+.prg-stagger > *:nth-child(5){animation-delay:.24s}.prg-stagger > *:nth-child(6){animation-delay:.29s}
+.prg-stagger > *:nth-child(7){animation-delay:.34s}.prg-stagger > *:nth-child(8){animation-delay:.39s}
+.prg-lift { transition: transform .25s cubic-bezier(.22,1,.36,1), box-shadow .25s ease; will-change: transform; }
+.prg-lift:hover { transform: translateY(-4px); box-shadow: 0 14px 34px rgba(15,23,42,.14); }
+.prg-lift:active { transform: translateY(-1px) scale(.99); }
+.prg-sheen { background: linear-gradient(100deg,transparent 30%,rgba(255,255,255,.45) 50%,transparent 70%); background-size: 200% 100%; animation: prgSheen 2.4s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .prg-fade-up,.prg-float,.prg-stagger > *,.prg-lift,.prg-sheen { animation: none !important; transition: none !important; } }

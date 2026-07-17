@@ -195,7 +195,7 @@ export default function FinanceiroPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         {cards.map(card => (
-          <div key={card.label} className="glass-panel p-5 rounded-2xl border-slate-800 flex items-center gap-4">
+          <div key={card.label} className="glass-panel p-5 rounded-2xl border-slate-800 flex items-center gap-4 prg-lift">
             <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${card.bg}`}>
               <card.icon size={22} className={card.color} />
             </div>

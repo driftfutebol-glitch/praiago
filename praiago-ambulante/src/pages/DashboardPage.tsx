@@ -243,7 +243,7 @@ export default function DashboardPage() {
             { icon: Package,    cor: '#38bdf8', bg: 'rgba(56,189,248,0.1)', valor: String(pedidosHoje), label: 'Pedidos hoje',  change: '+0%' },
             { icon: DollarSign, cor: '#4ade80', bg: 'rgba(74,222,128,0.1)', valor: `R$ ${faturamentoHoje.toFixed(2)}`, label: 'Ganhos hoje', change: '+0%' },
           ].map(({ icon: Icon, cor, bg, valor, label, change }, i) => (
-            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 + (i * 0.1) }} key={label} className="glass-panel" style={{ borderRadius: 24, padding: '20px' }}>
+            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 + (i * 0.1) }} key={label} className="glass-panel prg-lift" style={{ borderRadius: 24, padding: '20px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
                 <div style={{ width: 44, height: 44, borderRadius: 14, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${cor}40` }}>
                   <Icon size={22} color={cor} />

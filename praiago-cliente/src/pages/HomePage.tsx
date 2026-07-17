@@ -71,6 +71,7 @@ function QuickAction({
     <button
       onClick={onClick}
       disabled={disabled}
+      className={disabled ? undefined : 'prg-lift'}
       style={{
         minHeight: 112,
         border: '1px solid #e2e8f0',
@@ -103,7 +104,7 @@ function VendorCard({ v, onClick }: { v: Vendedor; onClick: () => void }) {
   }
 
   return (
-    <div role="button" tabIndex={0} onClick={onClick} onKeyDown={abrirComTeclado} style={{
+    <div role="button" tabIndex={0} onClick={onClick} onKeyDown={abrirComTeclado} className="prg-lift" style={{
       width: 286,
       flexShrink: 0,
       cursor: 'pointer',
@@ -374,7 +375,7 @@ export default function HomePage() {
           </section>
         )}
 
-        <section style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
+        <section className="prg-stagger" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
           <QuickAction title="Restaurantes perto" subtitle={restaurantesLabel} color="#f97316" icon={<Utensils size={21} />} onClick={() => navigate('/pedir?tipo=restaurante')} />
           <QuickAction title="Ambulantes perto" subtitle={ambulantesLabel} color="#16a34a" icon={<ShoppingBag size={21} />} onClick={() => navigate('/pedir?tipo=ambulante')} />
           <QuickAction title="Cupons" subtitle={`${cupons.length} ativo${cupons.length === 1 ? '' : 's'}`} color="#7c3aed" icon={<Ticket size={21} />} onClick={() => document.getElementById('cupons')?.scrollIntoView({ behavior: 'smooth', block: 'center' })} />
