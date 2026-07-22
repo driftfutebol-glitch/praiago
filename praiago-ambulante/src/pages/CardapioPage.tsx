@@ -206,8 +206,8 @@ export default function CardapioPage() {
                 <div style={{ flex: 1, paddingTop: 4 }}>
                   {editando === p.id ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <input autoFocus value={editNome} onChange={e => setEditNome(e.target.value)} style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 8, padding: '6px 10px', color: '#fff', fontSize: 15, fontWeight: 700 }} />
-                      <input value={editPreco} onChange={e => setEditPreco(e.target.value)} type="number" step="0.01" style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 8, padding: '6px 10px', color: '#fff', fontSize: 15, fontWeight: 700 }} />
+                      <input autoFocus value={editNome} onChange={e => setEditNome(e.target.value)} style={{ width: '100%', background: '#f8fafc', border: '1px solid rgba(0,0,0,0.12)', borderRadius: 8, padding: '6px 10px', color: '#0f172a', fontSize: 15, fontWeight: 700 }} />
+                      <input value={editPreco} onChange={e => setEditPreco(e.target.value)} type="number" step="0.01" style={{ width: '100%', background: '#f8fafc', border: '1px solid rgba(0,0,0,0.12)', borderRadius: 8, padding: '6px 10px', color: '#0f172a', fontSize: 15, fontWeight: 700 }} />
                     </div>
                   ) : (
                     <>
@@ -259,17 +259,17 @@ export default function CardapioPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 13, color: '#64748b', fontWeight: 600, marginBottom: 8 }}>NOME</label>
-                  <input value={novo.nome} onChange={e => setNovo({...novo, nome: e.target.value})} placeholder="Ex: Cerveja Gelada" style={{ width: '100%', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 16, padding: '14px 16px', color: '#fff', fontSize: 16, outline: 'none' }} />
+                  <input value={novo.nome} onChange={e => setNovo({...novo, nome: e.target.value})} placeholder="Ex: Cerveja Gelada" style={{ width: '100%', background: '#f8fafc', border: '1px solid rgba(0,0,0,0.12)', borderRadius: 16, padding: '14px 16px', color: '#0f172a', fontSize: 16, outline: 'none' }} />
                 </div>
                 
                 <div>
                   <label style={{ display: 'block', fontSize: 13, color: '#64748b', fontWeight: 600, marginBottom: 8 }}>PREÇO (R$)</label>
-                  <input value={novo.preco} onChange={e => setNovo({...novo, preco: e.target.value})} type="number" step="0.01" placeholder="0.00" style={{ width: '100%', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 16, padding: '14px 16px', color: '#fff', fontSize: 16, outline: 'none' }} />
+                  <input value={novo.preco} onChange={e => setNovo({...novo, preco: e.target.value})} type="number" step="0.01" placeholder="0.00" style={{ width: '100%', background: '#f8fafc', border: '1px solid rgba(0,0,0,0.12)', borderRadius: 16, padding: '14px 16px', color: '#0f172a', fontSize: 16, outline: 'none' }} />
                 </div>
 
                 <div>
                   <label style={{ display: 'block', fontSize: 13, color: '#64748b', fontWeight: 600, marginBottom: 8 }}>DESCRIÇÃO</label>
-                  <input value={novo.descricao} onChange={e => setNovo({...novo, descricao: e.target.value})} placeholder="350ml trincando..." style={{ width: '100%', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 16, padding: '14px 16px', color: '#fff', fontSize: 16, outline: 'none' }} />
+                  <input value={novo.descricao} onChange={e => setNovo({...novo, descricao: e.target.value})} placeholder="350ml trincando..." style={{ width: '100%', background: '#f8fafc', border: '1px solid rgba(0,0,0,0.12)', borderRadius: 16, padding: '14px 16px', color: '#0f172a', fontSize: 16, outline: 'none' }} />
                 </div>
 
                 <div>

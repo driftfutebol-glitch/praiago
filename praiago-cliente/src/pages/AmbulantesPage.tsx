@@ -129,10 +129,8 @@ export default function AmbulantesPage() {
 
   // Navegar para pedir de um ambulante (vincula ao catálogo se existir)
   const handlePedir = (amb: AmbulanteLive) => {
-    const vendedor = vendedores.find(v =>
-      v.nome.toLowerCase().includes(amb.nome.split(' ')[0].toLowerCase()) ||
-      amb.id.includes(v.id)
-    )
+    // Casa SÓ por id exato — casar por primeiro nome abria a loja errada (ex: "Ana Silva" -> "Ana Coco").
+    const vendedor = vendedores.find(v => v.id === amb.id)
     if (vendedor) {
       navigate(`/pedir?v=${vendedor.id}`)
     } else {

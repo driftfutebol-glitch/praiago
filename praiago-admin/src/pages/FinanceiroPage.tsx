@@ -12,6 +12,7 @@ type PedidoFinanceiro = {
   pagamento?: string | null
   payment_provider?: string | null
   payment_status?: string | null
+  status?: string | null
   settlement_status?: string | null
   gross_amount?: number | null
   total?: number | null
@@ -82,7 +83,7 @@ export default function FinanceiroPage() {
     const [{ data: pedidosData }, { data: settingsData }] = await Promise.all([
       supabase
         .from('pedidos')
-        .select('id,created_at,cliente_nome,vendedor_nome,pagamento,payment_provider,payment_status,settlement_status,gross_amount,total,platform_fee_amount,vendor_amount,mercadopago_payment_id,payment_checkout_url,reembolso_status,reembolso_motivo,reembolso_previsao')
+        .select('id,created_at,cliente_nome,vendedor_nome,pagamento,payment_provider,payment_status,settlement_status,status,gross_amount,total,platform_fee_amount,vendor_amount,mercadopago_payment_id,payment_checkout_url,reembolso_status,reembolso_motivo,reembolso_previsao')
         .order('created_at', { ascending: false }),
       supabase
         .from('payment_settings')
@@ -106,6 +107,8 @@ export default function FinanceiroPage() {
     load()
     const channel = supabase.channel('admin_financeiro')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos' }, () => load())
+      // saques novos aparecem na hora (antes só atualizava ao dar refresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'payouts' }, () => loadSaques())
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [])
@@ -124,13 +127,14 @@ export default function FinanceiroPage() {
 
   const resumo = useMemo(() => {
     return pedidos.reduce((acc, p) => {
-      const bruto = Number(p.gross_amount ?? p.total ?? 0)
-      const taxa = Number(p.platform_fee_amount ?? 0)
-      const repasse = Number(p.vendor_amount ?? 0)
-      acc.bruto += bruto
-      acc.taxa += taxa
-      acc.repasse += repasse
-      if (p.settlement_status === 'repasse_manual_pendente') acc.repasseManual += repasse
+      // só soma pedido efetivamente pago/válido (fora pendente/cancelado/estornado)
+      const cancelado = ['cancelado', 'pagamento_recusado'].includes(String(p.status))
+      const naoPago = ['pendente', 'rejeitado', 'estornado', 'chargeback', 'recusado', 'aguardando_pagamento'].includes(String(p.payment_status))
+      if (cancelado || naoPago) return acc
+      acc.bruto += Number(p.gross_amount ?? p.total ?? 0)
+      acc.taxa += Number(p.platform_fee_amount ?? 0)
+      acc.repasse += Number(p.vendor_amount ?? 0)
+      if (p.settlement_status === 'repasse_manual_pendente') acc.repasseManual += Number(p.vendor_amount ?? 0)
       if (p.payment_provider === 'mercadopago') acc.online += 1
       return acc
     }, { bruto: 0, taxa: 0, repasse: 0, repasseManual: 0, online: 0 })
@@ -138,7 +142,7 @@ export default function FinanceiroPage() {
 
   async function salvarTaxa() {
     setSalvando(true)
-    await supabase.from('payment_settings').upsert({
+    const { error } = await supabase.from('payment_settings').upsert({
       id: true,
       platform_fee_percent: settings.platform_fee_percent,
       platform_fee_fixed: settings.platform_fee_fixed,
@@ -147,6 +151,8 @@ export default function FinanceiroPage() {
       updated_at: new Date().toISOString(),
     })
     setSalvando(false)
+    if (error) { alertDialog({ title: 'Não salvou', message: error.message, tone: 'danger' }); return }
+    alertDialog({ title: 'Taxa salva ✅', message: 'As novas regras valem pros próximos pedidos.', tone: 'success' })
     load()
   }
 

@@ -87,7 +87,8 @@ function TelaLogada() {
       .select('cpf,cpf_check_status,email_verificado')
       .maybeSingle()
     if (error) {
-      useStore.getState().addNotif({ titulo: 'Erro ao validar CPF', texto: error.message })
+      const dup = (error as { code?: string }).code === '23505'
+      useStore.getState().addNotif({ titulo: dup ? 'CPF já cadastrado' : 'Erro ao validar CPF', texto: dup ? 'Esse CPF já está em outra conta. Cada CPF só pode ter uma conta.' : error.message })
       return
     }
     setVerificacao(data as VerificacaoCliente)

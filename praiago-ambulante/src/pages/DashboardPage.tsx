@@ -56,28 +56,28 @@ export default function DashboardPage() {
     async function loadStats() {
       if (!sessao) return
 
-      const hojeStr = new Date().toISOString().split('T')[0]
+      // início do dia em horário LOCAL (não UTC) — antes contava errado das 21h à meia-noite
+      const inicioDia = new Date(); inicioDia.setHours(0, 0, 0, 0)
       const { data } = await supabase
         .from('pedidos')
-        .select('total')
+        .select('total,status')
         .eq('vendedor_id', sessao.id)
-        .gte('created_at', `${hojeStr}T00:00:00Z`)
-      
+        .gte('created_at', inicioDia.toISOString())
       if (data) {
-        setPedidosHoje(data.length)
-        setFaturamentoHoje(data.reduce((acc, p) => acc + Number(p.total), 0))
+        // só conta pedido pago/válido (fora aguardando_pagamento e cancelado)
+        const validos = data.filter(p => !['aguardando_pagamento', 'cancelado', 'pagamento_recusado'].includes(String(p.status)))
+        setPedidosHoje(validos.length)
+        setFaturamentoHoje(validos.reduce((acc, p) => acc + Number(p.total), 0))
       }
     }
     loadStats()
 
     if (!sessao) return
     const ch = supabase.channel('ambulante_stats')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos', filter: `vendedor_id=eq.${sessao.id}` }, (payload) => {
-        if (payload.eventType === 'INSERT') {
-          setPedidosHoje(p => p + 1)
-          setFaturamentoHoje(f => f + Number(payload.new.total))
-        }
-      }).subscribe()
+      // recarrega os stats em qualquer mudança (INSERT/UPDATE/cancelamento) —
+      // antes só somava no INSERT (inflava com não-pago e nunca decrementava)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos', filter: `vendedor_id=eq.${sessao.id}` }, () => loadStats())
+      .subscribe()
 
     return () => { supabase.removeChannel(ch) }
   }, [sessao])
@@ -122,10 +122,10 @@ export default function DashboardPage() {
           </motion.div>
           <motion.div initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} style={{ display: 'flex', gap: 10 }}>
             <motion.button whileTap={{ scale: 0.9 }} style={{ background: 'rgba(0,0,0,0.08)', border: '1px solid rgba(0,0,0,0.05)', borderRadius: 16, width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backdropFilter: 'blur(10px)' }}>
-              <Bell size={22} color="#fff" />
+              <Bell size={22} color="#0ea5e9" />
             </motion.button>
             <motion.button whileTap={{ scale: 0.9 }} style={{ background: 'rgba(0,0,0,0.08)', border: '1px solid rgba(0,0,0,0.05)', borderRadius: 16, width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backdropFilter: 'blur(10px)' }}>
-              <Settings size={22} color="#fff" />
+              <Settings size={22} color="#0ea5e9" />
             </motion.button>
           </motion.div>
         </div>
@@ -267,7 +267,7 @@ export default function DashboardPage() {
             🛒
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: '#fff' }}>Gerenciar Estoque</div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>Gerenciar Estoque</div>
             <div style={{ fontSize: 12, color: '#64748b', marginTop: 4, fontWeight: 500 }}>0 itens online agora</div>
           </div>
           <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

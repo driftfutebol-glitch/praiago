@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { confirmDialog } from '../lib/dialog'
+import { confirmDialog, alertDialog } from '../lib/dialog'
 import { Search, Ban } from 'lucide-react'
 import { format } from 'date-fns'
 
@@ -25,8 +25,11 @@ export default function PedidosPage() {
   }, [])
 
   async function cancelarPedido(id: string) {
-    if (!await confirmDialog({ title: 'Forçar cancelamento', message: 'Tem certeza que deseja cancelar este pedido?', confirmText: 'Cancelar pedido', tone: 'danger' })) return
-    await supabase.from('pedidos').update({ status: 'cancelado' }).eq('id', id)
+    if (!await confirmDialog({ title: 'Forçar cancelamento', message: 'Tem certeza que deseja cancelar este pedido? O repasse pendente é cancelado junto.', confirmText: 'Cancelar pedido', tone: 'danger' })) return
+    // Cancela o pedido E o repasse pendente (senão continuava aparecendo pra "Marcar pago")
+    const { error } = await supabase.from('pedidos').update({ status: 'cancelado', settlement_status: 'cancelado' }).eq('id', id)
+    if (error) { alertDialog({ title: 'Erro', message: error.message, tone: 'danger' }); return }
+    await supabase.from('financial_ledger').update({ status: 'cancelado' }).eq('pedido_id', id).neq('status', 'pago')
   }
 
   const filtrados = pedidos.filter(p => 

@@ -3,7 +3,7 @@ import { CheckCircle2, ChevronRight, Zap, ChefHat, Bike,
          Search, MapPin, Truck, Package, QrCode, CreditCard, Banknote } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useOrders, type Status } from '../store/useOrders'
-import { alertDialog, promptDialog } from '../lib/dialog'
+import { alertDialog, promptDialog, confirmDialog } from '../lib/dialog'
 
 const STATUS_CFG: Record<Status, { label: string; bg: string; cor: string; icon: any; glow: string }> = {
   novo:       { label: 'Novo',       bg: 'rgba(239,68,68,0.15)',   cor: '#f87171', icon: Zap,         glow: 'rgba(239,68,68,0.3)'   },
@@ -221,7 +221,7 @@ export default function PedidosPage() {
                 <div style={{ position: 'relative', zIndex: 1 }}>
                   {p.status === 'novo' && (
                     <div style={{ display: 'flex', gap: 12 }}>
-                      <motion.button whileHover={{ scale: 1.02, backgroundColor: 'rgba(239,68,68,0.1)' }} whileTap={{ scale: 0.98 }} onClick={() => recusar(p.id)} style={{
+                      <motion.button whileHover={{ scale: 1.02, backgroundColor: 'rgba(239,68,68,0.1)' }} whileTap={{ scale: 0.98 }} onClick={async () => { if (await confirmDialog({ title: 'Recusar este pedido?', message: 'O cliente será avisado que o pedido foi recusado. Não dá pra desfazer.', confirmText: 'Recusar', tone: 'danger' })) { const ok = await recusar(p.id); if (!ok) alertDialog({ title: 'Erro', message: 'Não deu pra recusar. Tente de novo.', tone: 'danger' }) } }} style={{
                         flex: 1, padding: '14px 0', borderRadius: 16,
                         border: '1px solid rgba(239,68,68,0.4)', background: 'rgba(239,68,68,0.05)',
                         color: '#f87171', fontSize: 14, fontWeight: 800, cursor: 'pointer', transition: 'all 0.2s'

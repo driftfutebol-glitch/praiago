@@ -20,7 +20,7 @@ import PasswordRecoveryHandler from './components/PasswordRecoveryHandler'
 import { useGPS } from './hooks/useGPS'
 import { useOrderNotifications } from './hooks/useOrderNotifications'
 
-const PUBLIC_ROUTES = ['/login', '/cadastro']
+const PUBLIC_ROUTES = ['/login']
 
 // Logo do PraiaGo Ambulante
 function LogoBar({ gpsStatus }: { gpsStatus: string }) {

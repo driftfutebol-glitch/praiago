@@ -16,9 +16,7 @@ export async function logSecurityEvent(
   metadata: Record<string, unknown> = {},
 ) {
   try {
-    const { data } = await supabase.auth.getSession()
-    if (!data.session) return
-
+    // nao exige sessao: eventos pre-login (login_failed/access_denied/reset) sao os mais importantes
     await supabase.rpc('log_security_event', {
       p_event_type: eventType,
       p_platform: 'restaurante',

@@ -3,7 +3,7 @@ import { Plus, Trash2, Edit2, Check, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { getSessao } from '../lib/auth'
-import { alertDialog } from '../lib/dialog'
+import { alertDialog, confirmDialog } from '../lib/dialog'
 
 type Produto = {
   id: string
@@ -74,16 +74,24 @@ export default function CardapioPage() {
   }
 
   async function deletar(id: string) {
+    const ok = await confirmDialog({ title: 'Excluir produto?', message: 'Ele some do cardápio pra sempre. Não dá pra desfazer.', confirmText: 'Excluir', tone: 'danger' })
+    if (!ok) return
+    const anteriores = produtos
     setProdutos(prev => prev.filter(p => p.id !== id))
-    await supabase.from('produtos').delete().eq('id', id)
+    const { error } = await supabase.from('produtos').delete().eq('id', id)
+    if (error) { setProdutos(anteriores); alertDialog({ title: 'Erro', message: 'Não deu pra excluir. Tente de novo.', tone: 'danger' }) }
   }
 
   async function salvarEdicao(id: string) {
     const p = produtos.find(p => p.id === id)
     if (!p) return
-    
+
     const newNome = editNome || p.nome
-    const newPreco = parseFloat(editPreco) || p.preco
+    const precoNum = parseFloat(editPreco)
+    if (editPreco.trim() !== '' && (!Number.isFinite(precoNum) || precoNum <= 0 || precoNum > 100000)) {
+      await alertDialog({ title: 'Preço inválido', message: 'Informe um preço maior que zero.', tone: 'danger' }); return
+    }
+    const newPreco = editPreco.trim() !== '' ? precoNum : p.preco
 
     setProdutos(prev => prev.map(p => p.id === id
       ? { ...p, nome: newNome, preco: newPreco }
@@ -102,10 +110,16 @@ export default function CardapioPage() {
       return
     }
 
+    const precoNum = parseFloat(novo.preco)
+    if (!Number.isFinite(precoNum) || precoNum <= 0 || precoNum > 100000) {
+      setAdicionando(false)
+      await alertDialog({ title: 'Preço inválido', message: 'Informe um preço maior que zero (e realista).', tone: 'danger' })
+      return
+    }
     const prod = {
       vendedor_id: sessao.id,
       nome: novo.nome,
-      preco: parseFloat(novo.preco) || 0,
+      preco: precoNum,
       descricao: novo.descricao,
       categoria: novo.categoria,
       ativo: true,

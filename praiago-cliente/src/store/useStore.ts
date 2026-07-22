@@ -213,10 +213,13 @@ export const useStore = create<State>()(
         if (!carrinhoVendedor) return null
         const vend = getVendedor(carrinhoVendedor)
         if (!vend) return null
-        const itens: PedidoItem[] = Object.entries(carrinho).map(([pid, qtd]) => {
-          const p = getProduto(carrinhoVendedor, pid)!
-          return { nome: p.nome, qtd, preco: p.preco }
-        })
+        // Ignora itens que sumiram do catálogo (produto desativado / loja recarregada)
+        // — antes usava non-null assertion e quebrava com TypeError no checkout.
+        const itensBrutos = Object.entries(carrinho)
+          .map(([pid, qtd]) => { const p = getProduto(carrinhoVendedor, pid); return p ? { id: pid, nome: p.nome, qtd, preco: p.preco } : null })
+          .filter((x): x is { id: string; nome: string; qtd: number; preco: number } => x !== null)
+        if (itensBrutos.length === 0) return null
+        const itens: PedidoItem[] = itensBrutos.map(({ nome, qtd, preco }) => ({ nome, qtd, preco }))
         const subtotal = itens.reduce((a, i) => a + i.preco * i.qtd, 0)
         const discountAmount = Math.max(0, Math.min(subtotal, Math.round(Number(options.desconto?.valor ?? 0) * 100) / 100))
         const total = Math.max(0, Math.round((subtotal - discountAmount) * 100) / 100)
@@ -241,7 +244,7 @@ export const useStore = create<State>()(
           itens: itens.map(i => `${i.qtd}x ${i.nome}`),
           // itens com ID do produto — o SERVIDOR recalcula o preço real por aqui
           // (o total/subtotal abaixo são só palpite; o trigger sobrescreve).
-          itens_detalhe: Object.entries(carrinho).map(([pid, qtd]) => ({ produto_id: pid, qtd })),
+          itens_detalhe: itensBrutos.map(i => ({ produto_id: i.id, qtd: i.qtd })),
           total: total,
           subtotal_amount: subtotal,
           discount_amount: discountAmount,

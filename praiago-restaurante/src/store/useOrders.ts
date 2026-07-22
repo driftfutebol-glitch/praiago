@@ -31,7 +31,7 @@ type State = {
   lastSeen: number
   fetchOrders: () => Promise<void>
   avancar: (id: string, codigoEntrega?: string) => Promise<boolean>
-  recusar: (id: string) => Promise<void>
+  recusar: (id: string) => Promise<boolean>
   markSeen: () => void
   novos: () => number
 }
@@ -96,7 +96,10 @@ export const useOrders = create<State>((set, get) => ({
 
   recusar: async (id) => {
     set(s => ({ pedidos: s.pedidos.filter(p => p.id !== id) }))
-    await supabase.from('pedidos').update({ status: 'cancelado' }).eq('id', id)
+    const { error } = await supabase.from('pedidos').update({ status: 'cancelado' }).eq('id', id)
+    if (error) { await get().fetchOrders(); return false }  // reverte se falhou (senão sumia da tela mas ficava ativo)
+    await get().fetchOrders()
+    return true
   },
 
   markSeen: () => set({ lastSeen: Date.now() }),

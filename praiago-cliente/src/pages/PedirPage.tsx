@@ -962,12 +962,17 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
     setConfirming(true)
     const entrega: Entrega = { reta: reta.trim(), barraca: barraca.trim(), modo, pagamento, lat: clientePos[0], lng: clientePos[1], cpfNota: querCpfNota ? cpfNota.replace(/\D/g, '') : undefined }
     const usaMercadoPago = isMercadoPagoMethod(pagamento)
-    const pedido = await criarPedido(entrega, {
-      limparCarrinho: !usaMercadoPago,
-      desconto: cupomAplicado ? { codigo: cupomAplicado.codigo, valor: desconto, motivo: cupomAplicado.motivo } : undefined,
-    })
+    let pedido: Awaited<ReturnType<typeof criarPedido>>
+    try {
+      pedido = await criarPedido(entrega, {
+        limparCarrinho: !usaMercadoPago,
+        desconto: cupomAplicado ? { codigo: cupomAplicado.codigo, valor: desconto, motivo: cupomAplicado.motivo } : undefined,
+      })
+    } catch {
+      pedido = null
+    }
     if (!pedido) {
-      setErro('Erro ao criar pedido. Tente novamente.')
+      setErro('Não deu pra criar o pedido. Confira os itens do carrinho e tente de novo.')
       setConfirming(false)
       return
     }

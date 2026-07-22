@@ -78,15 +78,12 @@ export function useGPS() {
     })
 
     if (sessao?.id) {
-      await supabase
-        .from('profiles')
-        .update({
-          online: aberto,
-          lat: g.lat,
-          lng: g.lng,
-          zona: zona?.nome ?? 'Praia Grande',
-        })
-        .eq('id', sessao.id)
+      // Fechado: NÃO persiste a localização (privacidade) — só marca offline.
+      // Aberto: transmite a posição ao vivo.
+      const patch = aberto
+        ? { online: true, lat: g.lat, lng: g.lng, zona: zona?.nome ?? 'Praia Grande' }
+        : { online: false }
+      await supabase.from('profiles').update(patch).eq('id', sessao.id)
     }
   }
 
