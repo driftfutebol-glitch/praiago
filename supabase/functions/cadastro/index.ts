@@ -4,7 +4,7 @@
 //  - 1 conta por IP (celular/CGNAT isento) — via signup_rules/authorized_ips
 //  - cria a conta e envia o e-mail de verificação
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2'
-import { corsHeaders, json, readJson } from './_shared/cors.ts'
+import { corsHeaders, json, readJson } from '../_shared/cors.ts'
 
 type Body = { email?: string; senha?: string; metadata?: Record<string, unknown>; emailRedirectTo?: string }
 
