@@ -28,7 +28,7 @@ export type Entrega = {
   reta: string
   barraca: string
   modo: 'fixa' | 'tempo_real'
-  pagamento: 'pix' | 'cartao' | 'credito_online' | 'debito_online' | 'mercadopago' | 'dinheiro' | 'cartao_fisico' | 'debito_fisico' | 'credito_fisico'
+  pagamento: 'pix' | 'credito_online' | 'debito_online' | 'dinheiro' | 'cartao_fisico' | 'debito_fisico' | 'credito_fisico'
   lat?: number
   lng?: number
   cpfNota?: string // CPF na nota (opcional, só dígitos)
@@ -251,10 +251,10 @@ export const useStore = create<State>()(
           discount_code: options.desconto?.codigo ?? null,
           discount_reason: options.desconto?.motivo ?? null,
           // Pagamento online: o pedido NASCE travado e só vira 'novo' (visível
-          // pro vendedor) quando o webhook do Mercado Pago confirmar o pagamento.
+          // pro vendedor) quando o webhook do gateway confirmar o pagamento.
           status: presencial ? 'novo' : 'aguardando_pagamento',
           pagamento: method,
-          payment_provider: presencial ? 'manual' : 'mercadopago',
+          payment_provider: presencial ? 'manual' : 'pagarme',
           payment_status: presencial ? 'presencial' : 'pendente',
           gross_amount: total,
           platform_fee_amount: platformFeeAmount,

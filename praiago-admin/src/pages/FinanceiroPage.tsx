@@ -18,7 +18,7 @@ type PedidoFinanceiro = {
   total?: number | null
   platform_fee_amount?: number | null
   vendor_amount?: number | null
-  mercadopago_payment_id?: string | null
+  payment_reference?: string | null
   payment_checkout_url?: string | null
   reembolso_status?: string | null
   reembolso_motivo?: string | null
@@ -83,7 +83,7 @@ export default function FinanceiroPage() {
     const [{ data: pedidosData }, { data: settingsData }] = await Promise.all([
       supabase
         .from('pedidos')
-        .select('id,created_at,cliente_nome,vendedor_nome,pagamento,payment_provider,payment_status,settlement_status,status,gross_amount,total,platform_fee_amount,vendor_amount,mercadopago_payment_id,payment_checkout_url,reembolso_status,reembolso_motivo,reembolso_previsao')
+        .select('id,created_at,cliente_nome,vendedor_nome,pagamento,payment_provider,payment_status,settlement_status,status,gross_amount,total,platform_fee_amount,vendor_amount,payment_reference,payment_checkout_url,reembolso_status,reembolso_motivo,reembolso_previsao')
         .order('created_at', { ascending: false }),
       supabase
         .from('payment_settings')
@@ -135,7 +135,7 @@ export default function FinanceiroPage() {
       acc.taxa += Number(p.platform_fee_amount ?? 0)
       acc.repasse += Number(p.vendor_amount ?? 0)
       if (p.settlement_status === 'repasse_manual_pendente') acc.repasseManual += Number(p.vendor_amount ?? 0)
-      if (p.payment_provider === 'mercadopago') acc.online += 1
+      if (p.payment_provider && p.payment_provider !== 'manual') acc.online += 1
       return acc
     }, { bruto: 0, taxa: 0, repasse: 0, repasseManual: 0, online: 0 })
   }, [pedidos])
@@ -170,7 +170,7 @@ export default function FinanceiroPage() {
   const [processandoReembolso, setProcessandoReembolso] = useState<string | null>(null)
 
   async function resolverReembolso(pedido: PedidoFinanceiro, acao: 'aprovar' | 'negar') {
-    if (acao === 'aprovar' && !await confirmDialog({ title: 'Aprovar reembolso?', message: `Devolver ${money(pedido.total)} para ${pedido.cliente_nome || 'cliente'}? Se foi pago online, o estorno é disparado no Mercado Pago na hora (PIX volta rápido, cartão demora dias).`, confirmText: 'Aprovar e estornar', tone: 'danger' })) return
+    if (acao === 'aprovar' && !await confirmDialog({ title: 'Aprovar reembolso?', message: `Devolver ${money(pedido.total)} para ${pedido.cliente_nome || 'cliente'}? Se foi pago online, o estorno é disparado no gateway na hora (PIX volta rápido, cartão demora dias).`, confirmText: 'Aprovar e estornar', tone: 'danger' })) return
     if (acao === 'negar' && !await confirmDialog({ title: 'Negar reembolso?', message: 'O cliente será informado de que o reembolso não foi aprovado.', confirmText: 'Negar', tone: 'danger' })) return
     setProcessandoReembolso(pedido.id)
     const { data, error } = await supabase.functions.invoke('pedido-reembolso', { body: { pedido_id: pedido.id, acao } })
@@ -192,7 +192,7 @@ export default function FinanceiroPage() {
       <header className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-black text-slate-100 tracking-tight">Financeiro e Repasses</h1>
-          <p className="text-slate-400 font-medium">Controle do Mercado Pago, taxa da empresa e repasses dos vendedores.</p>
+          <p className="text-slate-400 font-medium">Controle de pagamentos, taxa da empresa e repasses dos vendedores.</p>
         </div>
         <button onClick={load} className="inline-flex items-center justify-center gap-2 bg-slate-900/70 border border-slate-800 text-slate-300 px-4 py-2 rounded-xl font-bold text-sm hover:bg-slate-800 transition-colors">
           <RefreshCw size={16} /> Atualizar
@@ -346,7 +346,7 @@ export default function FinanceiroPage() {
                   <td className="p-4 text-purple-300 font-mono font-black">{money(p.vendor_amount)}</td>
                   <td className="p-4">
                     <span className={`px-2 py-1 rounded-md text-xs font-bold uppercase border ${statusClass(p.payment_status)}`}>{p.payment_status || 'pendente'}</span>
-                    {p.mercadopago_payment_id && <div className="text-[10px] text-slate-600 mt-1 font-mono">MP {p.mercadopago_payment_id}</div>}
+                    {p.payment_reference && <div className="text-[10px] text-slate-600 mt-1 font-mono">Ref {p.payment_reference}</div>}
                   </td>
                   <td className="p-4">
                     <span className={`px-2 py-1 rounded-md text-xs font-bold uppercase border ${statusClass(p.settlement_status)}`}>{p.settlement_status || 'pendente'}</span>

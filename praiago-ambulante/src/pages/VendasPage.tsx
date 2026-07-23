@@ -28,7 +28,6 @@ export default function VendasPage() {
   const [pixSalvo, setPixSalvo] = useState(false)
   const [pixSalvando, setPixSalvando] = useState(false)
   const [pixErro, setPixErro] = useState('')
-  const [mpVinculado, setMpVinculado] = useState(false)
 
   useEffect(() => {
     if (!sessao) return
@@ -56,14 +55,13 @@ export default function VendasPage() {
       .then(({ data }) => setVerificado(!!data?.verificado))
 
     supabase.from('vendor_payment_accounts')
-      .select('pix_key, holder_name, mercadopago_user_id')
+      .select('pix_key, holder_name')
       .eq('vendedor_id', sessao.id)
       .maybeSingle()
       .then(({ data }) => {
         if (!data) return
         if (data.pix_key) { setPixChave(data.pix_key); setPixSalvo(true) }
         if (data.holder_name) setPixTitular(data.holder_name)
-        setMpVinculado(!!data.mercadopago_user_id)
       })
 
     const timer = window.setInterval(carregarCarteira, 30000)
@@ -198,9 +196,7 @@ export default function VendasPage() {
         </div>
 
         <div style={{ fontSize: 12.5, color: '#64748b', fontWeight: 600, lineHeight: 1.5, marginBottom: 16 }}>
-          {mpVinculado
-            ? '✅ Conta Mercado Pago vinculada: sua parte da venda online cai direto na sua conta.'
-            : 'Vendas online são repassadas pra sua chave PIX 7 dias após o pagamento. Nas vendas no dinheiro, a comissão da PraiaGo fica registrada aqui e é descontada do seu repasse.'}
+          Vendas online são repassadas pra sua chave PIX 7 dias após o pagamento. Nas vendas no dinheiro, a comissão da PraiaGo fica registrada aqui e é descontada do seu repasse.
           {carteira.recebido > 0 && <> Você já recebeu <b>{fmtBRL(carteira.recebido)}</b> no total.</>}
         </div>
 

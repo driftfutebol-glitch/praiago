@@ -4,7 +4,7 @@ import { ShoppingBag, Clock, Bike, CheckCircle2, RotateCcw, XCircle, LifeBuoy, T
 import { useStore } from '../store/useStore'
 import { theme } from '../lib/theme'
 import { confirmDialog, alertDialog } from '../lib/dialog'
-import { verificarPagamentoMercadoPago } from '../lib/mercadopago'
+import { verificarPagamento as verificarPagamentoServidor } from '../lib/pagamento'
 
 const STATUS_CFG = {
   aguardando_pagamento: { label: 'Verificando pagamento', cor: '#d97706', bg: 'rgba(245,158,11,0.12)', icon: CreditCard },
@@ -43,10 +43,10 @@ export default function MeusPedidosPage() {
       ocupado = true
       if (ativo) setVerificandoId(prev => prev ?? pendente.id)
       try {
-        await verificarPagamentoMercadoPago(pendente.id)
+        await verificarPagamentoServidor(pendente.id)
         await sincronizarPedidos()
       } catch {
-        // O botao manual continua disponivel se o Mercado Pago ou a rede falhar.
+        // O botao manual continua disponivel se o gateway ou a rede falhar.
       } finally {
         if (ativo) setVerificandoId(prev => prev === pendente.id ? null : prev)
         ocupado = false
@@ -64,14 +64,14 @@ export default function MeusPedidosPage() {
   async function verificarPagamento(id: string, silencioso = false) {
     setVerificandoId(id)
     try {
-      const result = await verificarPagamentoMercadoPago(id)
+      const result = await verificarPagamentoServidor(id)
       await sincronizarPedidos()
       if (!silencioso) {
         await alertDialog({
           title: result.payment_status === 'aprovado' ? 'Pagamento aprovado' : 'Pagamento em verificacao',
           message: result.payment_status === 'aprovado'
             ? 'Pedido aprovado e enviado para o vendedor.'
-            : 'Ainda estamos aguardando a confirmacao do Mercado Pago.',
+            : 'Ainda estamos aguardando a confirmacao do pagamento.',
           tone: result.payment_status === 'aprovado' ? 'success' : 'default',
         })
       }
@@ -163,7 +163,7 @@ export default function MeusPedidosPage() {
 
                 {p.status === 'aguardando_pagamento' && (
                   <div style={{ fontSize: 12, lineHeight: 1.45, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, padding: '10px 12px', marginBottom: 12, fontWeight: 700 }}>
-                    Seu pedido so vai para o ambulante ou restaurante depois que o Mercado Pago aprovar.
+                    Seu pedido so vai para o ambulante ou restaurante depois que o pagamento for aprovado.
                   </div>
                 )}
 

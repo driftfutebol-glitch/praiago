@@ -115,11 +115,11 @@ export type EventoWebhook = {
 }
 
 /**
- * Contrato que Asaas/Pagar.me/Iugu implementam. Métodos podem lançar erro;
+ * Contrato que Pagar.me (atual) / Asaas / Iugu implementam. Métodos podem lançar erro;
  * quem chama trata e nunca credita/debita sem uma entrada no ledger.
  */
 export interface PaymentProvider {
-  readonly nome: 'asaas' | 'pagarme' | 'iugu' | 'mercadopago'
+  readonly nome: 'pagarme' | 'asaas' | 'iugu'
 
   // ── Onboarding / KYC (recebedor criado por API, vendedor não sai do app) ──
   criarRecebedor(dados: DadosRecebedor): Promise<StatusRecebedor>

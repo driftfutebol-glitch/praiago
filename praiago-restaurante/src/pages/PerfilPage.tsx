@@ -5,7 +5,6 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { getSessao, logout } from '../lib/auth'
 import SuportePanel from '../components/SuportePanel'
-import { buscarStatusMercadoPago, iniciarVinculoMercadoPago, type MercadoPagoLinkStatus } from '../lib/mercadopago'
 
 type PerfilInfo = {
   nome: string
@@ -61,9 +60,9 @@ export default function PerfilPage() {
   const [faturamentoMes, setFaturamentoMes] = useState(0)
   const [painelAberto, setPainelAberto] = useState<Painel | null>(null)
   const [suporteAberto, setSuporteAberto] = useState(false)
-  const [mpStatus, setMpStatus] = useState<MercadoPagoLinkStatus | null>(null)
-  const [mpLoading, setMpLoading] = useState(false)
-  const [mpErro, setMpErro] = useState('')
+  const [pixKey, setPixKey] = useState('')
+  const [pixSalvando, setPixSalvando] = useState(false)
+  const [pixMsg, setPixMsg] = useState('')
   const [horaAbre, setHoraAbre] = useState('')
   const [horaFecha, setHoraFecha] = useState('')
   const [salvandoHorario, setSalvandoHorario] = useState(false)
@@ -105,7 +104,12 @@ export default function PerfilPage() {
         setFaturamentoMes(entregues.reduce((a, p) => a + (Number(p.total) || 0), 0))
       })
 
-    buscarStatusMercadoPago(sessao.id).then(setMpStatus)
+    supabase
+      .from('vendor_payment_accounts')
+      .select('pix_key')
+      .eq('vendedor_id', sessao.id)
+      .maybeSingle()
+      .then(({ data }) => setPixKey(data?.pix_key || ''))
   }, [sessao])
 
   async function salvarHorario() {
@@ -121,16 +125,18 @@ export default function PerfilPage() {
     setTimeout(() => setHorarioMsg(''), 3500)
   }
 
-  async function conectarMercadoPago() {
+  async function salvarChavePix() {
     if (!sessao) return
-    setMpErro('')
-    setMpLoading(true)
-    try {
-      await iniciarVinculoMercadoPago(sessao.id)
-    } catch (err) {
-      setMpErro(err instanceof Error ? err.message : 'Nao foi possivel vincular o Mercado Pago.')
-      setMpLoading(false)
-    }
+    const chave = pixKey.trim()
+    if (!chave) { setPixMsg('Digite sua chave Pix pra receber os repasses.'); return }
+    setPixSalvando(true)
+    setPixMsg('')
+    const { error } = await supabase
+      .from('vendor_payment_accounts')
+      .upsert({ vendedor_id: sessao.id, pix_key: chave }, { onConflict: 'vendedor_id' })
+    setPixSalvando(false)
+    setPixMsg(error ? 'Nao deu pra salvar. Tente de novo.' : 'Chave Pix salva! O repasse cai nela.')
+    setTimeout(() => setPixMsg(''), 4000)
   }
 
   function sair() {
@@ -212,22 +218,29 @@ export default function PerfilPage() {
         <ChevronRight size={20} color="#94a3b8" />
       </motion.button>
 
-      <InfoCard title="Recebimentos Mercado Pago" icon={<CreditCard size={16} color="#0284c7" />}>
-        <Metric
-          label="Status do split"
-          value={mpStatus?.provider === 'mercadopago' && mpStatus.status === 'verificado' ? 'Conta vinculada' : 'Pendente'}
-          color={mpStatus?.provider === 'mercadopago' && mpStatus.status === 'verificado' ? '#16a34a' : '#d97706'}
-        />
+      <InfoCard title="Onde voce recebe (chave Pix)" icon={<CreditCard size={16} color="#0284c7" />}>
+        <p style={{ fontSize: 13, color: '#64748b', fontWeight: 500, margin: 0 }}>
+          Seus repasses caem nessa chave. Nao precisa criar conta em gateway nenhum — so informe sua chave Pix.
+        </p>
+        <div>
+          <label style={{ fontSize: 11, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 6, letterSpacing: 0.5 }}>CHAVE PIX</label>
+          <input
+            value={pixKey}
+            onChange={e => setPixKey(e.target.value)}
+            placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatoria"
+            style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 14, padding: '12px', fontSize: 15, fontWeight: 700, color: '#0f172a', background: '#f8fafc' }}
+          />
+        </div>
         <button
           type="button"
-          onClick={conectarMercadoPago}
-          disabled={mpLoading}
-          style={{ width: '100%', border: '1px solid rgba(2,132,199,0.25)', background: '#eff6ff', color: '#0284c7', borderRadius: 16, padding: 16, fontSize: 14, fontWeight: 900, cursor: mpLoading ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
+          onClick={salvarChavePix}
+          disabled={pixSalvando}
+          style={{ width: '100%', border: '1px solid rgba(2,132,199,0.25)', background: '#eff6ff', color: '#0284c7', borderRadius: 16, padding: 16, fontSize: 14, fontWeight: 900, cursor: pixSalvando ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
         >
-          {mpLoading ? <Loader2 size={18} className="animate-spin-slow" /> : <CreditCard size={18} />}
-          {mpStatus?.provider === 'mercadopago' ? 'Atualizar vinculo Mercado Pago' : 'Vincular conta Mercado Pago'}
+          {pixSalvando ? <Loader2 size={18} className="animate-spin-slow" /> : <CreditCard size={18} />}
+          {pixSalvando ? 'Salvando...' : 'Salvar chave Pix'}
         </button>
-        {mpErro && <div style={{ color: '#ef4444', fontSize: 13, fontWeight: 800 }}>{mpErro}</div>}
+        {pixMsg && <div style={{ color: pixMsg.includes('salva') ? '#16a34a' : '#ef4444', fontSize: 13, fontWeight: 800 }}>{pixMsg}</div>}
       </InfoCard>
 
       <InfoCard title="Horario de funcionamento" icon={<Clock size={16} color="#f97316" />}>

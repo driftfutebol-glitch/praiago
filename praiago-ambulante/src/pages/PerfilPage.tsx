@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { logout, useSessao } from '../lib/auth'
 import { supabase } from '../lib/supabase'
-import { buscarStatusMercadoPago, iniciarVinculoMercadoPago, type MercadoPagoLinkStatus } from '../lib/mercadopago'
 import SuportePanel from '../components/SuportePanel'
 
 const menuItems = [
@@ -19,9 +18,6 @@ const menuItems = [
 export default function PerfilPage() {
   const navigate = useNavigate()
   const sessao = useSessao()
-  const [mpStatus, setMpStatus] = useState<MercadoPagoLinkStatus | null>(null)
-  const [mpLoading, setMpLoading] = useState(false)
-  const [mpErro, setMpErro] = useState('')
   const [suporteAberto, setSuporteAberto] = useState(false)
   const [horaAbre, setHoraAbre] = useState('')
   const [horaFecha, setHoraFecha] = useState('')
@@ -30,7 +26,6 @@ export default function PerfilPage() {
 
   useEffect(() => {
     if (!sessao) return
-    buscarStatusMercadoPago(sessao.id).then(setMpStatus)
     supabase.from('profiles').select('horario_abre,horario_fecha').eq('id', sessao.id).maybeSingle()
       .then(({ data }) => {
         if (data) {
@@ -51,18 +46,6 @@ export default function PerfilPage() {
     setSalvandoHorario(false)
     setHorarioMsg(error ? 'Não deu pra salvar. Tenta de novo.' : 'Horário salvo! Já aparece pros clientes ✅')
     setTimeout(() => setHorarioMsg(''), 3500)
-  }
-
-  async function conectarMercadoPago() {
-    if (!sessao) return
-    setMpErro('')
-    setMpLoading(true)
-    try {
-      await iniciarVinculoMercadoPago(sessao.id)
-    } catch (err) {
-      setMpErro(err instanceof Error ? err.message : 'Nao foi possivel vincular o Mercado Pago.')
-      setMpLoading(false)
-    }
   }
 
   function sair() {
@@ -179,24 +162,14 @@ export default function PerfilPage() {
           borderRadius: 24, padding: '20px', marginBottom: 20,
         }}>
           <div style={{ fontSize: 12, fontWeight: 900, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 16 }}>
-            RECEBIMENTOS MERCADO PAGO
+            COMO VOCÊ RECEBE
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-            <span style={{ fontSize: 14, color: '#64748b', fontWeight: 600 }}>Status do split</span>
-            <span style={{ fontSize: 12, fontWeight: 900, color: mpStatus?.provider === 'mercadopago' && mpStatus.status === 'verificado' ? '#16a34a' : '#d97706', background: mpStatus?.provider === 'mercadopago' && mpStatus.status === 'verificado' ? 'rgba(34,197,94,0.1)' : 'rgba(245,158,11,0.1)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 12, padding: '5px 10px', textTransform: 'uppercase' }}>
-              {mpStatus?.provider === 'mercadopago' && mpStatus.status === 'verificado' ? 'Vinculado' : 'Pendente'}
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            <CreditCard size={18} color="#0284c7" style={{ flexShrink: 0, marginTop: 2 }} />
+            <span style={{ fontSize: 13.5, color: '#475569', fontWeight: 600, lineHeight: 1.5 }}>
+              Seus repasses caem na sua <b>chave Pix</b>, 7 dias após o pagamento. Não precisa de conta em gateway nenhum — cadastre ou troque a chave na aba <b>Vendas</b>.
             </span>
           </div>
-          <button
-            type="button"
-            onClick={conectarMercadoPago}
-            disabled={mpLoading}
-            style={{ width: '100%', border: '1px solid rgba(2,132,199,0.25)', background: '#eff6ff', color: '#0284c7', borderRadius: 16, padding: 14, fontSize: 14, fontWeight: 900, cursor: mpLoading ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
-          >
-            {mpLoading ? <Loader2 size={18} className="animate-spin-slow" /> : <CreditCard size={18} />}
-            {mpStatus?.provider === 'mercadopago' ? 'Atualizar vinculo Mercado Pago' : 'Vincular conta Mercado Pago'}
-          </button>
-          {mpErro && <div style={{ marginTop: 10, color: '#ef4444', fontSize: 13, fontWeight: 800 }}>{mpErro}</div>}
         </motion.div>
 
         <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.6 }} className="glass-panel" style={{

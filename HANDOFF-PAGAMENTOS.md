@@ -1,3 +1,10 @@
+> ## ⚠️ DOCUMENTO HISTÓRICO — NÃO SIGA COMO INSTRUÇÃO
+> Em **23/07/2026** o Mercado Pago foi **removido por completo** do PraiaGo
+> (código, banco de dados e edge functions). O gateway agora é o **Pagar.me**.
+> Tudo abaixo que cita Mercado Pago, OAuth de vendedor ou `mercadopago-*`
+> **não existe mais**. O estado atual está em `supabase/.env.example` e na
+> tabela nova `public.pagamentos`.
+
 # 🏦 Pagamentos white-label — o que ficou pronto e o que VOCÊ faz na mão
 
 > Feito enquanto você tava na academia. Nada de dinheiro real foi movido (spec).

@@ -271,7 +271,7 @@ export default function EventosPage() {
   }
 
   async function processarReembolso(refundId: string) {
-    if (!await confirmDialog({ title: 'Processar reembolso', message: 'Processar o reembolso no Mercado Pago agora?', confirmText: 'Processar', tone: 'danger' })) return
+    if (!await confirmDialog({ title: 'Processar reembolso', message: 'Processar o reembolso agora?', confirmText: 'Processar', tone: 'danger' })) return
     const { error } = await supabase.functions.invoke('evento-ticket-refund', {
       body: { acao: 'processar', refund_id: refundId },
     })
@@ -326,7 +326,7 @@ export default function EventosPage() {
               <h2 className="text-lg font-black text-slate-100 flex items-center gap-2">
                 <ShoppingCart size={18} className="text-emerald-400" /> Ingressos para entregar
               </h2>
-              <p className="text-xs text-slate-500 font-semibold">Pagamentos aprovados no Mercado Pago aguardando envio do ingresso.</p>
+              <p className="text-xs text-slate-500 font-semibold">Pagamentos aprovados aguardando envio do ingresso.</p>
             </div>
             <span className="text-xs font-black text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-2.5 py-1">
               {pedidosPendentes.length} pendente(s)

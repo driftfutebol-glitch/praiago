@@ -10,8 +10,8 @@ import { useGPS, type GPSFonte, type GPSStatus } from '../hooks/useGPS'
 import { criarMonitorSentido, type SentidoStatus } from '../lib/trafego'
 import { broadcastOrder } from '../hooks/useOrderBroadcast'
 import { type Vendedor } from '../lib/catalogo'
-import { criarPixMercadoPago, isMercadoPagoMethod, pagarComCartao, mensagemRecusaCartao, type PixCobranca } from '../lib/mercadopago'
-import { tokenizarCartao } from '../lib/mpsdk'
+import { criarPix, isPagamentoOnline, pagarComCartao, mensagemRecusaCartao, type PixCobranca } from '../lib/pagamento'
+import { tokenizarCartao } from '../lib/pagamentosdk'
 import { labelHorario } from '../lib/horario'
 import { useCatalogo } from '../store/useCatalogo'
 import { useStore, type Entrega } from '../store/useStore'
@@ -570,11 +570,11 @@ function CartaoPagamentoModal({ tipo, pedidoId, total, emailCliente, onPago, onC
     setErro('')
     setProcessando(true)
     try {
-      const { token, paymentMethodId } = await tokenizarCartao({
+      const { token } = await tokenizarCartao({
         numero: digitosNumero, nome, validade, cvv, cpf: digitosCpf,
-      }, tipo)
-      const resultado = await pagarComCartao(pedidoId, { token, paymentMethodId, cpf: digitosCpf, email: emailCliente || undefined })
-      if (resultado.status === 'approved') {
+      })
+      const resultado = await pagarComCartao(pedidoId, { token, tipo, cpf: digitosCpf, email: emailCliente || undefined })
+      if (resultado.status === 'approved' || resultado.status === 'paid') {
         aprovadoRef.current = true
         setAprovado(true)
         setTimeout(onPago, 2000)
@@ -961,11 +961,11 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
     setErro('')
     setConfirming(true)
     const entrega: Entrega = { reta: reta.trim(), barraca: barraca.trim(), modo, pagamento, lat: clientePos[0], lng: clientePos[1], cpfNota: querCpfNota ? cpfNota.replace(/\D/g, '') : undefined }
-    const usaMercadoPago = isMercadoPagoMethod(pagamento)
+    const usaPagamentoOnline = isPagamentoOnline(pagamento)
     let pedido: Awaited<ReturnType<typeof criarPedido>>
     try {
       pedido = await criarPedido(entrega, {
-        limparCarrinho: !usaMercadoPago,
+        limparCarrinho: !usaPagamentoOnline,
         desconto: cupomAplicado ? { codigo: cupomAplicado.codigo, valor: desconto, motivo: cupomAplicado.motivo } : undefined,
       })
     } catch {
@@ -976,13 +976,13 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
       setConfirming(false)
       return
     }
-    if (usaMercadoPago) {
-      // Pagamento online: o vendedor SÓ recebe o pedido depois que o Mercado
-      // Pago confirmar — nada de broadcast nem "pedido enviado" antes de pagar.
+    if (usaPagamentoOnline) {
+      // Pagamento online: o vendedor SÓ recebe o pedido depois que o gateway
+      // confirmar — nada de broadcast nem "pedido enviado" antes de pagar.
       if (pagamento === 'pix') {
         // PIX transparente: QR + copia-e-cola DENTRO do app, sem redirect.
         try {
-          const cobranca = await criarPixMercadoPago(pedido.id)
+          const cobranca = await criarPix(pedido.id)
           const valor = total
           limparCarrinho()
           setConfirming(false)
@@ -993,7 +993,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
         }
         return
       }
-      // Cartão transparente: formulário DENTRO do app (token via SDK do MP).
+      // Cartão transparente: formulário DENTRO do app (token gerado no gateway).
       const valor = total
       limparCarrinho()
       setConfirming(false)
@@ -1217,34 +1217,80 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
           )}
         </div>
 
-        {/* Pagamento */}
+        {/* Pagamento — estilo lista, com a marca PraiaGo Pay */}
         <div style={{ marginBottom: 24 }}>
-          <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <CreditCard size={18} color="#0ea5e9" /> Forma de Pagamento
+          <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <CreditCard size={18} color="#2a22de" /> Como você quer pagar?
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-            {([
-              ['pix', QrCode, 'PIX', 'na hora'],
-              ['credito_online', CreditCard, 'Crédito', 'na hora'],
-              ['debito_online', CreditCard, 'Débito', 'na hora'],
-              ['dinheiro', Banknote, 'Dinheiro', 'na entrega'],
-              ['cartao_fisico', CreditCard, 'Maquininha', 'na entrega'],
-            ] as const).map(([key, Icon, label, hint]) => {
-              const sel = pagamento === key
-              return (
-                <button key={key} onClick={() => setPagamento(key)} style={{
-                  background: sel ? 'rgba(14,165,233,0.15)' : '#f1f5f9',
-                  border: `1.5px solid ${sel ? '#0ea5e9' : 'rgba(0,0,0,0.06)'}`,
-                  borderRadius: 16, padding: '14px 8px', color: sel ? '#0ea5e9' : '#64748b',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', transition: 'all 0.2s'
-                }}>
-                  <Icon size={22} />
-                  <span style={{ fontSize: 12.5, fontWeight: 800 }}>{label}</span>
-                  <span style={{ fontSize: 10, fontWeight: 700, opacity: 0.75 }}>{hint}</span>
-                </button>
-              )
-            })}
-          </div>
+
+          {[
+            {
+              id: 'app', cor: '#2a22de', corBg: 'rgba(42,34,222,0.06)',
+              opcoes: [
+                { key: 'pix', Icon: QrCode, label: 'Pix', sub: 'Aprovação automática', tag: 'Na hora' },
+                { key: 'credito_online', Icon: CreditCard, label: 'Cartão de crédito', sub: 'Visa, Master, Elo, Amex e mais', tag: '' },
+                { key: 'debito_online', Icon: CreditCard, label: 'Cartão de débito', sub: 'Débito online, sem sair do app', tag: '' },
+              ],
+            },
+            {
+              id: 'entrega', cor: '#16a34a', corBg: 'rgba(22,163,94,0.06)',
+              opcoes: [
+                { key: 'dinheiro', Icon: Banknote, label: 'Dinheiro', sub: 'Pague ao receber o pedido', tag: '' },
+                { key: 'cartao_fisico', Icon: CreditCard, label: 'Maquininha', sub: 'Crédito ou débito na entrega', tag: '' },
+              ],
+            },
+          ].map((grupo, gi) => (
+            <div key={grupo.id} style={{ marginBottom: gi === 0 ? 18 : 0 }}>
+              <div style={{ marginBottom: 10 }}>
+                {grupo.id === 'app' ? (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ background: 'linear-gradient(135deg,#2a22de,#4f46e5)', color: '#fff', fontSize: 11, fontWeight: 950, letterSpacing: 0.3, padding: '5px 11px', borderRadius: 999, boxShadow: '0 4px 12px rgba(42,34,222,0.35)' }}>🏖️ PraiaGo Pay</span>
+                    <span style={{ fontSize: 11.5, fontWeight: 800, color: '#64748b' }}>aprovação na hora ⚡</span>
+                  </span>
+                ) : (
+                  <span style={{ fontSize: 11.5, fontWeight: 950, color: '#94a3b8', letterSpacing: 0.6, textTransform: 'uppercase' }}>Pagar na entrega</span>
+                )}
+              </div>
+              <div style={{ display: 'grid', gap: 10 }}>
+                {grupo.opcoes.map((o, oi) => {
+                  const sel = pagamento === o.key
+                  return (
+                    <motion.button
+                      key={o.key}
+                      type="button"
+                      onClick={() => setPagamento(o.key as Entrega['pagamento'])}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: (gi * 3 + oi) * 0.04, type: 'spring', damping: 22, stiffness: 260 }}
+                      whileTap={{ scale: 0.985 }}
+                      style={{
+                        width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 14,
+                        background: sel ? grupo.corBg : '#ffffff',
+                        border: `2px solid ${sel ? grupo.cor : 'rgba(15,23,42,0.08)'}`,
+                        borderRadius: 18, padding: '15px 16px', cursor: 'pointer',
+                        boxShadow: sel ? `0 10px 24px ${grupo.cor}22` : '0 2px 8px rgba(15,23,42,0.04)',
+                        transition: 'border-color .2s, box-shadow .2s, background .2s',
+                      }}
+                    >
+                      <div style={{ width: 46, height: 46, borderRadius: 14, background: sel ? grupo.cor : '#f1f5f9', color: sel ? '#fff' : '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background .2s, color .2s' }}>
+                        <o.Icon size={22} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 15, fontWeight: 900, color: '#0f172a' }}>{o.label}</span>
+                          {o.tag && <span style={{ fontSize: 10, fontWeight: 950, color: '#15803d', background: '#dcfce7', borderRadius: 999, padding: '2px 8px' }}>{o.tag}</span>}
+                        </div>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginTop: 2 }}>{o.sub}</div>
+                      </div>
+                      <div style={{ width: 24, height: 24, borderRadius: '50%', border: `2px solid ${sel ? grupo.cor : '#cbd5e1'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'border-color .2s' }}>
+                        {sel && <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', damping: 15, stiffness: 320 }} style={{ width: 12, height: 12, borderRadius: '50%', background: grupo.cor }} />}
+                      </div>
+                    </motion.button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </div>
 
         {/* CPF na nota (opcional) */}
@@ -1332,7 +1378,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
         {erro && <div style={{ fontSize: 13, color: '#ef4444', fontWeight: 800, marginBottom: 16, textAlign: 'center', background: 'rgba(239,68,68,0.1)', padding: 12, borderRadius: 12 }}>{erro}</div>}
 
         <motion.button whileTap={{ scale: 0.96 }} onClick={handleConfirm} disabled={confirming} style={{ width: '100%', background: confirming ? '#22c55e' : 'linear-gradient(135deg, #0ea5e9, #22c55e)', border: 'none', borderRadius: 20, padding: '20px', color: '#fff', fontSize: 18, fontWeight: 900, cursor: confirming ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, boxShadow: confirming ? '0 0 20px rgba(34,197,94,0.6)' : '0 10px 30px rgba(14,165,233,0.4)', transition: 'all 0.3s' }}>
-          {confirming ? <><Check size={24} /> {isMercadoPagoMethod(pagamento) ? 'Preparando pagamento...' : 'Pedido Enviado!'}</> : <><Send size={20} /> Fechar Pedido · R$ {dinheiro(total)}</>}
+          {confirming ? <><Check size={24} /> {isPagamentoOnline(pagamento) ? 'Preparando pagamento...' : 'Pedido Enviado!'}</> : <><Send size={20} /> Fechar Pedido · R$ {dinheiro(total)}</>}
         </motion.button>
       </motion.div>
     </div>

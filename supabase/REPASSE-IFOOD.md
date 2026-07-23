@@ -1,3 +1,11 @@
+> ## ⚠️ DOCUMENTO HISTÓRICO — NÃO SIGA COMO INSTRUÇÃO
+> Em **23/07/2026** o Mercado Pago foi **removido por completo**. O gateway
+> agora é o **Pagar.me**, e o vendedor **não cria conta em gateway nenhum** —
+> ele só informa a **chave Pix** (tabela `vendor_payment_accounts.pix_key`).
+> As referências a `_shared/mercadopago.ts`, `mercadopago-oauth-*` e à tabela
+> `mercadopago_vendor_accounts` **não existem mais**. A arquitetura de carteira
+> e repasse abaixo continua válida; só o provedor mudou.
+
 # Repasse estilo iFood — PraiaGo
 
 Sistema de **carteira do vendedor + retenção + saque via Pix**, com comissão da plataforma

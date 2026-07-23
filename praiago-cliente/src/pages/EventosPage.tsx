@@ -240,7 +240,7 @@ function ComprarIngressoModal({ evento, onClose, sessao }: { evento: Evento; onC
 
           <button disabled={loading || !lote} onClick={comprar} style={{ border: 0, borderRadius: 16, padding: '14px 16px', background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', color: '#fff', fontSize: 15, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: loading ? 0.6 : 1 }}>
             {loading ? <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> : <ShoppingCart size={18} />}
-            Pagar no Mercado Pago
+            Comprar ingresso
           </button>
         </div>
       </motion.div>

@@ -63,7 +63,7 @@ export default function AiChatbot({ plataforma = 'cliente' }: { plataforma?: str
 Regras e Termos da PraiaGo que você deve seguir e informar quando perguntado:
 1. A PraiaGo é apenas uma plataforma de intermediação tecnológica. Não somos fornecedores, não vendemos e não entregamos produtos. Conectamos consumidores a ambulantes e restaurantes.
 2. O ambulante/restaurante é autônomo e responsável pela qualidade, higiene, preço e entrega do produto.
-3. Pagamentos são processados via Mercado Pago (Pix ou cartão) diretamente para o vendedor.
+3. Pagamentos são processados com segurança (Pix ou cartão) dentro do próprio app, direto para o vendedor.
 4. Problemas com pedidos, reembolsos, cancelamentos ou trocas devem abrir atendimento no painel. Oriente o usuario a informar o numero do pedido e os detalhes.
 5. Coletamos localização e dados essenciais apenas para conectar as pessoas, seguindo a LGPD.
 Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "suporte".` },
