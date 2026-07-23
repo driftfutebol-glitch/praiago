@@ -79,6 +79,8 @@ export default function LoginPage() {
 
   const [isLogin, setIsLogin] = useState(true)
   const [loading, setLoading] = useState(false)
+  // Aceite obrigatorio no cadastro (exigencia da Play Store + LGPD)
+  const [aceitouTermos, setAceitouTermos] = useState(false)
 
   // Cadastro: dados reais do negócio
   const [nomePessoa, setNomePessoa] = useState('')
@@ -324,6 +326,7 @@ export default function LoginPage() {
 
       } else {
         // validações do cadastro real
+        if (!aceitouTermos) throw new Error('Você precisa aceitar os Termos de Uso e a Política de Privacidade.')
         if (!nomePessoa.trim()) throw new Error('Informe o seu nome.')
         if (cnpj.trim() && cnpjStatus === 'invalido') throw new Error('CNPJ inválido — confira os números.')
         if (!nomeLoja.trim()) throw new Error('Informe o nome do restaurante ou loja.')
@@ -505,6 +508,15 @@ export default function LoginPage() {
                 </button>
               </div>
             </div>
+
+            {!isLogin && (
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', background: '#f8fafc', border: `1.5px solid ${aceitouTermos ? '#16a34a' : 'rgba(0,0,0,0.08)'}`, borderRadius: 14, padding: '12px 14px', transition: 'border-color .2s' }}>
+                <input type="checkbox" checked={aceitouTermos} onChange={e => setAceitouTermos(e.target.checked)} style={{ width: 18, height: 18, accentColor: '#16a34a', marginTop: 1, flexShrink: 0, cursor: 'pointer' }} />
+                <span style={{ fontSize: 12.5, color: '#475569', fontWeight: 600, lineHeight: 1.5 }}>
+                  Li e aceito os <a href="https://www.praiago.com.br/termos.html" target="_blank" rel="noopener noreferrer" style={{ color: '#0284c7', fontWeight: 800 }}>Termos de Uso</a> e a <a href="https://www.praiago.com.br/privacidade.html" target="_blank" rel="noopener noreferrer" style={{ color: '#0284c7', fontWeight: 800 }}>Política de Privacidade</a> — incluindo o uso da <strong>localização (GPS)</strong> durante os pedidos e o tratamento de nome, e-mail e dados de pagamento.
+                </span>
+              </label>
+            )}
 
             {erro && <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} style={{ fontSize: 13, color: erro.includes('sucesso') ? '#4ade80' : '#f87171', fontWeight: 600, background: erro.includes('sucesso') ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)', border: erro.includes('sucesso') ? '1px solid rgba(34,197,94,0.2)' : '1px solid rgba(239,68,68,0.2)', padding: '10px 14px', borderRadius: 12 }}>{erro}</motion.div>}
 

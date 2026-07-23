@@ -236,6 +236,8 @@ export default function PerfilPage() {
   const [codigo, setCodigo] = useState('')
   const [erro, setErro] = useState('')
   const [loading, setLoading] = useState(false)
+  // Aceite obrigatorio no cadastro (exigencia da Play Store + LGPD)
+  const [aceitouTermos, setAceitouTermos] = useState(false)
 
   function emailNormalizado() {
     return email.trim().toLowerCase()
@@ -282,6 +284,7 @@ export default function PerfilPage() {
     if (senha.length < 6) { setErro('A senha precisa ter ao menos 6 caracteres.'); return }
     if (tab === 'cadastro' && !nome.trim()) { setErro('Informe seu nome.'); return }
     if (tab === 'cadastro' && !validarCpf(cpf)) { setErro('Informe um CPF valido para liberar pedidos e o cupom de boas-vindas.'); return }
+    if (tab === 'cadastro' && !aceitouTermos) { setErro('Você precisa aceitar os Termos de Uso e a Política de Privacidade.'); return }
     setErro('')
     setLoading(true)
 
@@ -434,6 +437,15 @@ export default function PerfilPage() {
               </button>
             </div>
           </div>
+
+          {tab === 'cadastro' && (
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', background: '#f8fafc', border: `1.5px solid ${aceitouTermos ? '#22c55e' : 'rgba(0,0,0,0.08)'}`, borderRadius: 14, padding: '12px 14px', transition: 'border-color .2s' }}>
+              <input type="checkbox" checked={aceitouTermos} onChange={e => setAceitouTermos(e.target.checked)} style={{ width: 18, height: 18, accentColor: '#22c55e', marginTop: 1, flexShrink: 0, cursor: 'pointer' }} />
+              <span style={{ fontSize: 12.5, color: '#475569', fontWeight: 600, lineHeight: 1.5 }}>
+                Li e aceito os <a href="https://www.praiago.com.br/termos.html" target="_blank" rel="noopener noreferrer" style={{ color: '#0284c7', fontWeight: 800 }}>Termos de Uso</a> e a <a href="https://www.praiago.com.br/privacidade.html" target="_blank" rel="noopener noreferrer" style={{ color: '#0284c7', fontWeight: 800 }}>Política de Privacidade</a> — incluindo o uso da minha <strong>localização (GPS)</strong> durante os pedidos e o tratamento de nome, e-mail, CPF e dados de pagamento.
+              </span>
+            </label>
+          )}
 
           <AnimatePresence>
             {erro && (
