@@ -232,6 +232,8 @@ export default function PerfilPage() {
   const [nome, setNome] = useState('')
   const [cpf, setCpf] = useState('')
   const [senha, setSenha] = useState('')
+  const [codigoEnvio, setCodigoEnvio] = useState<string | null>(null)  // e-mail aguardando código de verificação
+  const [codigo, setCodigo] = useState('')
   const [erro, setErro] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -327,8 +329,10 @@ export default function PerfilPage() {
         const resp = data as { error?: string } | null
         if (resp?.error) throw new Error(resp.error)
         await logSecurityEvent('signup_created', alvo, { email_confirmation_required: true })
-        setErro('Conta criada! Enviamos um link de confirmação para o seu e-mail.')
-        setTab('entrar')
+        // Vai pra tela de código: enviamos um código de 6 dígitos no e-mail.
+        setCodigo('')
+        setCodigoEnvio(alvo)
+        setErro('Enviamos um código de 6 dígitos pro seu e-mail. Digite abaixo pra ativar. 📧')
       }
     } catch (err: any) {
       let msg = err.message || 'Erro inesperado.'
@@ -338,6 +342,25 @@ export default function PerfilPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  async function confirmarCadastro() {
+    if (!codigoEnvio) return
+    if (codigo.replace(/\D/g, '').length < 6) { setErro('Digite o código de 6 dígitos que enviamos no e-mail.'); return }
+    setLoading(true)
+    const { data, error } = await supabase.auth.verifyOtp({ email: codigoEnvio, token: codigo.trim(), type: 'signup' })
+    setLoading(false)
+    if (error) { setErro('Código inválido ou expirado. Confira ou toque em Reenviar.'); return }
+    if (data.user) {
+      await logSecurityEvent('login_success', codigoEnvio, { via: 'signup_otp' })
+      useStore.getState().login(data.user.id, codigoEnvio, nome || (data.user.user_metadata?.nome as string) || '')
+      setCodigoEnvio(null); setErro('')
+    }
+  }
+  async function reenviarCodigo() {
+    if (!codigoEnvio) return
+    const { error } = await supabase.auth.resend({ type: 'signup', email: codigoEnvio })
+    setErro(error ? 'Não deu pra reenviar agora. Aguarde um minuto.' : 'Reenviamos o código pro seu e-mail. 📧')
   }
 
   return (
@@ -351,6 +374,22 @@ export default function PerfilPage() {
       </motion.div>
 
       <motion.div initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }} className="glass-panel" style={{ borderRadius: 28, padding: 32, width: '100%', maxWidth: 400, border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 20px 40px rgba(0,0,0,0.5)' }}>
+        {codigoEnvio ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 42, marginBottom: 6 }}>📧</div>
+              <h2 style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', margin: 0 }}>Confirme seu e-mail</h2>
+              <p style={{ fontSize: 13.5, color: '#64748b', fontWeight: 600, marginTop: 6 }}>Enviamos um código de 6 dígitos pra <b style={{ color: '#0f172a' }}>{codigoEnvio}</b></p>
+            </div>
+            <input inputMode="numeric" autoFocus value={codigo} onChange={e => setCodigo(e.target.value.replace(/\D/g, '').slice(0, 6))} onKeyDown={e => e.key === 'Enter' && confirmarCadastro()} placeholder="000000" style={{ ...inputStyle, textAlign: 'center', fontSize: 30, fontWeight: 900, letterSpacing: 12, fontFamily: 'monospace' }} />
+            {erro && <div style={{ fontSize: 13.5, textAlign: 'center', fontWeight: 700, color: erro.includes('inválido') || erro.includes('Não') ? '#f87171' : '#16a34a' }}>{erro}</div>}
+            <motion.button disabled={loading} whileTap={{ scale: 0.96 }} onClick={confirmarCadastro} className="neon-border" style={{ background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', border: 'none', borderRadius: 16, padding: '16px 0', color: '#fff', fontSize: 16, fontWeight: 900, cursor: loading ? 'wait' : 'pointer', boxShadow: '0 8px 20px rgba(34,197,94,0.3)' }}>{loading ? 'CONFIRMANDO...' : 'Confirmar código'}</motion.button>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 16 }}>
+              <button type="button" onClick={reenviarCodigo} style={{ background: 'none', border: 0, color: '#16a34a', fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>Reenviar código</button>
+              <button type="button" onClick={() => { setCodigoEnvio(null); setErro('') }} style={{ background: 'none', border: 0, color: '#64748b', fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>Trocar e-mail</button>
+            </div>
+          </div>
+        ) : (<>
         <div style={{ display: 'flex', background: '#eef2f7', borderRadius: 16, padding: 6, marginBottom: 32, position: 'relative' }}>
           {(['entrar', 'cadastro'] as const).map(t => (
             <button key={t} onClick={() => { setTab(t); setErro('') }} style={{ flex: 1, padding: '12px 0', borderRadius: 12, border: 'none', fontSize: 15, fontWeight: 800, cursor: 'pointer', background: 'transparent', color: tab === t ? '#fff' : '#64748b', position: 'relative', zIndex: 2, transition: 'color 0.2s' }}>
@@ -416,6 +455,7 @@ export default function PerfilPage() {
             </div>
           )}
         </div>
+        </>)}
       </motion.div>
     </div>
   )

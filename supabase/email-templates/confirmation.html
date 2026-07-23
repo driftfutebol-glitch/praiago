@@ -6,14 +6,20 @@
         <div style="font-size:12px;font-weight:600;color:#eafff4;letter-spacing:2px;text-transform:uppercase;margin-top:6px;">Praia Grande na palma da mão</div>
       </td></tr>
       <tr><td style="padding:36px 36px 8px 36px;">
-        <h1 style="margin:0 0 12px 0;font-size:22px;color:#0f172a;font-weight:800;">Bem-vindo ao PraiaGo! 🏖️</h1>
-        <p style="margin:0 0 18px 0;font-size:15px;line-height:1.6;color:#475569;">Falta só um passo pra ativar sua conta: confirma seu e-mail clicando no botão abaixo e já começa a usar.</p>
+        <h1 style="margin:0 0 12px 0;font-size:22px;color:#0f172a;font-weight:800;">Confirme seu e-mail 🏖️</h1>
+        <p style="margin:0 0 12px 0;font-size:15px;line-height:1.6;color:#475569;">Digite este código no aplicativo PraiaGo pra ativar sua conta:</p>
       </td></tr>
-      <tr><td align="center" style="padding:8px 36px;">
-        <a href="{{ .ConfirmationURL }}" style="display:inline-block;background-color:#0ea5e9;background-image:linear-gradient(120deg,#0ea5e9,#22c55e);color:#ffffff;text-decoration:none;font-weight:700;font-size:16px;padding:15px 40px;border-radius:14px;box-shadow:0 6px 16px rgba(14,165,233,0.35);">Confirmar meu e-mail</a>
+      <tr><td align="center" style="padding:4px 36px 8px 36px;">
+        <div style="display:inline-block;background-color:#f0f9ff;border:2px dashed #0ea5e9;border-radius:16px;padding:18px 28px;">
+          <div style="font-size:38px;font-weight:900;letter-spacing:10px;color:#0284c7;font-family:'Courier New',monospace;">{{ .Token }}</div>
+        </div>
       </td></tr>
-      <tr><td style="padding:20px 36px 8px 36px;"><p style="margin:0;font-size:13px;line-height:1.6;color:#94a3b8;text-align:center;">Por segurança, esse link expira em 1 hora.</p></td></tr>
-      <tr><td style="padding:8px 36px 32px 36px;">
+      <tr><td style="padding:14px 36px 8px 36px;"><p style="margin:0;font-size:13px;line-height:1.6;color:#94a3b8;text-align:center;">Esse código expira em 1 hora. Não compartilhe com ninguém.</p></td></tr>
+      <tr><td align="center" style="padding:8px 36px 4px 36px;"><p style="margin:0;font-size:13px;color:#94a3b8;">Prefere clicar? Também dá:</p></td></tr>
+      <tr><td align="center" style="padding:6px 36px 8px 36px;">
+        <a href="{{ .ConfirmationURL }}" style="display:inline-block;background-color:#0ea5e9;background-image:linear-gradient(120deg,#0ea5e9,#22c55e);color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:13px 34px;border-radius:14px;box-shadow:0 6px 16px rgba(14,165,233,0.35);">Confirmar meu e-mail</a>
+      </td></tr>
+      <tr><td style="padding:16px 36px 32px 36px;">
         <div style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;">
           <p style="margin:0;font-size:13px;line-height:1.6;color:#64748b;">👋 Se você não criou uma conta no PraiaGo, pode ignorar este e-mail.</p>
         </div>
