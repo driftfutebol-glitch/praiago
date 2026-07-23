@@ -12,6 +12,8 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
   const [nome, setNome] = useState('')
+  const [codigoEnvio, setCodigoEnvio] = useState<string | null>(null)
+  const [codigo, setCodigo] = useState('')
   const [erro, setErro] = useState('')
   const navigate = useNavigate()
 
@@ -101,8 +103,8 @@ export default function LoginPage() {
         const resp = data as { error?: string } | null
         if (resp?.error) throw new Error(resp.error)
         await logSecurityEvent('signup_created', alvo, { email_confirmation_required: true })
-        setErro('Conta criada! Enviamos um link de confirmação para o seu e-mail.')
-        setTab('entrar')
+        setCodigo(''); setCodigoEnvio(alvo)
+        setErro('Enviamos um código de 6 dígitos pro seu e-mail. Digite pra ativar. 📧')
         setLoading(false)
         return
       }
@@ -114,6 +116,21 @@ export default function LoginPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  async function confirmarCadastro() {
+    if (!codigoEnvio) return
+    if (codigo.replace(/\D/g, '').length < 6) { setErro('Digite o código de 6 dígitos que enviamos.'); return }
+    setLoading(true)
+    const { data, error } = await supabase.auth.verifyOtp({ email: codigoEnvio, token: codigo.trim(), type: 'signup' })
+    setLoading(false)
+    if (error) { setErro('Código inválido ou expirado. Confira ou toque em Reenviar.'); return }
+    if (data.user) { login(data.user.id, codigoEnvio, nome || undefined); navigate('/') }
+  }
+  async function reenviarCodigo() {
+    if (!codigoEnvio) return
+    const { error } = await supabase.auth.resend({ type: 'signup', email: codigoEnvio })
+    setErro(error ? 'Não deu pra reenviar agora. Aguarde um minuto.' : 'Reenviamos o código pro seu e-mail. 📧')
   }
 
   return (
@@ -131,6 +148,22 @@ export default function LoginPage() {
       </div>
 
       <div style={{ background: '#fff', borderRadius: 24, padding: 28, width: '100%', maxWidth: 380, boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }}>
+        {codigoEnvio ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 40, marginBottom: 4 }}>📧</div>
+              <div style={{ fontSize: 19, fontWeight: 900, color: '#0f172a' }}>Confirme seu e-mail</div>
+              <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600, marginTop: 4 }}>Código de 6 dígitos enviado pra <b style={{ color: '#0f172a' }}>{codigoEnvio}</b></div>
+            </div>
+            <input inputMode="numeric" autoFocus value={codigo} onChange={e => setCodigo(e.target.value.replace(/\D/g, '').slice(0, 6))} onKeyDown={e => e.key === 'Enter' && confirmarCadastro()} placeholder="000000" style={{ ...inputStyle, textAlign: 'center', fontSize: 28, fontWeight: 900, letterSpacing: 10 }} />
+            {erro && <div style={{ fontSize: 13, textAlign: 'center', fontWeight: 700, color: erro.includes('inválido') || erro.includes('Não') ? '#ef4444' : '#22c55e' }}>{erro}</div>}
+            <button disabled={loading} onClick={confirmarCadastro} style={{ background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', border: 'none', borderRadius: 14, padding: '15px 0', color: '#fff', fontSize: 16, fontWeight: 800, cursor: loading ? 'wait' : 'pointer' }}>{loading ? 'CONFIRMANDO...' : 'Confirmar código'}</button>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 16 }}>
+              <button type="button" onClick={reenviarCodigo} style={{ background: 'none', border: 0, color: '#16a34a', fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>Reenviar código</button>
+              <button type="button" onClick={() => { setCodigoEnvio(null); setErro('') }} style={{ background: 'none', border: 0, color: '#64748b', fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>Trocar e-mail</button>
+            </div>
+          </div>
+        ) : (<>
         <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: 12, padding: 4, marginBottom: 24 }}>
           {(['entrar', 'cadastro'] as const).map(t => (
             <button key={t} onClick={() => { setTab(t); setErro('') }} style={{
@@ -183,6 +216,7 @@ export default function LoginPage() {
             </div>
           )}
         </div>
+        </>)}
       </div>
 
       <p style={{ fontSize: 12, color: '#64748b', marginTop: 24, textAlign: 'center', maxWidth: 300 }}>

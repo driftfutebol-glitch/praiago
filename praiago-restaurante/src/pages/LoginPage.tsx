@@ -362,9 +362,14 @@ export default function LoginPage() {
           }).eq('id', resp.user_id)
         }
         await logSecurityEvent('signup_created', emailNormalizado, { email_confirmation_required: true })
-        setErro('Conta criada com sucesso! Enviamos um link de confirmação para o seu e-mail.')
-        setIsLogin(true)
         setLoading(false)
+        // Pede o código de 6 dígitos que foi pro e-mail (confirma via OTP).
+        const codigo = await promptDialog({ title: 'Confirme seu e-mail 📧', message: `Enviamos um código de 6 dígitos para ${emailNormalizado}. Digite pra ativar sua conta.`, placeholder: '000000' })
+        if (!codigo?.trim()) { setErro('Conta criada! Confirme com o código do e-mail (ou clique no link) e faça login.'); setIsLogin(true); return }
+        const { data: otp, error: otpErr } = await supabase.auth.verifyOtp({ email: emailNormalizado, token: codigo.trim(), type: 'signup' })
+        if (otpErr) { setErro('Código inválido ou expirado. Quando confirmar, entre em "Tenho código".'); setIsLogin(true); return }
+        if (otp.user) { login(otp.user.id, emailNormalizado, nomeLoja.trim() || undefined); navigate('/'); return }
+        setIsLogin(true)
         return
       }
 
