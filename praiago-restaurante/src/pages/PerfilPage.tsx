@@ -67,13 +67,19 @@ export default function PerfilPage() {
   const [horaFecha, setHoraFecha] = useState('')
   const [salvandoHorario, setSalvandoHorario] = useState(false)
   const [horarioMsg, setHorarioMsg] = useState('')
+  // Localizacao FIXA da loja (ponto no mapa). Nao segue o GPS do celular —
+  // o dono crava uma vez, dentro da loja, e fica travado ali.
+  const [lat, setLat] = useState<number | null>(null)
+  const [lng, setLng] = useState<number | null>(null)
+  const [salvandoLocal, setSalvandoLocal] = useState(false)
+  const [localMsg, setLocalMsg] = useState('')
 
   useEffect(() => {
     if (!sessao) return
 
     supabase
       .from('profiles')
-      .select('nome, razao_social, avaliacao_media, total_avaliacoes, telefone_comercial, endereco, horario_abre, horario_fecha')
+      .select('nome, razao_social, avaliacao_media, total_avaliacoes, telefone_comercial, endereco, horario_abre, horario_fecha, lat, lng')
       .eq('id', sessao.id)
       .maybeSingle()
       .then(({ data }) => {
@@ -87,6 +93,8 @@ export default function PerfilPage() {
         })
         setHoraAbre(data.horario_abre || '')
         setHoraFecha(data.horario_fecha || '')
+        setLat(data.lat != null ? Number(data.lat) : null)
+        setLng(data.lng != null ? Number(data.lng) : null)
       })
 
     const inicioMes = new Date()
@@ -123,6 +131,28 @@ export default function PerfilPage() {
     setSalvandoHorario(false)
     setHorarioMsg(error ? 'Nao deu pra salvar. Tente de novo.' : 'Horario salvo! Ja aparece pros clientes.')
     setTimeout(() => setHorarioMsg(''), 3500)
+  }
+
+  async function definirLocalizacao() {
+    if (!sessao) return
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      setLocalMsg('Seu aparelho nao tem GPS disponivel.'); return
+    }
+    setSalvandoLocal(true); setLocalMsg('Pegando sua posicao atual...')
+    navigator.geolocation.getCurrentPosition(
+      async (p) => {
+        const novaLat = p.coords.latitude
+        const novaLng = p.coords.longitude
+        const { error } = await supabase.from('profiles').update({ lat: novaLat, lng: novaLng }).eq('id', sessao.id)
+        setSalvandoLocal(false)
+        if (error) { setLocalMsg('Nao deu pra salvar. Tente de novo.'); return }
+        setLat(novaLat); setLng(novaLng)
+        setLocalMsg('Ponto da loja fixado aqui! ✅ Ja aparece no mapa dos clientes.')
+        setTimeout(() => setLocalMsg(''), 6000)
+      },
+      () => { setSalvandoLocal(false); setLocalMsg('Precisamos da permissao de localizacao. Ative o GPS e permita o acesso.') },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 },
+    )
   }
 
   async function salvarChavePix() {
@@ -217,6 +247,30 @@ export default function PerfilPage() {
         </div>
         <ChevronRight size={20} color="#94a3b8" />
       </motion.button>
+
+      <InfoCard title="Localizacao da loja (ponto fixo)" icon={<MapPin size={16} color="#f43f5e" />}>
+        <p style={{ fontSize: 13, color: '#64748b', fontWeight: 500, margin: 0 }}>
+          Defina <strong>uma vez, dentro da loja</strong>. O ponto fica <strong>fixo</strong> no mapa dos clientes — nao muda quando voce abre o app em outro lugar.
+        </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: (lat != null && lng != null) ? 'rgba(34,197,94,0.08)' : 'rgba(245,158,11,0.08)', border: `1px solid ${(lat != null && lng != null) ? 'rgba(34,197,94,0.25)' : 'rgba(245,158,11,0.25)'}`, borderRadius: 14, padding: '12px 14px' }}>
+          <MapPin size={18} color={(lat != null && lng != null) ? '#16a34a' : '#d97706'} />
+          <div style={{ flex: 1, fontSize: 13, fontWeight: 800, color: (lat != null && lng != null) ? '#15803d' : '#b45309' }}>
+            {(lat != null && lng != null)
+              ? `Ponto fixado ✅ (${lat.toFixed(5)}, ${lng.toFixed(5)})`
+              : 'Sem ponto definido — sua loja ainda nao aparece no mapa.'}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={definirLocalizacao}
+          disabled={salvandoLocal}
+          style={{ width: '100%', border: '1px solid rgba(244,63,94,0.25)', background: '#fff1f2', color: '#e11d48', borderRadius: 16, padding: 16, fontSize: 14, fontWeight: 900, cursor: salvandoLocal ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
+        >
+          {salvandoLocal ? <Loader2 size={18} className="animate-spin-slow" /> : <MapPin size={18} />}
+          {salvandoLocal ? 'Pegando GPS...' : (lat != null && lng != null) ? 'Atualizar ponto (estou na loja agora)' : 'Usar minha localizacao como ponto da loja'}
+        </button>
+        {localMsg && <div style={{ color: localMsg.includes('✅') ? '#16a34a' : localMsg.includes('...') ? '#64748b' : '#ef4444', fontSize: 13, fontWeight: 800 }}>{localMsg}</div>}
+      </InfoCard>
 
       <InfoCard title="Onde voce recebe (chave Pix)" icon={<CreditCard size={16} color="#0284c7" />}>
         <p style={{ fontSize: 13, color: '#64748b', fontWeight: 500, margin: 0 }}>
