@@ -3,7 +3,7 @@
 // ============================================================================
 // TODO o resto do sistema fala com esta interface, NUNCA com o SDK/HTTP de um
 // provedor específico. Trocar de provedor = escrever um novo arquivo que
-// implementa esta interface (ex: asaas.ts, pagarme.ts, iugu.ts) e apontar as
+// implementa esta interface (ex: pagarme.ts) e apontar as
 // edge functions pra ele. Nenhuma tabela/tela muda.
 //
 // Princípios (spec Praia Go):
@@ -115,11 +115,11 @@ export type EventoWebhook = {
 }
 
 /**
- * Contrato que Pagar.me (atual) / Asaas / Iugu implementam. Métodos podem lançar erro;
+ * Contrato que Pagar.me implementa. Métodos podem lançar erro;
  * quem chama trata e nunca credita/debita sem uma entrada no ledger.
  */
 export interface PaymentProvider {
-  readonly nome: 'pagarme' | 'asaas' | 'iugu'
+  readonly nome: 'pagarme'
 
   // ── Onboarding / KYC (recebedor criado por API, vendedor não sai do app) ──
   criarRecebedor(dados: DadosRecebedor): Promise<StatusRecebedor>

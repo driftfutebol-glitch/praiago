@@ -136,16 +136,18 @@ export default function VerificacoesPage() {
       title: 'Liberar sem KYC completo',
       message: 'Use apenas quando voce conferiu por outro meio. Informe o motivo/a evidencia da liberacao manual.',
       placeholder: 'Ex: documentos conferidos presencialmente pelo gerente',
+      defaultValue: 'Liberado manualmente pelo admin sem documento completo',
       confirmText: 'Liberar',
       tone: 'danger',
     })
-    if (!motivo || motivo.trim().length < 10) return
+    const motivoFinal = (motivo || 'Liberado manualmente pelo admin sem documento completo').trim()
+    if (motivoFinal.length < 10) return
     setActionLoading(verificacao.id)
     try {
       const { error } = await supabase.rpc('aprovar_verificacao', {
         p_verificacao_id: verificacao.id,
         p_override: true,
-        p_override_reason: motivo.trim(),
+        p_override_reason: motivoFinal,
       })
       if (error) throw error
       await fetchVerificacoes()
@@ -437,7 +439,7 @@ export default function VerificacoesPage() {
                         className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-bold text-amber-400 bg-amber-500/5 hover:bg-amber-500/15 transition-all duration-200 disabled:opacity-50 border-r border-slate-800/50"
                       >
                         <AlertTriangle size={16} />
-                        SEM KYC
+                        SEM DOC
                       </button>
                       <button
                         onClick={() => {

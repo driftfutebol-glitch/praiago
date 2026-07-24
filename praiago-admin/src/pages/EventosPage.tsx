@@ -223,7 +223,7 @@ export default function EventosPage() {
       evento_id: ev.id,
       nome: nome.trim(),
       preco_origem: preco,
-      markup_percent: 25,
+      markup_percent: 10,
       estoque_total: estoque,
       estoque_disponivel: estoque,
       status: ev.status === 'ativo' ? 'disponivel' : 'pendente_aprovacao',
@@ -530,7 +530,7 @@ export default function EventosPage() {
                           <div className="min-w-0 flex-1">
                             <div className="text-xs font-black text-slate-200 truncate">{lote.nome}</div>
                             <div className="text-[11px] text-slate-500 mt-0.5">
-                              Origem {fmtMoney(lote.preco_origem)} · venda {fmtMoney(lote.preco_venda)} · +{Number(lote.markup_percent || 25)}%
+                              Origem {fmtMoney(lote.preco_origem)} · venda {fmtMoney(lote.preco_venda)} · +{Number(lote.markup_percent || 10)}%
                               {lote.estoque_disponivel != null ? ` · ${lote.estoque_disponivel} disp.` : ''}
                             </div>
                           </div>

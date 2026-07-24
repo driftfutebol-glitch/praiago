@@ -37,11 +37,27 @@ export default function CardapioPage() {
 
   useEffect(() => {
     fetchProdutos()
-    if (sessao) {
+    if (!sessao?.id) return
+
+    let ativo = true
+    const carregarVerificacao = () => {
       supabase.from('profiles').select('verificado').eq('id', sessao.id).maybeSingle()
-        .then(({ data }) => setVerificado(Boolean(data?.verificado)))
+        .then(({ data }) => { if (ativo) setVerificado(Boolean(data?.verificado)) })
     }
-  }, [])
+
+    carregarVerificacao()
+    const ch = supabase.channel(`restaurante_cardapio_verificado_${sessao.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${sessao.id}` }, payload => {
+        setVerificado(Boolean((payload.new as { verificado?: boolean | null }).verificado))
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'verificacoes', filter: `user_id=eq.${sessao.id}` }, () => carregarVerificacao())
+      .subscribe()
+
+    return () => {
+      ativo = false
+      supabase.removeChannel(ch)
+    }
+  }, [sessao?.id])
 
   async function fetchProdutos() {
     if (!sessao) return

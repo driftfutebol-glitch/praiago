@@ -41,11 +41,27 @@ export default function DashboardPage() {
   const [verificado, setVerificado] = useState<boolean | null>(null)
 
   useEffect(() => {
-    if (sessao) {
+    if (!sessao?.id) return
+
+    let ativo = true
+    const carregarVerificacao = () => {
       supabase.from('profiles').select('verificado').eq('id', sessao.id).maybeSingle()
-        .then(({ data }) => setVerificado(Boolean(data?.verificado)))
+        .then(({ data }) => { if (ativo) setVerificado(Boolean(data?.verificado)) })
     }
-  }, [sessao])
+
+    carregarVerificacao()
+    const ch = supabase.channel(`ambulante_dashboard_verificado_${sessao.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${sessao.id}` }, payload => {
+        setVerificado(Boolean((payload.new as { verificado?: boolean | null }).verificado))
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'verificacoes', filter: `user_id=eq.${sessao.id}` }, () => carregarVerificacao())
+      .subscribe()
+
+    return () => {
+      ativo = false
+      supabase.removeChannel(ch)
+    }
+  }, [sessao?.id])
 
   // Sem verificação aprovada, não deixa ficar online (não aparece no mapa).
   useEffect(() => {

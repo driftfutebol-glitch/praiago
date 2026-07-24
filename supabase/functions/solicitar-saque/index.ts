@@ -1,6 +1,5 @@
-// Solicitar saque (payout) — o vendedor pede, registramos atômico via RPC, e
-// SÓ chamamos o provedor de verdade se a key existir (senão fica 'solicitado'
-// pra liberar quando o Asaas estiver configurado + validado em sandbox).
+// Solicitar saque (payout): registra a solicitacao via RPC.
+// O Pix real segue manual ate o gateway Pagar.me ser configurado e validado.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2'
 import { corsHeaders, json, readJson } from '../_shared/cors.ts'
 
@@ -27,22 +26,8 @@ Deno.serve(async (req: Request) => {
     const { data: payout, error } = await admin.rpc('solicitar_saque', { p_vendedor: vendedorId, p_valor: valor })
     if (error) return json({ error: error.message }, { status: 400 })
 
-    // Provedor real: só se configurado. Senão fica 'solicitado' (admin/cron processa).
-    const temProvedor = !!Deno.env.get('ASAAS_API_KEY')
-    if (temProvedor) {
-      try {
-        const { AsaasProvider } = await import('../_shared/asaas.ts')
-        const { data: rec } = await admin.from('seller_recipients').select('recipient_id,status').eq('vendedor_id', vendedorId).maybeSingle()
-        const { data: pay } = await admin.from('payouts').select('chave_pix').eq('id', (payout as { id: string }).id).maybeSingle()
-        if (rec?.status === 'ativo') {
-          const chave = (pay as { chave_pix?: string } | null)?.chave_pix || ''
-          const res = await AsaasProvider.transferir(chave, Math.round(valor * 100), (payout as { id: string }).id)
-          await admin.from('payouts').update({ status: res.status === 'paga' ? 'pago' : 'processando', mp_transfer_id: res.transferId, updated_at: new Date().toISOString() }).eq('id', (payout as { id: string }).id)
-        }
-      } catch (e) {
-        await admin.from('payouts').update({ status: 'solicitado', erro: e instanceof Error ? e.message : 'provedor indisponivel' }).eq('id', (payout as { id: string }).id)
-      }
-    }
+    // Enquanto Pagar.me nao estiver ligado, o saque fica "solicitado".
+    // O admin confirma o Pix manualmente no painel Financeiro.
 
     return json({ ok: true, payout })
   } catch (e) {

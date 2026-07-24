@@ -168,10 +168,15 @@ export default function App() {
         .then(({ data }) => atualizarGate(data))
     }
     checarStatus()
-    const timer = window.setInterval(checarStatus, 30000)
+    const channel = supabase.channel(`restaurante_kyc_gate_${sessao.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${sessao.id}` }, payload => atualizarGate(payload.new as { status?: string; ban_motivo?: string | null; verificado?: boolean | null }))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'verificacoes', filter: `user_id=eq.${sessao.id}` }, () => checarStatus())
+      .subscribe()
+    const timer = window.setInterval(checarStatus, 10000)
 
     return () => {
       ativo = false
+      supabase.removeChannel(channel)
       window.clearInterval(timer)
     }
   }, [sessao?.id, isPublic, navigate])

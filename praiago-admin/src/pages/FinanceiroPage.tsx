@@ -234,7 +234,7 @@ export default function FinanceiroPage() {
               </div>
             ))}
           </div>
-          <p className="text-[11px] text-slate-500 mt-3">Quando o provedor (Asaas) estiver ligado, o Pix sai automático e este painel só mostra o status. Por ora, confirme o pagamento manual aqui.</p>
+          <p className="text-[11px] text-slate-500 mt-3">Quando o gateway da PraiaGo estiver configurado, o Pix sai automatico e este painel so mostra o status. Por ora, confirme o pagamento manual aqui.</p>
         </section>
       )}
 

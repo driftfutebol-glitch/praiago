@@ -66,6 +66,19 @@ export default function VerificationBar() {
   useEffect(() => {
     if (!sessao) return
     async function fetchStatus() {
+      const { data: perfil } = await supabase
+        .from('profiles')
+        .select('verificado')
+        .eq('id', sessao!.id)
+        .maybeSingle()
+
+      if (perfil?.verificado === true) {
+        setStatus('aprovado')
+        setMotivo('')
+        setExpanded(false)
+        return
+      }
+
       const { data } = await supabase
         .from('verificacoes')
         .select('status, motivo_rejeicao')
@@ -82,13 +95,8 @@ export default function VerificationBar() {
     fetchStatus()
 
     const ch = supabase.channel('verif_rest_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'verificacoes', filter: `user_id=eq.${sessao.id}` }, (payload) => {
-        if (payload.new) {
-          const newRow = payload.new as any
-          setStatus(newRow.status as Status)
-          setMotivo(newRow.motivo_rejeicao || '')
-        }
-      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'verificacoes', filter: `user_id=eq.${sessao.id}` }, () => { fetchStatus() })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${sessao.id}` }, () => { fetchStatus() })
       .subscribe()
     return () => { supabase.removeChannel(ch) }
   }, [sessao])

@@ -9,6 +9,9 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 }
 
+const ROBO_VERSION = 'v2'
+const DEFAULT_MARKUP_PERCENT = 10
+
 const ALVOS_SUGERIDOS = [
   { nome: 'Rocket Blue', foco: 'balada, shows, madrugada, ingressos' },
   { nome: 'Blue House', foco: 'balada, noite, madrugada, ingressos' },
@@ -125,6 +128,12 @@ type Fonte = {
   categoria?: string
   local_nome?: string
 }
+
+const FONTES_PADRAO: Fonte[] = [
+  { url: 'https://www.guicheweb.com.br/', nome: 'Guiche Web Praia Grande', categoria: 'Ingressos' },
+  { url: 'https://www.articket.com.br/', nome: 'ArTicket', categoria: 'Ingressos' },
+  { url: 'https://www.roleagora.com.br/', nome: 'RoleAgora Praia Grande', categoria: 'Agenda local' },
+]
 
 type EventoNormalizado = {
   titulo: string
@@ -511,7 +520,8 @@ function fontesDoPedido(body: Record<string, unknown>) {
     : []
 
   const map = new Map<string, Fonte>()
-  for (const fonte of [...envFontes, ...bodyFontes]) map.set(fonte.url, fonte)
+  const usarPadrao = body.fontes_padrao !== false && body.default_sources !== false
+  for (const fonte of [...(usarPadrao ? FONTES_PADRAO : []), ...envFontes, ...bodyFontes]) map.set(fonte.url, fonte)
   return [...map.values()]
 }
 
@@ -666,7 +676,7 @@ async function buscarDetalhesSociais(html: string, fonte: Fonte) {
         signal: AbortSignal.timeout(12000),
         headers: {
           Accept: 'text/html,*/*;q=0.8',
-          'User-Agent': 'PraiaGoCacaEventos/1.0',
+          'User-Agent': `PraiaGoCacaEventos/${ROBO_VERSION}`,
         },
       }, 1)
       if (!res.ok) continue
@@ -909,7 +919,7 @@ async function enriquecerDetalhesArticket(
         signal: AbortSignal.timeout(12000),
         headers: {
           Accept: 'text/html,application/json;q=0.9,*/*;q=0.8',
-          'User-Agent': 'PraiaGoCacaEventos/1.0',
+          'User-Agent': `PraiaGoCacaEventos/${ROBO_VERSION}`,
         },
       })
       if (!res.ok) throw new Error(`detalhe respondeu ${res.status}`)
@@ -1024,7 +1034,7 @@ async function postGuicheWeb(acao: string, offset?: number) {
     headers: {
       Accept: 'application/json, text/plain, */*',
       'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
-      'User-Agent': 'PraiaGoCacaEventos/1.0',
+      'User-Agent': `PraiaGoCacaEventos/${ROBO_VERSION}`,
     },
     body: body.toString(),
   })
@@ -1069,7 +1079,7 @@ async function buscarFonte(
   const res = await fetchComRetry(fonte.url, {
     headers: {
       Accept: 'application/json, text/html;q=0.9, */*;q=0.8',
-      'User-Agent': 'PraiaGoCacaEventos/1.0',
+      'User-Agent': `PraiaGoCacaEventos/${ROBO_VERSION}`,
     },
   })
   if (!res.ok) throw new Error(`Fonte ${fonte.url} respondeu ${res.status}`)
@@ -1119,12 +1129,12 @@ async function localizarEvento(supabase: ReturnType<typeof createClient>, ev: Ev
   return null
 }
 
-// Margem do PraiaGo na revenda do ingresso (nosso lucro). Padrão 25% — mesmo
+// Margem do PraiaGo na revenda do ingresso (nosso lucro). Padrao 10% — mesmo
 // valor usado pelos lotes criados manualmente pelo admin (markup_percent
 // default no banco). Ajustável via EVENTOS_MARKUP_PERCENT se precisar mudar.
 function markupPercent() {
   const m = Number(env('EVENTOS_MARKUP_PERCENT'))
-  return Number.isFinite(m) && m >= 0 && m <= 500 ? m : 25
+  return Number.isFinite(m) && m >= 0 && m <= 500 ? m : DEFAULT_MARKUP_PERCENT
 }
 
 async function salvarIngressos(supabase: ReturnType<typeof createClient>, eventoId: string, ingressos: IngressoNormalizado[] | undefined) {
@@ -1136,7 +1146,17 @@ async function salvarIngressos(supabase: ReturnType<typeof createClient>, evento
   let menorPreco = Number.POSITIVE_INFINITY
 
   for (const ingresso of ingressosValidos) {
-    const precoVenda = Math.round((ingresso.preco_origem * (1 + markup / 100)) * 100) / 100
+    const precoBase = Math.max(0, ingresso.preco_origem + ingresso.taxa_origem)
+    const precoVenda = Math.round((precoBase * (1 + markup / 100)) * 100) / 100
+    const metadata = {
+      ...ingresso.metadata,
+      robo_version: ROBO_VERSION,
+      preco_origem: ingresso.preco_origem,
+      taxa_origem: ingresso.taxa_origem,
+      preco_base: precoBase,
+      markup_percent: markup,
+      preco_venda_estimado: precoVenda,
+    }
     // "a partir de R$": menor preço PAGO com estoque (ignora cortesia/R$0 pra
     // não mostrar "a partir de R$0" quando existe ingresso pago)
     if (precoVenda > 0 && (ingresso.estoque_disponivel === null || ingresso.estoque_disponivel > 0)) {
@@ -1163,6 +1183,7 @@ async function salvarIngressos(supabase: ReturnType<typeof createClient>, evento
         markup_percent: markup,
         taxa_origem: ingresso.taxa_origem,
         estoque_disponivel: ingresso.estoque_disponivel,
+        metadata,
       }
       // se estava esgotado e voltou a ter estoque, reabre a venda
       if (existenteStatus === 'esgotado' && (ingresso.estoque_disponivel === null || ingresso.estoque_disponivel > 0)) {
@@ -1184,7 +1205,7 @@ async function salvarIngressos(supabase: ReturnType<typeof createClient>, evento
         estoque_disponivel: ingresso.estoque_disponivel,
         status: 'pendente_aprovacao',
         fonte_url: ingresso.fonte_url,
-        metadata: ingresso.metadata,
+        metadata,
         criado_por: 'robo',
       })
       if (!error) salvos++
@@ -1384,6 +1405,8 @@ Deno.serve(async (req: Request) => {
 
     return json({
       ok: true,
+      version: ROBO_VERSION,
+      markup_percent_padrao: markupPercent(),
       recebidos: validos.length + stats.salvosIncrementais,
       inseridos: inseridos + stats.salvosIncrementais,
       ignorados,
