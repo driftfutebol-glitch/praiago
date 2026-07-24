@@ -62,6 +62,13 @@ const ALVOS_PG = [
   'marechal mallet',
 ]
 
+// Bairros/regioes de Praia Grande INTEIRA. Quanto mais completo, mais eventos
+// da cidade toda o robo reconhece como "dentro de Praia Grande" (o ArTicket e o
+// Guiche listam o Brasil todo; e esse filtro que decide quem e de PG).
+const BAIRROS_PG = 'boqueirao|canto do forte|guilhermina|aviacao|tupi|ocian|mirim|caicara|solemar|melvi|sitio do campo|caca e pesca|quietude|tude bastos|cidade ocian|vila mirim|vila tupi|vila guilhermina|vila sonia|nova mirim|balneario florida|balneario maracana|jardim melvi|jardim real|jardim imperador|cidade da crianca'
+const RE_BAIRROS_PG = new RegExp(`\\b(pg|${BAIRROS_PG})\\b`)
+const RE_BAIRROS_OU_ALVO_PG = new RegExp(`\\b(pg|${BAIRROS_PG}|rocket|porks|embaixador|quiosque)\\b`)
+
 type Periodo = 'manha' | 'tarde' | 'noite' | 'madrugada'
 
 type IngressoBruto = {
@@ -456,7 +463,7 @@ function dentroDePraiaGrande(ev: EventoNormalizado) {
   const blob = semAcento(`${ev.titulo || ''} ${ev.local_nome || ''} ${ev.endereco || ''} ${ev.descricao_curta || ''} ${ev.fonte_url || ''}`)
   if (!blob) return false
   if (blob.includes('praia grande')) return true
-  if (/\b(pg|boqueirao|canto do forte|guilhermina|aviacao|tupi|ocian|caicara|solemar)\b/.test(blob)) return true
+  if (RE_BAIRROS_PG.test(blob)) return true
   if (mencionaAlvoPg(blob)) return true
   return false
 }
@@ -471,7 +478,7 @@ function pareceSerPraiaGrande(e: EventoBruto): boolean {
   const blob = semAcento(`${text(e.titulo, e.title, e.name, e.nome)} ${text(e.local_nome, e.venue, e.local)} ${text(e.endereco, e.address)} ${text(e.fonte_url, e.url)}`)
   if (!blob) return false
   if (blob.includes('praia grande')) return true
-  if (/\b(pg|boqueirao|canto do forte|guilhermina|aviacao|tupi|ocian|caicara|solemar|rocket|porks|embaixador|quiosque)\b/.test(blob)) return true
+  if (RE_BAIRROS_OU_ALVO_PG.test(blob)) return true
   if (mencionaAlvoPg(blob)) return true
   return false
 }
