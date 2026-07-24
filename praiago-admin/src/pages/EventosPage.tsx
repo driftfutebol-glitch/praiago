@@ -111,27 +111,22 @@ export default function EventosPage() {
 
   async function cacarEventos() {
     setCacando(true); setCacaMsg('')
-    const { data, error } = await supabase.functions.invoke('caca-eventos', { body: { buscar: true } })
+    // Dispara o robô em SEGUNDO PLANO (RPC async, via pg_net). Antes o navegador
+    // esperava ~100s pelo scrape inteiro e estourava o limite do gateway do
+    // Supabase ("Edge Function returned a non-2xx"). Agora retorna na hora e os
+    // eventos aparecem sozinhos (realtime) conforme o robô salva.
+    const { error } = await supabase.rpc('rodar_robo_eventos')
     setCacando(false)
-    if (error) { setCacaMsg('O robô não conseguiu rodar agora: ' + error.message); return }
-    const ins = data?.inseridos ?? 0
-    const ign = data?.ignorados ?? 0
-    const lotes = data?.ingressos_salvos ?? 0
-    const fontes = data?.fontes_consultadas ?? 0
-    setCacaMsg(
-      ins > 0
-        ? `Robô achou ${ins} evento(s) novo(s) para aprovação e ${lotes} lote(s) de ingresso! ${ign ? `(${ign} já existiam)` : ''}`
-        : fontes > 0
-          ? `Robô consultou as fontes; ${lotes} lote(s) de ingresso foram atualizados.`
-          : 'Configure EVENTOS_SOURCE_URLS no Supabase para o robô buscar casas, baladas e organizadores automaticamente.'
-    )
-    carregar()
-    setTimeout(() => setCacaMsg(''), 8000)
+    if (error) { setCacaMsg('Não deu pra iniciar o robô: ' + error.message); return }
+    setCacaMsg('🤖 Robô rodando em segundo plano — os eventos e ingressos aparecem aqui em até ~2 min.')
+    setTimeout(() => { void carregar() }, 75000)
+    setTimeout(() => setCacaMsg(''), 90000)
   }
 
   const carregar = useCallback(async () => {
     const hoje = hojeSpIso()
-    await supabase.functions.invoke('caca-eventos', { body: { cleanup: true } }).catch(() => null)
+    // (removido) NAO chamar a edge function a cada load — virava tempestade de
+    // chamadas com o realtime. A limpeza/ciclo de vida roda no cron horario.
     const [{ data }, { data: pedidos }, { data: reembolsos }] = await Promise.all([
       supabase
         .from('eventos')
