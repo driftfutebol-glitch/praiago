@@ -38,33 +38,62 @@ export default function DashboardPage() {
   const sessao = getSessao()
   const [pedidosHoje, setPedidosHoje] = useState(0)
   const [faturamentoHoje, setFaturamentoHoje] = useState(0)
+  const [verificado, setVerificado] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    if (!sessao?.id) return
+
+    let ativo = true
+    const carregarVerificacao = () => {
+      supabase.from('profiles').select('verificado').eq('id', sessao.id).maybeSingle()
+        .then(({ data }) => { if (ativo) setVerificado(Boolean(data?.verificado)) })
+    }
+
+    carregarVerificacao()
+    const ch = supabase.channel(`ambulante_dashboard_verificado_${sessao.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${sessao.id}` }, payload => {
+        setVerificado(Boolean((payload.new as { verificado?: boolean | null }).verificado))
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'verificacoes', filter: `user_id=eq.${sessao.id}` }, () => carregarVerificacao())
+      .subscribe()
+
+    return () => {
+      ativo = false
+      supabase.removeChannel(ch)
+    }
+  }, [sessao?.id])
+
+  // Sem verificação aprovada, não deixa ficar online (não aparece no mapa).
+  useEffect(() => {
+    if (verificado === false && online) setOnline(false)
+  }, [verificado, online])
 
   useEffect(() => {
     async function loadStats() {
       if (!sessao) return
-      
-      const hojeStr = new Date().toISOString().split('T')[0]
+
+      // início do dia em horário LOCAL (não UTC) — antes contava errado das 21h à meia-noite
+      const inicioDia = new Date(); inicioDia.setHours(0, 0, 0, 0)
       const { data } = await supabase
         .from('pedidos')
-        .select('total')
+        .select('total,status')
         .eq('vendedor_id', sessao.id)
-        .gte('created_at', `${hojeStr}T00:00:00Z`)
-      
+        .gte('created_at', inicioDia.toISOString())
       if (data) {
-        setPedidosHoje(data.length)
-        setFaturamentoHoje(data.reduce((acc, p) => acc + Number(p.total), 0))
+        // só conta pedido pago/válido (fora aguardando_pagamento e cancelado)
+        const validos = data.filter(p => !['aguardando_pagamento', 'cancelado', 'pagamento_recusado'].includes(String(p.status)))
+        setPedidosHoje(validos.length)
+        setFaturamentoHoje(validos.reduce((acc, p) => acc + Number(p.total), 0))
       }
     }
     loadStats()
 
     if (!sessao) return
     const ch = supabase.channel('ambulante_stats')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos', filter: `vendedor_id=eq.${sessao.id}` }, (payload) => {
-        if (payload.eventType === 'INSERT') {
-          setPedidosHoje(p => p + 1)
-          setFaturamentoHoje(f => f + Number(payload.new.total))
-        }
-      }).subscribe()
+      // recarrega os stats em qualquer mudança (INSERT/UPDATE/cancelamento) —
+      // antes só somava no INSERT (inflava com não-pago e nunca decrementava)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos', filter: `vendedor_id=eq.${sessao.id}` }, () => loadStats())
+      .subscribe()
 
     return () => { supabase.removeChannel(ch) }
   }, [sessao])
@@ -109,10 +138,10 @@ export default function DashboardPage() {
           </motion.div>
           <motion.div initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} style={{ display: 'flex', gap: 10 }}>
             <motion.button whileTap={{ scale: 0.9 }} style={{ background: 'rgba(0,0,0,0.08)', border: '1px solid rgba(0,0,0,0.05)', borderRadius: 16, width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backdropFilter: 'blur(10px)' }}>
-              <Bell size={22} color="#fff" />
+              <Bell size={22} color="#0ea5e9" />
             </motion.button>
             <motion.button whileTap={{ scale: 0.9 }} style={{ background: 'rgba(0,0,0,0.08)', border: '1px solid rgba(0,0,0,0.05)', borderRadius: 16, width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backdropFilter: 'blur(10px)' }}>
-              <Settings size={22} color="#fff" />
+              <Settings size={22} color="#0ea5e9" />
             </motion.button>
           </motion.div>
         </div>
@@ -147,12 +176,12 @@ export default function DashboardPage() {
               <div style={{ fontSize: 18, fontWeight: 900, color: '#0f172a' }}>
                 Ponto {online ? <span style={{ color: '#4ade80' }}>Aberto</span> : <span style={{ color: '#64748b' }}>Fechado</span>}
               </div>
-              <div style={{ fontSize: 12, color: '#64748b', marginTop: 4, fontWeight: 500 }}>
-                {online ? 'Radar transmitindo aos clientes' : 'Você está invisível no mapa'}
+              <div style={{ fontSize: 12, color: verificado === false ? '#b45309' : '#64748b', marginTop: 4, fontWeight: verificado === false ? 700 : 500 }}>
+                {verificado === false ? '🔒 Verifique sua conta pra aparecer no mapa' : (online ? 'Radar transmitindo aos clientes' : 'Você está invisível no mapa')}
               </div>
             </div>
           </div>
-          <button onClick={() => setOnline(v => !v)} style={{
+          <button onClick={() => { if (verificado) setOnline(v => !v) }} disabled={!verificado} style={{
             width: 72, height: 40, borderRadius: 20,
             background: online ? 'linear-gradient(135deg, #22c55e, #16a34a)' : 'rgba(0,0,0,0.08)',
             border: online ? 'none' : '1px solid rgba(255,255,255,0.2)', position: 'relative', cursor: 'pointer', transition: 'background 0.3s',
@@ -230,7 +259,7 @@ export default function DashboardPage() {
             { icon: Package,    cor: '#38bdf8', bg: 'rgba(56,189,248,0.1)', valor: String(pedidosHoje), label: 'Pedidos hoje',  change: '+0%' },
             { icon: DollarSign, cor: '#4ade80', bg: 'rgba(74,222,128,0.1)', valor: `R$ ${faturamentoHoje.toFixed(2)}`, label: 'Ganhos hoje', change: '+0%' },
           ].map(({ icon: Icon, cor, bg, valor, label, change }, i) => (
-            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 + (i * 0.1) }} key={label} className="glass-panel" style={{ borderRadius: 24, padding: '20px' }}>
+            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 + (i * 0.1) }} key={label} className="glass-panel prg-lift" style={{ borderRadius: 24, padding: '20px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
                 <div style={{ width: 44, height: 44, borderRadius: 14, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${cor}40` }}>
                   <Icon size={22} color={cor} />
@@ -254,7 +283,7 @@ export default function DashboardPage() {
             🛒
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: '#fff' }}>Gerenciar Estoque</div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>Gerenciar Estoque</div>
             <div style={{ fontSize: 12, color: '#64748b', marginTop: 4, fontWeight: 500 }}>0 itens online agora</div>
           </div>
           <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

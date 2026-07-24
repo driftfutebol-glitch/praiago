@@ -63,7 +63,7 @@ export default function AiChatbot({ plataforma = 'cliente' }: { plataforma?: str
 Regras e Termos da PraiaGo que você deve seguir e informar quando perguntado:
 1. A PraiaGo é apenas uma plataforma de intermediação tecnológica. Não somos fornecedores, não vendemos e não entregamos produtos. Conectamos consumidores a ambulantes e restaurantes.
 2. O ambulante/restaurante é autônomo e responsável pela qualidade, higiene, preço e entrega do produto.
-3. Pagamentos são processados via AbacatePay (Pix ou cartão) diretamente para o vendedor.
+3. Pagamentos são processados com segurança (Pix ou cartão) dentro do próprio app, direto para o vendedor.
 4. Problemas com pedidos, reembolsos, cancelamentos ou trocas devem abrir atendimento no painel. Oriente o usuario a informar o numero do pedido e os detalhes.
 5. Coletamos localização e dados essenciais apenas para conectar as pessoas, seguindo a LGPD.
 Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "suporte".` },
@@ -109,17 +109,27 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
       return
     }
 
+    // Sem login o chamado ficaria orfao (o painel de suporte filtra por usuario_id).
+    if (!sessao?.id) {
+      addMessage('bot', 'Pra abrir um chamado e acompanhar a resposta, entre na sua conta primeiro (aba Perfil). 🙏')
+      setMode('ai'); setTicketSubject('')
+      return
+    }
+
     // Create the ticket
     setLoading(true)
     try {
       const { error } = await supabase.from('tickets').insert({
         plataforma: plataforma,
-        usuario_nome: sessao?.nome || 'Usuário Não Logado',
+        usuario_id: sessao.id,
+        usuario_nome: sessao?.nome || 'Cliente PraiaGo',
         usuario_email: sessao?.email || 'N/A',
         assunto: ticketSubject,
         mensagem: userText,
         status: 'aberto',
-        prioridade: 'media'
+        prioridade: 'media',
+        nao_lida_admin: true,
+        nao_lida_usuario: false,
       })
 
       if (error) throw error

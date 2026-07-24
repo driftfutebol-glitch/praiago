@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { Ban, RotateCcw, Trash2, UserCheck, ShieldCheck, ShieldX, Search } from 'lucide-react'
@@ -11,22 +11,21 @@ export default function UsuariosPage() {
   const [filtroRole, setFiltroRole] = useState('todos')
   const [acaoId, setAcaoId] = useState<string | null>(null)
 
-  useEffect(() => {
-    async function load() {
-      // Puxa da tabela public.profiles
-      const { data } = await supabase.from('profiles').select('*').order('created_at', { ascending: false })
-      if (data) setUsuarios(data)
-    }
-    load()
-
-    const channel = supabase.channel('admin_usuarios')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
-        load()
-      })
-      .subscribe()
-
-    return () => { supabase.removeChannel(channel) }
+  const carregar = useCallback(async () => {
+    // Puxa da tabela public.profiles (admin le todos via RLS is_admin).
+    const { data } = await supabase.from('profiles').select('*').order('created_at', { ascending: false })
+    if (data) setUsuarios(data)
   }, [])
+
+  useEffect(() => {
+    carregar()
+    // Atualiza em tempo real: cadastro novo, verificacao, banimento etc.
+    const ch = supabase
+      .channel('admin_usuarios')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => carregar())
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [carregar])
 
   const roleConfig: Record<string, { color: string; bg: string; border: string; bar: string }> = {
     restaurante: { color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20', bar: 'bg-orange-500' },
@@ -65,6 +64,22 @@ export default function UsuariosPage() {
       setUsuarios(prev => prev.map(item => item.id === u.id ? { ...item, ...atualizacao } : item))
     } else {
       alertDialog({ title: 'Erro', message: 'Não foi possível atualizar este usuário: ' + error.message, tone: 'danger' })
+    }
+    setAcaoId(null)
+  }
+
+  async function alternarVerificado(u: any) {
+    const liberar = !u.verificado
+    const ok = liberar
+      ? await confirmDialog({ title: 'Liberar KYC manualmente?', message: `Marcar ${u.nome || u.email} como VERIFICADO? Ele passa a aparecer no mapa e pode vender.`, confirmText: 'Liberar' })
+      : await confirmDialog({ title: 'Remover verificação?', message: `Tirar a verificação de ${u.nome || u.email}? Ele volta a ficar travado até novo KYC.`, tone: 'danger', confirmText: 'Remover' })
+    if (!ok) return
+    setAcaoId(u.id)
+    const { error } = await supabase.rpc('admin_set_verificado', { p_user_id: u.id, p_verificado: liberar })
+    if (!error) {
+      setUsuarios(prev => prev.map(item => item.id === u.id ? { ...item, verificado: liberar } : item))
+    } else {
+      alertDialog({ title: 'Erro', message: 'Não foi possível atualizar a verificação: ' + error.message, tone: 'danger' })
     }
     setAcaoId(null)
   }
@@ -229,6 +244,20 @@ export default function UsuariosPage() {
                   Desde {u.created_at ? format(new Date(u.created_at), 'dd/MM/yyyy') : '—'}
                 </span>
               </div>
+              {(u.role === 'ambulante' || u.role === 'restaurante' || u.role === 'entregador') && (
+                <button
+                  onClick={() => alternarVerificado(u)}
+                  disabled={acaoId === u.id}
+                  className={`mt-3 w-full px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-wide border transition-colors flex items-center justify-center gap-1 ${
+                    u.verificado
+                      ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/15'
+                      : 'bg-green-500/10 text-green-400 border-green-500/20 hover:bg-green-500/15'
+                  } disabled:opacity-50`}
+                >
+                  {u.verificado ? <ShieldX size={12} /> : <ShieldCheck size={12} />}
+                  {u.verificado ? 'Tirar verificação' : 'Liberar KYC manual'}
+                </button>
+              )}
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <button
                   onClick={() => resetarPerfil(u)}

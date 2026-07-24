@@ -26,6 +26,6 @@ export async function criarCheckoutIngresso(params: {
     }
     throw new Error(error.message || 'Nao foi possivel iniciar a compra do ingresso.')
   }
-  if (!data?.checkout_url) throw new Error('Mercado Pago nao retornou URL de checkout.')
+  if (!data?.checkout_url) throw new Error('O pagamento nao retornou a URL de checkout.')
   return data
 }

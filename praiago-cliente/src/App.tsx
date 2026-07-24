@@ -123,23 +123,20 @@ export default function App() {
       navigate('/perfil', { replace: true })
     }
 
-    supabase
-      .from('profiles')
-      .select('status')
-      .eq('id', sessao.id)
-      .maybeSingle()
-      .then(({ data }) => bloquearSeBanido(data))
-
-    const channel = supabase
-      .channel(`cliente_status_${sessao.id}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${sessao.id}` }, payload => {
-        bloquearSeBanido(payload.new as { status?: string })
-      })
-      .subscribe()
+    const checarStatus = () => {
+      supabase
+        .from('profiles')
+        .select('status')
+        .eq('id', sessao.id)
+        .maybeSingle()
+        .then(({ data }) => bloquearSeBanido(data))
+    }
+    checarStatus()
+    const timer = window.setInterval(checarStatus, 30000)
 
     return () => {
       ativo = false
-      supabase.removeChannel(channel)
+      window.clearInterval(timer)
     }
   }, [sessao?.id, navigate])
 
@@ -211,10 +208,10 @@ export default function App() {
         <AnimatePresence mode="wait">
           <motion.div
             key={location.pathname}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
+            initial={{ opacity: 0, y: 18, scale: 0.985 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -12, scale: 0.99 }}
+            transition={{ duration: 0.38, ease: [0.22, 1, 0.36, 1] }}
             style={{ minHeight: '100%' }}
           >
             <Routes location={location}>

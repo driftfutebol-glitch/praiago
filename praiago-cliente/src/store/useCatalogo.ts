@@ -42,7 +42,13 @@ type ProfileRow = {
   lat: number | null
   lng: number | null
   zona: string | null
+  verificado: boolean | null
+  status: string | null
+  horario_abre: string | null
+  horario_fecha: string | null
 }
+
+import { dentroDoHorario } from '../lib/horario'
 
 function hero(emoji: string): string {
   const svg =
@@ -102,16 +108,27 @@ export const useCatalogo = create<State>((set, get) => ({
     const ids = [...new Set(rows.map(r => r.vendedor_id).filter((v): v is string => !!v))]
     const profs: Record<string, ProfileRow> = {}
     if (ids.length) {
-      const { data: p } = await supabase.from('profiles').select('*').in('id', ids)
+      // Tabela publica cacheada (so colunas seguras): profiles nao e legivel por outros.
+      const { data: p } = await supabase.from('vendedores_publicos').select('*').in('id', ids)
       for (const pr of (p ?? []) as ProfileRow[]) profs[pr.id] = pr
     }
 
     const byVend = new Map<string, Vendedor>()
     for (const r of rows) {
       const vid = r.vendedor_id ?? 'sem-vendedor'
+      // Vendedor só aparece pro cliente se estiver verificado (CNPJ/CPF aprovado)
+      if (profs[vid]?.verificado !== true) continue
+      if (profs[vid]?.status === 'banido' || (profs[vid]?.status && profs[vid]?.status !== 'ativo')) continue
       if (!byVend.has(vid)) {
         const pf = profs[vid]
         const vendedorEmoji = r.vendedor_emoji || pf?.emoji || '🥥'
+        const tipo = (pf?.role as VendedorTipo) || 'ambulante'
+        // Aberto de verdade: horário do vendedor manda; ambulante também precisa
+        // estar online (radar ligado). Sem horário definido → cai no online.
+        const noHorario = dentroDoHorario(pf?.horario_abre, pf?.horario_fecha)
+        const aberto = tipo === 'ambulante'
+          ? (pf?.online ?? false) && (noHorario ?? true)
+          : (noHorario ?? (pf?.online ?? true))
         byVend.set(vid, {
           id: vid,
           nome: r.vendedor_nome || pf?.nome || 'Vendedor PraiaGo',
@@ -122,12 +139,14 @@ export const useCatalogo = create<State>((set, get) => ({
           distancia: 'Perto de voce',
           emoji: vendedorEmoji,
           gradiente: 'linear-gradient(135deg,#0ea5e9,#22c55e)',
-          aberto: pf?.online ?? true,
+          aberto,
           image: hero(vendedorEmoji),
           pos: [pf?.lat ?? -24.0228, pf?.lng ?? -46.4305],
           zona: pf?.zona || 'Praia Grande',
           produtos: [],
-          tipo: (pf?.role as VendedorTipo) || 'ambulante',
+          tipo,
+          horarioAbre: pf?.horario_abre ?? null,
+          horarioFecha: pf?.horario_fecha ?? null,
         })
       }
 
@@ -174,7 +193,7 @@ export function iniciarCatalogo() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'produtos' }, () => {
       useCatalogo.getState().carregar()
     })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'vendedores_publicos' }, () => {
       useCatalogo.getState().carregar()
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'promocoes' }, () => {

@@ -12,12 +12,13 @@ type PedidoFinanceiro = {
   pagamento?: string | null
   payment_provider?: string | null
   payment_status?: string | null
+  status?: string | null
   settlement_status?: string | null
   gross_amount?: number | null
   total?: number | null
   platform_fee_amount?: number | null
   vendor_amount?: number | null
-  mercadopago_payment_id?: string | null
+  payment_reference?: string | null
   payment_checkout_url?: string | null
   reembolso_status?: string | null
   reembolso_motivo?: string | null
@@ -46,13 +47,43 @@ export default function FinanceiroPage() {
   const [busca, setBusca] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [saques, setSaques] = useState<Array<{ id: string; valor: number; status: string; chave_pix: string | null; created_at: string; vendedor_nome: string }>>([])
+  const [processandoSaque, setProcessandoSaque] = useState<string | null>(null)
+
+  async function loadSaques() {
+    const { data } = await supabase
+      .from('payouts')
+      .select('id,valor,status,chave_pix,created_at,vendedor_id')
+      .in('status', ['solicitado', 'processando'])
+      .order('created_at', { ascending: true })
+    const rows = (data as Array<{ id: string; valor: number; status: string; chave_pix: string | null; created_at: string; vendedor_id: string }>) ?? []
+    const ids = [...new Set(rows.map(r => r.vendedor_id))]
+    const nomes: Record<string, string> = {}
+    if (ids.length) {
+      const { data: profs } = await supabase.from('profiles').select('id,nome').in('id', ids)
+      for (const p of (profs as Array<{ id: string; nome: string }>) ?? []) nomes[p.id] = p.nome
+    }
+    setSaques(rows.map(r => ({ ...r, vendedor_nome: nomes[r.vendedor_id] || 'Vendedor' })))
+  }
+
+  useEffect(() => { loadSaques() }, [])
+
+  async function marcarSaquePago(saque: { id: string; vendedor_nome: string; valor: number }) {
+    const ok = await confirmDialog({ title: 'Confirmar pagamento do saque?', message: `Confirma que o Pix de ${money(saque.valor)} para ${saque.vendedor_nome} foi enviado? (marca como pago no espelho)`, confirmText: 'Marcar pago' })
+    if (!ok) return
+    setProcessandoSaque(saque.id)
+    const { error } = await supabase.from('payouts').update({ status: 'pago', updated_at: new Date().toISOString() }).eq('id', saque.id)
+    setProcessandoSaque(null)
+    if (error) { alertDialog({ title: 'Erro', message: error.message, tone: 'danger' }); return }
+    loadSaques()
+  }
 
   async function load() {
     setLoading(true)
     const [{ data: pedidosData }, { data: settingsData }] = await Promise.all([
       supabase
         .from('pedidos')
-        .select('id,created_at,cliente_nome,vendedor_nome,pagamento,payment_provider,payment_status,settlement_status,gross_amount,total,platform_fee_amount,vendor_amount,mercadopago_payment_id,payment_checkout_url,reembolso_status,reembolso_motivo,reembolso_previsao')
+        .select('id,created_at,cliente_nome,vendedor_nome,pagamento,payment_provider,payment_status,settlement_status,status,gross_amount,total,platform_fee_amount,vendor_amount,payment_reference,payment_checkout_url,reembolso_status,reembolso_motivo,reembolso_previsao')
         .order('created_at', { ascending: false }),
       supabase
         .from('payment_settings')
@@ -76,7 +107,8 @@ export default function FinanceiroPage() {
     load()
     const channel = supabase.channel('admin_financeiro')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos' }, () => load())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'payment_settings' }, () => load())
+      // saques novos aparecem na hora (antes só atualizava ao dar refresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'payouts' }, () => loadSaques())
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [])
@@ -95,21 +127,22 @@ export default function FinanceiroPage() {
 
   const resumo = useMemo(() => {
     return pedidos.reduce((acc, p) => {
-      const bruto = Number(p.gross_amount ?? p.total ?? 0)
-      const taxa = Number(p.platform_fee_amount ?? 0)
-      const repasse = Number(p.vendor_amount ?? 0)
-      acc.bruto += bruto
-      acc.taxa += taxa
-      acc.repasse += repasse
-      if (p.settlement_status === 'repasse_manual_pendente') acc.repasseManual += repasse
-      if (p.payment_provider === 'mercadopago') acc.online += 1
+      // só soma pedido efetivamente pago/válido (fora pendente/cancelado/estornado)
+      const cancelado = ['cancelado', 'pagamento_recusado'].includes(String(p.status))
+      const naoPago = ['pendente', 'rejeitado', 'estornado', 'chargeback', 'recusado', 'aguardando_pagamento'].includes(String(p.payment_status))
+      if (cancelado || naoPago) return acc
+      acc.bruto += Number(p.gross_amount ?? p.total ?? 0)
+      acc.taxa += Number(p.platform_fee_amount ?? 0)
+      acc.repasse += Number(p.vendor_amount ?? 0)
+      if (p.settlement_status === 'repasse_manual_pendente') acc.repasseManual += Number(p.vendor_amount ?? 0)
+      if (p.payment_provider && p.payment_provider !== 'manual') acc.online += 1
       return acc
     }, { bruto: 0, taxa: 0, repasse: 0, repasseManual: 0, online: 0 })
   }, [pedidos])
 
   async function salvarTaxa() {
     setSalvando(true)
-    await supabase.from('payment_settings').upsert({
+    const { error } = await supabase.from('payment_settings').upsert({
       id: true,
       platform_fee_percent: settings.platform_fee_percent,
       platform_fee_fixed: settings.platform_fee_fixed,
@@ -118,6 +151,8 @@ export default function FinanceiroPage() {
       updated_at: new Date().toISOString(),
     })
     setSalvando(false)
+    if (error) { alertDialog({ title: 'Não salvou', message: error.message, tone: 'danger' }); return }
+    alertDialog({ title: 'Taxa salva ✅', message: 'As novas regras valem pros próximos pedidos.', tone: 'success' })
     load()
   }
 
@@ -135,7 +170,7 @@ export default function FinanceiroPage() {
   const [processandoReembolso, setProcessandoReembolso] = useState<string | null>(null)
 
   async function resolverReembolso(pedido: PedidoFinanceiro, acao: 'aprovar' | 'negar') {
-    if (acao === 'aprovar' && !await confirmDialog({ title: 'Aprovar reembolso?', message: `Devolver ${money(pedido.total)} para ${pedido.cliente_nome || 'cliente'}? Se foi pago online, o estorno é disparado no Mercado Pago na hora (PIX volta rápido, cartão demora dias).`, confirmText: 'Aprovar e estornar', tone: 'danger' })) return
+    if (acao === 'aprovar' && !await confirmDialog({ title: 'Aprovar reembolso?', message: `Devolver ${money(pedido.total)} para ${pedido.cliente_nome || 'cliente'}? Se foi pago online, o estorno é disparado no gateway na hora (PIX volta rápido, cartão demora dias).`, confirmText: 'Aprovar e estornar', tone: 'danger' })) return
     if (acao === 'negar' && !await confirmDialog({ title: 'Negar reembolso?', message: 'O cliente será informado de que o reembolso não foi aprovado.', confirmText: 'Negar', tone: 'danger' })) return
     setProcessandoReembolso(pedido.id)
     const { data, error } = await supabase.functions.invoke('pedido-reembolso', { body: { pedido_id: pedido.id, acao } })
@@ -157,7 +192,7 @@ export default function FinanceiroPage() {
       <header className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-black text-slate-100 tracking-tight">Financeiro e Repasses</h1>
-          <p className="text-slate-400 font-medium">Controle do Mercado Pago, taxa da empresa e repasses dos vendedores.</p>
+          <p className="text-slate-400 font-medium">Controle de pagamentos, taxa da empresa e repasses dos vendedores.</p>
         </div>
         <button onClick={load} className="inline-flex items-center justify-center gap-2 bg-slate-900/70 border border-slate-800 text-slate-300 px-4 py-2 rounded-xl font-bold text-sm hover:bg-slate-800 transition-colors">
           <RefreshCw size={16} /> Atualizar
@@ -166,7 +201,7 @@ export default function FinanceiroPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         {cards.map(card => (
-          <div key={card.label} className="glass-panel p-5 rounded-2xl border-slate-800 flex items-center gap-4">
+          <div key={card.label} className="glass-panel p-5 rounded-2xl border-slate-800 flex items-center gap-4 prg-lift">
             <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${card.bg}`}>
               <card.icon size={22} className={card.color} />
             </div>
@@ -177,6 +212,31 @@ export default function FinanceiroPage() {
           </div>
         ))}
       </div>
+
+      {/* Saques solicitados (repasse via Pix) */}
+      {saques.length > 0 && (
+        <section className="glass-panel rounded-2xl border border-sky-500/20 p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <WalletCards size={16} className="text-sky-400" />
+            <h2 className="text-lg font-black text-slate-100">Saques solicitados</h2>
+            <span className="text-xs font-black text-sky-400 font-mono">({saques.length})</span>
+          </div>
+          <div className="space-y-3">
+            {saques.map(s => (
+              <div key={s.id} className="flex flex-col md:flex-row md:items-center gap-3 bg-slate-950/40 rounded-xl p-4 border border-slate-800/50">
+                <div className="flex-1">
+                  <div className="text-slate-200 font-bold">{s.vendedor_nome} <span className="text-sky-400 font-mono">{money(s.valor)}</span></div>
+                  <div className="text-xs text-slate-500 mt-0.5">Pix: {s.chave_pix || '—'} · {s.status} · {format(new Date(s.created_at), 'dd/MM/yyyy')}</div>
+                </div>
+                <button onClick={() => marcarSaquePago(s)} disabled={processandoSaque === s.id} className="inline-flex items-center gap-1.5 bg-green-500/10 text-green-400 border border-green-500/20 rounded-lg px-3 py-2 text-xs font-black hover:bg-green-500/20 disabled:opacity-50">
+                  <CheckCircle2 size={14} /> Marcar pago
+                </button>
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-slate-500 mt-3">Quando o gateway da PraiaGo estiver configurado, o Pix sai automatico e este painel so mostra o status. Por ora, confirme o pagamento manual aqui.</p>
+        </section>
+      )}
 
       {/* Reembolsos solicitados */}
       {reembolsos.length > 0 && (
@@ -286,7 +346,7 @@ export default function FinanceiroPage() {
                   <td className="p-4 text-purple-300 font-mono font-black">{money(p.vendor_amount)}</td>
                   <td className="p-4">
                     <span className={`px-2 py-1 rounded-md text-xs font-bold uppercase border ${statusClass(p.payment_status)}`}>{p.payment_status || 'pendente'}</span>
-                    {p.mercadopago_payment_id && <div className="text-[10px] text-slate-600 mt-1 font-mono">MP {p.mercadopago_payment_id}</div>}
+                    {p.payment_reference && <div className="text-[10px] text-slate-600 mt-1 font-mono">Ref {p.payment_reference}</div>}
                   </td>
                   <td className="p-4">
                     <span className={`px-2 py-1 rounded-md text-xs font-bold uppercase border ${statusClass(p.settlement_status)}`}>{p.settlement_status || 'pendente'}</span>

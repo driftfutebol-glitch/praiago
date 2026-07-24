@@ -166,16 +166,17 @@ export default function DashboardPage() {
       const s = getSessao()
       if (!s) return
       
-      const hojeStr = new Date().toISOString().split('T')[0]
+      const inicioDia = new Date(); inicioDia.setHours(0, 0, 0, 0)  // dia LOCAL, não UTC
       const { data } = await supabase
         .from('pedidos')
-        .select('total')
+        .select('total,status')
         .eq('vendedor_id', s.id)
-        .gte('created_at', `${hojeStr}T00:00:00Z`)
-      
+        .gte('created_at', inicioDia.toISOString())
       if (data) {
-        setTodayCount(data.length)
-        setRevenue(data.reduce((acc, p) => acc + Number(p.total), 0))
+        // só conta pedido pago/válido (fora aguardando_pagamento e cancelado)
+        const validos = data.filter(p => !['aguardando_pagamento', 'cancelado', 'pagamento_recusado'].includes(String(p.status)))
+        setTodayCount(validos.length)
+        setRevenue(validos.reduce((acc, p) => acc + Number(p.total), 0))
       }
     }
     loadStats()

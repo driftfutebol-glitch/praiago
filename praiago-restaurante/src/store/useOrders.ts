@@ -18,6 +18,7 @@ export type Pedido = {
   hora: string
   entregador?: string
   pagamento: string
+  codigoEntrega?: string | null
   ts: number
 }
 
@@ -29,8 +30,8 @@ type State = {
   pedidos: Pedido[]
   lastSeen: number
   fetchOrders: () => Promise<void>
-  avancar: (id: string) => Promise<void>
-  recusar: (id: string) => Promise<void>
+  avancar: (id: string, codigoEntrega?: string) => Promise<boolean>
+  recusar: (id: string) => Promise<boolean>
   markSeen: () => void
   novos: () => number
 }
@@ -59,24 +60,46 @@ export const useOrders = create<State>((set, get) => ({
       status: row.status as Status,
       hora: 'agora',
       pagamento: row.pagamento,
+      codigoEntrega: row.codigo_entrega ?? null,
       ts: new Date(row.created_at).getTime()
     }))
     set({ pedidos: formatados })
   },
 
-  avancar: async (id) => {
+  avancar: async (id, codigoEntrega) => {
     const p = get().pedidos.find(p => p.id === id)
-    if (!p) return
+    if (!p) return false
     const next = NEXT[p.status]
-    if (!next) return
-    // Otimista
+    if (!next) return false
+
+    if (next === 'entregue') {
+      const { error } = await supabase.rpc('confirmar_entrega_pedido', { p_pedido_id: id, p_codigo: codigoEntrega ?? '' })
+      if (error) {
+        console.error('Falha ao confirmar entrega', error)
+        return false
+      }
+      set(s => ({ pedidos: s.pedidos.map(x => x.id === id ? { ...x, status: next } : x) }))
+      await get().fetchOrders()
+      return true
+    }
+
     set(s => ({ pedidos: s.pedidos.map(x => x.id === id ? { ...x, status: next } : x) }))
-    await supabase.from('pedidos').update({ status: next }).eq('id', id)
+    const { error } = await supabase.from('pedidos').update({ status: next }).eq('id', id)
+    if (error) {
+      console.error('Falha ao atualizar pedido', error)
+      await get().fetchOrders()
+      return false
+    }
+    await get().fetchOrders()
+    return true
   },
 
   recusar: async (id) => {
     set(s => ({ pedidos: s.pedidos.filter(p => p.id !== id) }))
-    await supabase.from('pedidos').update({ status: 'cancelado' }).eq('id', id)
+    const { error } = await supabase.from('pedidos').update({ status: 'cancelado' }).eq('id', id)
+    if (error) { await get().fetchOrders(); return false }  // reverte se falhou (senão sumia da tela mas ficava ativo)
+    await get().fetchOrders()
+    return true
   },
 
   markSeen: () => set({ lastSeen: Date.now() }),

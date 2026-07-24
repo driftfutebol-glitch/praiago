@@ -8,6 +8,7 @@ import {
   FileText, User, MapPin, Building2, AlertTriangle,
   X, Loader2, Filter
 } from 'lucide-react'
+import { alertDialog, promptDialog } from '../lib/dialog'
 
 // Colunas REAIS da tabela `verificacoes` (as mesmas que os apps gravam).
 // Antes o admin lia `nome`/`praia`/`documento_url` — colunas que não existem —
@@ -31,6 +32,17 @@ interface Verificacao {
   cnh_url?: string
   status: string // 'pendente' | 'aprovado' | 'rejeitado'
   motivo_rejeicao?: string
+  nome_check_status?: string
+  cpf_check_status?: string
+  cnpj_check_status?: string
+  nascimento_check_status?: string
+  email_check_status?: string
+  documento_check_status?: string
+  face_check_status?: string
+  local_check_status?: string
+  kyc_override?: boolean
+  kyc_override_reason?: string | null
+  validation_errors?: Record<string, string>
   created_at: string
 }
 
@@ -52,6 +64,23 @@ const filterTabs = [
   { key: 'restaurante', label: 'Restaurantes' },
   { key: 'entregador', label: 'Entregadores' },
 ]
+
+const checkLabel: Record<string, string> = {
+  nome_check_status: 'Nome real',
+  cpf_check_status: 'CPF',
+  cnpj_check_status: 'CNPJ',
+  nascimento_check_status: 'Data',
+  email_check_status: 'E-mail',
+  documento_check_status: 'Documento',
+  face_check_status: 'Rosto',
+  local_check_status: 'Local',
+}
+
+function checkTone(status?: string) {
+  if (status === 'aprovado' || status === 'dispensado') return 'bg-green-500/10 text-green-400 border-green-500/20'
+  if (status === 'rejeitado') return 'bg-red-500/10 text-red-400 border-red-500/20'
+  return 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+}
 
 export default function VerificacoesPage() {
   const [verificacoes, setVerificacoes] = useState<Verificacao[]>([])
@@ -87,19 +116,45 @@ export default function VerificacoesPage() {
   async function aprovar(verificacao: Verificacao) {
     setActionLoading(verificacao.id)
     try {
-      // Update verificacao status
-      await supabase
-        .from('verificacoes')
-        .update({ status: 'aprovado' })
-        .eq('id', verificacao.id)
-
-      // Update user profile to verificado=true
-      await supabase
-        .from('profiles')
-        .update({ verificado: true })
-        .eq('id', verificacao.user_id)
+      const { error } = await supabase.rpc('aprovar_verificacao', {
+        p_verificacao_id: verificacao.id,
+        p_override: false,
+        p_override_reason: null,
+      })
+      if (error) throw error
+      await fetchVerificacoes()
+      await alertDialog({ title: 'Verificacao aprovada', message: 'O usuario foi liberado para aparecer no mapa e criar produtos.', tone: 'success' })
     } catch (err) {
       console.error('Erro ao aprovar:', err)
+      await alertDialog({ title: 'Nao foi possivel aprovar', message: err instanceof Error ? err.message : 'Confira CPF, CNPJ, e-mail, rosto, documento e local.', tone: 'danger' })
+    }
+    setActionLoading(null)
+  }
+
+  async function aprovarComOverride(verificacao: Verificacao) {
+    const motivo = await promptDialog({
+      title: 'Liberar sem KYC completo',
+      message: 'Use apenas quando voce conferiu por outro meio. Informe o motivo/a evidencia da liberacao manual.',
+      placeholder: 'Ex: documentos conferidos presencialmente pelo gerente',
+      defaultValue: 'Liberado manualmente pelo admin sem documento completo',
+      confirmText: 'Liberar',
+      tone: 'danger',
+    })
+    const motivoFinal = (motivo || 'Liberado manualmente pelo admin sem documento completo').trim()
+    if (motivoFinal.length < 10) return
+    setActionLoading(verificacao.id)
+    try {
+      const { error } = await supabase.rpc('aprovar_verificacao', {
+        p_verificacao_id: verificacao.id,
+        p_override: true,
+        p_override_reason: motivoFinal,
+      })
+      if (error) throw error
+      await fetchVerificacoes()
+      await alertDialog({ title: 'Liberado com override', message: 'A excecao ficou registrada para auditoria.', tone: 'success' })
+    } catch (err) {
+      console.error('Erro ao liberar override:', err)
+      await alertDialog({ title: 'Nao foi possivel liberar', message: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' })
     }
     setActionLoading(null)
   }
@@ -108,15 +163,15 @@ export default function VerificacoesPage() {
     if (!motivoRejeicao.trim()) return
     setActionLoading(id)
     try {
-      await supabase
-        .from('verificacoes')
-        .update({
-          status: 'rejeitado',
-          motivo_rejeicao: motivoRejeicao.trim(),
-        })
-        .eq('id', id)
+      const { error } = await supabase.rpc('rejeitar_verificacao', {
+        p_verificacao_id: id,
+        p_motivo: motivoRejeicao.trim(),
+      })
+      if (error) throw error
+      await fetchVerificacoes()
     } catch (err) {
       console.error('Erro ao rejeitar:', err)
+      await alertDialog({ title: 'Nao foi possivel rejeitar', message: err instanceof Error ? err.message : 'Tente novamente.', tone: 'danger' })
     }
     setActionLoading(null)
     setRejectModalOpen(null)
@@ -297,6 +352,32 @@ export default function VerificacoesPage() {
                     </div>
 
                     {/* Document Previews — todas as imagens que os apps enviam */}
+                    <div className="mt-4 p-3 rounded-xl bg-slate-900/40 border border-slate-800/70">
+                      <div className="text-[10px] uppercase tracking-wider text-slate-500 font-black mb-2">
+                        Checklist KYC
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {(Object.keys(checkLabel) as Array<keyof Verificacao>).map(key => {
+                          const value = String(v[key] || 'pendente')
+                          return (
+                            <span key={String(key)} className={`px-2.5 py-1 rounded-lg border text-[10px] font-black uppercase ${checkTone(value)}`}>
+                              {checkLabel[String(key)]}: {value}
+                            </span>
+                          )
+                        })}
+                      </div>
+                      {v.kyc_override && (
+                        <div className="mt-3 p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-[11px] text-red-300">
+                          <b>Override admin:</b> {v.kyc_override_reason || 'Sem motivo registrado'}
+                        </div>
+                      )}
+                      {v.validation_errors && Object.keys(v.validation_errors).length > 0 && (
+                        <div className="mt-3 text-[11px] text-amber-300/80">
+                          {Object.values(v.validation_errors).join(' ')}
+                        </div>
+                      )}
+                    </div>
+
                     <div className="flex gap-2 mt-4 flex-wrap">
                       {([
                         ['RG Frente', v.rg_frente_url],
@@ -339,7 +420,7 @@ export default function VerificacoesPage() {
 
                   {/* Action Buttons - only for pending */}
                   {v.status === 'pendente' && (
-                    <div className="flex border-t border-slate-800/50">
+                    <div className="grid grid-cols-3 border-t border-slate-800/50">
                       <button
                         onClick={() => aprovar(v)}
                         disabled={actionLoading === v.id}
@@ -351,6 +432,14 @@ export default function VerificacoesPage() {
                           <CheckCircle2 size={16} />
                         )}
                         APROVAR
+                      </button>
+                      <button
+                        onClick={() => aprovarComOverride(v)}
+                        disabled={actionLoading === v.id}
+                        className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-bold text-amber-400 bg-amber-500/5 hover:bg-amber-500/15 transition-all duration-200 disabled:opacity-50 border-r border-slate-800/50"
+                      >
+                        <AlertTriangle size={16} />
+                        SEM DOC
                       </button>
                       <button
                         onClick={() => {

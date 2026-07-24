@@ -40,6 +40,9 @@ export type Vendedor = {
   zona: string
   produtos: Produto[]
   tipo: VendedorTipo
+  // Horário de funcionamento (HH:MM) definido pelo próprio vendedor
+  horarioAbre?: string | null
+  horarioFecha?: string | null
 }
 
 export const CATEGORIAS = [

@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Bell, ChevronRight, CreditCard, HelpCircle, Loader2, LogOut, MapPin, Phone, Shield, Star, Store, TrendingUp } from 'lucide-react'
+import { Bell, ChevronRight, Clock, CreditCard, HelpCircle, Loader2, LogOut, MapPin, Phone, Shield, Star, Store, TrendingUp, Wallet } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { getSessao, logout } from '../lib/auth'
 import SuportePanel from '../components/SuportePanel'
-import { buscarStatusMercadoPago, iniciarVinculoMercadoPago, type MercadoPagoLinkStatus } from '../lib/mercadopago'
 
 type PerfilInfo = {
   nome: string
@@ -61,16 +60,26 @@ export default function PerfilPage() {
   const [faturamentoMes, setFaturamentoMes] = useState(0)
   const [painelAberto, setPainelAberto] = useState<Painel | null>(null)
   const [suporteAberto, setSuporteAberto] = useState(false)
-  const [mpStatus, setMpStatus] = useState<MercadoPagoLinkStatus | null>(null)
-  const [mpLoading, setMpLoading] = useState(false)
-  const [mpErro, setMpErro] = useState('')
+  const [pixKey, setPixKey] = useState('')
+  const [pixSalvando, setPixSalvando] = useState(false)
+  const [pixMsg, setPixMsg] = useState('')
+  const [horaAbre, setHoraAbre] = useState('')
+  const [horaFecha, setHoraFecha] = useState('')
+  const [salvandoHorario, setSalvandoHorario] = useState(false)
+  const [horarioMsg, setHorarioMsg] = useState('')
+  // Localizacao FIXA da loja (ponto no mapa). Nao segue o GPS do celular —
+  // o dono crava uma vez, dentro da loja, e fica travado ali.
+  const [lat, setLat] = useState<number | null>(null)
+  const [lng, setLng] = useState<number | null>(null)
+  const [salvandoLocal, setSalvandoLocal] = useState(false)
+  const [localMsg, setLocalMsg] = useState('')
 
   useEffect(() => {
     if (!sessao) return
 
     supabase
       .from('profiles')
-      .select('nome, razao_social, avaliacao_media, total_avaliacoes, telefone_comercial, endereco')
+      .select('nome, razao_social, avaliacao_media, total_avaliacoes, telefone_comercial, endereco, horario_abre, horario_fecha, lat, lng')
       .eq('id', sessao.id)
       .maybeSingle()
       .then(({ data }) => {
@@ -82,6 +91,10 @@ export default function PerfilPage() {
           telefone: data.telefone_comercial,
           endereco: data.endereco,
         })
+        setHoraAbre(data.horario_abre || '')
+        setHoraFecha(data.horario_fecha || '')
+        setLat(data.lat != null ? Number(data.lat) : null)
+        setLng(data.lng != null ? Number(data.lng) : null)
       })
 
     const inicioMes = new Date()
@@ -99,19 +112,61 @@ export default function PerfilPage() {
         setFaturamentoMes(entregues.reduce((a, p) => a + (Number(p.total) || 0), 0))
       })
 
-    buscarStatusMercadoPago(sessao.id).then(setMpStatus)
+    supabase
+      .from('vendor_payment_accounts')
+      .select('pix_key')
+      .eq('vendedor_id', sessao.id)
+      .maybeSingle()
+      .then(({ data }) => setPixKey(data?.pix_key || ''))
   }, [sessao])
 
-  async function conectarMercadoPago() {
+  async function salvarHorario() {
     if (!sessao) return
-    setMpErro('')
-    setMpLoading(true)
-    try {
-      await iniciarVinculoMercadoPago(sessao.id)
-    } catch (err) {
-      setMpErro(err instanceof Error ? err.message : 'Nao foi possivel vincular o Mercado Pago.')
-      setMpLoading(false)
+    setSalvandoHorario(true)
+    setHorarioMsg('')
+    const { error } = await supabase
+      .from('profiles')
+      .update({ horario_abre: horaAbre || null, horario_fecha: horaFecha || null })
+      .eq('id', sessao.id)
+    setSalvandoHorario(false)
+    setHorarioMsg(error ? 'Nao deu pra salvar. Tente de novo.' : 'Horario salvo! Ja aparece pros clientes.')
+    setTimeout(() => setHorarioMsg(''), 3500)
+  }
+
+  async function definirLocalizacao() {
+    if (!sessao) return
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      setLocalMsg('Seu aparelho nao tem GPS disponivel.'); return
     }
+    setSalvandoLocal(true); setLocalMsg('Pegando sua posicao atual...')
+    navigator.geolocation.getCurrentPosition(
+      async (p) => {
+        const novaLat = p.coords.latitude
+        const novaLng = p.coords.longitude
+        const { error } = await supabase.from('profiles').update({ lat: novaLat, lng: novaLng }).eq('id', sessao.id)
+        setSalvandoLocal(false)
+        if (error) { setLocalMsg('Nao deu pra salvar. Tente de novo.'); return }
+        setLat(novaLat); setLng(novaLng)
+        setLocalMsg('Ponto da loja fixado aqui! ✅ Ja aparece no mapa dos clientes.')
+        setTimeout(() => setLocalMsg(''), 6000)
+      },
+      () => { setSalvandoLocal(false); setLocalMsg('Precisamos da permissao de localizacao. Ative o GPS e permita o acesso.') },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 },
+    )
+  }
+
+  async function salvarChavePix() {
+    if (!sessao) return
+    const chave = pixKey.trim()
+    if (!chave) { setPixMsg('Digite sua chave Pix pra receber os repasses.'); return }
+    setPixSalvando(true)
+    setPixMsg('')
+    const { error } = await supabase
+      .from('vendor_payment_accounts')
+      .upsert({ vendedor_id: sessao.id, pix_key: chave }, { onConflict: 'vendedor_id' })
+    setPixSalvando(false)
+    setPixMsg(error ? 'Nao deu pra salvar. Tente de novo.' : 'Chave Pix salva! O repasse cai nela.')
+    setTimeout(() => setPixMsg(''), 4000)
   }
 
   function sair() {
@@ -177,22 +232,95 @@ export default function PerfilPage() {
         </InfoCard>
       </div>
 
-      <InfoCard title="Recebimentos Mercado Pago" icon={<CreditCard size={16} color="#0284c7" />}>
-        <Metric
-          label="Status do split"
-          value={mpStatus?.provider === 'mercadopago' && mpStatus.status === 'verificado' ? 'Conta vinculada' : 'Pendente'}
-          color={mpStatus?.provider === 'mercadopago' && mpStatus.status === 'verificado' ? '#16a34a' : '#d97706'}
-        />
+      <motion.button
+        initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
+        onClick={() => navigate('/carteira')}
+        className="glass-panel"
+        style={{ width: '100%', borderRadius: 24, padding: 20, border: '1px solid rgba(0,0,0,0.06)', background: 'linear-gradient(135deg, rgba(14,165,233,0.08), rgba(34,197,94,0.08))', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left', marginBottom: 4 }}
+      >
+        <div style={{ width: 46, height: 46, borderRadius: 14, background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Wallet size={22} color="#fff" />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 15, fontWeight: 900, color: '#0f172a' }}>Minha Carteira</div>
+          <div style={{ fontSize: 12.5, color: '#64748b', fontWeight: 600 }}>Saldo, repasses e saque via Pix</div>
+        </div>
+        <ChevronRight size={20} color="#94a3b8" />
+      </motion.button>
+
+      <InfoCard title="Localizacao da loja (ponto fixo)" icon={<MapPin size={16} color="#f43f5e" />}>
+        <p style={{ fontSize: 13, color: '#64748b', fontWeight: 500, margin: 0 }}>
+          Defina <strong>uma vez, dentro da loja</strong>. O ponto fica <strong>fixo</strong> no mapa dos clientes — nao muda quando voce abre o app em outro lugar.
+        </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: (lat != null && lng != null) ? 'rgba(34,197,94,0.08)' : 'rgba(245,158,11,0.08)', border: `1px solid ${(lat != null && lng != null) ? 'rgba(34,197,94,0.25)' : 'rgba(245,158,11,0.25)'}`, borderRadius: 14, padding: '12px 14px' }}>
+          <MapPin size={18} color={(lat != null && lng != null) ? '#16a34a' : '#d97706'} />
+          <div style={{ flex: 1, fontSize: 13, fontWeight: 800, color: (lat != null && lng != null) ? '#15803d' : '#b45309' }}>
+            {(lat != null && lng != null)
+              ? `Ponto fixado ✅ (${lat.toFixed(5)}, ${lng.toFixed(5)})`
+              : 'Sem ponto definido — sua loja ainda nao aparece no mapa.'}
+          </div>
+        </div>
         <button
           type="button"
-          onClick={conectarMercadoPago}
-          disabled={mpLoading}
-          style={{ width: '100%', border: '1px solid rgba(2,132,199,0.25)', background: '#eff6ff', color: '#0284c7', borderRadius: 16, padding: 16, fontSize: 14, fontWeight: 900, cursor: mpLoading ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
+          onClick={definirLocalizacao}
+          disabled={salvandoLocal}
+          style={{ width: '100%', border: '1px solid rgba(244,63,94,0.25)', background: '#fff1f2', color: '#e11d48', borderRadius: 16, padding: 16, fontSize: 14, fontWeight: 900, cursor: salvandoLocal ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
         >
-          {mpLoading ? <Loader2 size={18} className="animate-spin-slow" /> : <CreditCard size={18} />}
-          {mpStatus?.provider === 'mercadopago' ? 'Atualizar vinculo Mercado Pago' : 'Vincular conta Mercado Pago'}
+          {salvandoLocal ? <Loader2 size={18} className="animate-spin-slow" /> : <MapPin size={18} />}
+          {salvandoLocal ? 'Pegando GPS...' : (lat != null && lng != null) ? 'Atualizar ponto (estou na loja agora)' : 'Usar minha localizacao como ponto da loja'}
         </button>
-        {mpErro && <div style={{ color: '#ef4444', fontSize: 13, fontWeight: 800 }}>{mpErro}</div>}
+        {localMsg && <div style={{ color: localMsg.includes('✅') ? '#16a34a' : localMsg.includes('...') ? '#64748b' : '#ef4444', fontSize: 13, fontWeight: 800 }}>{localMsg}</div>}
+      </InfoCard>
+
+      <InfoCard title="Onde voce recebe (chave Pix)" icon={<CreditCard size={16} color="#0284c7" />}>
+        <p style={{ fontSize: 13, color: '#64748b', fontWeight: 500, margin: 0 }}>
+          Seus repasses caem nessa chave. Nao precisa criar conta em gateway nenhum — so informe sua chave Pix.
+        </p>
+        <div>
+          <label style={{ fontSize: 11, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 6, letterSpacing: 0.5 }}>CHAVE PIX</label>
+          <input
+            value={pixKey}
+            onChange={e => setPixKey(e.target.value)}
+            placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatoria"
+            style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 14, padding: '12px', fontSize: 15, fontWeight: 700, color: '#0f172a', background: '#f8fafc' }}
+          />
+        </div>
+        <button
+          type="button"
+          onClick={salvarChavePix}
+          disabled={pixSalvando}
+          style={{ width: '100%', border: '1px solid rgba(2,132,199,0.25)', background: '#eff6ff', color: '#0284c7', borderRadius: 16, padding: 16, fontSize: 14, fontWeight: 900, cursor: pixSalvando ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
+        >
+          {pixSalvando ? <Loader2 size={18} className="animate-spin-slow" /> : <CreditCard size={18} />}
+          {pixSalvando ? 'Salvando...' : 'Salvar chave Pix'}
+        </button>
+        {pixMsg && <div style={{ color: pixMsg.includes('salva') ? '#16a34a' : '#ef4444', fontSize: 13, fontWeight: 800 }}>{pixMsg}</div>}
+      </InfoCard>
+
+      <InfoCard title="Horario de funcionamento" icon={<Clock size={16} color="#f97316" />}>
+        <p style={{ fontSize: 13, color: '#64748b', fontWeight: 500, margin: 0 }}>
+          Fora desse horario o restaurante aparece como <strong>fechado</strong> pros clientes no app.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 6, letterSpacing: 0.5 }}>ABRE AS</label>
+            <input type="time" value={horaAbre} onChange={e => setHoraAbre(e.target.value)} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 14, padding: '12px', fontSize: 16, fontWeight: 800, color: '#0f172a', background: '#f8fafc' }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 6, letterSpacing: 0.5 }}>FECHA AS</label>
+            <input type="time" value={horaFecha} onChange={e => setHoraFecha(e.target.value)} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 14, padding: '12px', fontSize: 16, fontWeight: 800, color: '#0f172a', background: '#f8fafc' }} />
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={salvarHorario}
+          disabled={salvandoHorario}
+          style={{ width: '100%', border: 'none', background: 'linear-gradient(135deg, #f97316, #ea580c)', color: '#fff', borderRadius: 16, padding: 15, fontSize: 14, fontWeight: 900, cursor: salvandoHorario ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
+        >
+          {salvandoHorario ? <Loader2 size={18} className="animate-spin-slow" /> : <Clock size={18} />}
+          Salvar horario
+        </button>
+        {horarioMsg && <div style={{ fontSize: 13, fontWeight: 800, color: horarioMsg.includes('salvo') ? '#16a34a' : '#ef4444', textAlign: 'center' }}>{horarioMsg}</div>}
       </InfoCard>
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-panel" style={{ borderRadius: 24, overflow: 'hidden', border: '1px solid rgba(0,0,0,0.06)', marginBottom: 24 }}>

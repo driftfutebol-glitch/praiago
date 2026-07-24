@@ -46,6 +46,7 @@ type ProfileAmbulanteRow = {
   lng: number | null
   zona: string | null
   status?: string | null
+  verificado?: boolean | null
 }
 
 // ── Haversine ────────────────────────────────────────────────
@@ -97,7 +98,7 @@ export function useNearbyAmbulantes(clientePos: [number, number]) {
   }, [])
 
   const upsertProfile = useCallback((row: ProfileAmbulanteRow) => {
-    if (row.role !== 'ambulante' || row.status === 'banido' || !row.online || typeof row.lat !== 'number' || typeof row.lng !== 'number') {
+    if (row.role !== 'ambulante' || row.status === 'banido' || row.verificado !== true || !row.online || typeof row.lat !== 'number' || typeof row.lng !== 'number') {
       mapRef.current.delete(row.id)
       recalcAndSort()
       return
@@ -162,9 +163,10 @@ export function useNearbyAmbulantes(clientePos: [number, number]) {
     let ativo = true
 
     supabase
-      .from('profiles')
-      .select('id,nome,emoji,categoria,role,online,lat,lng,zona,status')
+      .from('vendedores_publicos')
+      .select('id,nome,emoji,categoria,role,online,lat,lng,zona,status,verificado')
       .eq('role', 'ambulante')
+      .eq('verificado', true)
       .eq('online', true)
       .not('lat', 'is', null)
       .not('lng', 'is', null)
@@ -174,8 +176,8 @@ export function useNearbyAmbulantes(clientePos: [number, number]) {
       })
 
     const dbChannel = supabase
-      .channel('cliente_ambulantes_profiles')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, payload => {
+      .channel('cliente_ambulantes_publicos')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'vendedores_publicos' }, payload => {
         if (payload.eventType === 'DELETE') {
           mapRef.current.delete((payload.old as { id?: string }).id || '')
           recalcAndSort()

@@ -172,10 +172,10 @@ ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS public.vendor_payment_accounts (
   vendedor_id UUID PRIMARY KEY,
-  provider TEXT NOT NULL DEFAULT 'mercadopago',
+  provider TEXT NOT NULL DEFAULT 'pagarme',
   provider_account_id TEXT,
-  mercadopago_user_id TEXT,
-  mercadopago_linked_at TIMESTAMPTZ,
+  gateway_user_id TEXT,
+  gateway_linked_at TIMESTAMPTZ,
   pix_key TEXT,
   bank_name TEXT,
   bank_agency TEXT,
@@ -186,23 +186,6 @@ CREATE TABLE IF NOT EXISTS public.vendor_payment_accounts (
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
-
-CREATE TABLE IF NOT EXISTS public.mercadopago_vendor_accounts (
-  vendedor_id UUID PRIMARY KEY REFERENCES public.profiles(id) ON DELETE CASCADE,
-  mp_user_id TEXT,
-  public_key TEXT,
-  access_token TEXT NOT NULL,
-  refresh_token TEXT,
-  token_type TEXT,
-  scope TEXT,
-  live_mode BOOLEAN,
-  expires_at TIMESTAMPTZ,
-  linked_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_mercadopago_vendor_accounts_mp_user_id
-  ON public.mercadopago_vendor_accounts (mp_user_id);
 
 CREATE TABLE IF NOT EXISTS public.financial_ledger (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -222,8 +205,8 @@ ALTER TABLE public.pedidos ADD COLUMN IF NOT EXISTS payment_provider TEXT DEFAUL
 ALTER TABLE public.pedidos ADD COLUMN IF NOT EXISTS payment_status TEXT DEFAULT 'pendente';
 ALTER TABLE public.pedidos ADD COLUMN IF NOT EXISTS payment_reference TEXT;
 ALTER TABLE public.pedidos ADD COLUMN IF NOT EXISTS payment_checkout_url TEXT;
-ALTER TABLE public.pedidos ADD COLUMN IF NOT EXISTS mercadopago_preference_id TEXT;
-ALTER TABLE public.pedidos ADD COLUMN IF NOT EXISTS mercadopago_payment_id TEXT;
+ALTER TABLE public.pedidos ADD COLUMN IF NOT EXISTS gateway_checkout_id TEXT;
+ALTER TABLE public.pedidos ADD COLUMN IF NOT EXISTS gateway_payment_id TEXT;
 ALTER TABLE public.pedidos ADD COLUMN IF NOT EXISTS payment_details JSONB DEFAULT '{}'::jsonb;
 ALTER TABLE public.pedidos ADD COLUMN IF NOT EXISTS lat DOUBLE PRECISION;
 ALTER TABLE public.pedidos ADD COLUMN IF NOT EXISTS lng DOUBLE PRECISION;
@@ -259,7 +242,7 @@ BEGIN
   NEW.gross_amount := gross;
   NEW.platform_fee_amount := COALESCE(NEW.platform_fee_amount, fee);
   NEW.vendor_amount := COALESCE(NEW.vendor_amount, vendor_value);
-  NEW.payment_provider := COALESCE(NEW.payment_provider, CASE WHEN method IN ('pix','cartao','credito_online','debito_online','mercadopago') THEN 'mercadopago' ELSE 'manual' END);
+  NEW.payment_provider := COALESCE(NEW.payment_provider, CASE WHEN method IN ('pix','cartao','credito_online','debito_online') THEN 'pagarme' ELSE 'manual' END);
   NEW.payment_status := COALESCE(NEW.payment_status, CASE WHEN method IN ('dinheiro','cartao_fisico','debito_fisico','credito_fisico') THEN 'presencial' ELSE 'pendente' END);
   NEW.settlement_status := COALESCE(NEW.settlement_status, CASE WHEN method IN ('dinheiro','cartao_fisico','debito_fisico','credito_fisico') THEN COALESCE(cfg.presencial_fee_mode, 'cobrar_vendedor') ELSE 'pendente' END);
   RETURN NEW;
@@ -303,11 +286,7 @@ ALTER TABLE public.entregadores ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tickets      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payment_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.vendor_payment_accounts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.mercadopago_vendor_accounts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.financial_ledger ENABLE ROW LEVEL SECURITY;
-
-REVOKE ALL ON TABLE public.mercadopago_vendor_accounts FROM anon, authenticated;
-GRANT ALL ON TABLE public.mercadopago_vendor_accounts TO service_role;
 
 DROP POLICY IF EXISTS "Allow all profiles"     ON public.profiles;
 DROP POLICY IF EXISTS "Allow all verificacoes" ON public.verificacoes;

@@ -1,6 +1,7 @@
 // Sessão simples persistida (placeholder até o Supabase Auth).
 // Antes o botão "Entrar" não fazia nada — agora há sessão real + proteção de rota.
 import { useSyncExternalStore } from 'react'
+import { supabase } from './supabase'
 
 export type Sessao = {
   id: string
@@ -28,6 +29,9 @@ export function login(id: string, email: string, nome?: string): Sessao {
 }
 
 export function logout() {
+  // Best-effort: some do mapa ao sair (senão o vendedor fica "online" pra sempre).
+  const id = cache?.id
+  if (id) { supabase.from('profiles').update({ online: false }).eq('id', id).then(() => {}, () => {}) }
   localStorage.removeItem(KEY)
   refresh()
 }

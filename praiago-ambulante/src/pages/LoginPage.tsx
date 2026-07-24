@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { login } from '../lib/auth'
 import { promptDialog } from '../lib/dialog'
+import { logSecurityEvent } from '../lib/securityAudit'
 
 export default function LoginPage() {
   const [tab, setTab] = useState<'entrar' | 'cadastro'>('entrar')
@@ -11,10 +12,14 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
   const [nome, setNome] = useState('')
+  const [codigoEnvio, setCodigoEnvio] = useState<string | null>(null)
+  const [codigo, setCodigo] = useState('')
   const [erro, setErro] = useState('')
   const navigate = useNavigate()
 
   const [loading, setLoading] = useState(false)
+  // Aceite obrigatorio no cadastro (exigencia da Play Store + LGPD)
+  const [aceitouTermos, setAceitouTermos] = useState(false)
 
   function emailNormalizado() {
     return email.trim().toLowerCase()
@@ -24,6 +29,7 @@ export default function LoginPage() {
     const alvo = emailNormalizado()
     if (!/^\S+@\S+\.\S+$/.test(alvo)) { setErro('Informe seu e-mail valido para redefinir a senha.'); return }
     const { error } = await supabase.auth.resetPasswordForEmail(alvo, { redirectTo: window.location.origin })
+    if (!error) await logSecurityEvent('password_reset_requested', alvo)
     setErro(error ? `Nao foi possivel enviar redefinicao: ${error.message}` : 'Enviamos o e-mail de redefinicao. Use o link ou o codigo recebido.')
   }
 
@@ -53,13 +59,16 @@ export default function LoginPage() {
     if (!/^\S+@\S+\.\S+$/.test(email)) { setErro('Informe um e-mail válido.'); return }
     if (senha.length < 6) { setErro('A senha precisa ter ao menos 6 caracteres.'); return }
     if (tab === 'cadastro' && !nome.trim()) { setErro('Informe o nome da sua banca.'); return }
+    if (tab === 'cadastro' && !aceitouTermos) { setErro('Você precisa aceitar os Termos de Uso e a Política de Privacidade.'); return }
     setErro('')
     setLoading(true)
 
     try {
+      const alvo = emailNormalizado()
       if (tab === 'entrar') {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password: senha })
+        const { data, error } = await supabase.auth.signInWithPassword({ email: alvo, password: senha })
         if (error) {
+          await logSecurityEvent('login_failed', alvo, { status: error.status ?? null, message: error.message })
           if (error.status === 429) throw new Error('Limite de tentativas excedido. Aguarde alguns minutos e tente novamente.')
           if (error.message.includes('Email not confirmed')) throw new Error('E-mail não confirmado! Verifique sua caixa de entrada.')
           if (error.message.includes('Invalid login credentials')) throw new Error('E-mail ou senha incorretos.')
@@ -75,36 +84,32 @@ export default function LoginPage() {
 
           if (perfil?.status === 'banido') {
             await supabase.auth.signOut()
+            await logSecurityEvent('access_denied', alvo, { reason: 'banned', ban_motivo: perfil.ban_motivo ?? null })
             throw new Error(`Conta bloqueada pelo suporte.${perfil.ban_motivo ? ` Motivo: ${perfil.ban_motivo}` : ''}`)
           }
 
-          login(data.user.id, email, perfil?.nome || undefined);
+          await logSecurityEvent('login_success', alvo, { user_id: data.user.id })
+          login(data.user.id, alvo, perfil?.nome || undefined);
           navigate('/');
         }
 
       } else {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password: senha,
-          options: { data: { nome, role: 'ambulante' } }
+        // Cadastro via edge function 'cadastro' (regra de 1 conta por IP).
+        const { data, error } = await supabase.functions.invoke('cadastro', {
+          body: { email: alvo, senha, metadata: { nome, role: 'ambulante' }, emailRedirectTo: `${window.location.origin}/` },
         })
         if (error) {
-          if (error.status === 429) throw new Error('Limite de e-mails do Supabase (429). Para testar: Authentication → Providers → Email → desligue "Confirm email". Ou aumente os Rate Limits.')
-          throw new Error(error.message)
+          let msg = 'Erro ao criar conta. Tente novamente.'
+          try { const p = await (error as { context?: { json?: () => Promise<{ error?: string }> } }).context?.json?.(); if (p?.error) msg = p.error } catch { /* usa msg padrão */ }
+          throw new Error(msg)
         }
-
-        if (data.session && data.user) {
-          login(data.user.id, email);
-          navigate('/')
-          return
-        }
-
-        if (data.user && !data.session) {
-          setErro('Conta criada! Enviamos um link de confirmação para o seu e-mail.')
-          setTab('entrar')
-          setLoading(false)
-          return
-        }
+        const resp = data as { error?: string } | null
+        if (resp?.error) throw new Error(resp.error)
+        await logSecurityEvent('signup_created', alvo, { email_confirmation_required: true })
+        setCodigo(''); setCodigoEnvio(alvo)
+        setErro('Enviamos um código de 6 dígitos pro seu e-mail. Digite pra ativar. 📧')
+        setLoading(false)
+        return
       }
     } catch (err: any) {
       let msg = err.message || 'Erro inesperado.'
@@ -114,6 +119,21 @@ export default function LoginPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  async function confirmarCadastro() {
+    if (!codigoEnvio) return
+    if (codigo.replace(/\D/g, '').length < 6) { setErro('Digite o código de 6 dígitos que enviamos.'); return }
+    setLoading(true)
+    const { data, error } = await supabase.auth.verifyOtp({ email: codigoEnvio, token: codigo.trim(), type: 'signup' })
+    setLoading(false)
+    if (error) { setErro('Código inválido ou expirado. Confira ou toque em Reenviar.'); return }
+    if (data.user) { login(data.user.id, codigoEnvio, nome || undefined); navigate('/') }
+  }
+  async function reenviarCodigo() {
+    if (!codigoEnvio) return
+    const { error } = await supabase.auth.resend({ type: 'signup', email: codigoEnvio })
+    setErro(error ? 'Não deu pra reenviar agora. Aguarde um minuto.' : 'Reenviamos o código pro seu e-mail. 📧')
   }
 
   return (
@@ -131,6 +151,22 @@ export default function LoginPage() {
       </div>
 
       <div style={{ background: '#fff', borderRadius: 24, padding: 28, width: '100%', maxWidth: 380, boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }}>
+        {codigoEnvio ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 40, marginBottom: 4 }}>📧</div>
+              <div style={{ fontSize: 19, fontWeight: 900, color: '#0f172a' }}>Confirme seu e-mail</div>
+              <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600, marginTop: 4 }}>Código de 6 dígitos enviado pra <b style={{ color: '#0f172a' }}>{codigoEnvio}</b></div>
+            </div>
+            <input inputMode="numeric" autoFocus value={codigo} onChange={e => setCodigo(e.target.value.replace(/\D/g, '').slice(0, 6))} onKeyDown={e => e.key === 'Enter' && confirmarCadastro()} placeholder="000000" style={{ ...inputStyle, textAlign: 'center', fontSize: 28, fontWeight: 900, letterSpacing: 10 }} />
+            {erro && <div style={{ fontSize: 13, textAlign: 'center', fontWeight: 700, color: erro.includes('inválido') || erro.includes('Não') ? '#ef4444' : '#22c55e' }}>{erro}</div>}
+            <button disabled={loading} onClick={confirmarCadastro} style={{ background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', border: 'none', borderRadius: 14, padding: '15px 0', color: '#fff', fontSize: 16, fontWeight: 800, cursor: loading ? 'wait' : 'pointer' }}>{loading ? 'CONFIRMANDO...' : 'Confirmar código'}</button>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 16 }}>
+              <button type="button" onClick={reenviarCodigo} style={{ background: 'none', border: 0, color: '#16a34a', fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>Reenviar código</button>
+              <button type="button" onClick={() => { setCodigoEnvio(null); setErro('') }} style={{ background: 'none', border: 0, color: '#64748b', fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>Trocar e-mail</button>
+            </div>
+          </div>
+        ) : (<>
         <div style={{ display: 'flex', background: '#f1f5f9', borderRadius: 12, padding: 4, marginBottom: 24 }}>
           {(['entrar', 'cadastro'] as const).map(t => (
             <button key={t} onClick={() => { setTab(t); setErro('') }} style={{
@@ -169,6 +205,15 @@ export default function LoginPage() {
             </div>
           </div>
 
+          {tab === 'cadastro' && (
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', background: '#f8fafc', border: `1.5px solid ${aceitouTermos ? '#22c55e' : 'rgba(0,0,0,0.08)'}`, borderRadius: 14, padding: '12px 14px', transition: 'border-color .2s' }}>
+              <input type="checkbox" checked={aceitouTermos} onChange={e => setAceitouTermos(e.target.checked)} style={{ width: 18, height: 18, accentColor: '#22c55e', marginTop: 1, flexShrink: 0, cursor: 'pointer' }} />
+              <span style={{ fontSize: 12.5, color: '#475569', fontWeight: 600, lineHeight: 1.5 }}>
+                Li e aceito os <a href="https://www.praiago.com.br/termos.html" target="_blank" rel="noopener noreferrer" style={{ color: '#0284c7', fontWeight: 800 }}>Termos de Uso</a> e a <a href="https://www.praiago.com.br/privacidade.html" target="_blank" rel="noopener noreferrer" style={{ color: '#0284c7', fontWeight: 800 }}>Política de Privacidade</a> — incluindo o uso da minha <strong>localização (GPS)</strong> durante os pedidos e o tratamento de nome, e-mail e dados de pagamento.
+              </span>
+            </label>
+          )}
+
           {erro && <div style={{ fontSize: 13, color: erro.includes('sucesso') ? '#22c55e' : '#ef4444', fontWeight: 600 }}>{erro}</div>}
 
           <button disabled={loading} onClick={submit} style={{ background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', border: 'none', borderRadius: 14, padding: '15px 0', color: '#fff', fontSize: 16, fontWeight: 700, cursor: loading ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 4, opacity: loading ? 0.7 : 1 }}>
@@ -183,6 +228,7 @@ export default function LoginPage() {
             </div>
           )}
         </div>
+        </>)}
       </div>
 
       <p style={{ fontSize: 12, color: '#64748b', marginTop: 24, textAlign: 'center', maxWidth: 300 }}>

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { login } from '../lib/auth'
 import { promptDialog } from '../lib/dialog'
+import { logSecurityEvent } from '../lib/securityAudit'
 import { motion } from 'framer-motion'
 import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
@@ -78,6 +79,8 @@ export default function LoginPage() {
 
   const [isLogin, setIsLogin] = useState(true)
   const [loading, setLoading] = useState(false)
+  // Aceite obrigatorio no cadastro (exigencia da Play Store + LGPD)
+  const [aceitouTermos, setAceitouTermos] = useState(false)
 
   // Cadastro: dados reais do negócio
   const [nomePessoa, setNomePessoa] = useState('')
@@ -107,25 +110,19 @@ export default function LoginPage() {
     return pedacos[pedacos.length - 1].length >= 2
   }
 
-  async function emailJaCadastrado(valor = email) {
-    const alvo = normalizarEmail(valor)
-    if (!emailValido(alvo)) return false
-    const { data } = await supabase.from('profiles').select('id').ilike('email', alvo).limit(1)
-    return (data?.length ?? 0) > 0
-  }
-
   async function checarEmail() {
     const alvo = normalizarEmail()
     if (!alvo) { setEmailStatus('idle'); return }
     if (!emailValido(alvo)) { setEmailStatus('invalido'); return }
     setEmailStatus('checando')
-    setEmailStatus(await emailJaCadastrado(alvo) ? 'duplicado' : 'ok')
+    setEmailStatus('ok')
   }
 
   async function enviarResetSenha() {
     const alvo = normalizarEmail()
     if (!emailValido(alvo)) { setErro('Informe seu e-mail valido para redefinir a senha.'); return }
     const { error } = await supabase.auth.resetPasswordForEmail(alvo, { redirectTo: window.location.origin })
+    if (!error) await logSecurityEvent('password_reset_requested', alvo)
     setErro(error ? `Nao foi possivel enviar redefinicao: ${error.message}` : 'Enviamos o e-mail de redefinicao. Use o link ou o codigo recebido.')
   }
 
@@ -151,13 +148,6 @@ export default function LoginPage() {
     setErro(error ? `Nao foi possivel reenviar verificacao: ${error.message}` : 'Enviamos um novo e-mail de verificacao.')
   }
 
-  async function cnpjJaCadastrado(valor = cnpj) {
-    const d = valor.replace(/\D/g, '')
-    if (!d) return false
-    const { data } = await supabase.from('profiles').select('id,nome').eq('cnpj', d).limit(1)
-    return (data?.length ?? 0) > 0
-  }
-
   // Validação local dos dígitos verificadores do CNPJ
   function cnpjValido(v: string): boolean {
     const d = v.replace(/\D/g, '')
@@ -178,11 +168,6 @@ export default function LoginPage() {
     if (!cnpjValido(d)) { setCnpjStatus('invalido'); setRazaoSocial(''); return }
     setCnpjStatus('buscando')
     try {
-      if (await cnpjJaCadastrado(d)) {
-        setCnpjStatus('duplicado')
-        setRazaoSocial('')
-        return
-      }
       const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${d}`)
       if (!r.ok) throw new Error('nao encontrado')
       const j = await r.json()
@@ -314,6 +299,7 @@ export default function LoginPage() {
       if (isLogin) {
         const { data, error } = await supabase.auth.signInWithPassword({ email: emailNormalizado, password: senha })
         if (error) {
+          await logSecurityEvent('login_failed', emailNormalizado, { status: error.status ?? null, message: error.message })
           if (error.status === 429) throw new Error('Limite de tentativas excedido. Aguarde alguns minutos e tente novamente.')
           if (error.message.includes('Email not confirmed')) throw new Error('E-mail não confirmado! Verifique sua caixa de entrada.')
           if (error.message.includes('Invalid login credentials')) throw new Error('E-mail ou senha incorretos.')
@@ -329,62 +315,65 @@ export default function LoginPage() {
 
           if (perfil?.status === 'banido') {
             await supabase.auth.signOut()
+            await logSecurityEvent('access_denied', emailNormalizado, { reason: 'banned', ban_motivo: perfil.ban_motivo ?? null })
             throw new Error(`Conta bloqueada pelo suporte.${perfil.ban_motivo ? ` Motivo: ${perfil.ban_motivo}` : ''}`)
           }
 
+          await logSecurityEvent('login_success', emailNormalizado, { user_id: data.user.id })
           login(data.user.id, emailNormalizado, perfil?.nome || undefined);
           navigate('/');
         }
 
       } else {
         // validações do cadastro real
+        if (!aceitouTermos) throw new Error('Você precisa aceitar os Termos de Uso e a Política de Privacidade.')
         if (!nomePessoa.trim()) throw new Error('Informe o seu nome.')
         if (cnpj.trim() && cnpjStatus === 'invalido') throw new Error('CNPJ inválido — confira os números.')
-        if (cnpj.trim() && cnpjStatus === 'duplicado') throw new Error('Este CNPJ ja esta cadastrado no PraiaGo.')
-        if (cnpj.trim() && await cnpjJaCadastrado()) throw new Error('Este CNPJ ja esta cadastrado no PraiaGo.')
-        if (await emailJaCadastrado(emailNormalizado)) throw new Error('Este e-mail ja esta cadastrado. Use login ou outro e-mail.')
         if (!nomeLoja.trim()) throw new Error('Informe o nome do restaurante ou loja.')
         if (!coords || (enderecoStatus !== 'confirmado' && enderecoStatus !== 'gps')) throw new Error('Verifique o endereco e selecione uma sugestao no mapa antes de cadastrar.')
         if (!endereco.trim() && !coords) throw new Error('Informe a localização da loja (endereço ou GPS).')
 
-        const { data, error } = await supabase.auth.signUp({
-          email: emailNormalizado,
-          password: senha,
-          options: { data: { role: 'restaurante', nome: nomeLoja.trim() } }
+        // Cadastro via edge function 'cadastro' (regra de 1 conta por IP).
+        const { data, error } = await supabase.functions.invoke('cadastro', {
+          body: {
+            email: emailNormalizado, senha,
+            metadata: {
+              role: 'restaurante', nome: nomeLoja.trim(),
+              cnpj: cnpj.replace(/\D/g, '') || null,
+              razao_social: razaoSocial || nomePessoa.trim(),
+              endereco: endereco.trim() || null,
+              lat: coords?.lat ?? null, lng: coords?.lng ?? null,
+            },
+            emailRedirectTo: `${window.location.origin}/`,
+          },
         })
-
         if (error) {
-          if (error.status === 429) throw new Error('LIMITE EXCEDIDO (Erro 429). Para continuar testando, vá no painel Supabase -> Authentication -> Rate Limits -> e aumente o "Email Signups" para 1000.')
-          throw new Error('Erro ao criar conta: ' + error.message)
+          let msg = 'Erro ao criar conta. Tente novamente.'
+          try { const p = await (error as { context?: { json?: () => Promise<{ error?: string }> } }).context?.json?.(); if (p?.error) msg = p.error } catch { /* usa msg padrão */ }
+          throw new Error(msg)
         }
-
-        if (data.user) {
-          // o trigger já criou o profile — completamos com os dados do negócio
+        const resp = data as { error?: string; user_id?: string } | null
+        if (resp?.error) throw new Error(resp.error)
+        // completa os dados do negócio (o trigger já criou o profile básico)
+        if (resp?.user_id) {
           await supabase.from('profiles').update({
-            nome: nomeLoja.trim(),
-            role: 'restaurante',
-            email: emailNormalizado,
+            nome: nomeLoja.trim(), role: 'restaurante', email: emailNormalizado,
             cnpj: cnpj.replace(/\D/g, '') || null,
             razao_social: razaoSocial || nomePessoa.trim(),
             endereco: endereco.trim() || null,
-            lat: coords?.lat ?? null,
-            lng: coords?.lng ?? null,
-            status: 'ativo',
-          }).eq('id', data.user.id)
+            lat: coords?.lat ?? null, lng: coords?.lng ?? null, status: 'ativo',
+          }).eq('id', resp.user_id)
         }
-
-        if (data.session && data.user && data.user.email_confirmed_at) {
-          login(data.user.id, emailNormalizado);
-          navigate('/');
-          return;
-        }
-
-        if (data.user && !data.session) {
-          setErro('Conta criada com sucesso! Enviamos um link de confirmação para o seu e-mail.')
-          setIsLogin(true)
-          setLoading(false)
-          return
-        }
+        await logSecurityEvent('signup_created', emailNormalizado, { email_confirmation_required: true })
+        setLoading(false)
+        // Pede o código de 6 dígitos que foi pro e-mail (confirma via OTP).
+        const codigo = await promptDialog({ title: 'Confirme seu e-mail 📧', message: `Enviamos um código de 6 dígitos para ${emailNormalizado}. Digite pra ativar sua conta.`, placeholder: '000000' })
+        if (!codigo?.trim()) { setErro('Conta criada! Confirme com o código do e-mail (ou clique no link) e faça login.'); setIsLogin(true); return }
+        const { data: otp, error: otpErr } = await supabase.auth.verifyOtp({ email: emailNormalizado, token: codigo.trim(), type: 'signup' })
+        if (otpErr) { setErro('Código inválido ou expirado. Quando confirmar, entre em "Tenho código".'); setIsLogin(true); return }
+        if (otp.user) { login(otp.user.id, emailNormalizado, nomeLoja.trim() || undefined); navigate('/'); return }
+        setIsLogin(true)
+        return
       }
 
     } catch (err: any) {
@@ -519,6 +508,15 @@ export default function LoginPage() {
                 </button>
               </div>
             </div>
+
+            {!isLogin && (
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', background: '#f8fafc', border: `1.5px solid ${aceitouTermos ? '#16a34a' : 'rgba(0,0,0,0.08)'}`, borderRadius: 14, padding: '12px 14px', transition: 'border-color .2s' }}>
+                <input type="checkbox" checked={aceitouTermos} onChange={e => setAceitouTermos(e.target.checked)} style={{ width: 18, height: 18, accentColor: '#16a34a', marginTop: 1, flexShrink: 0, cursor: 'pointer' }} />
+                <span style={{ fontSize: 12.5, color: '#475569', fontWeight: 600, lineHeight: 1.5 }}>
+                  Li e aceito os <a href="https://www.praiago.com.br/termos.html" target="_blank" rel="noopener noreferrer" style={{ color: '#0284c7', fontWeight: 800 }}>Termos de Uso</a> e a <a href="https://www.praiago.com.br/privacidade.html" target="_blank" rel="noopener noreferrer" style={{ color: '#0284c7', fontWeight: 800 }}>Política de Privacidade</a> — incluindo o uso da <strong>localização (GPS)</strong> durante os pedidos e o tratamento de nome, e-mail e dados de pagamento.
+                </span>
+              </label>
+            )}
 
             {erro && <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} style={{ fontSize: 13, color: erro.includes('sucesso') ? '#4ade80' : '#f87171', fontWeight: 600, background: erro.includes('sucesso') ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)', border: erro.includes('sucesso') ? '1px solid rgba(34,197,94,0.2)' : '1px solid rgba(239,68,68,0.2)', padding: '10px 14px', borderRadius: 12 }}>{erro}</motion.div>}
 

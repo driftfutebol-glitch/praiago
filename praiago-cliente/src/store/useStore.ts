@@ -28,9 +28,10 @@ export type Entrega = {
   reta: string
   barraca: string
   modo: 'fixa' | 'tempo_real'
-  pagamento: 'pix' | 'cartao' | 'credito_online' | 'debito_online' | 'mercadopago' | 'dinheiro' | 'cartao_fisico' | 'debito_fisico' | 'credito_fisico'
+  pagamento: 'pix' | 'credito_online' | 'debito_online' | 'dinheiro' | 'cartao_fisico' | 'debito_fisico' | 'credito_fisico'
   lat?: number
   lng?: number
+  cpfNota?: string // CPF na nota (opcional, só dígitos)
 }
 export type Pedido = {
   id: string
@@ -38,8 +39,11 @@ export type Pedido = {
   vendedorNome: string
   itens: PedidoItem[]
   total: number
+  subtotal?: number
+  desconto?: number
+  cupom?: string | null
   data: number
-  status: 'preparando' | 'a_caminho' | 'entregue' | 'cancelado'
+  status: 'aguardando_pagamento' | 'enviado' | 'preparando' | 'a_caminho' | 'entregue' | 'cancelado'
   entrega?: Entrega
 }
 
@@ -75,7 +79,8 @@ type State = {
   totalPreco: () => number
 
   // pedidos
-  criarPedido: (entrega?: Entrega, options?: { limparCarrinho?: boolean }) => Promise<Pedido | null>
+  criarPedido: (entrega?: Entrega, options?: { limparCarrinho?: boolean; desconto?: { codigo: string; valor: number; motivo?: string } }) => Promise<Pedido | null>
+  sincronizarPedidos: () => Promise<void>
   cancelarPedido: (pedidoId: string) => Promise<boolean>
   removerPedido: (pedidoId: string) => void
   solicitarAjudaPedido: (pedidoId: string, tipo: 'ajuda' | 'reembolso') => Promise<boolean>
@@ -130,6 +135,16 @@ function isPresencialPayment(method?: string) {
   return method === 'dinheiro' || method === 'cartao_fisico' || method === 'debito_fisico' || method === 'credito_fisico'
 }
 
+function mapDbStatusToPedidoStatus(status?: string): Pedido['status'] {
+  if (status === 'aguardando_pagamento') return 'aguardando_pagamento'
+  if (status === 'novo') return 'enviado'
+  if (status === 'preparando' || status === 'pronto') return 'preparando'
+  if (status === 'saiu_entrega' || status === 'entregando') return 'a_caminho'
+  if (status === 'entregue') return 'entregue'
+  if (status === 'cancelado') return 'cancelado'
+  return 'enviado'
+}
+
 export const useStore = create<State>()(
   persist(
     (set, get) => ({
@@ -140,10 +155,18 @@ export const useStore = create<State>()(
       pedidos: [],
       notificacoes: [],
 
-      login: (id, email, nome = '', telefone = '') => set({ 
-        sessao: { id, email, nome, telefone } 
+      // Ao logar: se for OUTRA conta (ou não havia sessão), zera TUDO que é por
+      // usuário — senão a conta nova herdaria pedidos/carrinho/notificações da
+      // conta anterior no mesmo aparelho (vazamento). Mesma conta (restart) preserva.
+      login: (id, email, nome = '', telefone = '') => set(s => {
+        const outraConta = !s.sessao || s.sessao.id !== id
+        return {
+          sessao: { id, email, nome, telefone },
+          ...(outraConta ? { pedidos: [], carrinho: {}, carrinhoVendedor: null, notificacoes: [], favoritos: [] } : {}),
+        }
       }),
-      logout: () => set({ sessao: null }),
+      // Ao sair: limpa TUDO que é por usuário (não deixa rastro pra próxima conta).
+      logout: () => set({ sessao: null, pedidos: [], carrinho: {}, carrinhoVendedor: null, notificacoes: [], favoritos: [] }),
 
       toggleFavorito: (vendedorId) => set(s => ({
         favoritos: s.favoritos.includes(vendedorId)
@@ -186,14 +209,20 @@ export const useStore = create<State>()(
 
       criarPedido: async (entrega, options = {}) => {
         const { carrinho, carrinhoVendedor, sessao } = get()
+        if (!sessao?.id) return null
         if (!carrinhoVendedor) return null
         const vend = getVendedor(carrinhoVendedor)
         if (!vend) return null
-        const itens: PedidoItem[] = Object.entries(carrinho).map(([pid, qtd]) => {
-          const p = getProduto(carrinhoVendedor, pid)!
-          return { nome: p.nome, qtd, preco: p.preco }
-        })
-        const total = itens.reduce((a, i) => a + i.preco * i.qtd, 0)
+        // Ignora itens que sumiram do catálogo (produto desativado / loja recarregada)
+        // — antes usava non-null assertion e quebrava com TypeError no checkout.
+        const itensBrutos = Object.entries(carrinho)
+          .map(([pid, qtd]) => { const p = getProduto(carrinhoVendedor, pid); return p ? { id: pid, nome: p.nome, qtd, preco: p.preco } : null })
+          .filter((x): x is { id: string; nome: string; qtd: number; preco: number } => x !== null)
+        if (itensBrutos.length === 0) return null
+        const itens: PedidoItem[] = itensBrutos.map(({ nome, qtd, preco }) => ({ nome, qtd, preco }))
+        const subtotal = itens.reduce((a, i) => a + i.preco * i.qtd, 0)
+        const discountAmount = Math.max(0, Math.min(subtotal, Math.round(Number(options.desconto?.valor ?? 0) * 100) / 100))
+        const total = Math.max(0, Math.round((subtotal - discountAmount) * 100) / 100)
         const paymentSettings = await getPaymentSettings()
         const platformFeeAmount = Math.round((total * paymentSettings.platformFeePercent / 100 + paymentSettings.platformFeeFixed) * 100) / 100
         const vendorAmount = Math.max(0, Math.round((total - platformFeeAmount) * 100) / 100)
@@ -203,7 +232,7 @@ export const useStore = create<State>()(
         // Insere no banco
         const { data: inserted, error } = await supabase.from('pedidos').insert({
           cliente_nome: sessao?.nome || 'Anônimo',
-          cliente_id: sessao?.id ?? null,
+          cliente_id: sessao.id,
           vendedor_id: vend.id,
           vendedor_nome: vend.nome,
           zona: entrega?.reta ? `Reta ${entrega.reta} - Barraca ${entrega.barraca || 'Sem Barraca'}` : (vend.zona || 'Desconhecida'),
@@ -211,13 +240,21 @@ export const useStore = create<State>()(
           barraca: entrega?.barraca ?? null,
           lat: entrega?.lat ?? null,
           lng: entrega?.lng ?? null,
+          cpf_nota: entrega?.cpfNota || null,
           itens: itens.map(i => `${i.qtd}x ${i.nome}`),
+          // itens com ID do produto — o SERVIDOR recalcula o preço real por aqui
+          // (o total/subtotal abaixo são só palpite; o trigger sobrescreve).
+          itens_detalhe: itensBrutos.map(i => ({ produto_id: i.id, qtd: i.qtd })),
           total: total,
+          subtotal_amount: subtotal,
+          discount_amount: discountAmount,
+          discount_code: options.desconto?.codigo ?? null,
+          discount_reason: options.desconto?.motivo ?? null,
           // Pagamento online: o pedido NASCE travado e só vira 'novo' (visível
-          // pro vendedor) quando o webhook do Mercado Pago confirmar o pagamento.
+          // pro vendedor) quando o webhook do gateway confirmar o pagamento.
           status: presencial ? 'novo' : 'aguardando_pagamento',
           pagamento: method,
-          payment_provider: presencial ? 'manual' : 'mercadopago',
+          payment_provider: presencial ? 'manual' : 'pagarme',
           payment_status: presencial ? 'presencial' : 'pendente',
           gross_amount: total,
           platform_fee_amount: platformFeeAmount,
@@ -234,13 +271,36 @@ export const useStore = create<State>()(
 
         const pedido: Pedido = {
           id: inserted.id, vendedorId: vend.id, vendedorNome: vend.nome,
-          itens, total, data: new Date(inserted.created_at).getTime(), status: 'preparando', entrega,
+          itens, total, subtotal, desconto: discountAmount, cupom: options.desconto?.codigo ?? null, data: new Date(inserted.created_at).getTime(), status: presencial ? 'enviado' : 'aguardando_pagamento', entrega,
         }
         set(s => ({
           pedidos: [pedido, ...s.pedidos],
           ...(options.limparCarrinho === false ? {} : { carrinho: {}, carrinhoVendedor: null }),
         }))
         return pedido
+      },
+
+      sincronizarPedidos: async () => {
+        const ids = get().pedidos.map(p => p.id).filter(Boolean)
+        if (ids.length === 0) return
+
+        const { data, error } = await supabase
+          .from('pedidos')
+          .select('id,status')
+          .in('id', ids)
+
+        if (error || !data) {
+          if (error) console.error('Erro ao sincronizar pedidos', error)
+          return
+        }
+
+        const statusById = new Map(data.map(row => [String(row.id), mapDbStatusToPedidoStatus(String(row.status ?? 'novo'))]))
+        set(s => ({
+          pedidos: s.pedidos.map(p => {
+            const status = statusById.get(p.id)
+            return status ? { ...p, status } : p
+          }),
+        }))
       },
 
       cancelarPedido: async (pedidoId) => {

@@ -26,13 +26,34 @@ export default function CardapioPage() {
   const [editPreco, setEditPreco] = useState('')
   const [adicionando, setAdicionando] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [verificado, setVerificado] = useState<boolean | null>(null)
   const [novo, setNovo] = useState<NovoForm>({ nome: '', preco: '', descricao: '', emoji: '🍽️', foto: null })
-  
+
   const sessao = getSessao()
 
   useEffect(() => {
     fetchProdutos()
-  }, [])
+    if (!sessao?.id) return
+
+    let ativo = true
+    const carregarVerificacao = () => {
+      supabase.from('profiles').select('verificado').eq('id', sessao.id).maybeSingle()
+        .then(({ data }) => { if (ativo) setVerificado(Boolean(data?.verificado)) })
+    }
+
+    carregarVerificacao()
+    const ch = supabase.channel(`ambulante_cardapio_verificado_${sessao.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${sessao.id}` }, payload => {
+        setVerificado(Boolean((payload.new as { verificado?: boolean | null }).verificado))
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'verificacoes', filter: `user_id=eq.${sessao.id}` }, () => carregarVerificacao())
+      .subscribe()
+
+    return () => {
+      ativo = false
+      supabase.removeChannel(ch)
+    }
+  }, [sessao?.id])
 
   async function fetchProdutos() {
     if (!sessao) return
@@ -87,7 +108,12 @@ export default function CardapioPage() {
 
   async function adicionarProduto() {
     if (!novo.nome.trim() || !sessao) return
-    
+    if (!verificado) {
+      setAdicionando(false)
+      await alertDialog({ title: 'Verificacao obrigatoria', message: 'Complete o KYC para criar produtos. Enquanto nao aprovar, voce nao aparece no mapa.', tone: 'danger' })
+      return
+    }
+
     const prod = {
       vendedor_id: sessao.id,
       vendedor_nome: sessao.nome,        // pro cliente mostrar o nome da loja
@@ -109,6 +135,7 @@ export default function CardapioPage() {
       setAdicionando(false)
     } else {
       console.error("Erro ao adicionar produto:", error)
+      await alertDialog({ title: 'Nao deu pra criar', message: error?.message || 'Confira sua verificacao e tente novamente.', tone: 'danger' })
     }
   }
 
@@ -147,17 +174,27 @@ export default function CardapioPage() {
               Suas mudanças aparecem na hora pros clientes ⚡
             </p>
           </div>
-          <motion.button whileTap={{ scale: 0.95 }} onClick={() => setAdicionando(true)} style={{
-            background: 'linear-gradient(135deg, #0ea5e9, #22c55e)',
+          <motion.button whileTap={{ scale: 0.95 }} onClick={() => { if (verificado) setAdicionando(true) }} disabled={!verificado} style={{
+            background: verificado ? 'linear-gradient(135deg, #0ea5e9, #22c55e)' : '#cbd5e1',
             border: 'none', borderRadius: 20, padding: '12px 20px',
-            color: '#fff', fontSize: 14, fontWeight: 900, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 8px 25px rgba(34,197,94,0.3)'
+            color: '#fff', fontSize: 14, fontWeight: 900, cursor: verificado ? 'pointer' : 'not-allowed',
+            display: 'flex', alignItems: 'center', gap: 8, boxShadow: verificado ? '0 8px 25px rgba(34,197,94,0.3)' : 'none'
           }}>
             <Plus size={18} strokeWidth={3} />
             Add Item
           </motion.button>
         </div>
       </div>
+
+      {/* Gate de verificação */}
+      {verificado === false && (
+        <div style={{ margin: '0 20px 20px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 16, padding: '14px 16px' }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: '#b45309', marginBottom: 4 }}>⚠️ Verificação pendente</div>
+          <p style={{ fontSize: 13, color: '#92400e', margin: 0, lineHeight: 1.5 }}>
+            Complete sua <strong>verificação (CPF + documento)</strong> pra anunciar produtos. Sem verificar, você <strong>não aparece no mapa</strong> pros clientes.
+          </p>
+        </div>
+      )}
 
       <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
         <AnimatePresence>
@@ -185,8 +222,8 @@ export default function CardapioPage() {
                 <div style={{ flex: 1, paddingTop: 4 }}>
                   {editando === p.id ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <input autoFocus value={editNome} onChange={e => setEditNome(e.target.value)} style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 8, padding: '6px 10px', color: '#fff', fontSize: 15, fontWeight: 700 }} />
-                      <input value={editPreco} onChange={e => setEditPreco(e.target.value)} type="number" step="0.01" style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 8, padding: '6px 10px', color: '#fff', fontSize: 15, fontWeight: 700 }} />
+                      <input autoFocus value={editNome} onChange={e => setEditNome(e.target.value)} style={{ width: '100%', background: '#f8fafc', border: '1px solid rgba(0,0,0,0.12)', borderRadius: 8, padding: '6px 10px', color: '#0f172a', fontSize: 15, fontWeight: 700 }} />
+                      <input value={editPreco} onChange={e => setEditPreco(e.target.value)} type="number" step="0.01" style={{ width: '100%', background: '#f8fafc', border: '1px solid rgba(0,0,0,0.12)', borderRadius: 8, padding: '6px 10px', color: '#0f172a', fontSize: 15, fontWeight: 700 }} />
                     </div>
                   ) : (
                     <>
@@ -238,17 +275,17 @@ export default function CardapioPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 13, color: '#64748b', fontWeight: 600, marginBottom: 8 }}>NOME</label>
-                  <input value={novo.nome} onChange={e => setNovo({...novo, nome: e.target.value})} placeholder="Ex: Cerveja Gelada" style={{ width: '100%', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 16, padding: '14px 16px', color: '#fff', fontSize: 16, outline: 'none' }} />
+                  <input value={novo.nome} onChange={e => setNovo({...novo, nome: e.target.value})} placeholder="Ex: Cerveja Gelada" style={{ width: '100%', background: '#f8fafc', border: '1px solid rgba(0,0,0,0.12)', borderRadius: 16, padding: '14px 16px', color: '#0f172a', fontSize: 16, outline: 'none' }} />
                 </div>
                 
                 <div>
                   <label style={{ display: 'block', fontSize: 13, color: '#64748b', fontWeight: 600, marginBottom: 8 }}>PREÇO (R$)</label>
-                  <input value={novo.preco} onChange={e => setNovo({...novo, preco: e.target.value})} type="number" step="0.01" placeholder="0.00" style={{ width: '100%', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 16, padding: '14px 16px', color: '#fff', fontSize: 16, outline: 'none' }} />
+                  <input value={novo.preco} onChange={e => setNovo({...novo, preco: e.target.value})} type="number" step="0.01" placeholder="0.00" style={{ width: '100%', background: '#f8fafc', border: '1px solid rgba(0,0,0,0.12)', borderRadius: 16, padding: '14px 16px', color: '#0f172a', fontSize: 16, outline: 'none' }} />
                 </div>
 
                 <div>
                   <label style={{ display: 'block', fontSize: 13, color: '#64748b', fontWeight: 600, marginBottom: 8 }}>DESCRIÇÃO</label>
-                  <input value={novo.descricao} onChange={e => setNovo({...novo, descricao: e.target.value})} placeholder="350ml trincando..." style={{ width: '100%', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 16, padding: '14px 16px', color: '#fff', fontSize: 16, outline: 'none' }} />
+                  <input value={novo.descricao} onChange={e => setNovo({...novo, descricao: e.target.value})} placeholder="350ml trincando..." style={{ width: '100%', background: '#f8fafc', border: '1px solid rgba(0,0,0,0.12)', borderRadius: 16, padding: '14px 16px', color: '#0f172a', fontSize: 16, outline: 'none' }} />
                 </div>
 
                 <div>

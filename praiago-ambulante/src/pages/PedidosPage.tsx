@@ -365,26 +365,57 @@ export default function PedidosPage() {
 
     // ANTI-MÁ-FÉ: pra marcar ENTREGUE, precisa do código que o cliente informa
     // na entrega. Sem o código certo, não fecha (prova que a venda passou no app).
-    if (novoStatus === 'entregue' && atual.codigoEntrega) {
+    if (novoStatus === 'entregue') {
+      let codigoEsperado = atual.codigoEntrega
+      if (!codigoEsperado) {
+        const { data } = await supabase
+          .from('pedidos')
+          .select('codigo_entrega')
+          .eq('id', id)
+          .single()
+        codigoEsperado = (data?.codigo_entrega as string | null) ?? null
+      }
+
+      if (!codigoEsperado) {
+        await alertDialog({ title: 'Codigo indisponivel', message: 'Envie o pedido para rota e aguarde o codigo aparecer no app do cliente antes de finalizar.', tone: 'danger' })
+        return
+      }
+
       const codigo = await promptDialog({
         title: 'Código de entrega',
         message: 'Peça ao cliente o código de 4 dígitos que aparece no app dele e digite aqui pra confirmar a entrega.',
         placeholder: '0000',
       })
       if (codigo === null) return
-      if (codigo.trim() !== atual.codigoEntrega) {
+      if (codigo.trim() !== codigoEsperado) {
         await alertDialog({ title: 'Código errado', message: 'O código não confere. Confirme com o cliente — a entrega só fecha com o código certo.', tone: 'danger' })
         return
       }
-      patch.entrega_confirmada = true
+      const { error } = await supabase.rpc('confirmar_entrega_pedido', { p_pedido_id: id, p_codigo: codigo.trim() })
+      if (error) {
+        console.error('Falha ao confirmar entrega', error)
+        await alertDialog({ title: 'Codigo nao confirmado', message: error.message || 'Confirme o codigo com o cliente e tente novamente.', tone: 'danger' })
+        return
+      }
+      setPedidos(prev => prev.map(p => (p.id === id ? { ...p, status: 'entregue', codigoEntrega: codigoEsperado } : p)))
+      return
     }
 
     // otimista na tela + grava no banco (o cliente acompanha em tempo real)
     setPedidos(prev => prev.map(p => (p.id === id ? { ...p, status: novoStatus } : p)))
-    const { error } = await supabase.from('pedidos').update(patch).eq('id', id)
+    const { data, error } = await supabase
+      .from('pedidos')
+      .update(patch)
+      .eq('id', id)
+      .select('codigo_entrega')
+      .single()
     if (error) {
       console.error('Falha ao atualizar status', error)
       setPedidos(prev => prev.map(p => (p.id === id ? { ...p, status: atual.status } : p)))
+      return
+    }
+    if (data?.codigo_entrega) {
+      setPedidos(prev => prev.map(p => (p.id === id ? { ...p, codigoEntrega: data.codigo_entrega as string } : p)))
     }
   }
 

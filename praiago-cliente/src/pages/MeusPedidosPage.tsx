@@ -1,10 +1,14 @@
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ShoppingBag, Clock, Bike, CheckCircle2, RotateCcw, XCircle, LifeBuoy, Trash2 } from 'lucide-react'
+import { ShoppingBag, Clock, Bike, CheckCircle2, RotateCcw, XCircle, LifeBuoy, Trash2, Send, CreditCard } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { theme } from '../lib/theme'
 import { confirmDialog, alertDialog } from '../lib/dialog'
+import { verificarPagamento as verificarPagamentoServidor } from '../lib/pagamento'
 
 const STATUS_CFG = {
+  aguardando_pagamento: { label: 'Verificando pagamento', cor: '#d97706', bg: 'rgba(245,158,11,0.12)', icon: CreditCard },
+  enviado: { label: 'Pedido enviado', cor: '#0ea5e9', bg: 'rgba(14,165,233,0.12)', icon: Send },
   preparando: { label: 'Preparando', cor: '#f59e0b', bg: 'rgba(245,158,11,0.12)', icon: Clock },
   a_caminho:  { label: 'A caminho',  cor: '#0ea5e9', bg: 'rgba(14,165,233,0.12)', icon: Bike },
   entregue:   { label: 'Entregue',   cor: '#22c55e', bg: 'rgba(34,197,94,0.12)', icon: CheckCircle2 },
@@ -21,9 +25,68 @@ function fmtData(ts: number) {
 export default function MeusPedidosPage() {
   const navigate = useNavigate()
   const pedidos = useStore(s => s.pedidos)
+  const sincronizarPedidos = useStore(s => s.sincronizarPedidos)
   const cancelarPedido = useStore(s => s.cancelarPedido)
   const removerPedido = useStore(s => s.removerPedido)
   const solicitarAjudaPedido = useStore(s => s.solicitarAjudaPedido)
+  const [verificandoId, setVerificandoId] = useState<string | null>(null)
+
+  useEffect(() => {
+    let ativo = true
+    let ocupado = false
+
+    async function atualizar() {
+      await sincronizarPedidos()
+      const pendente = useStore.getState().pedidos.find(p => p.status === 'aguardando_pagamento')
+      if (!pendente || ocupado) return
+
+      ocupado = true
+      if (ativo) setVerificandoId(prev => prev ?? pendente.id)
+      try {
+        await verificarPagamentoServidor(pendente.id)
+        await sincronizarPedidos()
+      } catch {
+        // O botao manual continua disponivel se o gateway ou a rede falhar.
+      } finally {
+        if (ativo) setVerificandoId(prev => prev === pendente.id ? null : prev)
+        ocupado = false
+      }
+    }
+
+    void atualizar()
+    const timer = window.setInterval(() => { void atualizar() }, 12000)
+    return () => {
+      ativo = false
+      window.clearInterval(timer)
+    }
+  }, [sincronizarPedidos])
+
+  async function verificarPagamento(id: string, silencioso = false) {
+    setVerificandoId(id)
+    try {
+      const result = await verificarPagamentoServidor(id)
+      await sincronizarPedidos()
+      if (!silencioso) {
+        await alertDialog({
+          title: result.payment_status === 'aprovado' ? 'Pagamento aprovado' : 'Pagamento em verificacao',
+          message: result.payment_status === 'aprovado'
+            ? 'Pedido aprovado e enviado para o vendedor.'
+            : 'Ainda estamos aguardando a confirmacao do pagamento.',
+          tone: result.payment_status === 'aprovado' ? 'success' : 'default',
+        })
+      }
+    } catch (err) {
+      if (!silencioso) {
+        await alertDialog({
+          title: 'Nao foi possivel verificar',
+          message: err instanceof Error ? err.message : 'Tente novamente em instantes.',
+          tone: 'danger',
+        })
+      }
+    } finally {
+      setVerificandoId(null)
+    }
+  }
 
   async function cancelar(id: string) {
     const ok = await confirmDialog({
@@ -98,16 +161,30 @@ export default function MeusPedidosPage() {
                   </button>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: (p.status === 'preparando' || p.status === 'entregue' || p.status === 'cancelado') ? '1fr 1fr' : '1fr', gap: 8 }}>
-                  {p.status === 'preparando' && (
+                {p.status === 'aguardando_pagamento' && (
+                  <div style={{ fontSize: 12, lineHeight: 1.45, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, padding: '10px 12px', marginBottom: 12, fontWeight: 700 }}>
+                    Seu pedido so vai para o ambulante ou restaurante depois que o pagamento for aprovado.
+                  </div>
+                )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: (p.status === 'enviado' || p.status === 'preparando' || p.status === 'entregue' || p.status === 'cancelado') ? '1fr 1fr' : '1fr', gap: 8 }}>
+                  {p.status === 'aguardando_pagamento' && (
+                    <button disabled={verificandoId === p.id} onClick={() => verificarPagamento(p.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.24)', borderRadius: 12, padding: '10px 12px', color: '#b45309', fontSize: 12, fontWeight: 800, cursor: verificandoId === p.id ? 'default' : 'pointer' }}>
+                      <CreditCard size={14} /> {verificandoId === p.id ? 'Verificando...' : 'Verificar pagamento'}
+                    </button>
+                  )}
+
+                  {(p.status === 'enviado' || p.status === 'preparando') && (
                     <button onClick={() => cancelar(p.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.22)', borderRadius: 12, padding: '10px 12px', color: '#dc2626', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
                       <XCircle size={14} /> Cancelar
                     </button>
                   )}
 
-                  <button onClick={() => pedirAjuda(p.id, p.status === 'entregue' || p.status === 'cancelado' ? 'reembolso' : 'ajuda')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(14,165,233,0.08)', border: '1px solid rgba(14,165,233,0.2)', borderRadius: 12, padding: '10px 12px', color: '#0284c7', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
-                    <LifeBuoy size={14} /> {p.status === 'entregue' || p.status === 'cancelado' ? 'Reembolso' : 'Ajuda'}
-                  </button>
+                  {p.status !== 'aguardando_pagamento' && (
+                    <button onClick={() => pedirAjuda(p.id, p.status === 'entregue' || p.status === 'cancelado' ? 'reembolso' : 'ajuda')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(14,165,233,0.08)', border: '1px solid rgba(14,165,233,0.2)', borderRadius: 12, padding: '10px 12px', color: '#0284c7', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
+                      <LifeBuoy size={14} /> {p.status === 'entregue' || p.status === 'cancelado' ? 'Reembolso' : 'Ajuda'}
+                    </button>
+                  )}
 
                   {(p.status === 'entregue' || p.status === 'cancelado') && (
                     <button onClick={() => removerPedido(p.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: '#f8fafc', border: `1px solid ${theme.color.border}`, borderRadius: 12, padding: '10px 12px', color: '#64748b', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>

@@ -11,6 +11,7 @@ import AvaliacoesPage from './pages/AvaliacoesPage'
 import CardapioPage from './pages/CardapioPage'
 import PerfilPage from './pages/PerfilPage'
 import ZonasPage from './pages/ZonasPage'
+import CarteiraPage from './pages/CarteiraPage'
 import BottomNav from './components/BottomNav'
 import VerificationBar from './components/VerificationBar'
 import { DialogHost } from './lib/dialog'
@@ -19,7 +20,7 @@ import PasswordRecoveryHandler from './components/PasswordRecoveryHandler'
 import { useGPS } from './hooks/useGPS'
 import { useOrderNotifications } from './hooks/useOrderNotifications'
 
-const PUBLIC_ROUTES = ['/login', '/cadastro']
+const PUBLIC_ROUTES = ['/login']
 
 // Logo do PraiaGo Ambulante
 function LogoBar({ gpsStatus }: { gpsStatus: string }) {
@@ -215,11 +216,25 @@ function GlobalAvisoToast() {
   )
 }
 
+function KycLockedPanel() {
+  return (
+    <div style={{ padding: 24 }}>
+      <div style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: 18, padding: 18 }}>
+        <div style={{ fontSize: 18, fontWeight: 900, color: '#92400e', marginBottom: 6 }}>Verificacao obrigatoria</div>
+        <p style={{ margin: 0, color: '#92400e', fontSize: 14, lineHeight: 1.5, fontWeight: 600 }}>
+          Seu acesso operacional fica bloqueado ate o KYC ser aprovado. Envie CPF real, documento, selfie e local de atuacao acima. Enquanto isso voce nao aparece no mapa e nao pode criar produtos.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   const location = useLocation()
   const navigate = useNavigate()
   const isPublic = PUBLIC_ROUTES.includes(location.pathname)
   const sessao = useSessao()
+  const [kycLocked, setKycLocked] = useState(false)
 
   // GPS ativo em todo o app — transmite posição em tempo real
   const { status: gpsStatus } = useGPS()
@@ -228,29 +243,36 @@ export default function App() {
     if (!sessao?.id || isPublic) return
 
     let ativo = true
-    const bloquearSeBanido = (perfil?: { status?: string } | null) => {
+    const bloquearSeBanido = (perfil?: { status?: string; verificado?: boolean | null } | null) => {
       if (!ativo || perfil?.status !== 'banido') return
       logout()
       navigate('/login', { replace: true })
     }
+    const atualizarGate = (perfil?: { status?: string; verificado?: boolean | null } | null) => {
+      if (!ativo) return
+      bloquearSeBanido(perfil)
+      setKycLocked(perfil?.status !== 'banido' && perfil?.verificado !== true)
+    }
 
-    supabase
-      .from('profiles')
-      .select('status')
-      .eq('id', sessao.id)
-      .maybeSingle()
-      .then(({ data }) => bloquearSeBanido(data))
-
-    const channel = supabase
-      .channel(`ambulante_status_${sessao.id}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${sessao.id}` }, payload => {
-        bloquearSeBanido(payload.new as { status?: string })
-      })
+    const checarStatus = () => {
+      supabase
+        .from('profiles')
+        .select('status,verificado')
+        .eq('id', sessao.id)
+        .maybeSingle()
+        .then(({ data }) => atualizarGate(data))
+    }
+    checarStatus()
+    const channel = supabase.channel(`ambulante_kyc_gate_${sessao.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${sessao.id}` }, payload => atualizarGate(payload.new as { status?: string; verificado?: boolean | null }))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'verificacoes', filter: `user_id=eq.${sessao.id}` }, () => checarStatus())
       .subscribe()
+    const timer = window.setInterval(checarStatus, 10000)
 
     return () => {
       ativo = false
       supabase.removeChannel(channel)
+      window.clearInterval(timer)
     }
   }, [sessao?.id, isPublic, navigate])
 
@@ -263,22 +285,27 @@ export default function App() {
       {!isPublic && <LogoBar gpsStatus={gpsStatus} />}
       {!isPublic && <VerificationBar />}
       <main style={{ flex: 1, overflowY: 'auto', paddingBottom: isPublic ? 0 : '80px', position: 'relative' }}>
-        <AnimatePresence mode="wait">
-          <Routes location={location} key={location.pathname}>
-            <Route path="/login"    element={<PageWrapper><LoginPage /></PageWrapper>} />
-            <Route path="/"         element={<PageWrapper><DashboardPage /></PageWrapper>} />
-            <Route path="/pedidos"  element={<PageWrapper><PedidosPage /></PageWrapper>} />
-            <Route path="/vendas"   element={<PageWrapper><VendasPage /></PageWrapper>} />
-            <Route path="/avaliacoes" element={<PageWrapper><AvaliacoesPage /></PageWrapper>} />
-            <Route path="/cardapio" element={<PageWrapper><CardapioPage /></PageWrapper>} />
-            <Route path="/zonas"    element={<PageWrapper><ZonasPage /></PageWrapper>} />
-            <Route path="/perfil"   element={<PageWrapper><PerfilPage /></PageWrapper>} />
-          </Routes>
-        </AnimatePresence>
+        {!isPublic && kycLocked ? (
+          <KycLockedPanel />
+        ) : (
+          <AnimatePresence mode="wait">
+            <Routes location={location} key={location.pathname}>
+              <Route path="/login"    element={<PageWrapper><LoginPage /></PageWrapper>} />
+              <Route path="/"         element={<PageWrapper><DashboardPage /></PageWrapper>} />
+              <Route path="/pedidos"  element={<PageWrapper><PedidosPage /></PageWrapper>} />
+              <Route path="/vendas"   element={<PageWrapper><VendasPage /></PageWrapper>} />
+              <Route path="/avaliacoes" element={<PageWrapper><AvaliacoesPage /></PageWrapper>} />
+              <Route path="/cardapio" element={<PageWrapper><CardapioPage /></PageWrapper>} />
+              <Route path="/zonas"    element={<PageWrapper><ZonasPage /></PageWrapper>} />
+              <Route path="/perfil"   element={<PageWrapper><PerfilPage /></PageWrapper>} />
+              <Route path="/carteira" element={<PageWrapper><CarteiraPage /></PageWrapper>} />
+            </Routes>
+          </AnimatePresence>
+        )}
       </main>
-      {!isPublic && <BottomNav />}
-      {!isPublic && <AiChatbot plataforma="ambulante" />}
-      {!isPublic && <GlobalOrderToast />}
+      {!isPublic && !kycLocked && <BottomNav />}
+      {!isPublic && !kycLocked && <AiChatbot plataforma="ambulante" />}
+      {!isPublic && !kycLocked && <GlobalOrderToast />}
       {!isPublic && (
         <AnimatePresence>
           <GlobalAvisoToast />

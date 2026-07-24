@@ -14,8 +14,17 @@ import EventosPage from './pages/EventosPage'
 import CuponsPage from './pages/CuponsPage'
 import PromocoesPage from './pages/PromocoesPage'
 import FinanceiroPage from './pages/FinanceiroPage'
+import AdminsPage from './pages/AdminsPage'
 import Sidebar from './components/Sidebar'
 import { DialogHost } from './lib/dialog'
+
+export type PerfilAdmin = {
+  id: string
+  nome: string | null
+  email: string | null
+  role: string
+  permissions: string[] | null
+}
 
 function NotificationSystem() {
   const [notifications, setNotifications] = useState<any[]>([])
@@ -83,15 +92,6 @@ function NotificationSystem() {
           origem: p.cliente_nome || p.cliente || 'Cliente',
         })
       })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'event_ticket_notifications' }, (payload) => {
-        const n = payload.new
-        pushNotification({
-          id: n.id,
-          titulo: n.titulo || 'Ingresso vendido',
-          texto: n.mensagem || 'Pagamento aprovado. Entregue o ingresso pelo painel de eventos.',
-          origem: n.tipo || 'Ingressos',
-        })
-      })
       .subscribe()
 
     return () => {
@@ -136,6 +136,26 @@ export default function App() {
       return false
     }
   })
+  const [perfil, setPerfil] = useState<PerfilAdmin | null>(null)
+
+  // Carrega o perfil do admin logado (role + permissões) pra montar o menu
+  // e liberar/bloquear a página de Administradores.
+  useEffect(() => {
+    if (!isAdmin) { setPerfil(null); return }
+    let cancelado = false
+    async function carregar() {
+      const { data: u } = await supabase.auth.getUser()
+      if (!u.user) return
+      const { data } = await supabase
+        .from('profiles')
+        .select('id,nome,email,role,permissions')
+        .eq('id', u.user.id)
+        .maybeSingle()
+      if (!cancelado && data) setPerfil(data as PerfilAdmin)
+    }
+    carregar()
+    return () => { cancelado = true }
+  }, [isAdmin])
 
   function entrarAdmin() {
     try {
@@ -165,23 +185,35 @@ export default function App() {
     )
   }
 
+  // #22: enquanto o perfil não carregou, mostra loading — antes o refresh em /admins
+  // decidia com perfil=null e chutava o sysadmin pro dashboard.
+  if (isAdmin && perfil === null) {
+    return <div className="flex h-screen items-center justify-center bg-slate-950 text-slate-400 font-bold">Carregando painel…</div>
+  }
+
+  // #4: permissão por seção também nas ROTAS (não só no menu) — bloqueia acesso por URL.
+  const isSys = perfil?.role === 'sysadmin'
+  const podeVer = (secao: string) => isSys || !perfil?.permissions || perfil.permissions.includes(secao)
+  const guard = (secao: string, el: React.ReactNode) => (podeVer(secao) ? el : <Navigate to="/" replace />)
+
   return (
     <BrowserRouter>
       <div className="flex h-screen overflow-hidden">
-        <Sidebar onLogout={sairAdmin} />
+        <Sidebar onLogout={sairAdmin} perfil={perfil} />
         <main className="flex-1 overflow-y-auto bg-slate-950 p-8 relative">
           <NotificationSystem />
           <Routes>
-            <Route path="/" element={<DashboardPage />} />
-            <Route path="/pedidos" element={<PedidosPage />} />
-            <Route path="/usuarios" element={<UsuariosPage />} />
-            <Route path="/verificacoes" element={<VerificacoesPage />} />
-            <Route path="/atendimento/:plataforma" element={<AtendimentoPage />} />
-            <Route path="/eventos" element={<EventosPage />} />
-            <Route path="/cupons" element={<CuponsPage />} />
-            <Route path="/promocoes" element={<PromocoesPage />} />
-            <Route path="/financeiro" element={<FinanceiroPage />} />
-            <Route path="/erros" element={<ErrorsPage />} />
+            <Route path="/" element={guard('dashboard', <DashboardPage />)} />
+            <Route path="/pedidos" element={guard('pedidos', <PedidosPage />)} />
+            <Route path="/usuarios" element={guard('usuarios', <UsuariosPage />)} />
+            <Route path="/verificacoes" element={guard('verificacoes', <VerificacoesPage />)} />
+            <Route path="/atendimento/:plataforma" element={guard('atendimento', <AtendimentoPage />)} />
+            <Route path="/eventos" element={guard('eventos', <EventosPage />)} />
+            <Route path="/cupons" element={guard('cupons', <CuponsPage />)} />
+            <Route path="/promocoes" element={guard('promocoes', <PromocoesPage />)} />
+            <Route path="/financeiro" element={guard('financeiro', <FinanceiroPage />)} />
+            <Route path="/erros" element={guard('erros', <ErrorsPage />)} />
+            <Route path="/admins" element={perfil?.role === 'sysadmin' ? <AdminsPage /> : <Navigate to="/" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
