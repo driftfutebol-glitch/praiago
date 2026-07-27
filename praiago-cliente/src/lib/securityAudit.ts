@@ -16,7 +16,8 @@ export async function logSecurityEvent(
   metadata: Record<string, unknown> = {},
 ) {
   try {
-    // nao exige sessao: eventos pre-login (login_failed/access_denied/reset) sao os mais importantes
+    const { data: authData } = await supabase.auth.getSession()
+    if (!authData.session) return
     await supabase.rpc('log_security_event', {
       p_event_type: eventType,
       p_platform: 'cliente',

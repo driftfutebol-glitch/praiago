@@ -25,7 +25,7 @@ export default function PasswordRecoveryHandler() {
   if (!aberto) return null
 
   async function salvar() {
-    if (senha.length < 6) { setMsg('A nova senha precisa ter ao menos 6 caracteres.'); return }
+    if (senha.length < 10 || !/[A-Za-z]/.test(senha) || !/\d/.test(senha)) { setMsg('Use pelo menos 10 caracteres, com letras e numeros.'); return }
     if (senha !== confirma) { setMsg('As senhas nÃ£o conferem.'); return }
     setMsg('')
     setSalvando(true)
@@ -52,7 +52,7 @@ export default function PasswordRecoveryHandler() {
         </div>
         {!ok && (
           <>
-            <input type="password" value={senha} onChange={e => setSenha(e.target.value)} placeholder="Nova senha (mÃ­n. 6 caracteres)" style={inputStyle} />
+            <input type="password" value={senha} onChange={e => setSenha(e.target.value)} placeholder="Nova senha (min. 10 caracteres)" style={inputStyle} />
             <input type="password" value={confirma} onChange={e => setConfirma(e.target.value)} placeholder="Repita a nova senha" style={inputStyle} />
             <button
               onClick={salvar}

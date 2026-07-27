@@ -59,8 +59,8 @@ export default function PedidosPage() {
   async function finalizarEntrega(id: string) {
     const codigo = await promptDialog({
       title: 'Codigo de entrega',
-      message: 'Peca ao cliente o codigo de 4 digitos exibido no app dele para finalizar a entrega.',
-      placeholder: '0000',
+      message: 'Peca ao cliente o codigo de 6 digitos exibido no app dele para finalizar a entrega.',
+      placeholder: '000000',
     })
     if (codigo === null) return
     const ok = await avancar(id, codigo.trim())

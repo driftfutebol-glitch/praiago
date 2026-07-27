@@ -99,24 +99,6 @@ function isTestNotification(n: Pick<Notificacao, 'titulo' | 'texto'>) {
   return TEST_NOTIF_TITLES.some(t => haystack.includes(t))
 }
 
-function publicoDoVendedor(vendedorId: string) {
-  const tipo = getVendedor(vendedorId)?.tipo
-  if (tipo === 'restaurante') return 'restaurantes'
-  if (tipo === 'ambulante') return 'ambulantes'
-  return null
-}
-
-async function avisarVendedorSePossivel(pedido: Pedido, titulo: string, mensagem: string) {
-  const publico = publicoDoVendedor(pedido.vendedorId)
-  if (!publico) return
-  await supabase.from('avisos').insert({
-    titulo,
-    mensagem,
-    tipo: 'aviso',
-    publico,
-  })
-}
-
 async function getPaymentSettings() {
   const { data } = await supabase
     .from('payment_settings')
@@ -328,12 +310,6 @@ export const useStore = create<State>()(
           prioridade: 'alta',
         })
 
-        await avisarVendedorSePossivel(
-          pedido,
-          'Pedido cancelado',
-          `O pedido ${pedidoId.slice(0, 8)} foi cancelado pelo cliente. Confira a aba de pedidos.`,
-        )
-
         set(s => ({
           pedidos: s.pedidos.map(p => p.id === pedidoId ? { ...p, status: 'cancelado' } : p),
           notificacoes: [{
@@ -383,12 +359,6 @@ export const useStore = create<State>()(
             reembolso_solicitado_em: new Date().toISOString(),
           }).eq('id', pedidoId)
         }
-
-        await avisarVendedorSePossivel(
-          pedido,
-          tipo === 'reembolso' ? 'Pedido com solicitacao de reembolso' : 'Pedido precisa de atencao',
-          `Pedido ${pedidoId.slice(0, 8)} abriu atendimento. Acompanhe o painel e aguarde orientacao do suporte.`,
-        )
 
         set(s => ({
           notificacoes: [{

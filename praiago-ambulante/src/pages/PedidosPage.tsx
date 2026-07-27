@@ -39,7 +39,6 @@ type Pedido = {
   clienteLat: number
   clienteLng: number
   pagamento: string
-  codigoEntrega?: string | null
   isLive?: boolean
 }
 
@@ -286,7 +285,6 @@ function rowToPedido(row: Record<string, unknown>): Pedido {
     clienteLat: Number(row.lat) || -24.0228,
     clienteLng: Number(row.lng) || -46.4305,
     pagamento: String(row.pagamento ?? 'pix'),
-    codigoEntrega: (row.codigo_entrega as string) ?? null,
   }
 }
 
@@ -363,59 +361,42 @@ export default function PedidosPage() {
     const novoStatus = map[atual.status]
     const patch: Record<string, unknown> = { status: novoStatus }
 
-    // ANTI-MÁ-FÉ: pra marcar ENTREGUE, precisa do código que o cliente informa
-    // na entrega. Sem o código certo, não fecha (prova que a venda passou no app).
     if (novoStatus === 'entregue') {
-      let codigoEsperado = atual.codigoEntrega
-      if (!codigoEsperado) {
-        const { data } = await supabase
-          .from('pedidos')
-          .select('codigo_entrega')
-          .eq('id', id)
-          .single()
-        codigoEsperado = (data?.codigo_entrega as string | null) ?? null
-      }
-
-      if (!codigoEsperado) {
-        await alertDialog({ title: 'Codigo indisponivel', message: 'Envie o pedido para rota e aguarde o codigo aparecer no app do cliente antes de finalizar.', tone: 'danger' })
-        return
-      }
-
       const codigo = await promptDialog({
-        title: 'Código de entrega',
-        message: 'Peça ao cliente o código de 4 dígitos que aparece no app dele e digite aqui pra confirmar a entrega.',
-        placeholder: '0000',
+        title: 'Codigo de entrega',
+        message: 'Peca ao cliente o codigo de 6 digitos exibido no app dele.',
+        placeholder: '000000',
       })
       if (codigo === null) return
-      if (codigo.trim() !== codigoEsperado) {
-        await alertDialog({ title: 'Código errado', message: 'O código não confere. Confirme com o cliente — a entrega só fecha com o código certo.', tone: 'danger' })
+      if (!/^\d{6}$/.test(codigo.trim())) {
+        await alertDialog({ title: 'Codigo invalido', message: 'Digite exatamente os 6 numeros mostrados pelo cliente.', tone: 'danger' })
         return
       }
-      const { error } = await supabase.rpc('confirmar_entrega_pedido', { p_pedido_id: id, p_codigo: codigo.trim() })
+      const { data, error } = await supabase.rpc('confirmar_entrega_pedido', { p_pedido_id: id, p_codigo: codigo.trim() })
       if (error) {
         console.error('Falha ao confirmar entrega', error)
         await alertDialog({ title: 'Codigo nao confirmado', message: error.message || 'Confirme o codigo com o cliente e tente novamente.', tone: 'danger' })
         return
       }
-      setPedidos(prev => prev.map(p => (p.id === id ? { ...p, status: 'entregue', codigoEntrega: codigoEsperado } : p)))
+      const resultado = data as { ok?: boolean; message?: string } | null
+      if (!resultado?.ok) {
+        await alertDialog({ title: 'Codigo nao confirmado', message: resultado?.message || 'Confirme o codigo com o cliente e tente novamente.', tone: 'danger' })
+        return
+      }
+      setPedidos(prev => prev.map(p => (p.id === id ? { ...p, status: 'entregue' } : p)))
       return
     }
 
     // otimista na tela + grava no banco (o cliente acompanha em tempo real)
     setPedidos(prev => prev.map(p => (p.id === id ? { ...p, status: novoStatus } : p)))
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('pedidos')
       .update(patch)
       .eq('id', id)
-      .select('codigo_entrega')
-      .single()
     if (error) {
       console.error('Falha ao atualizar status', error)
       setPedidos(prev => prev.map(p => (p.id === id ? { ...p, status: atual.status } : p)))
       return
-    }
-    if (data?.codigo_entrega) {
-      setPedidos(prev => prev.map(p => (p.id === id ? { ...p, codigoEntrega: data.codigo_entrega as string } : p)))
     }
   }
 

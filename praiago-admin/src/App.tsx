@@ -17,6 +17,7 @@ import FinanceiroPage from './pages/FinanceiroPage'
 import AdminsPage from './pages/AdminsPage'
 import LocalizacoesPage from './pages/LocalizacoesPage'
 import Sidebar from './components/Sidebar'
+import PasswordRecoveryHandler from './components/PasswordRecoveryHandler'
 import { DialogHost } from './lib/dialog'
 
 export type PerfilAdmin = {
@@ -139,66 +140,92 @@ function NotificationSystem() {
 }
 
 export default function App() {
-  const [isAdmin, setIsAdmin] = useState(() => {
-    try {
-      return window.localStorage.getItem('praiago_admin_auth') === 'true'
-    } catch {
-      return false
-    }
-  })
+  const [authState, setAuthState] = useState<'loading' | 'guest' | 'admin'>('loading')
   const [perfil, setPerfil] = useState<PerfilAdmin | null>(null)
+  const [authCheck, setAuthCheck] = useState(0)
 
-  // Carrega o perfil do admin logado (role + permissões) pra montar o menu
-  // e liberar/bloquear a página de Administradores.
   useEffect(() => {
-    if (!isAdmin) { setPerfil(null); return }
     let cancelado = false
-    async function carregar() {
-      const { data: u } = await supabase.auth.getUser()
-      if (!u.user) return
-      const { data } = await supabase
+    async function validarAdmin() {
+      const { data: authData } = await supabase.auth.getUser()
+      if (!authData.user) {
+        if (!cancelado) {
+          setPerfil(null)
+          setAuthState('guest')
+        }
+        return
+      }
+
+      const { data: profile } = await supabase
         .from('profiles')
-        .select('id,nome,email,role,permissions')
-        .eq('id', u.user.id)
+        .select('id,nome,email,role,permissions,status')
+        .eq('id', authData.user.id)
         .maybeSingle()
-      if (!cancelado && data) setPerfil(data as PerfilAdmin)
+
+      const autorizado = (
+        (profile?.role === 'admin' || profile?.role === 'sysadmin')
+        && profile?.status !== 'banido'
+      )
+      if (!autorizado) {
+        await supabase.auth.signOut()
+        if (!cancelado) {
+          setPerfil(null)
+          setAuthState('guest')
+        }
+        return
+      }
+
+      if (!cancelado) {
+        setPerfil(profile as PerfilAdmin)
+        setAuthState('admin')
+      }
     }
-    carregar()
-    return () => { cancelado = true }
-  }, [isAdmin])
+
+    validarAdmin()
+    const { data } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        setPerfil(null)
+        setAuthState('guest')
+      } else {
+        window.setTimeout(validarAdmin, 0)
+      }
+    })
+
+    return () => {
+      cancelado = true
+      data.subscription.unsubscribe()
+    }
+  }, [authCheck])
 
   function entrarAdmin() {
-    try {
-      window.localStorage.setItem('praiago_admin_auth', 'true')
-    } catch {
-      // Mantem a sessao em memoria quando o navegador bloqueia storage.
-    }
-    setIsAdmin(true)
+    setAuthState('loading')
+    setAuthCheck(value => value + 1)
   }
 
-  function sairAdmin() {
-    try {
-      window.localStorage.removeItem('praiago_admin_auth')
-    } catch {
-      // Sem acao extra.
-    }
-    setIsAdmin(false)
+  async function sairAdmin() {
+    await supabase.auth.signOut()
+    setPerfil(null)
+    setAuthState('guest')
   }
 
-  if (!isAdmin) {
+  if (authState === 'loading') {
+    return <div className="flex h-screen items-center justify-center bg-slate-950 text-slate-400 font-bold">Carregando painel...</div>
+  }
+
+  if (authState === 'guest') {
     return (
       <BrowserRouter>
+        <PasswordRecoveryHandler />
         <Routes>
           <Route path="*" element={<LoginPage onLogin={entrarAdmin} />} />
         </Routes>
+        <DialogHost />
       </BrowserRouter>
     )
   }
 
-  // #22: enquanto o perfil não carregou, mostra loading — antes o refresh em /admins
-  // decidia com perfil=null e chutava o sysadmin pro dashboard.
-  if (isAdmin && perfil === null) {
-    return <div className="flex h-screen items-center justify-center bg-slate-950 text-slate-400 font-bold">Carregando painel…</div>
+  if (perfil === null) {
+    return <div className="flex h-screen items-center justify-center bg-slate-950 text-slate-400 font-bold">Carregando painel...</div>
   }
 
   // #4: permissão por seção também nas ROTAS (não só no menu) — bloqueia acesso por URL.
@@ -208,6 +235,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <PasswordRecoveryHandler />
       <div className="flex h-screen overflow-hidden">
         <Sidebar onLogout={sairAdmin} perfil={perfil} />
         <main className="flex-1 overflow-y-auto bg-slate-950 p-8 relative">

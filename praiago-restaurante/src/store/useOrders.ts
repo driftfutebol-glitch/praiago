@@ -18,7 +18,6 @@ export type Pedido = {
   hora: string
   entregador?: string
   pagamento: string
-  codigoEntrega?: string | null
   ts: number
 }
 
@@ -60,7 +59,6 @@ export const useOrders = create<State>((set, get) => ({
       status: row.status as Status,
       hora: 'agora',
       pagamento: row.pagamento,
-      codigoEntrega: row.codigo_entrega ?? null,
       ts: new Date(row.created_at).getTime()
     }))
     set({ pedidos: formatados })
@@ -73,11 +71,12 @@ export const useOrders = create<State>((set, get) => ({
     if (!next) return false
 
     if (next === 'entregue') {
-      const { error } = await supabase.rpc('confirmar_entrega_pedido', { p_pedido_id: id, p_codigo: codigoEntrega ?? '' })
+      const { data, error } = await supabase.rpc('confirmar_entrega_pedido', { p_pedido_id: id, p_codigo: codigoEntrega ?? '' })
       if (error) {
         console.error('Falha ao confirmar entrega', error)
         return false
       }
+      if (!(data as { ok?: boolean } | null)?.ok) return false
       set(s => ({ pedidos: s.pedidos.map(x => x.id === id ? { ...x, status: next } : x) }))
       await get().fetchOrders()
       return true

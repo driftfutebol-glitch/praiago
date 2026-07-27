@@ -259,8 +259,8 @@ export default function PerfilPage() {
     if (!/^\S+@\S+\.\S+$/.test(alvo)) { setErro('Informe seu e-mail valido para confirmar o codigo.'); return }
     const codigo = await promptDialog({ title: 'Código do e-mail', message: 'Digite o código que enviamos para o seu e-mail.', placeholder: '000000' })
     if (!codigo?.trim()) return
-    const novaSenha = await promptDialog({ title: 'Nova senha', message: 'Crie uma senha com pelo menos 6 caracteres.', placeholder: 'Nova senha', secret: true })
-    if (!novaSenha || novaSenha.length < 6) { setErro('A nova senha precisa ter ao menos 6 caracteres.'); return }
+    const novaSenha = await promptDialog({ title: 'Nova senha', message: 'Use pelo menos 10 caracteres, com letras e numeros.', placeholder: 'Nova senha', secret: true })
+    if (!novaSenha || novaSenha.length < 10 || !/[A-Za-z]/.test(novaSenha) || !/\d/.test(novaSenha)) { setErro('Use pelo menos 10 caracteres, com letras e numeros.'); return }
 
     const { error: otpError } = await supabase.auth.verifyOtp({ email: alvo, token: codigo.trim(), type: 'recovery' })
     if (otpError) { setErro('Codigo invalido ou expirado. Peca um novo codigo.'); return }
@@ -285,6 +285,7 @@ export default function PerfilPage() {
   async function entrar() {
     if (!/^\S+@\S+\.\S+$/.test(email)) { setErro('Informe um e-mail válido.'); return }
     if (senha.length < 6) { setErro('A senha precisa ter ao menos 6 caracteres.'); return }
+    if (tab === 'cadastro' && (senha.length < 10 || !/[A-Za-z]/.test(senha) || !/\d/.test(senha))) { setErro('Use pelo menos 10 caracteres, com letras e numeros.'); return }
     if (tab === 'cadastro' && !nome.trim()) { setErro('Informe seu nome.'); return }
     if (tab === 'cadastro' && !validarCpf(cpf)) { setErro('Informe um CPF valido para liberar pedidos e o cupom de boas-vindas.'); return }
     if (tab === 'cadastro' && !aceitouTermos) { setErro('Você precisa aceitar os Termos de Uso e a Política de Privacidade.'); return }
@@ -307,11 +308,16 @@ export default function PerfilPage() {
         
         const { data: profile } = await supabase
           .from('profiles')
-          .select('nome,status,ban_motivo')
-          .eq('email', email.trim().toLowerCase())
+          .select('nome,status,ban_motivo,role')
+          .eq('id', data.user?.id || '')
           .maybeSingle()
 
         if (data.user) {
+          if (profile?.role !== 'cliente') {
+            await supabase.auth.signOut()
+            await logSecurityEvent('access_denied', alvo, { reason: 'wrong_app_role', role: profile?.role ?? null })
+            throw new Error('Esta conta nao pertence ao aplicativo de cliente.')
+          }
           if (profile?.status === 'banido') {
             await supabase.auth.signOut()
             await logSecurityEvent('access_denied', alvo, { reason: 'banned', ban_motivo: profile.ban_motivo ?? null })
@@ -360,6 +366,16 @@ export default function PerfilPage() {
     setLoading(false)
     if (error) { setErro('Código inválido ou expirado. Confira ou toque em Reenviar.'); return }
     if (data.user) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role,status')
+        .eq('id', data.user.id)
+        .maybeSingle()
+      if (profile?.role !== 'cliente' || profile?.status === 'banido') {
+        await supabase.auth.signOut()
+        setErro('Esta conta nao pode acessar o aplicativo de cliente.')
+        return
+      }
       await logSecurityEvent('login_success', codigoEnvio, { via: 'signup_otp' })
       useStore.getState().login(data.user.id, codigoEnvio, nome || (data.user.user_metadata?.nome as string) || '')
       setCodigoEnvio(null); setErro('')

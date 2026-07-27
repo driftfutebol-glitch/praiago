@@ -243,28 +243,35 @@ export default function App() {
     if (!sessao?.id || isPublic) return
 
     let ativo = true
-    const bloquearSeBanido = (perfil?: { status?: string; verificado?: boolean | null } | null) => {
-      if (!ativo || perfil?.status !== 'banido') return
+    const bloquearAcessoInvalido = (perfil?: { status?: string; role?: string; verificado?: boolean | null } | null, userId?: string) => {
+      if (!ativo) return
+      if (perfil?.status !== 'banido' && perfil?.role === 'ambulante' && userId === sessao.id) return
       logout()
+      supabase.auth.signOut()
       navigate('/login', { replace: true })
     }
-    const atualizarGate = (perfil?: { status?: string; verificado?: boolean | null } | null) => {
+    const atualizarGate = (perfil?: { status?: string; role?: string; verificado?: boolean | null } | null, userId = sessao.id) => {
       if (!ativo) return
-      bloquearSeBanido(perfil)
+      bloquearAcessoInvalido(perfil, userId)
       setKycLocked(perfil?.status !== 'banido' && perfil?.verificado !== true)
     }
 
-    const checarStatus = () => {
-      supabase
+    const checarStatus = async () => {
+      const { data: authData } = await supabase.auth.getUser()
+      if (!authData.user) {
+        bloquearAcessoInvalido(null, undefined)
+        return
+      }
+      const { data } = await supabase
         .from('profiles')
-        .select('status,verificado')
+        .select('status,role,verificado')
         .eq('id', sessao.id)
         .maybeSingle()
-        .then(({ data }) => atualizarGate(data))
+      atualizarGate(data, authData.user.id)
     }
     checarStatus()
     const channel = supabase.channel(`ambulante_kyc_gate_${sessao.id}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${sessao.id}` }, payload => atualizarGate(payload.new as { status?: string; verificado?: boolean | null }))
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${sessao.id}` }, payload => atualizarGate(payload.new as { status?: string; role?: string; verificado?: boolean | null }))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'verificacoes', filter: `user_id=eq.${sessao.id}` }, () => checarStatus())
       .subscribe()
     const timer = window.setInterval(checarStatus, 10000)

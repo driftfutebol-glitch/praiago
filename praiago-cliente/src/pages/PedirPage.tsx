@@ -115,14 +115,19 @@ function RastreamentoModal({ vendedor, clientePos, pedidoId, onClose }: { vended
   // pelo app dele e a etapa muda aqui na hora).
   useEffect(() => {
     if (!pedidoId) return
-    supabase.from('pedidos').select('status, codigo_entrega').eq('id', pedidoId).single()
-      .then(({ data }) => { if (data?.status && DB_STATUS[data.status]) setStatus(DB_STATUS[data.status]); if (data?.codigo_entrega) setCodigoEntrega(data.codigo_entrega) })
+    supabase.from('pedidos').select('status').eq('id', pedidoId).single()
+      .then(({ data }) => {
+        if (data?.status && DB_STATUS[data.status]) setStatus(DB_STATUS[data.status])
+      })
+    supabase.rpc('obter_codigo_entrega', { p_pedido_id: pedidoId })
+      .then(({ data, error }) => {
+        if (!error && typeof data === 'string') setCodigoEntrega(data)
+      })
     const ch = supabase.channel(`pedido_${pedidoId}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pedidos', filter: `id=eq.${pedidoId}` }, (payload) => {
-        const row = payload.new as { status?: string; codigo_entrega?: string | null }
+        const row = payload.new as { status?: string }
         const st = row.status
         if (st && DB_STATUS[st]) setStatus(DB_STATUS[st])
-        if (row.codigo_entrega) setCodigoEntrega(row.codigo_entrega)
       })
       .subscribe()
     return () => { supabase.removeChannel(ch) }

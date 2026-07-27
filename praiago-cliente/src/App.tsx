@@ -117,19 +117,34 @@ export default function App() {
     if (!sessao?.id) return
 
     let ativo = true
-    const bloquearSeBanido = (perfil?: { status?: string } | null) => {
-      if (!ativo || perfil?.status !== 'banido') return
-      useStore.getState().logout()
-      navigate('/perfil', { replace: true })
+    const validarAcesso = (
+      userId?: string,
+      perfil?: { status?: string; role?: string } | null,
+    ) => {
+      if (!ativo) return
+      if (
+        userId !== sessao.id
+        || perfil?.role !== 'cliente'
+        || perfil?.status === 'banido'
+      ) {
+        useStore.getState().logout()
+        supabase.auth.signOut()
+        navigate('/perfil', { replace: true })
+      }
     }
 
-    const checarStatus = () => {
-      supabase
+    const checarStatus = async () => {
+      const { data: authData } = await supabase.auth.getUser()
+      if (!authData.user) {
+        validarAcesso(undefined, null)
+        return
+      }
+      const { data } = await supabase
         .from('profiles')
-        .select('status')
+        .select('status,role')
         .eq('id', sessao.id)
         .maybeSingle()
-        .then(({ data }) => bloquearSeBanido(data))
+      validarAcesso(authData.user.id, data)
     }
     checarStatus()
     const timer = window.setInterval(checarStatus, 30000)

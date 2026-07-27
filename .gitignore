@@ -24,6 +24,8 @@ supabase/.temp/
 *.jks
 key.properties
 google-services.json
+/praiago-cliente/release/
+/praiago-ambulante/release/
 
 # Apple signing / App Store Connect secrets
 *.p8

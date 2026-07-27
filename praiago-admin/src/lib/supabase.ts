@@ -5,6 +5,13 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || ''
 // exclusivamente em Edge Functions/servidor, nunca no bundle do painel.
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
 
+const recoveryUrl = typeof window === 'undefined'
+  ? ''
+  : `${window.location.hash || ''}${window.location.search || ''}`
+export const VEIO_DE_RECOVERY =
+  /(?:^|[?&#])type=recovery(?:&|$)/.test(recoveryUrl)
+  && /(?:^|[?&#])(?:access_token|token_hash|code)=/.test(recoveryUrl)
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     storageKey: 'praiago-admin-auth',

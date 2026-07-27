@@ -308,19 +308,17 @@ function lerEscalonamento(reply: string): Escalonamento | null {
   }
 }
 
-/** Abre o atendimento na fila de triagem, usando o token do proprio usuario (RLS). */
+/** Abre a triagem depois que o gateway validou o JWT e o contexto confirmou o usuario. */
 async function abrirTriagem(
   supabaseUrl: string,
-  anonKey: string,
-  authHeader: string,
+  serviceRoleKey: string,
   ctx: Contexto,
   esc: Escalonamento,
   plataforma: string,
   ultimaPergunta: string,
 ) {
-  if (!ctx.uid) return false
-  const cliente = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: authHeader, apikey: anonKey } },
+  if (!ctx.uid || !serviceRoleKey) return false
+  const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false },
   })
 
@@ -334,7 +332,7 @@ async function abrirTriagem(
     outro: "Atendimento",
   }
 
-  const { error } = await cliente.from("tickets").insert({
+  const { error } = await admin.from("tickets").insert({
     plataforma,
     usuario_id: ctx.uid,
     usuario_nome: ctx.nome || "Usuario PraiaGo",
@@ -381,6 +379,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? ""
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
   // Prioriza a chave que o proprio app enviou (sempre valida, ja que a
   // requisicao chegou); o env fica de reserva. Sem isso, projetos com o
   // formato novo de chave (sb_publishable_) ficavam sem contexto.
@@ -445,7 +444,7 @@ Deno.serve(async (req: Request) => {
   if (esc && ctx.uid) {
     const ultima = [...messages].reverse().find((m) => m.role === "user")?.content ?? ""
     try {
-      triagemAberta = await abrirTriagem(supabaseUrl, anonKey, authHeader, ctx, esc, plataforma, ultima)
+      triagemAberta = await abrirTriagem(supabaseUrl, serviceRoleKey, ctx, esc, plataforma, ultima)
     } catch (erro) {
       console.error("Erro ao abrir triagem", erro instanceof Error ? erro.message : erro)
     }

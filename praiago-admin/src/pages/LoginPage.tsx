@@ -8,6 +8,7 @@ export default function LoginPage({ onLogin }: { onLogin: () => void }) {
   const [user, setUser] = useState('')
   const [pass, setPass] = useState('')
   const [erro, setErro] = useState('')
+  const [recuperando, setRecuperando] = useState(false)
 
   async function handleLogin() {
     setErro('')
@@ -35,6 +36,22 @@ export default function LoginPage({ onLogin }: { onLogin: () => void }) {
       await logSecurityEvent('suspicious_activity', null, { reason: 'admin_login_invalid_identifier', identifier_length: user.length })
     }
     setErro('ACESSO NEGADO. USE UMA CONTA ADMIN DO SUPABASE AUTH.')
+  }
+
+  async function recuperarSenha() {
+    const email = user.trim().toLowerCase()
+    if (!/^\S+@\S+\.\S+$/.test(email)) {
+      setErro('INFORME O E-MAIL DA CONTA ADMIN.')
+      return
+    }
+    setRecuperando(true)
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin,
+    })
+    setRecuperando(false)
+    setErro(error
+      ? 'NAO FOI POSSIVEL ENVIAR AGORA. AGUARDE E TENTE NOVAMENTE.'
+      : 'SE A CONTA EXISTIR, O LINK DE RECUPERACAO FOI ENVIADO.')
   }
 
   return (
@@ -93,6 +110,13 @@ export default function LoginPage({ onLogin }: { onLogin: () => void }) {
             className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-4 rounded-lg mt-4 transition-colors tracking-widest flex items-center justify-center gap-2"
           >
             AUTENTICAR
+          </button>
+          <button
+            onClick={recuperarSenha}
+            disabled={recuperando}
+            className="w-full py-2 text-xs font-bold tracking-widest text-slate-400 hover:text-slate-200 disabled:opacity-50"
+          >
+            {recuperando ? 'ENVIANDO...' : 'RECUPERAR SENHA'}
           </button>
         </div>
       </motion.div>

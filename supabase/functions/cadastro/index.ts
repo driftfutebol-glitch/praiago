@@ -34,7 +34,9 @@ Deno.serve(async (req: Request) => {
     const ip = clientIp(req)
 
     if (!/^\S+@\S+\.\S+$/.test(email)) return json({ error: 'E-mail inválido.' }, { status: 400 })
-    if (senha.length < 6) return json({ error: 'A senha precisa de ao menos 6 caracteres.' }, { status: 400 })
+    if (senha.length < 10 || !/[A-Za-z]/.test(senha) || !/\d/.test(senha)) {
+      return json({ error: 'Use pelo menos 10 caracteres, com letras e numeros.' }, { status: 400 })
+    }
 
     const url = Deno.env.get('SUPABASE_URL')!
     const admin = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } })
@@ -87,7 +89,11 @@ Deno.serve(async (req: Request) => {
 
     // 5) cria a conta (envia e-mail de verificação)
     const anon = createClient(url, Deno.env.get('SUPABASE_ANON_KEY')!, { auth: { persistSession: false } })
-    const { data: signUpData, error } = await anon.auth.signUp({ email, password: senha, options: { data: metadata, emailRedirectTo: body.emailRedirectTo } })
+    const { data: signUpData, error } = await anon.auth.signUp({
+      email,
+      password: senha,
+      options: { data: metadata },
+    })
     if (error) {
       const status = (error as { status?: number }).status === 429 ? 429 : 400
       return json({ error: error.message, code: 'signup_error' }, { status })

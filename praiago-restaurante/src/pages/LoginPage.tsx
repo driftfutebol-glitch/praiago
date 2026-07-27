@@ -131,8 +131,8 @@ export default function LoginPage() {
     if (!emailValido(alvo)) { setErro('Informe seu e-mail valido para confirmar o codigo.'); return }
     const codigo = await promptDialog({ title: 'Código do e-mail', message: 'Digite o código que enviamos para o seu e-mail.', placeholder: '000000' })
     if (!codigo?.trim()) return
-    const novaSenha = await promptDialog({ title: 'Nova senha', message: 'Crie uma senha com pelo menos 6 caracteres.', placeholder: 'Nova senha', secret: true })
-    if (!novaSenha || novaSenha.length < 6) { setErro('A nova senha precisa ter ao menos 6 caracteres.'); return }
+    const novaSenha = await promptDialog({ title: 'Nova senha', message: 'Use pelo menos 10 caracteres, com letras e numeros.', placeholder: 'Nova senha', secret: true })
+    if (!novaSenha || novaSenha.length < 10 || !/[A-Za-z]/.test(novaSenha) || !/\d/.test(novaSenha)) { setErro('Use pelo menos 10 caracteres, com letras e numeros.'); return }
 
     const { error: otpError } = await supabase.auth.verifyOtp({ email: alvo, token: codigo.trim(), type: 'recovery' })
     if (otpError) { setErro('Codigo invalido ou expirado. Peca um novo codigo.'); return }
@@ -292,6 +292,7 @@ export default function LoginPage() {
     const emailNormalizado = normalizarEmail()
     if (!emailValido(emailNormalizado)) { setErro('Informe um e-mail valido e real.'); setEmailStatus('invalido'); return }
     if (senha.length < 6) { setErro('A senha precisa ter ao menos 6 caracteres.'); return }
+    if (!isLogin && (senha.length < 10 || !/[A-Za-z]/.test(senha) || !/\d/.test(senha))) { setErro('Use pelo menos 10 caracteres, com letras e numeros.'); return }
     setErro('')
     setLoading(true)
 
@@ -309,10 +310,15 @@ export default function LoginPage() {
         if (data.user) {
           const { data: perfil } = await supabase
             .from('profiles')
-            .select('status,ban_motivo,nome,email')
+            .select('status,ban_motivo,nome,email,role')
             .eq('id', data.user.id)
             .maybeSingle()
 
+          if (perfil?.role !== 'restaurante') {
+            await supabase.auth.signOut()
+            await logSecurityEvent('access_denied', emailNormalizado, { reason: 'wrong_app_role', role: perfil?.role ?? null })
+            throw new Error('Esta conta nao pertence ao painel de restaurante.')
+          }
           if (perfil?.status === 'banido') {
             await supabase.auth.signOut()
             await logSecurityEvent('access_denied', emailNormalizado, { reason: 'banned', ban_motivo: perfil.ban_motivo ?? null })
@@ -371,7 +377,18 @@ export default function LoginPage() {
         if (!codigo?.trim()) { setErro('Conta criada! Confirme com o código do e-mail (ou clique no link) e faça login.'); setIsLogin(true); return }
         const { data: otp, error: otpErr } = await supabase.auth.verifyOtp({ email: emailNormalizado, token: codigo.trim(), type: 'signup' })
         if (otpErr) { setErro('Código inválido ou expirado. Quando confirmar, entre em "Tenho código".'); setIsLogin(true); return }
-        if (otp.user) { login(otp.user.id, emailNormalizado, nomeLoja.trim() || undefined); navigate('/'); return }
+        if (otp.user) {
+          const { data: perfil } = await supabase.from('profiles').select('role,status').eq('id', otp.user.id).maybeSingle()
+          if (perfil?.role !== 'restaurante' || perfil?.status === 'banido') {
+            await supabase.auth.signOut()
+            setErro('Esta conta nao pode acessar o painel de restaurante.')
+            setIsLogin(true)
+            return
+          }
+          login(otp.user.id, emailNormalizado, nomeLoja.trim() || undefined)
+          navigate('/')
+          return
+        }
         setIsLogin(true)
         return
       }
