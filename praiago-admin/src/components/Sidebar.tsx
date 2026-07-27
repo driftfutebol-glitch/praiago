@@ -6,7 +6,7 @@ import type { PerfilAdmin } from '../App'
 import {
   Activity, Package, Users, AlertOctagon, LogOut, ShieldAlert,
   ShieldCheck, Headphones, ChevronDown, CalendarDays, LayoutGrid,
-  Smartphone, TabletSmartphone, UtensilsCrossed, Umbrella, UserCircle, Ticket, Megaphone, WalletCards
+  Smartphone, TabletSmartphone, UtensilsCrossed, Umbrella, UserCircle, Ticket, Megaphone, WalletCards, MapPin
 } from 'lucide-react'
 
 const atendimentoSubItems = [
@@ -27,6 +27,7 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
 
 export default function Sidebar({ onLogout, perfil }: { onLogout: () => void; perfil: PerfilAdmin | null }) {
   const [pendingVerificacoes, setPendingVerificacoes] = useState(0)
+  const [pendingLocalizacoes, setPendingLocalizacoes] = useState(0)
   const [ticketsAbertos, setTicketsAbertos] = useState(0)
   const [atendimentoOpen, setAtendimentoOpen] = useState(false)
   const location = useLocation()
@@ -53,6 +54,26 @@ export default function Sidebar({ onLogout, perfil }: { onLogout: () => void; pe
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets' }, () => fetchTickets())
       .subscribe()
     return () => { supabase.removeChannel(ch) }
+  }, [])
+
+  useEffect(() => {
+    async function fetchPendingLocalizacoes() {
+      const { count } = await supabase
+        .from('solicitacoes_correcao_localizacao')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pendente')
+      setPendingLocalizacoes(count || 0)
+    }
+    fetchPendingLocalizacoes()
+    const channel = supabase
+      .channel('sidebar_localizacoes')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'solicitacoes_correcao_localizacao',
+      }, fetchPendingLocalizacoes)
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
   }, [])
 
   useEffect(() => {
@@ -95,6 +116,7 @@ export default function Sidebar({ onLogout, perfil }: { onLogout: () => void; pe
   ].filter(m => podeVer(m.key))
 
   const verVerificacoes = podeVer('verificacoes')
+  const verLocalizacoes = podeVer('usuarios')
   const verAtendimento = podeVer('atendimento')
   const verErros = podeVer('erros')
 
@@ -127,6 +149,22 @@ export default function Sidebar({ onLogout, perfil }: { onLogout: () => void; pe
             {m.label}
           </NavLink>
         ))}
+
+        {verLocalizacoes && (
+          <NavLink to="/localizacoes" className={linkClass}>
+            <MapPin size={18} />
+            <span className="flex-1">Correcoes de local</span>
+            {pendingLocalizacoes > 0 && (
+              <motion.span
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                className="min-w-[22px] h-[22px] flex items-center justify-center bg-amber-500 text-slate-950 text-[10px] font-black rounded-full"
+              >
+                {pendingLocalizacoes}
+              </motion.span>
+            )}
+          </NavLink>
+        )}
 
         {verVerificacoes && (
           <NavLink to="/verificacoes" className={linkClass}>

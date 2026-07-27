@@ -36,6 +36,14 @@ const PUBLIC = ['/login']
 
 const NOTIFS: any[] = []
 
+type LocationNotice = {
+  id: string
+  status: 'aprovada' | 'rejeitada'
+  observacao_admin: string | null
+  autorizado_ate: string | null
+  updated_at: string
+}
+
 function playAvisoSound() {
   try {
     const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext
@@ -61,7 +69,7 @@ function playAvisoSound() {
   }
 }
 
-function GlobalAvisoToast() {
+function GlobalAvisoToast({ locationNotice }: { locationNotice: LocationNotice | null }) {
   const [aviso, setAviso] = useState<{ id?: string; titulo?: string; mensagem?: string; cupom_codigo?: string | null } | null>(null)
 
   useEffect(() => {
@@ -78,6 +86,22 @@ function GlobalAvisoToast() {
 
     return () => { supabase.removeChannel(channel) }
   }, [])
+
+  useEffect(() => {
+    if (!locationNotice) return
+    const aprovado = locationNotice.status === 'aprovada'
+    const row = {
+      id: `local-${locationNotice.id}-${locationNotice.updated_at}`,
+      titulo: aprovado ? 'Correcao de localizacao autorizada' : 'Solicitacao de localizacao revisada',
+      mensagem: aprovado
+        ? 'Acesse Perfil, va ate o restaurante e grave o novo ponto fixo.'
+        : (locationNotice.observacao_admin || 'A solicitacao nao foi autorizada. Confira o motivo no Perfil.'),
+    }
+    setAviso(row)
+    playAvisoSound()
+    const timer = window.setTimeout(() => setAviso(current => current?.id === row.id ? null : current), 10000)
+    return () => window.clearTimeout(timer)
+  }, [locationNotice])
 
   if (!aviso) return null
 
@@ -136,6 +160,7 @@ export default function App() {
   const [aberto, setAberto]       = useState(true)
   const [notifOpen, setNotifOpen] = useState(false)
   const [kycLocked, setKycLocked] = useState(false)
+  const [locationNotice, setLocationNotice] = useState<LocationNotice | null>(null)
 
   const pedidos = useOrders(s => s.pedidos)            // referência estável
   const pedidosNovos = pedidos.filter(p => p.status === 'novo')
@@ -181,8 +206,56 @@ export default function App() {
     }
   }, [sessao?.id, isPublic, navigate])
 
+  useEffect(() => {
+    if (!sessao?.id || isPublic) {
+      setLocationNotice(null)
+      return
+    }
+
+    let ativo = true
+    supabase
+      .from('solicitacoes_correcao_localizacao')
+      .select('id,status,observacao_admin,autorizado_ate,updated_at')
+      .eq('restaurante_id', sessao.id)
+      .in('status', ['aprovada', 'rejeitada'])
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (ativo) setLocationNotice((data as LocationNotice | null) ?? null)
+      })
+
+    const channel = supabase
+      .channel(`correcao_local_aviso_${sessao.id}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'solicitacoes_correcao_localizacao',
+        filter: `restaurante_id=eq.${sessao.id}`,
+      }, payload => {
+        const row = payload.new as LocationNotice & { status: string }
+        setLocationNotice(row.status === 'aprovada' || row.status === 'rejeitada'
+          ? row as LocationNotice
+          : null)
+      })
+      .subscribe()
+
+    return () => {
+      ativo = false
+      supabase.removeChannel(channel)
+    }
+  }, [sessao?.id, isPublic])
+
   // Notificacoes: pedidos novos reais + alertas operacionais
   const notifs = [
+    ...(locationNotice ? [{
+      id: `local-${locationNotice.id}`,
+      msg: locationNotice.status === 'aprovada'
+        ? 'Correcao de localizacao autorizada. Abra o Perfil para gravar o novo ponto.'
+        : `Correcao de localizacao nao autorizada${locationNotice.observacao_admin ? `: ${locationNotice.observacao_admin}` : '.'}`,
+      time: 'instantes',
+      cor: locationNotice.status === 'aprovada' ? '#16a34a' : '#ef4444',
+    }] : []),
     ...pedidosNovos.slice(0, 3).map(p => ({ id: p.id, msg: `Novo pedido ${p.id} — ${p.cliente}`, time: p.hora, cor: '#f97316' })),
     ...NOTIFS,
   ].slice(0, 5)
@@ -424,7 +497,7 @@ export default function App() {
         {!isPublic && !kycLocked && <AiChatbot plataforma="restaurante" />}
         {!isPublic && (
           <AnimatePresence>
-            <GlobalAvisoToast />
+            <GlobalAvisoToast locationNotice={locationNotice} />
           </AnimatePresence>
         )}
       </main>

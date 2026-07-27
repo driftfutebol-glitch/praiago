@@ -15,6 +15,7 @@ import CuponsPage from './pages/CuponsPage'
 import PromocoesPage from './pages/PromocoesPage'
 import FinanceiroPage from './pages/FinanceiroPage'
 import AdminsPage from './pages/AdminsPage'
+import LocalizacoesPage from './pages/LocalizacoesPage'
 import Sidebar from './components/Sidebar'
 import { DialogHost } from './lib/dialog'
 
@@ -90,6 +91,15 @@ function NotificationSystem() {
           titulo: 'Novo pedido recebido',
           texto: `Pedido ${p.id?.slice?.(0, 8) || ''} no valor de R$ ${Number(p.total || 0).toFixed(2).replace('.', ',')}`,
           origem: p.cliente_nome || p.cliente || 'Cliente',
+        })
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'solicitacoes_correcao_localizacao' }, (payload) => {
+        const pedido = payload.new
+        pushNotification({
+          id: pedido.id,
+          titulo: 'Correcao de localizacao',
+          texto: pedido.motivo || 'Restaurante solicitou autorizacao para corrigir o ponto fixo.',
+          origem: pedido.restaurante_id || 'Restaurante',
         })
       })
       .subscribe()
@@ -206,6 +216,7 @@ export default function App() {
             <Route path="/" element={guard('dashboard', <DashboardPage />)} />
             <Route path="/pedidos" element={guard('pedidos', <PedidosPage />)} />
             <Route path="/usuarios" element={guard('usuarios', <UsuariosPage />)} />
+            <Route path="/localizacoes" element={guard('usuarios', <LocalizacoesPage />)} />
             <Route path="/verificacoes" element={guard('verificacoes', <VerificacoesPage />)} />
             <Route path="/atendimento/:plataforma" element={guard('atendimento', <AtendimentoPage />)} />
             <Route path="/eventos" element={guard('eventos', <EventosPage />)} />

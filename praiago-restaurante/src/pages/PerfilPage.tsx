@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Bell, ChevronRight, Clock, CreditCard, HelpCircle, Loader2, LogOut, MapPin, Phone, Shield, Star, Store, TrendingUp, Wallet } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { Bell, CheckCircle2, ChevronRight, Clock, CreditCard, HelpCircle, Loader2, LogOut, MapPin, Phone, Send, Shield, Star, Store, TrendingUp, Wallet, XCircle } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
@@ -12,6 +12,17 @@ type PerfilInfo = {
   totalAvaliacoes: number
   telefone: string | null
   endereco: string | null
+}
+
+type SolicitacaoLocalizacao = {
+  id: string
+  status: 'pendente' | 'aprovada' | 'rejeitada' | 'utilizada' | 'cancelada'
+  motivo: string
+  observacao_admin: string | null
+  solicitado_em: string
+  revisado_em: string | null
+  autorizado_ate: string | null
+  utilizado_em: string | null
 }
 
 type Painel = 'notificacoes' | 'seguranca' | 'ajuda'
@@ -67,12 +78,28 @@ export default function PerfilPage() {
   const [horaFecha, setHoraFecha] = useState('')
   const [salvandoHorario, setSalvandoHorario] = useState(false)
   const [horarioMsg, setHorarioMsg] = useState('')
-  // Localizacao FIXA da loja (ponto no mapa). Nao segue o GPS do celular —
-  // o dono crava uma vez, dentro da loja, e fica travado ali.
+  // O ponto da loja e fixo. Depois de definido, so muda com uma autorizacao
+  // administrativa de uso unico.
   const [lat, setLat] = useState<number | null>(null)
   const [lng, setLng] = useState<number | null>(null)
   const [salvandoLocal, setSalvandoLocal] = useState(false)
   const [localMsg, setLocalMsg] = useState('')
+  const [solicitacaoLocal, setSolicitacaoLocal] = useState<SolicitacaoLocalizacao | null>(null)
+  const [motivoCorrecao, setMotivoCorrecao] = useState('')
+  const [novoEndereco, setNovoEndereco] = useState('')
+  const [enviandoSolicitacao, setEnviandoSolicitacao] = useState(false)
+
+  const carregarSolicitacaoLocal = useCallback(async () => {
+    if (!sessao?.id) return
+    const { data } = await supabase
+      .from('solicitacoes_correcao_localizacao')
+      .select('id,status,motivo,observacao_admin,solicitado_em,revisado_em,autorizado_ate,utilizado_em')
+      .eq('restaurante_id', sessao.id)
+      .order('solicitado_em', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    setSolicitacaoLocal((data as SolicitacaoLocalizacao | null) ?? null)
+  }, [sessao?.id])
 
   useEffect(() => {
     if (!sessao) return
@@ -95,6 +122,7 @@ export default function PerfilPage() {
         setHoraFecha(data.horario_fecha || '')
         setLat(data.lat != null ? Number(data.lat) : null)
         setLng(data.lng != null ? Number(data.lng) : null)
+        setNovoEndereco(data.endereco || '')
       })
 
     const inicioMes = new Date()
@@ -120,6 +148,21 @@ export default function PerfilPage() {
       .then(({ data }) => setPixKey(data?.pix_key || ''))
   }, [sessao])
 
+  useEffect(() => {
+    if (!sessao?.id) return
+    carregarSolicitacaoLocal()
+    const channel = supabase
+      .channel(`correcao_local_perfil_${sessao.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'solicitacoes_correcao_localizacao',
+        filter: `restaurante_id=eq.${sessao.id}`,
+      }, () => carregarSolicitacaoLocal())
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [sessao?.id, carregarSolicitacaoLocal])
+
   async function salvarHorario() {
     if (!sessao) return
     setSalvandoHorario(true)
@@ -133,21 +176,64 @@ export default function PerfilPage() {
     setTimeout(() => setHorarioMsg(''), 3500)
   }
 
-  async function definirLocalizacao() {
+  async function solicitarCorrecaoLocalizacao() {
     if (!sessao) return
+    const motivo = motivoCorrecao.trim()
+    if (motivo.length < 8) {
+      setLocalMsg('Explique em poucas palavras por que o ponto atual esta errado.')
+      return
+    }
+    setEnviandoSolicitacao(true)
+    setLocalMsg('')
+    const { data, error } = await supabase.rpc('solicitar_correcao_localizacao', {
+      p_motivo: motivo,
+    })
+    setEnviandoSolicitacao(false)
+    if (error) {
+      setLocalMsg(error.message.includes('Ja existe')
+        ? 'Ja existe uma solicitacao aguardando analise.'
+        : 'Nao foi possivel enviar a solicitacao. Tente novamente.')
+      return
+    }
+    setSolicitacaoLocal(data as SolicitacaoLocalizacao)
+    setMotivoCorrecao('')
+    setLocalMsg('Solicitacao enviada ao painel PraiaGo. Voce sera avisado quando for revisada.')
+  }
+
+  async function aplicarCorrecaoLocalizacao() {
+    if (!sessao || !solicitacaoLocal || solicitacaoLocal.status !== 'aprovada') return
+    const endereco = novoEndereco.trim()
+    if (endereco.length < 5) {
+      setLocalMsg('Informe o endereco correto da loja antes de capturar o GPS.')
+      return
+    }
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       setLocalMsg('Seu aparelho nao tem GPS disponivel.'); return
     }
-    setSalvandoLocal(true); setLocalMsg('Pegando sua posicao atual...')
+    setSalvandoLocal(true)
+    setLocalMsg('Capturando o GPS da loja...')
     navigator.geolocation.getCurrentPosition(
       async (p) => {
         const novaLat = p.coords.latitude
         const novaLng = p.coords.longitude
-        const { error } = await supabase.from('profiles').update({ lat: novaLat, lng: novaLng }).eq('id', sessao.id)
+        const { data, error } = await supabase.rpc('aplicar_correcao_localizacao', {
+          p_solicitacao_id: solicitacaoLocal.id,
+          p_lat: novaLat,
+          p_lng: novaLng,
+          p_endereco: endereco,
+        })
         setSalvandoLocal(false)
-        if (error) { setLocalMsg('Nao deu pra salvar. Tente de novo.'); return }
-        setLat(novaLat); setLng(novaLng)
-        setLocalMsg('Ponto da loja fixado aqui! ✅ Ja aparece no mapa dos clientes.')
+        if (error) {
+          setLocalMsg(error.message.includes('expirou')
+            ? 'A autorizacao expirou. Envie uma nova solicitacao.'
+            : 'Nao foi possivel corrigir o ponto. Tente novamente.')
+          return
+        }
+        setLat(novaLat)
+        setLng(novaLng)
+        setPerfil(atual => ({ ...atual, endereco }))
+        setSolicitacaoLocal(data as SolicitacaoLocalizacao)
+        setLocalMsg('Localizacao corrigida e travada no novo ponto.')
         setTimeout(() => setLocalMsg(''), 6000)
       },
       () => { setSalvandoLocal(false); setLocalMsg('Precisamos da permissao de localizacao. Ative o GPS e permita o acesso.') },
@@ -173,6 +259,11 @@ export default function PerfilPage() {
     logout()
     navigate('/login')
   }
+
+  const autorizacaoValida = solicitacaoLocal?.status === 'aprovada'
+    && Boolean(solicitacaoLocal.autorizado_ate)
+    && new Date(solicitacaoLocal.autorizado_ate as string).getTime() > Date.now()
+  const aguardandoAnalise = solicitacaoLocal?.status === 'pendente'
 
   return (
     <div style={{ padding: '32px 40px 48px', minHeight: '100vh' }}>
@@ -250,26 +341,107 @@ export default function PerfilPage() {
 
       <InfoCard title="Localizacao da loja (ponto fixo)" icon={<MapPin size={16} color="#f43f5e" />}>
         <p style={{ fontSize: 13, color: '#64748b', fontWeight: 500, margin: 0 }}>
-          Defina <strong>uma vez, dentro da loja</strong>. O ponto fica <strong>fixo</strong> no mapa dos clientes — nao muda quando voce abre o app em outro lugar.
+          O restaurante nao se move: este ponto fica <strong>fixo</strong> no mapa. Para corrigir um ponto errado, envie uma solicitacao e aguarde a autorizacao PraiaGo.
         </p>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: (lat != null && lng != null) ? 'rgba(34,197,94,0.08)' : 'rgba(245,158,11,0.08)', border: `1px solid ${(lat != null && lng != null) ? 'rgba(34,197,94,0.25)' : 'rgba(245,158,11,0.25)'}`, borderRadius: 14, padding: '12px 14px' }}>
           <MapPin size={18} color={(lat != null && lng != null) ? '#16a34a' : '#d97706'} />
           <div style={{ flex: 1, fontSize: 13, fontWeight: 800, color: (lat != null && lng != null) ? '#15803d' : '#b45309' }}>
             {(lat != null && lng != null)
-              ? `Ponto fixado ✅ (${lat.toFixed(5)}, ${lng.toFixed(5)})`
+              ? `Ponto fixo atual (${lat.toFixed(5)}, ${lng.toFixed(5)})`
               : 'Sem ponto definido — sua loja ainda nao aparece no mapa.'}
           </div>
+          {lat != null && lng != null && (
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`}
+              target="_blank"
+              rel="noreferrer"
+              style={{ color: '#0284c7', fontSize: 12, fontWeight: 900, textDecoration: 'none' }}
+            >
+              Ver mapa
+            </a>
+          )}
         </div>
-        <button
-          type="button"
-          onClick={definirLocalizacao}
-          disabled={salvandoLocal}
-          style={{ width: '100%', border: '1px solid rgba(244,63,94,0.25)', background: '#fff1f2', color: '#e11d48', borderRadius: 16, padding: 16, fontSize: 14, fontWeight: 900, cursor: salvandoLocal ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
-        >
-          {salvandoLocal ? <Loader2 size={18} className="animate-spin-slow" /> : <MapPin size={18} />}
-          {salvandoLocal ? 'Pegando GPS...' : (lat != null && lng != null) ? 'Atualizar ponto (estou na loja agora)' : 'Usar minha localizacao como ponto da loja'}
-        </button>
-        {localMsg && <div style={{ color: localMsg.includes('✅') ? '#16a34a' : localMsg.includes('...') ? '#64748b' : '#ef4444', fontSize: 13, fontWeight: 800 }}>{localMsg}</div>}
+
+        {aguardandoAnalise && solicitacaoLocal && (
+          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', border: '1px solid rgba(245,158,11,0.3)', background: '#fffbeb', borderRadius: 16, padding: 14 }}>
+            <Clock size={20} color="#d97706" />
+            <div>
+              <div style={{ color: '#92400e', fontSize: 14, fontWeight: 900 }}>Aguardando aprovacao do admin</div>
+              <div style={{ color: '#a16207', fontSize: 12, marginTop: 4, lineHeight: 1.45 }}>{solicitacaoLocal.motivo}</div>
+            </div>
+          </div>
+        )}
+
+        {autorizacaoValida && solicitacaoLocal && (
+          <div style={{ display: 'grid', gap: 12, border: '1px solid rgba(34,197,94,0.3)', background: '#f0fdf4', borderRadius: 16, padding: 14 }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <CheckCircle2 size={20} color="#16a34a" />
+              <div>
+                <div style={{ color: '#166534', fontSize: 14, fontWeight: 900 }}>Correcao autorizada</div>
+                <div style={{ color: '#15803d', fontSize: 12, marginTop: 2 }}>
+                  Va ate a loja e grave o novo ponto ate {new Date(solicitacaoLocal.autorizado_ate as string).toLocaleDateString('pt-BR')}.
+                </div>
+              </div>
+            </div>
+            {solicitacaoLocal.observacao_admin && (
+              <div style={{ color: '#166534', fontSize: 12, fontWeight: 700 }}>Admin: {solicitacaoLocal.observacao_admin}</div>
+            )}
+            <label style={{ fontSize: 11, fontWeight: 900, color: '#166534' }}>
+              ENDERECO CORRETO DA LOJA
+              <input
+                value={novoEndereco}
+                onChange={e => setNovoEndereco(e.target.value)}
+                placeholder="Rua, numero, bairro e CEP"
+                style={{ display: 'block', width: '100%', boxSizing: 'border-box', marginTop: 6, border: '1px solid rgba(22,101,52,0.25)', borderRadius: 12, padding: 12, background: '#fff', color: '#0f172a', fontSize: 14, fontWeight: 700 }}
+              />
+            </label>
+            <button
+              type="button"
+              onClick={aplicarCorrecaoLocalizacao}
+              disabled={salvandoLocal}
+              style={{ width: '100%', border: 0, background: '#16a34a', color: '#fff', borderRadius: 14, padding: 14, fontSize: 14, fontWeight: 900, cursor: salvandoLocal ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9 }}
+            >
+              {salvandoLocal ? <Loader2 size={18} className="animate-spin-slow" /> : <MapPin size={18} />}
+              {salvandoLocal ? 'Capturando GPS...' : 'Gravar novo ponto fixo'}
+            </button>
+          </div>
+        )}
+
+        {solicitacaoLocal?.status === 'rejeitada' && (
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', border: '1px solid rgba(239,68,68,0.25)', background: '#fef2f2', borderRadius: 16, padding: 14 }}>
+            <XCircle size={20} color="#dc2626" />
+            <div>
+              <div style={{ color: '#991b1b', fontSize: 14, fontWeight: 900 }}>Solicitacao nao autorizada</div>
+              <div style={{ color: '#b91c1c', fontSize: 12, marginTop: 4 }}>{solicitacaoLocal.observacao_admin || 'Confira os dados e envie uma nova solicitacao.'}</div>
+            </div>
+          </div>
+        )}
+
+        {!aguardandoAnalise && !autorizacaoValida && (
+          <div style={{ display: 'grid', gap: 10 }}>
+            <label style={{ fontSize: 11, fontWeight: 900, color: '#64748b' }}>
+              POR QUE O PONTO PRECISA SER CORRIGIDO?
+              <textarea
+                value={motivoCorrecao}
+                onChange={e => setMotivoCorrecao(e.target.value)}
+                rows={3}
+                maxLength={500}
+                placeholder="Ex.: o ponto foi salvo no endereco vizinho durante o cadastro."
+                style={{ display: 'block', width: '100%', boxSizing: 'border-box', resize: 'vertical', marginTop: 6, border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: 12, background: '#f8fafc', color: '#0f172a', fontSize: 14, fontWeight: 650 }}
+              />
+            </label>
+            <button
+              type="button"
+              onClick={solicitarCorrecaoLocalizacao}
+              disabled={enviandoSolicitacao}
+              style={{ width: '100%', border: '1px solid rgba(244,63,94,0.25)', background: '#fff1f2', color: '#e11d48', borderRadius: 14, padding: 14, fontSize: 14, fontWeight: 900, cursor: enviandoSolicitacao ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9 }}
+            >
+              {enviandoSolicitacao ? <Loader2 size={18} className="animate-spin-slow" /> : <Send size={18} />}
+              {enviandoSolicitacao ? 'Enviando...' : 'Solicitar correcao ao admin'}
+            </button>
+          </div>
+        )}
+        {localMsg && <div style={{ color: localMsg.includes('enviada') || localMsg.includes('corrigida') ? '#16a34a' : localMsg.includes('...') ? '#64748b' : '#ef4444', fontSize: 13, fontWeight: 800 }}>{localMsg}</div>}
       </InfoCard>
 
       <InfoCard title="Onde voce recebe (chave Pix)" icon={<CreditCard size={16} color="#0284c7" />}>
