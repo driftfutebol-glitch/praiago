@@ -30,7 +30,7 @@ export default function LoginPage() {
     if (!/^\S+@\S+\.\S+$/.test(alvo)) { setErro('Informe seu e-mail valido para redefinir a senha.'); return }
     const { error } = await supabase.auth.resetPasswordForEmail(alvo, { redirectTo: window.location.origin })
     if (!error) await logSecurityEvent('password_reset_requested', alvo)
-    setErro(error ? `Nao foi possivel enviar redefinicao: ${error.message}` : 'Enviamos o e-mail de redefinicao. Use o link ou o codigo recebido.')
+    setErro(error ? 'Nao foi possivel enviar a redefinicao agora. Tente de novo em instantes.' : 'Enviamos o e-mail de redefinicao. Use o link ou o codigo recebido.')
   }
 
   async function confirmarCodigoSenha() {
@@ -42,9 +42,9 @@ export default function LoginPage() {
     if (!novaSenha || novaSenha.length < 6) { setErro('A nova senha precisa ter ao menos 6 caracteres.'); return }
 
     const { error: otpError } = await supabase.auth.verifyOtp({ email: alvo, token: codigo.trim(), type: 'recovery' })
-    if (otpError) { setErro(`Codigo invalido ou expirado: ${otpError.message}`); return }
+    if (otpError) { setErro('Codigo invalido ou expirado. Peca um novo codigo.'); return }
     const { error } = await supabase.auth.updateUser({ password: novaSenha })
-    setErro(error ? `Nao foi possivel trocar a senha: ${error.message}` : 'Senha alterada com sucesso. Entre novamente.')
+    setErro(error ? 'Nao foi possivel trocar a senha. Peca um novo codigo e tente de novo.' : 'Senha alterada com sucesso. Entre novamente.')
     if (!error) await supabase.auth.signOut()
   }
 
@@ -52,7 +52,7 @@ export default function LoginPage() {
     const alvo = emailNormalizado()
     if (!/^\S+@\S+\.\S+$/.test(alvo)) { setErro('Informe seu e-mail valido para reenviar a verificacao.'); return }
     const { error } = await supabase.auth.resend({ type: 'signup', email: alvo })
-    setErro(error ? `Nao foi possivel reenviar verificacao: ${error.message}` : 'Enviamos um novo e-mail de verificacao.')
+    setErro(error ? 'Nao foi possivel reenviar agora. Aguarde um minuto e tente de novo.' : 'Enviamos um novo e-mail de verificacao.')
   }
 
   async function submit() {

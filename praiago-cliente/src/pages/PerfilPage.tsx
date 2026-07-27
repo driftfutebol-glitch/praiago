@@ -62,7 +62,7 @@ function TelaLogada() {
     setReenviandoEmail(false)
     useStore.getState().addNotif({
       titulo: error ? 'Falha no envio' : 'E-mail enviado',
-      texto: error ? error.message : `Confira sua caixa de entrada em ${sessao.email}.`,
+      texto: error ? 'Nao deu pra reenviar agora. Aguarde um minuto e tente de novo.' : `Confira sua caixa de entrada em ${sessao.email}.`,
     })
   }
 
@@ -70,7 +70,7 @@ function TelaLogada() {
     const atual = formatarCpf(verificacao?.cpf || '')
     const novo = await promptDialog({
       title: 'Validar CPF',
-      message: 'Digite o CPF do cliente. O banco aprova automaticamente se o numero for valido.',
+      message: 'Digite seu CPF. A validacao e automatica se o numero for valido.',
       placeholder: '000.000.000-00',
       defaultValue: atual,
       confirmText: 'Validar',
@@ -88,7 +88,7 @@ function TelaLogada() {
       .maybeSingle()
     if (error) {
       const dup = (error as { code?: string }).code === '23505'
-      useStore.getState().addNotif({ titulo: dup ? 'CPF já cadastrado' : 'Erro ao validar CPF', texto: dup ? 'Esse CPF já está em outra conta. Cada CPF só pode ter uma conta.' : error.message })
+      useStore.getState().addNotif({ titulo: dup ? 'CPF já cadastrado' : 'Erro ao validar CPF', texto: dup ? 'Esse CPF já está em outra conta. Cada CPF só pode ter uma conta.' : 'Nao deu pra validar agora. Confira o numero e tente de novo.' })
       return
     }
     setVerificacao(data as VerificacaoCliente)
@@ -146,7 +146,7 @@ function TelaLogada() {
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 900, color: '#0f172a' }}>E-mail</div>
                 <div style={{ fontSize: 11.5, fontWeight: 700, color: emailConfirmado ? '#15803d' : '#a16207', marginTop: 2 }}>
-                  {emailConfirmado ? 'Confirmado no Supabase Auth' : `Pendente em ${sessao.email}`}
+                  {emailConfirmado ? 'E-mail confirmado' : `Pendente em ${sessao.email}`}
                 </div>
               </div>
               {!emailConfirmado && (
@@ -248,7 +248,7 @@ export default function PerfilPage() {
     if (!/^\S+@\S+\.\S+$/.test(alvo)) { setErro('Informe seu e-mail valido para redefinir a senha.'); return }
     const { error } = await supabase.auth.resetPasswordForEmail(alvo, { redirectTo: `${window.location.origin}/perfil` })
     if (!error) await logSecurityEvent('password_reset_requested', alvo)
-    setErro(error ? `Nao foi possivel enviar redefinicao: ${error.message}` : 'Enviamos o e-mail de redefinicao. Use o link ou o codigo recebido.')
+    setErro(error ? 'Nao foi possivel enviar a redefinicao agora. Tente de novo em instantes.' : 'Enviamos o e-mail de redefinicao. Use o link ou o codigo recebido.')
   }
 
   async function confirmarCodigoSenha() {
@@ -260,9 +260,9 @@ export default function PerfilPage() {
     if (!novaSenha || novaSenha.length < 6) { setErro('A nova senha precisa ter ao menos 6 caracteres.'); return }
 
     const { error: otpError } = await supabase.auth.verifyOtp({ email: alvo, token: codigo.trim(), type: 'recovery' })
-    if (otpError) { setErro(`Codigo invalido ou expirado: ${otpError.message}`); return }
+    if (otpError) { setErro('Codigo invalido ou expirado. Peca um novo codigo.'); return }
     const { error } = await supabase.auth.updateUser({ password: novaSenha })
-    setErro(error ? `Nao foi possivel trocar a senha: ${error.message}` : 'Senha alterada com sucesso. Entre novamente.')
+    setErro(error ? 'Nao foi possivel trocar a senha. Peca um novo codigo e tente de novo.' : 'Senha alterada com sucesso. Entre novamente.')
     if (!error) await supabase.auth.signOut()
   }
 
@@ -274,7 +274,7 @@ export default function PerfilPage() {
       email: alvo,
       options: { emailRedirectTo: `${window.location.origin}/perfil` },
     })
-    setErro(error ? `Nao foi possivel reenviar verificacao: ${error.message}` : 'Enviamos um novo e-mail de verificacao.')
+    setErro(error ? 'Nao foi possivel reenviar agora. Aguarde um minuto e tente de novo.' : 'Enviamos um novo e-mail de verificacao.')
   }
 
   if (sessao) return <TelaLogada />
@@ -295,9 +295,11 @@ export default function PerfilPage() {
         if (error) {
           await logSecurityEvent('login_failed', alvo, { status: error.status ?? null, message: error.message })
           if (error.status === 429) throw new Error('Limite de tentativas excedido! Aguarde alguns minutos.')
-          if (error.message.includes('Email not confirmed')) throw new Error('E-mail não confirmado! Por favor, confirme seu e-mail ou desative a confirmação no painel do Supabase.')
+          if (error.message.includes('Email not confirmed')) throw new Error('E-mail não confirmado. Confira sua caixa de entrada (e o spam) e use o código que enviamos.')
           if (error.message.includes('Invalid login credentials')) throw new Error('E-mail ou senha incorretos.')
-          throw new Error(error.message)
+          // Nunca repassar a mensagem crua: ela vem em ingles e pode expor
+          // detalhe tecnico do servico de autenticacao para o cliente.
+          throw new Error('Não foi possível entrar. Confira seus dados e sua conexão.')
         }
         
         const { data: profile } = await supabase
