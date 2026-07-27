@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Plus, Trash2, Edit2, Check, X } from 'lucide-react'
+import { Plus, Trash2, Edit2, Check, X, Camera, Loader2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { getSessao } from '../lib/auth'
@@ -20,7 +20,43 @@ type Produto = {
 const categorias = ['Pratos', 'Frutos do Mar', 'Bebidas', 'Executivo', 'Sobremesas', 'Petiscos', 'Outros']
 const emojis = ['🦐', '🐟', '🦀', '🦑', '🍽️', '🍹', '🥤', '🍰', '🥗', '🍝', '🥩', '🍖', '🍔']
 
-type NovoForm = { nome: string; preco: string; descricao: string; categoria: string; emoji: string }
+type NovoForm = {
+  nome: string
+  preco: string
+  descricao: string
+  categoria: string
+  emoji: string
+  foto: string | null
+}
+
+const NOVO_INICIAL: NovoForm = {
+  nome: '',
+  preco: '',
+  descricao: '',
+  categoria: 'Pratos',
+  emoji: '🍽️',
+  foto: null,
+}
+
+const FOTO_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+
+function extensaoFoto(file: File) {
+  if (file.type === 'image/png') return 'png'
+  if (file.type === 'image/webp') return 'webp'
+  return 'jpg'
+}
+
+function caminhoFotoProduto(url: string | null) {
+  if (!url) return null
+  const marcador = '/storage/v1/object/public/produtos/'
+  const indice = url.indexOf(marcador)
+  if (indice < 0) return null
+  try {
+    return decodeURIComponent(url.slice(indice + marcador.length))
+  } catch {
+    return null
+  }
+}
 
 export default function CardapioPage() {
   const [produtos, setProdutos] = useState<Produto[]>([])
@@ -31,7 +67,13 @@ export default function CardapioPage() {
   const [adicionando, setAdicionando] = useState(false)
   const [loading, setLoading] = useState(true)
   const [verificado, setVerificado] = useState<boolean | null>(null)
-  const [novo, setNovo] = useState<NovoForm>({ nome: '', preco: '', descricao: '', categoria: 'Pratos', emoji: '🍽️' })
+  const [novo, setNovo] = useState<NovoForm>(NOVO_INICIAL)
+  const [novaFotoArquivo, setNovaFotoArquivo] = useState<File | null>(null)
+  const [salvando, setSalvando] = useState(false)
+  const [fotoProdutoId, setFotoProdutoId] = useState<string | null>(null)
+  const [enviandoFotoId, setEnviandoFotoId] = useState<string | null>(null)
+  const novaFotoRef = useRef<HTMLInputElement>(null)
+  const trocarFotoRef = useRef<HTMLInputElement>(null)
 
   const sessao = getSessao()
 
@@ -92,10 +134,92 @@ export default function CardapioPage() {
   async function deletar(id: string) {
     const ok = await confirmDialog({ title: 'Excluir produto?', message: 'Ele some do cardápio pra sempre. Não dá pra desfazer.', confirmText: 'Excluir', tone: 'danger' })
     if (!ok) return
+    const produto = produtos.find(p => p.id === id)
     const anteriores = produtos
     setProdutos(prev => prev.filter(p => p.id !== id))
     const { error } = await supabase.from('produtos').delete().eq('id', id)
-    if (error) { setProdutos(anteriores); alertDialog({ title: 'Erro', message: 'Não deu pra excluir. Tente de novo.', tone: 'danger' }) }
+    if (error) {
+      setProdutos(anteriores)
+      await alertDialog({ title: 'Erro', message: 'Não deu pra excluir. Tente de novo.', tone: 'danger' })
+      return
+    }
+
+    const caminho = caminhoFotoProduto(produto?.foto ?? null)
+    if (caminho) await supabase.storage.from('produtos').remove([caminho])
+  }
+
+  function erroDaFoto(file: File) {
+    if (!FOTO_MIME_TYPES.includes(file.type)) return 'Use uma imagem JPG, PNG ou WebP.'
+    if (file.size > 5 * 1024 * 1024) return 'A foto deve ter no maximo 5 MB.'
+    return null
+  }
+
+  function selecionarNovaFoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+
+    const erro = erroDaFoto(file)
+    if (erro) {
+      void alertDialog({ title: 'Foto invalida', message: erro, tone: 'danger' })
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      setNovaFotoArquivo(file)
+      setNovo(atual => ({ ...atual, foto: String(reader.result) }))
+    }
+    reader.readAsDataURL(file)
+  }
+
+  async function subirFoto(file: File) {
+    if (!sessao) throw new Error('Sessao do restaurante indisponivel.')
+    const nomeSeguro = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${extensaoFoto(file)}`
+    const caminho = `${sessao.id}/${nomeSeguro}`
+    const { error } = await supabase.storage
+      .from('produtos')
+      .upload(caminho, file, { contentType: file.type, upsert: false })
+    if (error) throw new Error(error.message)
+
+    const { data } = supabase.storage.from('produtos').getPublicUrl(caminho)
+    return { caminho, url: data.publicUrl }
+  }
+
+  async function trocarFotoProduto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    const produto = produtos.find(p => p.id === fotoProdutoId)
+    if (!file || !produto) return
+
+    const erro = erroDaFoto(file)
+    if (erro) {
+      await alertDialog({ title: 'Foto invalida', message: erro, tone: 'danger' })
+      return
+    }
+
+    setEnviandoFotoId(produto.id)
+    let novoCaminho: string | null = null
+    try {
+      const upload = await subirFoto(file)
+      novoCaminho = upload.caminho
+      const { error } = await supabase
+        .from('produtos')
+        .update({ foto: upload.url })
+        .eq('id', produto.id)
+      if (error) throw new Error(error.message)
+
+      setProdutos(atuais => atuais.map(p => p.id === produto.id ? { ...p, foto: upload.url } : p))
+      const caminhoAnterior = caminhoFotoProduto(produto.foto)
+      if (caminhoAnterior) await supabase.storage.from('produtos').remove([caminhoAnterior])
+    } catch (error) {
+      if (novoCaminho) await supabase.storage.from('produtos').remove([novoCaminho])
+      console.error('Erro ao trocar foto do produto:', error)
+      await alertDialog({ title: 'Nao deu pra enviar', message: 'Tente outra foto em instantes.', tone: 'danger' })
+    } finally {
+      setEnviandoFotoId(null)
+      setFotoProdutoId(null)
+    }
   }
 
   async function salvarEdicao(id: string) {
@@ -119,37 +243,50 @@ export default function CardapioPage() {
   }
 
   async function adicionarProduto() {
-    if (!novo.nome.trim() || !sessao) return
+    if (!novo.nome.trim() || !sessao || salvando) return
     if (!verificado) {
-      setAdicionando(false)
       await alertDialog({ title: 'Verificacao obrigatoria', message: 'Complete o KYC para criar produtos. Enquanto nao aprovar, o restaurante nao aparece no mapa.', tone: 'danger' })
       return
     }
 
     const precoNum = parseFloat(novo.preco)
     if (!Number.isFinite(precoNum) || precoNum <= 0 || precoNum > 100000) {
-      setAdicionando(false)
       await alertDialog({ title: 'Preço inválido', message: 'Informe um preço maior que zero (e realista).', tone: 'danger' })
       return
     }
-    const prod = {
-      vendedor_id: sessao.id,
-      nome: novo.nome,
-      preco: precoNum,
-      descricao: novo.descricao,
-      categoria: novo.categoria,
-      ativo: true,
-      emoji: novo.emoji,
-    }
-    
-    const { data, error } = await supabase.from('produtos').insert(prod).select().single()
-    if (data) {
+
+    setSalvando(true)
+    let caminhoEnviado: string | null = null
+    try {
+      let fotoUrl: string | null = null
+      if (novaFotoArquivo) {
+        const upload = await subirFoto(novaFotoArquivo)
+        caminhoEnviado = upload.caminho
+        fotoUrl = upload.url
+      }
+
+      const { data, error } = await supabase.from('produtos').insert({
+        vendedor_id: sessao.id,
+        nome: novo.nome.trim(),
+        preco: precoNum,
+        descricao: novo.descricao.trim(),
+        categoria: novo.categoria,
+        ativo: true,
+        emoji: novo.emoji,
+        foto: fotoUrl,
+      }).select().single()
+      if (error || !data) throw new Error(error?.message || 'Produto nao criado.')
+
       setProdutos(prev => [data, ...prev])
-      setNovo({ nome: '', preco: '', descricao: '', categoria: 'Pratos', emoji: '🍽️' })
+      setNovo(NOVO_INICIAL)
+      setNovaFotoArquivo(null)
       setAdicionando(false)
-    } else {
-      console.error("Erro ao adicionar produto:", error)
-      await alertDialog({ title: 'Nao deu pra criar', message: error?.message || 'Confira sua verificacao e tente novamente.', tone: 'danger' })
+    } catch (error) {
+      if (caminhoEnviado) await supabase.storage.from('produtos').remove([caminhoEnviado])
+      console.error('Erro ao adicionar produto:', error)
+      await alertDialog({ title: 'Nao deu pra criar', message: error instanceof Error ? error.message : 'Confira sua verificacao e tente novamente.', tone: 'danger' })
+    } finally {
+      setSalvando(false)
     }
   }
 
@@ -158,6 +295,14 @@ export default function CardapioPage() {
 
   return (
     <div style={{ padding: '32px 0 48px', minHeight: '100vh', position: 'relative' }}>
+      <input
+        ref={trocarFotoRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        onChange={trocarFotoProduto}
+        style={{ display: 'none' }}
+      />
+
       {/* Header */}
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} style={{ padding: '0 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
         <div>
@@ -205,6 +350,25 @@ export default function CardapioPage() {
               <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
                 <div style={{ width: 72, height: 72, borderRadius: 16, background: 'rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, position: 'relative', overflow: 'hidden' }}>
                   {p.foto ? <img src={p.foto} alt={p.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : p.emoji}
+                  <button
+                    type="button"
+                    title={p.foto ? 'Trocar foto' : 'Adicionar foto'}
+                    aria-label={p.foto ? `Trocar foto de ${p.nome}` : `Adicionar foto a ${p.nome}`}
+                    disabled={enviandoFotoId === p.id}
+                    onClick={() => {
+                      setFotoProdutoId(p.id)
+                      trocarFotoRef.current?.click()
+                    }}
+                    style={{
+                      position: 'absolute', right: 4, bottom: 4, width: 28, height: 28,
+                      borderRadius: 8, border: '1px solid rgba(255,255,255,0.7)',
+                      background: '#ffffff', color: '#ea580c', cursor: enviandoFotoId === p.id ? 'wait' : 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      boxShadow: '0 2px 8px rgba(15,23,42,0.22)', padding: 0,
+                    }}
+                  >
+                    {enviandoFotoId === p.id ? <Loader2 size={15} className="animate-spin-slow" /> : <Camera size={15} />}
+                  </button>
                 </div>
                 <div style={{ flex: 1, paddingTop: 4 }}>
                   <div style={{ fontSize: 12, color: '#f97316', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
@@ -260,7 +424,7 @@ export default function CardapioPage() {
         {adicionando && (
           <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setAdicionando(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)' }} />
-            <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} style={{ width: '100%', maxWidth: 480, background: '#ffffff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 24, padding: 32, position: 'relative', zIndex: 101, boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }}>
+            <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} style={{ width: '100%', maxWidth: 480, maxHeight: 'calc(100vh - 40px)', overflowY: 'auto', background: '#ffffff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 24, padding: 32, position: 'relative', zIndex: 101, boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }}>
               <button onClick={() => setAdicionando(false)} style={{ position: 'absolute', top: 20, right: 20, background: 'transparent', border: 'none', cursor: 'pointer', padding: 4 }}>
                 <X size={24} color="#94a3b8" />
               </button>
@@ -292,6 +456,49 @@ export default function CardapioPage() {
                 </div>
 
                 <div>
+                  <label style={{ display: 'block', fontSize: 14, color: '#64748b', fontWeight: 600, marginBottom: 8 }}>Foto do produto (opcional)</label>
+                  <input
+                    ref={novaFotoRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={selecionarNovaFoto}
+                    style={{ display: 'none' }}
+                  />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <button
+                      type="button"
+                      title={novo.foto ? 'Trocar foto' : 'Adicionar foto'}
+                      onClick={() => novaFotoRef.current?.click()}
+                      style={{
+                        width: 84, height: 84, borderRadius: 12,
+                        border: `1.5px dashed ${novo.foto ? 'transparent' : 'rgba(249,115,22,0.45)'}`,
+                        background: novo.foto ? 'transparent' : 'rgba(249,115,22,0.07)',
+                        cursor: 'pointer', overflow: 'hidden', display: 'flex',
+                        alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0,
+                      }}
+                    >
+                      {novo.foto
+                        ? <img src={novo.foto} alt="Novo produto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        : <Camera size={25} color="#ea580c" />}
+                    </button>
+                    <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>
+                      {novo.foto ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNovaFotoArquivo(null)
+                            setNovo(atual => ({ ...atual, foto: null }))
+                          }}
+                          style={{ border: 0, background: 'transparent', color: '#dc2626', fontWeight: 800, cursor: 'pointer', padding: 0 }}
+                        >
+                          Remover foto
+                        </button>
+                      ) : 'JPG, PNG ou WebP. Maximo 5 MB.'}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
                   <label style={{ display: 'block', fontSize: 14, color: '#64748b', fontWeight: 600, marginBottom: 8 }}>Ícone / Emoji</label>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {emojis.map(e => (
@@ -302,8 +509,9 @@ export default function CardapioPage() {
                   </div>
                 </div>
 
-                <button onClick={adicionarProduto} style={{ width: '100%', padding: '16px', borderRadius: 16, background: 'linear-gradient(135deg, #f97316, #ea580c)', border: 'none', color: '#fff', fontSize: 16, fontWeight: 800, marginTop: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                  <Plus size={20} /> Salvar Produto
+                <button disabled={salvando} onClick={adicionarProduto} style={{ width: '100%', padding: '16px', borderRadius: 16, background: 'linear-gradient(135deg, #f97316, #ea580c)', border: 'none', color: '#fff', fontSize: 16, fontWeight: 800, marginTop: 16, cursor: salvando ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: salvando ? 0.7 : 1 }}>
+                  {salvando ? <Loader2 size={20} className="animate-spin-slow" /> : <Plus size={20} />}
+                  {salvando ? 'Salvando...' : 'Salvar Produto'}
                 </button>
               </div>
             </motion.div>
