@@ -80,6 +80,17 @@ Deno.serve(async (req: Request) => {
       return json({ error: error.message, code: 'signup_error' }, { status })
     }
 
+    // E-mail JA cadastrado: por protecao contra enumeracao, o Supabase responde
+    // "sucesso" com identities vazio e NAO envia e-mail nenhum. Sem tratar isso,
+    // o app anunciava "codigo enviado" e o usuario ficava esperando pra sempre.
+    const identities = (signUpData.user as { identities?: unknown[] } | null)?.identities
+    if (Array.isArray(identities) && identities.length === 0) {
+      return json({
+        error: 'Este e-mail ja tem uma conta no PraiaGo. Entre com sua senha ou use "Esqueci minha senha".',
+        code: 'email_dup',
+      }, { status: 409 })
+    }
+
     const userId = signUpData.user?.id ?? null
     await admin.from('signup_ips').insert({ ip, user_id: userId, email, role: String(metadata.role || ''), is_mobile: isMobile })
 
