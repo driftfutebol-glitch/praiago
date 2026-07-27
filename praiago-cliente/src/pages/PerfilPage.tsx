@@ -67,6 +67,7 @@ function TelaLogada() {
   }
 
   async function editarCpf() {
+    if (verificacao?.cpf_check_status === 'aprovado') return
     const atual = formatarCpf(verificacao?.cpf || '')
     const novo = await promptDialog({
       title: 'Validar CPF',
@@ -92,7 +93,7 @@ function TelaLogada() {
       return
     }
     setVerificacao(data as VerificacaoCliente)
-    useStore.getState().addNotif({ titulo: 'CPF atualizado', texto: 'Validacao do CPF conferida pelo PraiaGo.' })
+    useStore.getState().addNotif({ titulo: 'CPF confirmado', texto: 'CPF validado e vinculado definitivamente a esta conta.' })
   }
 
   const cpfOk = verificacao?.cpf_check_status === 'aprovado'
@@ -164,9 +165,11 @@ function TelaLogada() {
                   {cpfOk ? `${formatarCpf(verificacao?.cpf || '')} validado` : 'Informe um CPF valido para fazer pedido'}
                 </div>
               </div>
-              <button type="button" onClick={editarCpf} style={{ border: 0, background: '#fff', color: cpfOk ? '#15803d' : '#c2410c', borderRadius: 12, padding: '9px 11px', fontSize: 11.5, fontWeight: 900, display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-                <Edit3 size={13} /> {cpfOk ? 'Trocar' : 'Validar'}
-              </button>
+              {!cpfOk && (
+                <button type="button" onClick={editarCpf} style={{ border: 0, background: '#fff', color: '#c2410c', borderRadius: 12, padding: '9px 11px', fontSize: 11.5, fontWeight: 900, display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                  <Edit3 size={13} /> Validar
+                </button>
+              )}
             </div>
           </div>
         </motion.div>

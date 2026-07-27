@@ -854,6 +854,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
 
   async function salvarCpfCliente() {
     if (!sessao?.id) return
+    if (cpfOk) return
     if (!validarCpf(cpfCliente)) { setErro('CPF invalido. Confira os numeros para liberar o pedido.'); return }
     setSalvandoCpf(true)
     const { data, error } = await supabase
@@ -1079,7 +1080,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
             <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'end' }}>
               <div>
                 <label style={{ fontSize: 10.5, fontWeight: 900, color: '#64748b', display: 'block', marginBottom: 6, letterSpacing: 0.6 }}>CPF DO CLIENTE</label>
-                <input inputMode="numeric" value={cpfCliente} onChange={e => setCpfCliente(formatarCpfCliente(e.target.value))} placeholder="000.000.000-00" style={darkInput} />
+                <input inputMode="numeric" value={cpfCliente} onChange={e => setCpfCliente(formatarCpfCliente(e.target.value))} readOnly={cpfOk} placeholder="000.000.000-00" style={{ ...darkInput, cursor: cpfOk ? 'default' : 'text', opacity: cpfOk ? 0.82 : 1 }} />
               </div>
               <button type="button" disabled={salvandoCpf || cpfOk} onClick={salvarCpfCliente} style={{ height: 48, border: 'none', background: cpfOk ? '#dcfce7' : '#0ea5e9', color: cpfOk ? '#15803d' : '#fff', borderRadius: 15, padding: '0 14px', fontSize: 12, fontWeight: 900, cursor: cpfOk ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
                 {cpfOk ? 'Validado' : salvandoCpf ? 'Salvando' : 'Validar'}
