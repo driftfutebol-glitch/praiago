@@ -2,10 +2,10 @@
 // o app com uma sessão de recuperação e dispara PASSWORD_RECOVERY. Aqui a
 // gente mostra um formulário DE VERDADE (window.prompt não abre no Android).
 import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, VEIO_DE_RECOVERY } from '../lib/supabase'
 
 export default function PasswordRecoveryHandler() {
-  const [aberto, setAberto] = useState(false)
+  const [aberto, setAberto] = useState(VEIO_DE_RECOVERY)
   const [senha, setSenha] = useState('')
   const [confirma, setConfirma] = useState('')
   const [msg, setMsg] = useState('')
@@ -14,7 +14,10 @@ export default function PasswordRecoveryHandler() {
 
   useEffect(() => {
     const { data } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') setAberto(true)
+      // PASSWORD_RECOVERY nem sempre dispara: dependendo da versao o supabase-js
+      // trata o link como login normal. Por isso tambem aceitamos o SIGNED_IN
+      // quando a URL de entrada trazia type=recovery.
+      if (event === 'PASSWORD_RECOVERY' || (event === 'SIGNED_IN' && VEIO_DE_RECOVERY)) setAberto(true)
     })
     return () => data.subscription.unsubscribe()
   }, [])

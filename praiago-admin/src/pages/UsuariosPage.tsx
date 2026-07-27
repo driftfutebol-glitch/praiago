@@ -111,16 +111,37 @@ export default function UsuariosPage() {
 
   async function excluirPerfil(u: any) {
     const alvo = u.email || u.nome || u.id
-    if (!await confirmDialog({ title: 'Excluir perfil?', message: `Excluir o perfil de ${alvo}? Isso remove os dados públicos, mas não apaga o usuário do login (Auth).`, confirmText: 'Excluir', tone: 'danger' })) return
+    if (!await confirmDialog({
+      title: 'Excluir conta?',
+      message: `Excluir DEFINITIVAMENTE a conta de ${alvo}? Remove o perfil e também o login (Auth) — o e-mail fica livre para um novo cadastro. Não dá para desfazer.`,
+      confirmText: 'Excluir tudo',
+      tone: 'danger',
+    })) return
     setAcaoId(u.id)
     await supabase.from('verificacoes').delete().eq('user_id', u.id)
     await supabase.from('produtos').delete().eq('vendedor_id', u.id)
-    const { error } = await supabase.from('profiles').delete().eq('id', u.id)
-    if (!error) {
-      setUsuarios(prev => prev.filter(item => item.id !== u.id))
-    } else {
-      alertDialog({ title: 'Erro', message: 'Não foi possível excluir este perfil: ' + error.message, tone: 'danger' })
+
+    // Apaga o usuário do Auth (precisa de service role → edge function).
+    // Antes só o profile era removido, então o e-mail continuava "já cadastrado"
+    // e o cadastro novo falhava em silêncio, sem enviar código.
+    const { data, error } = await supabase.functions.invoke('admin-usuarios', {
+      body: { action: 'excluir', id: u.id },
+    })
+    const resp = data as { error?: string } | null
+    if (error || resp?.error) {
+      let msg = resp?.error || 'Não foi possível excluir a conta.'
+      try {
+        const p = await (error as { context?: { json?: () => Promise<{ error?: string }> } })?.context?.json?.()
+        if (p?.error) msg = p.error
+      } catch { /* usa a msg padrão */ }
+      alertDialog({ title: 'Erro', message: msg, tone: 'danger' })
+      setAcaoId(null)
+      return
     }
+
+    // Garante que o profile saiu mesmo se o Auth já não existia.
+    await supabase.from('profiles').delete().eq('id', u.id)
+    setUsuarios(prev => prev.filter(item => item.id !== u.id))
     setAcaoId(null)
   }
 
