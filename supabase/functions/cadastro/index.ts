@@ -46,19 +46,29 @@ Deno.serve(async (req: Request) => {
       return json({ error: reason === 'blocked' ? 'Acesso temporariamente bloqueado por segurança.' : 'Muitas tentativas. Tente novamente em alguns minutos.', code: reason }, { status: 429 })
     }
 
-    // 2) KYC: CPF e CNPJ únicos em QUALQUER conta (cliente/ambulante/restaurante)
     const cpf = String(metadata.cpf || '').replace(/\D/g, '')
-    if (cpf.length === 11) {
-      const { count } = await admin.from('profiles').select('id', { count: 'exact', head: true }).eq('cpf', cpf)
-      if ((count || 0) > 0) return json({ error: 'Este CPF já está cadastrado em uma conta. Cada CPF só pode ter uma conta.', code: 'cpf_dup' }, { status: 409 })
-    }
     const cnpj = String(metadata.cnpj || '').replace(/\D/g, '')
-    if (cnpj.length === 14) {
-      const { count } = await admin.from('profiles').select('id', { count: 'exact', head: true }).eq('cnpj', cnpj)
-      if ((count || 0) > 0) return json({ error: 'Este CNPJ já está cadastrado em uma conta.', code: 'cnpj_dup' }, { status: 409 })
+
+    // 2) Recicla cadastros ABANDONADOS e so entao checa o que realmente bloqueia.
+    //    Antes, quem fechava o app sem digitar o codigo deixava CPF/CNPJ/e-mail/IP
+    //    travados pra sempre — e nunca mais conseguia se cadastrar.
+    const { data: preparo } = await admin.rpc('preparar_cadastro', {
+      p_email: email,
+      p_cpf: cpf.length === 11 ? cpf : null,
+      p_cnpj: cnpj.length === 14 ? cnpj : null,
+      p_ip: ip !== 'desconhecido' ? ip : null,
+    })
+    const estado = (preparo ?? {}) as { cpf_em_uso?: boolean; cnpj_em_uso?: boolean; contas_confirmadas_no_ip?: number }
+
+    // 3) KYC: CPF e CNPJ unicos — considerando apenas contas CONFIRMADAS
+    if (cpf.length === 11 && estado.cpf_em_uso) {
+      return json({ error: 'Este CPF já está cadastrado em uma conta. Cada CPF só pode ter uma conta.', code: 'cpf_dup' }, { status: 409 })
+    }
+    if (cnpj.length === 14 && estado.cnpj_em_uso) {
+      return json({ error: 'Este CNPJ já está cadastrado em uma conta.', code: 'cnpj_dup' }, { status: 409 })
     }
 
-    // 3) 1 conta por IP (celular isento) — regra configurável
+    // 4) 1 conta por IP (celular isento) — regra configurável
     const { data: rules } = await admin.from('signup_rules').select('um_por_ip,exigir_em_movel').eq('id', true).maybeSingle()
     const limiteLigado = rules?.um_por_ip !== false
     const exigirEmMovel = rules?.exigir_em_movel === true
@@ -67,12 +77,15 @@ Deno.serve(async (req: Request) => {
       const { data: autorizado } = await admin.from('authorized_ips').select('ip').eq('ip', ip).maybeSingle()
       const isentoPorMovel = isMobile && !exigirEmMovel
       if (!autorizado && !isentoPorMovel) {
-        const { count } = await admin.from('signup_ips').select('*', { count: 'exact', head: true }).eq('ip', ip)
-        if ((count || 0) >= 1) return json({ error: 'Já existe uma conta cadastrada nesta rede/dispositivo. Se precisar de outra, fale com o suporte.', code: 'ip_limit' }, { status: 429 })
+        // conta so o que virou conta DE VERDADE (confirmada); tentativa abandonada
+        // nao pode queimar a vaga da rede.
+        if ((estado.contas_confirmadas_no_ip || 0) >= 1) {
+          return json({ error: 'Já existe uma conta cadastrada nesta rede/dispositivo. Se precisar de outra, fale com o suporte.', code: 'ip_limit' }, { status: 429 })
+        }
       }
     }
 
-    // 4) cria a conta (envia e-mail de verificação)
+    // 5) cria a conta (envia e-mail de verificação)
     const anon = createClient(url, Deno.env.get('SUPABASE_ANON_KEY')!, { auth: { persistSession: false } })
     const { data: signUpData, error } = await anon.auth.signUp({ email, password: senha, options: { data: metadata, emailRedirectTo: body.emailRedirectTo } })
     if (error) {
