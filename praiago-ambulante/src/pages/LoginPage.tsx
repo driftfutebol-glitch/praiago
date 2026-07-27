@@ -158,7 +158,7 @@ export default function LoginPage() {
               <div style={{ fontSize: 19, fontWeight: 900, color: '#0f172a' }}>Confirme seu e-mail</div>
               <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600, marginTop: 4 }}>Código de 6 dígitos enviado pra <b style={{ color: '#0f172a' }}>{codigoEnvio}</b></div>
             </div>
-            <input inputMode="numeric" autoFocus value={codigo} onChange={e => setCodigo(e.target.value.replace(/\D/g, '').slice(0, 6))} onKeyDown={e => e.key === 'Enter' && confirmarCadastro()} placeholder="000000" style={{ ...inputStyle, textAlign: 'center', fontSize: 28, fontWeight: 900, letterSpacing: 10 }} />
+            <input inputMode="numeric" autoFocus value={codigo} onChange={e => setCodigo(e.target.value.replace(/\D/g, '').slice(0, 8))} onKeyDown={e => e.key === 'Enter' && confirmarCadastro()} placeholder="000000" style={{ ...inputStyle, textAlign: 'center', fontSize: 28, fontWeight: 900, letterSpacing: 10 }} />
             {erro && <div style={{ fontSize: 13, textAlign: 'center', fontWeight: 700, color: erro.includes('inválido') || erro.includes('Não') ? '#ef4444' : '#22c55e' }}>{erro}</div>}
             <button disabled={loading} onClick={confirmarCadastro} style={{ background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', border: 'none', borderRadius: 14, padding: '15px 0', color: '#fff', fontSize: 16, fontWeight: 800, cursor: loading ? 'wait' : 'pointer' }}>{loading ? 'CONFIRMANDO...' : 'Confirmar código'}</button>
             <div style={{ display: 'flex', justifyContent: 'center', gap: 16 }}>

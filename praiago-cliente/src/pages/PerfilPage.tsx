@@ -384,7 +384,7 @@ export default function PerfilPage() {
               <h2 style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', margin: 0 }}>Confirme seu e-mail</h2>
               <p style={{ fontSize: 13.5, color: '#64748b', fontWeight: 600, marginTop: 6 }}>Enviamos um código de 6 dígitos pra <b style={{ color: '#0f172a' }}>{codigoEnvio}</b></p>
             </div>
-            <input inputMode="numeric" autoFocus value={codigo} onChange={e => setCodigo(e.target.value.replace(/\D/g, '').slice(0, 6))} onKeyDown={e => e.key === 'Enter' && confirmarCadastro()} placeholder="000000" style={{ ...inputStyle, textAlign: 'center', fontSize: 30, fontWeight: 900, letterSpacing: 12, fontFamily: 'monospace' }} />
+            <input inputMode="numeric" autoFocus value={codigo} onChange={e => setCodigo(e.target.value.replace(/\D/g, '').slice(0, 8))} onKeyDown={e => e.key === 'Enter' && confirmarCadastro()} placeholder="000000" style={{ ...inputStyle, textAlign: 'center', fontSize: 30, fontWeight: 900, letterSpacing: 12, fontFamily: 'monospace' }} />
             {erro && <div style={{ fontSize: 13.5, textAlign: 'center', fontWeight: 700, color: erro.includes('inválido') || erro.includes('Não') ? '#f87171' : '#16a34a' }}>{erro}</div>}
             <motion.button disabled={loading} whileTap={{ scale: 0.96 }} onClick={confirmarCadastro} className="neon-border" style={{ background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', border: 'none', borderRadius: 16, padding: '16px 0', color: '#fff', fontSize: 16, fontWeight: 900, cursor: loading ? 'wait' : 'pointer', boxShadow: '0 8px 20px rgba(34,197,94,0.3)' }}>{loading ? 'CONFIRMANDO...' : 'Confirmar código'}</motion.button>
             <div style={{ display: 'flex', justifyContent: 'center', gap: 16 }}>
