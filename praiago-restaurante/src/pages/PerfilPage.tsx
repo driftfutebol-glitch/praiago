@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Bell, CheckCircle2, ChevronRight, Clock, CreditCard, HelpCircle, Loader2, LogOut, MapPin, Phone, Send, Shield, Star, Store, TrendingUp, Wallet, XCircle } from 'lucide-react'
+import { Bell, CheckCircle2, ChevronRight, Clock, CreditCard, HelpCircle, Loader2, LogOut, MapPin, Navigation, Phone, Search, Send, Shield, Star, Store, TrendingUp, Wallet, XCircle } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
@@ -25,7 +25,69 @@ type SolicitacaoLocalizacao = {
   utilizado_em: string | null
 }
 
+type PhotonFeature = {
+  properties: {
+    osm_id?: number
+    osm_type?: string
+    name?: string
+    street?: string
+    housenumber?: string
+    district?: string
+    locality?: string
+    city?: string
+    county?: string
+    state?: string
+    postcode?: string
+  }
+  geometry: {
+    coordinates: [number, number]
+  }
+}
+
+type EnderecoSelecionado = {
+  rua: string
+  bairro: string
+  cidade: string
+  estado: string
+  cep: string
+  lat: number
+  lng: number
+  origem: 'busca' | 'gps'
+}
+
 type Painel = 'notificacoes' | 'seguranca' | 'ajuda'
+
+const CENTRO_PRAIA_GRANDE = { lat: -24.008, lng: -46.412 }
+
+function enderecoDaFeature(feature: PhotonFeature, lat?: number, lng?: number): EnderecoSelecionado | null {
+  const [featureLng, featureLat] = feature.geometry.coordinates
+  const rua = feature.properties.street || feature.properties.name || ''
+  const enderecoLat = lat ?? featureLat
+  const enderecoLng = lng ?? featureLng
+  if (!rua || !Number.isFinite(enderecoLat) || !Number.isFinite(enderecoLng)) return null
+
+  return {
+    rua,
+    bairro: feature.properties.district || feature.properties.locality || '',
+    cidade: feature.properties.city || feature.properties.county || 'Praia Grande',
+    estado: feature.properties.state || 'Sao Paulo',
+    cep: feature.properties.postcode || '',
+    lat: enderecoLat,
+    lng: enderecoLng,
+    origem: lat != null && lng != null ? 'gps' : 'busca',
+  }
+}
+
+function montarEndereco(endereco: EnderecoSelecionado, numero: string) {
+  return [
+    endereco.rua,
+    numero,
+    endereco.bairro,
+    endereco.cidade,
+    endereco.estado,
+    endereco.cep,
+  ].filter(Boolean).join(', ')
+}
 
 const painelConteudo: Record<Painel, { titulo: string; texto: string; itens: string[] }> = {
   notificacoes: {
@@ -87,6 +149,11 @@ export default function PerfilPage() {
   const [solicitacaoLocal, setSolicitacaoLocal] = useState<SolicitacaoLocalizacao | null>(null)
   const [motivoCorrecao, setMotivoCorrecao] = useState('')
   const [novoEndereco, setNovoEndereco] = useState('')
+  const [numeroEndereco, setNumeroEndereco] = useState('')
+  const [sugestoesEndereco, setSugestoesEndereco] = useState<PhotonFeature[]>([])
+  const [enderecoSelecionado, setEnderecoSelecionado] = useState<EnderecoSelecionado | null>(null)
+  const [buscandoEndereco, setBuscandoEndereco] = useState(false)
+  const [buscandoGps, setBuscandoGps] = useState(false)
   const [enviandoSolicitacao, setEnviandoSolicitacao] = useState(false)
 
   const carregarSolicitacaoLocal = useCallback(async () => {
@@ -122,7 +189,6 @@ export default function PerfilPage() {
         setHoraFecha(data.horario_fecha || '')
         setLat(data.lat != null ? Number(data.lat) : null)
         setLng(data.lng != null ? Number(data.lng) : null)
-        setNovoEndereco(data.endereco || '')
       })
 
     const inicioMes = new Date()
@@ -163,6 +229,70 @@ export default function PerfilPage() {
     return () => { supabase.removeChannel(channel) }
   }, [sessao?.id, carregarSolicitacaoLocal])
 
+  useEffect(() => {
+    const termo = novoEndereco.trim()
+    if (solicitacaoLocal?.status !== 'aprovada' || termo.length < 3 || enderecoSelecionado?.rua === termo) {
+      setBuscandoEndereco(false)
+      setSugestoesEndereco([])
+      return
+    }
+
+    const controller = new AbortController()
+    const timer = window.setTimeout(async () => {
+      setBuscandoEndereco(true)
+      try {
+        const url = new URL('https://photon.komoot.io/api/')
+        url.searchParams.set('q', `${termo}, Praia Grande, Sao Paulo, Brasil`)
+        url.searchParams.set('limit', '6')
+        url.searchParams.set('lat', String(CENTRO_PRAIA_GRANDE.lat))
+        url.searchParams.set('lon', String(CENTRO_PRAIA_GRANDE.lng))
+        url.searchParams.set('zoom', '12')
+        url.searchParams.set('location_bias_scale', '0.2')
+        url.searchParams.append('layer', 'street')
+        url.searchParams.append('layer', 'house')
+
+        const resposta = await fetch(url, {
+          signal: controller.signal,
+          headers: { Accept: 'application/json' },
+        })
+        if (!resposta.ok) throw new Error('busca indisponivel')
+        const data = (await resposta.json()) as { features?: PhotonFeature[] }
+        const resultados = (data.features ?? []).filter(feature => {
+          const cidade = `${feature.properties.city ?? ''} ${feature.properties.county ?? ''}`.toLowerCase()
+          return cidade.includes('praia grande')
+        })
+        const unicos = resultados.filter((feature, index, lista) => {
+          const chave = [
+            feature.properties.street || feature.properties.name,
+            feature.properties.district,
+            feature.properties.postcode,
+          ].join('|').toLowerCase()
+          return lista.findIndex(item => [
+            item.properties.street || item.properties.name,
+            item.properties.district,
+            item.properties.postcode,
+          ].join('|').toLowerCase() === chave) === index
+        })
+        setSugestoesEndereco(unicos)
+        if (!unicos.length) {
+          setLocalMsg('Nenhuma rua encontrada em Praia Grande. Confira o nome e tente novamente.')
+        }
+      } catch (error) {
+        if ((error as Error).name !== 'AbortError') {
+          setSugestoesEndereco([])
+          setLocalMsg('Nao consegui buscar enderecos agora. Confira a internet e tente novamente.')
+        }
+      } finally {
+        if (!controller.signal.aborted) setBuscandoEndereco(false)
+      }
+    }, 650)
+
+    return () => {
+      window.clearTimeout(timer)
+      controller.abort()
+    }
+  }, [novoEndereco, solicitacaoLocal?.status, enderecoSelecionado?.rua])
+
   async function salvarHorario() {
     if (!sessao) return
     setSalvandoHorario(true)
@@ -200,45 +330,96 @@ export default function PerfilPage() {
     setLocalMsg('Solicitacao enviada ao painel PraiaGo. Voce sera avisado quando for revisada.')
   }
 
-  async function aplicarCorrecaoLocalizacao() {
-    if (!sessao || !solicitacaoLocal || solicitacaoLocal.status !== 'aprovada') return
-    const endereco = novoEndereco.trim()
-    if (endereco.length < 5) {
-      setLocalMsg('Informe o endereco correto da loja antes de capturar o GPS.')
+  function selecionarEndereco(feature: PhotonFeature) {
+    const endereco = enderecoDaFeature(feature)
+    if (!endereco) return
+    setNovoEndereco(endereco.rua)
+    setNumeroEndereco(feature.properties.housenumber || '')
+    setEnderecoSelecionado(endereco)
+    setSugestoesEndereco([])
+    setLocalMsg('Rua selecionada. Agora informe somente o numero da loja.')
+  }
+
+  async function usarLocalizacaoAtual() {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      setLocalMsg('Seu aparelho nao tem GPS disponivel.')
       return
     }
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      setLocalMsg('Seu aparelho nao tem GPS disponivel.'); return
-    }
-    setSalvandoLocal(true)
-    setLocalMsg('Capturando o GPS da loja...')
-    navigator.geolocation.getCurrentPosition(
-      async (p) => {
-        const novaLat = p.coords.latitude
-        const novaLng = p.coords.longitude
-        const { data, error } = await supabase.rpc('aplicar_correcao_localizacao', {
-          p_solicitacao_id: solicitacaoLocal.id,
-          p_lat: novaLat,
-          p_lng: novaLng,
-          p_endereco: endereco,
+
+    setBuscandoGps(true)
+    setSugestoesEndereco([])
+    setLocalMsg('Localizando a rua mais proxima...')
+
+    try {
+      const posicao = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 0,
         })
-        setSalvandoLocal(false)
-        if (error) {
-          setLocalMsg(error.message.includes('expirou')
-            ? 'A autorizacao expirou. Envie uma nova solicitacao.'
-            : 'Nao foi possivel corrigir o ponto. Tente novamente.')
-          return
-        }
-        setLat(novaLat)
-        setLng(novaLng)
-        setPerfil(atual => ({ ...atual, endereco }))
-        setSolicitacaoLocal(data as SolicitacaoLocalizacao)
-        setLocalMsg('Localizacao corrigida e travada no novo ponto.')
-        setTimeout(() => setLocalMsg(''), 6000)
-      },
-      () => { setSalvandoLocal(false); setLocalMsg('Precisamos da permissao de localizacao. Ative o GPS e permita o acesso.') },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 },
-    )
+      })
+      const gpsLat = posicao.coords.latitude
+      const gpsLng = posicao.coords.longitude
+      const url = new URL('https://photon.komoot.io/reverse')
+      url.searchParams.set('lat', String(gpsLat))
+      url.searchParams.set('lon', String(gpsLng))
+      url.searchParams.set('limit', '5')
+      url.searchParams.set('radius', '1')
+
+      const resposta = await fetch(url, { headers: { Accept: 'application/json' } })
+      if (!resposta.ok) throw new Error('endereco indisponivel')
+      const data = (await resposta.json()) as { features?: PhotonFeature[] }
+      const feature = (data.features ?? []).find(item => item.properties.street || item.properties.name)
+      const endereco = feature ? enderecoDaFeature(feature, gpsLat, gpsLng) : null
+      if (!endereco) throw new Error('rua nao encontrada')
+
+      setNovoEndereco(endereco.rua)
+      setNumeroEndereco(feature?.properties.housenumber || '')
+      setEnderecoSelecionado(endereco)
+      setLocalMsg('Localizacao atual encontrada. Confira a rua e informe somente o numero.')
+    } catch (error) {
+      const codigo = (error as GeolocationPositionError).code
+      setLocalMsg(codigo
+        ? 'Precisamos da permissao de localizacao. Ative o GPS e permita o acesso.'
+        : 'O GPS foi capturado, mas nao encontrei a rua. Digite o endereco para buscar.')
+    } finally {
+      setBuscandoGps(false)
+    }
+  }
+
+  async function aplicarCorrecaoLocalizacao() {
+    if (!sessao || !solicitacaoLocal || solicitacaoLocal.status !== 'aprovada') return
+    if (!enderecoSelecionado) {
+      setLocalMsg('Escolha um endereco da lista ou use sua localizacao atual.')
+      return
+    }
+    const numero = numeroEndereco.trim()
+    if (!numero) {
+      setLocalMsg('Informe o numero da loja. Use S/N se o local nao tiver numero.')
+      return
+    }
+    const endereco = montarEndereco(enderecoSelecionado, numero)
+    setSalvandoLocal(true)
+    setLocalMsg('Salvando o novo ponto fixo...')
+    const { data, error } = await supabase.rpc('aplicar_correcao_localizacao', {
+      p_solicitacao_id: solicitacaoLocal.id,
+      p_lat: enderecoSelecionado.lat,
+      p_lng: enderecoSelecionado.lng,
+      p_endereco: endereco,
+    })
+    setSalvandoLocal(false)
+    if (error) {
+      setLocalMsg(error.message.includes('expirou')
+        ? 'A autorizacao expirou. Envie uma nova solicitacao.'
+        : 'Nao foi possivel corrigir o ponto. Tente novamente.')
+      return
+    }
+    setLat(enderecoSelecionado.lat)
+    setLng(enderecoSelecionado.lng)
+    setPerfil(atual => ({ ...atual, endereco }))
+    setSolicitacaoLocal(data as SolicitacaoLocalizacao)
+    setLocalMsg('Localizacao corrigida e travada no novo ponto.')
+    setTimeout(() => setLocalMsg(''), 6000)
   }
 
   async function salvarChavePix() {
@@ -264,6 +445,8 @@ export default function PerfilPage() {
     && Boolean(solicitacaoLocal.autorizado_ate)
     && new Date(solicitacaoLocal.autorizado_ate as string).getTime() > Date.now()
   const aguardandoAnalise = solicitacaoLocal?.status === 'pendente'
+  const localMsgSucesso = /(enviada|corrigida|selecionada|encontrada)/i.test(localMsg)
+  const localMsgProcessando = localMsg.endsWith('...')
 
   return (
     <div style={{ padding: '32px 40px 48px', minHeight: '100vh' }}>
@@ -386,23 +569,85 @@ export default function PerfilPage() {
             {solicitacaoLocal.observacao_admin && (
               <div style={{ color: '#166534', fontSize: 12, fontWeight: 700 }}>Admin: {solicitacaoLocal.observacao_admin}</div>
             )}
+            <button
+              type="button"
+              onClick={usarLocalizacaoAtual}
+              disabled={buscandoGps || salvandoLocal}
+              style={{ width: '100%', border: '1px solid rgba(2,132,199,0.3)', background: '#eff6ff', color: '#0369a1', borderRadius: 12, padding: 12, fontSize: 13, fontWeight: 900, cursor: buscandoGps ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+            >
+              {buscandoGps ? <Loader2 size={17} className="animate-spin-slow" /> : <Navigation size={17} />}
+              {buscandoGps ? 'Buscando rua proxima...' : 'Usar localizacao atual da loja'}
+            </button>
+            <div style={{ position: 'relative' }}>
+              <label style={{ fontSize: 11, fontWeight: 900, color: '#166534' }}>
+                RUA OU AVENIDA
+                <div style={{ position: 'relative', marginTop: 6 }}>
+                  <Search size={17} color="#64748b" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                  <input
+                    value={novoEndereco}
+                    onChange={e => {
+                      setNovoEndereco(e.target.value)
+                      setEnderecoSelecionado(null)
+                      setLocalMsg('')
+                    }}
+                    placeholder="Ex.: Rua Darcy"
+                    autoComplete="off"
+                    aria-autocomplete="list"
+                    aria-expanded={sugestoesEndereco.length > 0}
+                    style={{ display: 'block', width: '100%', boxSizing: 'border-box', border: '1px solid rgba(22,101,52,0.25)', borderRadius: 12, padding: '12px 42px 12px 38px', background: '#fff', color: '#0f172a', fontSize: 14, fontWeight: 700 }}
+                  />
+                  {buscandoEndereco && <Loader2 size={17} color="#16a34a" className="animate-spin-slow" style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)' }} />}
+                </div>
+              </label>
+              {sugestoesEndereco.length > 0 && (
+                <div role="listbox" style={{ position: 'absolute', zIndex: 20, top: '100%', left: 0, right: 0, marginTop: 6, overflow: 'hidden', border: '1px solid #cbd5e1', borderRadius: 8, background: '#fff', boxShadow: '0 12px 28px rgba(15,23,42,0.16)' }}>
+                  {sugestoesEndereco.map(feature => {
+                    const rua = feature.properties.street || feature.properties.name || 'Endereco'
+                    const detalhe = [feature.properties.district, feature.properties.city, feature.properties.postcode].filter(Boolean).join(' - ')
+                    return (
+                      <button
+                        type="button"
+                        role="option"
+                        key={`${feature.properties.osm_type ?? 'osm'}-${feature.properties.osm_id ?? rua}-${detalhe}`}
+                        onClick={() => selecionarEndereco(feature)}
+                        style={{ width: '100%', border: 0, borderBottom: '1px solid #e2e8f0', background: '#fff', padding: '11px 12px', textAlign: 'left', cursor: 'pointer' }}
+                      >
+                        <span style={{ display: 'block', color: '#0f172a', fontSize: 13, fontWeight: 900 }}>{rua}</span>
+                        {detalhe && <span style={{ display: 'block', marginTop: 3, color: '#64748b', fontSize: 11, fontWeight: 700 }}>{detalhe}</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
             <label style={{ fontSize: 11, fontWeight: 900, color: '#166534' }}>
-              ENDERECO CORRETO DA LOJA
+              NUMERO
               <input
-                value={novoEndereco}
-                onChange={e => setNovoEndereco(e.target.value)}
-                placeholder="Rua, numero, bairro e CEP"
+                value={numeroEndereco}
+                onChange={e => setNumeroEndereco(e.target.value)}
+                placeholder="Ex.: 123 ou S/N"
+                inputMode="text"
+                maxLength={20}
                 style={{ display: 'block', width: '100%', boxSizing: 'border-box', marginTop: 6, border: '1px solid rgba(22,101,52,0.25)', borderRadius: 12, padding: 12, background: '#fff', color: '#0f172a', fontSize: 14, fontWeight: 700 }}
               />
             </label>
+            {enderecoSelecionado && (
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px', border: '1px solid rgba(34,197,94,0.25)', borderRadius: 10, background: '#fff', color: '#166534', fontSize: 12, fontWeight: 800, lineHeight: 1.45 }}>
+                <MapPin size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+                <span>{montarEndereco(enderecoSelecionado, numeroEndereco.trim() || 'numero pendente')}</span>
+              </div>
+            )}
+            <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" style={{ color: '#64748b', fontSize: 10, fontWeight: 700, textDecoration: 'none' }}>
+              Enderecos: OpenStreetMap, busca Photon
+            </a>
             <button
               type="button"
               onClick={aplicarCorrecaoLocalizacao}
-              disabled={salvandoLocal}
-              style={{ width: '100%', border: 0, background: '#16a34a', color: '#fff', borderRadius: 14, padding: 14, fontSize: 14, fontWeight: 900, cursor: salvandoLocal ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9 }}
+              disabled={salvandoLocal || buscandoGps || !enderecoSelecionado || !numeroEndereco.trim()}
+              style={{ width: '100%', border: 0, background: '#16a34a', color: '#fff', borderRadius: 14, padding: 14, fontSize: 14, fontWeight: 900, cursor: salvandoLocal ? 'wait' : 'pointer', opacity: !enderecoSelecionado || !numeroEndereco.trim() ? 0.55 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9 }}
             >
               {salvandoLocal ? <Loader2 size={18} className="animate-spin-slow" /> : <MapPin size={18} />}
-              {salvandoLocal ? 'Capturando GPS...' : 'Gravar novo ponto fixo'}
+              {salvandoLocal ? 'Salvando ponto...' : 'Salvar endereco e ponto fixo'}
             </button>
           </div>
         )}
@@ -441,7 +686,7 @@ export default function PerfilPage() {
             </button>
           </div>
         )}
-        {localMsg && <div style={{ color: localMsg.includes('enviada') || localMsg.includes('corrigida') ? '#16a34a' : localMsg.includes('...') ? '#64748b' : '#ef4444', fontSize: 13, fontWeight: 800 }}>{localMsg}</div>}
+        {localMsg && <div role="status" style={{ color: localMsgSucesso ? '#16a34a' : localMsgProcessando ? '#64748b' : '#ef4444', fontSize: 13, fontWeight: 800 }}>{localMsg}</div>}
       </InfoCard>
 
       <InfoCard title="Onde voce recebe (chave Pix)" icon={<CreditCard size={16} color="#0284c7" />}>
