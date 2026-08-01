@@ -55,12 +55,21 @@ Deno.serve(async (req: Request) => {
 
   if (!pedido) return json({ error: 'Pedido nao encontrado.' }, { status: 404 })
   if (pedido.payment_status === 'aprovado') return json({ error: 'Este pedido ja foi pago.' }, { status: 409 })
+  if (pedido.payment_status === 'estornado') return json({ error: 'Este pedido ja foi estornado.' }, { status: 409 })
   if (pedido.status === 'cancelado') return json({ error: 'Este pedido foi cancelado.' }, { status: 409 })
 
   const valor = Number(pedido.total)
   if (!Number.isFinite(valor) || valor <= 0) return json({ error: 'Valor do pedido invalido.' }, { status: 422 })
 
   const admin = adminClient()
+  if (['recusado', 'rejeitado'].includes(String(pedido.payment_status))) {
+    const { error: erroReabrir } = await admin
+      .from('pedidos')
+      .update({ payment_status: 'pendente' })
+      .eq('id', pedidoId)
+      .eq('status', 'aguardando_pagamento')
+    if (erroReabrir) return json({ error: 'Nao foi possivel reabrir o pagamento.' }, { status: 409 })
+  }
   const { data: { user } } = await comoUsuario.auth.getUser(authHeader.slice(7))
   const { data: perfil } = await admin
     .from('profiles')

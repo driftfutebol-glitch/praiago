@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
-import { CheckCircle2, CreditCard, DollarSign, Percent, RefreshCw, Search, WalletCards } from 'lucide-react'
+import { AlertCircle, BellRing, CheckCircle2, CreditCard, DollarSign, Percent, RefreshCw, Search, WalletCards, XCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { confirmDialog, alertDialog } from '../lib/dialog'
 
@@ -32,11 +32,23 @@ type Settings = {
   repasse_dias: number
 }
 
+type PaymentNotification = {
+  id: string
+  pedido_id: string
+  tipo: 'pendente' | 'aprovado' | 'recusado' | 'cancelado' | 'estornado'
+  payment_status: string
+  pagamento?: string | null
+  valor: number
+  created_at: string
+}
+
+type StatusFilter = 'todos' | 'pendente' | 'aprovado' | 'atencao'
+
 const money = (value: unknown) => `R$ ${Number(value || 0).toFixed(2).replace('.', ',')}`
 
 function statusClass(status?: string | null) {
   if (['aprovado', 'pago', 'pago_split', 'repasse_manual_pago'].includes(status || '')) return 'bg-green-500/10 text-green-400 border-green-500/15'
-  if (['rejeitado', 'cancelado', 'estornado', 'chargeback'].includes(status || '')) return 'bg-red-500/10 text-red-400 border-red-500/15'
+  if (['recusado', 'rejeitado', 'cancelado', 'estornado', 'chargeback'].includes(status || '')) return 'bg-red-500/10 text-red-400 border-red-500/15'
   if ((status || '').includes('manual')) return 'bg-amber-500/10 text-amber-400 border-amber-500/15'
   return 'bg-blue-500/10 text-blue-400 border-blue-500/15'
 }
@@ -49,6 +61,8 @@ export default function FinanceiroPage() {
   const [loading, setLoading] = useState(true)
   const [saques, setSaques] = useState<Array<{ id: string; valor: number; status: string; chave_pix: string | null; created_at: string; vendedor_nome: string }>>([])
   const [processandoSaque, setProcessandoSaque] = useState<string | null>(null)
+  const [paymentNotifications, setPaymentNotifications] = useState<PaymentNotification[]>([])
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('todos')
 
   async function loadSaques() {
     const { data } = await supabase
@@ -80,7 +94,7 @@ export default function FinanceiroPage() {
 
   async function load() {
     setLoading(true)
-    const [{ data: pedidosData }, { data: settingsData }] = await Promise.all([
+    const [{ data: pedidosData }, { data: settingsData }, { data: notificationsData }] = await Promise.all([
       supabase
         .from('pedidos')
         .select('id,created_at,cliente_nome,vendedor_nome,pagamento,payment_provider,payment_status,settlement_status,status,gross_amount,total,platform_fee_amount,vendor_amount,payment_reference,payment_checkout_url,reembolso_status,reembolso_motivo,reembolso_previsao')
@@ -90,8 +104,14 @@ export default function FinanceiroPage() {
         .select('platform_fee_percent,platform_fee_fixed,presencial_fee_mode,repasse_dias')
         .eq('id', true)
         .maybeSingle(),
+      supabase
+        .from('payment_notifications')
+        .select('id,pedido_id,tipo,payment_status,pagamento,valor,created_at')
+        .order('created_at', { ascending: false })
+        .limit(30),
     ])
     setPedidos((pedidosData || []) as PedidoFinanceiro[])
+    setPaymentNotifications((notificationsData || []) as PaymentNotification[])
     if (settingsData) {
       setSettings({
         platform_fee_percent: Number(settingsData.platform_fee_percent ?? 10),
@@ -107,6 +127,7 @@ export default function FinanceiroPage() {
     load()
     const channel = supabase.channel('admin_financeiro')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos' }, () => load())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'payment_notifications' }, () => load())
       // saques novos aparecem na hora (antes só atualizava ao dar refresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'payouts' }, () => loadSaques())
       .subscribe()
@@ -115,15 +136,21 @@ export default function FinanceiroPage() {
 
   const filtrados = useMemo(() => {
     const term = busca.trim().toLowerCase()
-    if (!term) return pedidos
-    return pedidos.filter(p =>
-      p.id.toLowerCase().includes(term) ||
-      String(p.cliente_nome || '').toLowerCase().includes(term) ||
-      String(p.vendedor_nome || '').toLowerCase().includes(term) ||
-      String(p.payment_status || '').toLowerCase().includes(term) ||
-      String(p.settlement_status || '').toLowerCase().includes(term)
-    )
-  }, [busca, pedidos])
+    return pedidos.filter(p => {
+      const status = String(p.payment_status || 'pendente').toLowerCase()
+      const statusOk = statusFilter === 'todos'
+        || (statusFilter === 'pendente' && status === 'pendente')
+        || (statusFilter === 'aprovado' && status === 'aprovado')
+        || (statusFilter === 'atencao' && ['recusado', 'rejeitado', 'cancelado', 'estornado', 'chargeback'].includes(status))
+      if (!statusOk) return false
+      if (!term) return true
+      return p.id.toLowerCase().includes(term)
+        || String(p.cliente_nome || '').toLowerCase().includes(term)
+        || String(p.vendedor_nome || '').toLowerCase().includes(term)
+        || status.includes(term)
+        || String(p.settlement_status || '').toLowerCase().includes(term)
+    })
+  }, [busca, pedidos, statusFilter])
 
   const resumo = useMemo(() => {
     return pedidos.reduce((acc, p) => {
@@ -139,6 +166,16 @@ export default function FinanceiroPage() {
       return acc
     }, { bruto: 0, taxa: 0, repasse: 0, repasseManual: 0, online: 0 })
   }, [pedidos])
+
+  const paymentCounts = useMemo(() => pedidos.reduce((acc, pedido) => {
+    const status = String(pedido.payment_status || 'pendente').toLowerCase()
+    if (status === 'pendente') acc.pendente += 1
+    else if (status === 'aprovado') acc.aprovado += 1
+    else if (['recusado', 'rejeitado', 'cancelado', 'estornado', 'chargeback'].includes(status)) acc.atencao += 1
+    return acc
+  }, { pendente: 0, aprovado: 0, atencao: 0 }), [pedidos])
+
+  const pedidosById = useMemo(() => new Map(pedidos.map(pedido => [pedido.id, pedido])), [pedidos])
 
   async function salvarTaxa() {
     setSalvando(true)
@@ -198,6 +235,58 @@ export default function FinanceiroPage() {
           <RefreshCw size={16} /> Atualizar
         </button>
       </header>
+
+      <section className="glass-panel rounded-2xl border-slate-800 overflow-hidden">
+        <div className="p-5 border-b border-slate-800 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-sky-500/10 text-sky-400 flex items-center justify-center">
+              <BellRing size={19} />
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-slate-100">Alertas de pagamento</h2>
+              <p className="text-xs text-slate-500">Pendencias e confirmacoes recebidas do gateway em tempo real.</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" role="group" aria-label="Filtrar pagamentos por status">
+            <button onClick={() => setStatusFilter('todos')} className={`h-10 px-3 rounded-lg border text-xs font-black transition-colors ${statusFilter === 'todos' ? 'bg-slate-700 text-white border-slate-600' : 'bg-slate-950/40 text-slate-400 border-slate-800 hover:text-white'}`}>
+              Todos {pedidos.length}
+            </button>
+            <button onClick={() => setStatusFilter('pendente')} className={`h-10 px-3 rounded-lg border text-xs font-black transition-colors inline-flex items-center justify-center gap-1.5 ${statusFilter === 'pendente' ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' : 'bg-slate-950/40 text-slate-400 border-slate-800 hover:text-white'}`}>
+              <AlertCircle size={14} /> Pendentes {paymentCounts.pendente}
+            </button>
+            <button onClick={() => setStatusFilter('aprovado')} className={`h-10 px-3 rounded-lg border text-xs font-black transition-colors inline-flex items-center justify-center gap-1.5 ${statusFilter === 'aprovado' ? 'bg-green-500/15 text-green-300 border-green-500/30' : 'bg-slate-950/40 text-slate-400 border-slate-800 hover:text-white'}`}>
+              <CheckCircle2 size={14} /> Aprovados {paymentCounts.aprovado}
+            </button>
+            <button onClick={() => setStatusFilter('atencao')} className={`h-10 px-3 rounded-lg border text-xs font-black transition-colors inline-flex items-center justify-center gap-1.5 ${statusFilter === 'atencao' ? 'bg-red-500/15 text-red-300 border-red-500/30' : 'bg-slate-950/40 text-slate-400 border-slate-800 hover:text-white'}`}>
+              <XCircle size={14} /> Atencao {paymentCounts.atencao}
+            </button>
+          </div>
+        </div>
+        <div className="divide-y divide-slate-800/60">
+          {paymentNotifications.slice(0, 8).map(notification => {
+            const pedido = pedidosById.get(notification.pedido_id)
+            return (
+              <div key={notification.id} className="px-5 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 hover:bg-slate-900/30 transition-colors">
+                <span className={`w-fit px-2 py-1 rounded-md text-[10px] font-black uppercase border ${statusClass(notification.tipo)}`}>{notification.tipo}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-bold text-slate-200">
+                    Pedido <span className="font-mono text-purple-400">{notification.pedido_id.slice(0, 8)}</span>
+                    {pedido?.cliente_nome ? <span className="text-slate-500 font-medium"> · {pedido.cliente_nome}</span> : null}
+                  </div>
+                  <div className="text-xs text-slate-500 truncate">{pedido?.vendedor_nome || 'Vendedor'} · {(notification.pagamento || 'pagamento').toUpperCase()}</div>
+                </div>
+                <div className="sm:text-right">
+                  <div className="text-sm text-slate-100 font-black font-mono">{money(notification.valor)}</div>
+                  <div className="text-[10px] text-slate-600">{format(new Date(notification.created_at), 'dd/MM HH:mm')}</div>
+                </div>
+              </div>
+            )
+          })}
+          {!loading && paymentNotifications.length === 0 && (
+            <div className="px-5 py-8 text-center text-sm font-bold text-slate-500">Nenhum alerta de pagamento registrado.</div>
+          )}
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         {cards.map(card => (

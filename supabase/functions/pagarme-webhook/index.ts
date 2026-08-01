@@ -1,6 +1,6 @@
-// Webhook do Pagar.me. A notificacao recebida e apenas um aviso: antes de
-// alterar qualquer pagamento, buscamos o hook e o pedido diretamente na API
-// do gateway. Assim o endpoint pode ser publico sem confiar no corpo enviado.
+// Webhook do Pagar.me. A notificacao recebida e apenas um aviso: o status,
+// valor, moeda e codigo do pedido sao relidos na API autenticada do gateway
+// antes de qualquer alteracao. O corpo publico nunca aprova um pagamento.
 import { corsHeaders, json, readJson } from '../_shared/cors.ts'
 import {
   adminClient,
@@ -18,8 +18,8 @@ type WebhookPagarme = {
   data?: Record<string, unknown>
 }
 
-const HOOK_ID = /^hook_[A-Za-z0-9]+$/
-const ORDER_ID = /^or_[A-Za-z0-9]+$/
+const HOOK_ID = /^hook_[A-Za-z0-9]{16}$/
+const ORDER_ID = /^or_[A-Za-z0-9]{16}$/
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 function eventoDePagamento(tipo: string): boolean {
@@ -55,11 +55,6 @@ function extrairPedido(dados: Record<string, unknown>): { orderId: string; pedid
   }
 }
 
-function statusDoErro(erro: unknown): number {
-  const status = Number((erro as { status?: unknown } | null)?.status)
-  return Number.isInteger(status) ? status : 0
-}
-
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
   if (req.method !== 'POST') return json({ error: 'Metodo nao permitido.' }, { status: 405 })
@@ -77,27 +72,10 @@ Deno.serve(async (req: Request) => {
     return json({ ok: true, ignorado: tipoRecebido })
   }
 
-  let verificado: WebhookPagarme
-  try {
-    verificado = await pagarme<WebhookPagarme>(`/hooks/${hookId}`, { method: 'GET' })
-  } catch (erro) {
-    const status = statusDoErro(erro)
-    console.error('Webhook nao confirmado no gateway', { status })
-    if ([400, 401, 403, 404].includes(status)) {
-      return json({ error: 'evento nao autenticado' }, { status: 401 })
-    }
-    return json({ error: 'falha ao validar evento' }, { status: 503 })
-  }
-
-  // O id consultado precisa ser exatamente o devolvido pela API autenticada.
-  if (String(verificado.id || '') !== hookId) {
-    return json({ error: 'evento nao autenticado' }, { status: 401 })
-  }
-
-  const tipo = String(verificado.type || verificado.event || '')
+  const tipo = tipoRecebido
   if (!eventoDePagamento(tipo)) return json({ ok: true, ignorado: tipo || 'desconhecido' })
 
-  const dados = objeto(verificado.data)
+  const dados = objeto(recebido.data)
   const { orderId, pedidoId } = extrairPedido(dados)
   if (!orderId) return json({ ok: true, ignorado: tipo })
 
@@ -137,7 +115,8 @@ Deno.serve(async (req: Request) => {
     provider: 'pagarme',
     event_type: tipo,
     external_id: hookId,
-    signature_valid: true,
+    signature_valid: false,
+    verification_method: 'order_api',
     processed: false,
     // Nao persiste o payload completo (CPF, telefone e dados do cartao).
     payload: { id: hookId, type: tipo, order_id: orderId },
@@ -162,10 +141,14 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    // Segunda validacao: o estado e o valor sempre vem do pedido lido direto
-    // na API, nunca do payload do webhook.
+    // A autenticacao efetiva e a leitura do pedido com a secret key. O payload
+    // publico serve apenas para apontar qual recurso deve ser reconciliado.
     const resposta = await pagarme<Record<string, unknown>>(`/orders/${orderId}`, { method: 'GET' })
     if (String(resposta.id || '') !== orderId) throw new Error('Pedido divergente no gateway.')
+    if (String(resposta.code || '') !== String(pagamento.pedido_id || '')) {
+      console.error('Webhook com codigo de pedido divergente')
+      return json({ error: 'pagamento divergente' }, { status: 409 })
+    }
 
     const valorGateway = Number(resposta.amount)
     const valorEsperado = centavos(Number(pagamento.valor))

@@ -117,6 +117,44 @@ function isPresencialPayment(method?: string) {
   return method === 'dinheiro' || method === 'cartao_fisico' || method === 'debito_fisico' || method === 'credito_fisico'
 }
 
+type ItemDetalhe = { produto_id: string; qtd: number }
+
+function normalizarItensDetalhe(value: unknown): ItemDetalhe[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map(item => {
+      if (!item || typeof item !== 'object') return null
+      const row = item as Record<string, unknown>
+      const produtoId = String(row.produto_id || '')
+      const qtd = Number(row.qtd || 0)
+      return produtoId && Number.isInteger(qtd) && qtd > 0 ? { produto_id: produtoId, qtd } : null
+    })
+    .filter((item): item is ItemDetalhe => item !== null)
+    .sort((a, b) => a.produto_id.localeCompare(b.produto_id))
+}
+
+function mesmosItens(a: unknown, b: ItemDetalhe[]) {
+  const normalizado = normalizarItensDetalhe(a)
+  const esperado = normalizarItensDetalhe(b)
+  return normalizado.length === esperado.length
+    && normalizado.every((item, index) => (
+      item.produto_id === esperado[index].produto_id
+      && item.qtd === esperado[index].qtd
+    ))
+}
+
+function mensagemErroPedido(message?: string) {
+  const texto = String(message || '')
+  if (/cupom ja usado|duplicate key|cupom_usos/i.test(texto)) {
+    return 'Este cupom ja esta reservado em outro pedido pendente. Cancele esse pedido em Meus Pedidos ou conclua o pagamento.'
+  }
+  if (/produto invalido|pedido sem itens|pedido sem valor/i.test(texto)) {
+    return 'Um item do carrinho mudou ou ficou indisponivel. Atualize o carrinho e tente de novo.'
+  }
+  if (/cupom/i.test(texto)) return texto
+  return 'Nao foi possivel criar o pedido agora. Tente novamente.'
+}
+
 function mapDbStatusToPedidoStatus(status?: string): Pedido['status'] {
   if (status === 'aguardando_pagamento') return 'aguardando_pagamento'
   if (status === 'novo') return 'enviado'
@@ -205,11 +243,62 @@ export const useStore = create<State>()(
         const subtotal = itens.reduce((a, i) => a + i.preco * i.qtd, 0)
         const discountAmount = Math.max(0, Math.min(subtotal, Math.round(Number(options.desconto?.valor ?? 0) * 100) / 100))
         const total = Math.max(0, Math.round((subtotal - discountAmount) * 100) / 100)
+        const method = entrega?.pagamento || 'pix'
+        const presencial = isPresencialPayment(method)
+        const cupomCodigo = options.desconto?.codigo?.trim().toUpperCase() || null
+        const itensDetalhe = itensBrutos.map(i => ({ produto_id: i.id, qtd: i.qtd }))
+
+        // Se a rede caiu depois do INSERT ou a pre-validacao do PIX falhou, o
+        // cupom ja ficou reservado. Reutiliza o mesmo checkout em vez de criar
+        // outro pedido e bater na trava de uso unico.
+        if (!presencial) {
+          let pendentesQuery = supabase
+            .from('pedidos')
+            .select('id,created_at,total,subtotal_amount,discount_amount,discount_code,itens_detalhe,reta,barraca,payment_status')
+            .eq('cliente_id', sessao.id)
+            .eq('vendedor_id', vend.id)
+            .eq('pagamento', method)
+            .eq('status', 'aguardando_pagamento')
+            .in('payment_status', ['pendente', 'recusado'])
+
+          pendentesQuery = cupomCodigo
+            ? pendentesQuery.eq('discount_code', cupomCodigo)
+            : pendentesQuery.is('discount_code', null)
+
+          const { data: pendentes } = await pendentesQuery
+            .order('created_at', { ascending: false })
+            .limit(10)
+
+          const existente = pendentes?.find(row => (
+            mesmosItens(row.itens_detalhe, itensDetalhe)
+            && String(row.reta || '') === String(entrega?.reta || '')
+            && String(row.barraca || '') === String(entrega?.barraca || '')
+          ))
+
+          if (existente) {
+            const pedidoExistente: Pedido = {
+              id: String(existente.id),
+              vendedorId: vend.id,
+              vendedorNome: vend.nome,
+              itens,
+              total: Number(existente.total || total),
+              subtotal: Number(existente.subtotal_amount || subtotal),
+              desconto: Number(existente.discount_amount || discountAmount),
+              cupom: existente.discount_code || cupomCodigo,
+              data: new Date(existente.created_at).getTime(),
+              status: 'aguardando_pagamento',
+              entrega,
+            }
+            set(s => ({
+              pedidos: [pedidoExistente, ...s.pedidos.filter(p => p.id !== pedidoExistente.id)],
+            }))
+            return pedidoExistente
+          }
+        }
+
         const paymentSettings = await getPaymentSettings()
         const platformFeeAmount = Math.round((total * paymentSettings.platformFeePercent / 100 + paymentSettings.platformFeeFixed) * 100) / 100
         const vendorAmount = Math.max(0, Math.round((total - platformFeeAmount) * 100) / 100)
-        const method = entrega?.pagamento || 'pix'
-        const presencial = isPresencialPayment(method)
         
         // Insere no banco
         const { data: inserted, error } = await supabase.from('pedidos').insert({
@@ -226,11 +315,11 @@ export const useStore = create<State>()(
           itens: itens.map(i => `${i.qtd}x ${i.nome}`),
           // itens com ID do produto — o SERVIDOR recalcula o preço real por aqui
           // (o total/subtotal abaixo são só palpite; o trigger sobrescreve).
-          itens_detalhe: itensBrutos.map(i => ({ produto_id: i.id, qtd: i.qtd })),
+          itens_detalhe: itensDetalhe,
           total: total,
           subtotal_amount: subtotal,
           discount_amount: discountAmount,
-          discount_code: options.desconto?.codigo ?? null,
+          discount_code: cupomCodigo,
           discount_reason: options.desconto?.motivo ?? null,
           // Pagamento online: o pedido NASCE travado e só vira 'novo' (visível
           // pro vendedor) quando o webhook do gateway confirmar o pagamento.
@@ -247,13 +336,13 @@ export const useStore = create<State>()(
         }).select().single()
 
         if (error || !inserted) {
-          console.error("Erro ao criar pedido", error)
-          return null
+          console.error('Erro ao criar pedido', { code: error?.code || 'sem_retorno' })
+          throw new Error(mensagemErroPedido(error?.message))
         }
 
         const pedido: Pedido = {
           id: inserted.id, vendedorId: vend.id, vendedorNome: vend.nome,
-          itens, total, subtotal, desconto: discountAmount, cupom: options.desconto?.codigo ?? null, data: new Date(inserted.created_at).getTime(), status: presencial ? 'enviado' : 'aguardando_pagamento', entrega,
+          itens, total: Number(inserted.total ?? total), subtotal: Number(inserted.subtotal_amount ?? subtotal), desconto: Number(inserted.discount_amount ?? discountAmount), cupom: inserted.discount_code ?? cupomCodigo, data: new Date(inserted.created_at).getTime(), status: presencial ? 'enviado' : 'aguardando_pagamento', entrega,
         }
         set(s => ({
           pedidos: [pedido, ...s.pedidos],

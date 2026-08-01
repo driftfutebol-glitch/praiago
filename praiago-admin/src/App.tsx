@@ -66,7 +66,7 @@ function NotificationSystem() {
       }, 9000)
     }
 
-    const sub = supabase.channel('tickets_inserts')
+    const sub = supabase.channel('admin_notifications')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tickets' }, (payload) => {
         const ticket = payload.new
         pushNotification({
@@ -85,8 +85,40 @@ function NotificationSystem() {
           origem: v.nome || v.email || v.user_id || 'Cadastro',
         })
       })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'payment_notifications' }, (payload) => {
+        const pagamento = payload.new
+        const mensagens: Record<string, { titulo: string; texto: string }> = {
+          pendente: {
+            titulo: 'Pagamento pendente',
+            texto: `Pedido ${String(pagamento.pedido_id || '').slice(0, 8)} aguardando ${String(pagamento.pagamento || 'pagamento').toUpperCase()} de R$ ${Number(pagamento.valor || 0).toFixed(2).replace('.', ',')}`,
+          },
+          aprovado: {
+            titulo: 'Pagamento aprovado',
+            texto: `Pedido ${String(pagamento.pedido_id || '').slice(0, 8)} confirmado no valor de R$ ${Number(pagamento.valor || 0).toFixed(2).replace('.', ',')}`,
+          },
+          recusado: {
+            titulo: 'Pagamento recusado',
+            texto: `A cobranca do pedido ${String(pagamento.pedido_id || '').slice(0, 8)} nao foi aprovada.`,
+          },
+          cancelado: {
+            titulo: 'Pagamento cancelado',
+            texto: `O pagamento do pedido ${String(pagamento.pedido_id || '').slice(0, 8)} foi cancelado.`,
+          },
+          estornado: {
+            titulo: 'Pagamento estornado',
+            texto: `O pedido ${String(pagamento.pedido_id || '').slice(0, 8)} recebeu um estorno.`,
+          },
+        }
+        const mensagem = mensagens[String(pagamento.tipo)] || mensagens.pendente
+        pushNotification({
+          id: pagamento.id,
+          ...mensagem,
+          origem: 'Financeiro',
+        })
+      })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'pedidos' }, (payload) => {
         const p = payload.new
+        if (p.payment_provider === 'pagarme') return
         pushNotification({
           id: p.id,
           titulo: 'Novo pedido recebido',

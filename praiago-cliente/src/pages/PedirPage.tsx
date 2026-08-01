@@ -488,8 +488,14 @@ function PixPagamentoModal({ cobranca, pedidoId, total, onPago, onClose }: {
               <div style={{ textAlign: 'center', background: '#f8fafc', borderRadius: 24, border: '1px solid rgba(0,0,0,0.06)', padding: '18px 16px', marginBottom: 14 }}>
                 <div style={{ fontSize: 12, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1 }}>Total a pagar</div>
                 <div style={{ fontSize: 32, fontWeight: 900, color: '#16a34a', margin: '2px 0 12px' }}>R$ {total.toFixed(2).replace('.', ',')}</div>
-                {cobranca.qr_code_base64 ? (
-                  <motion.img initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} src={`data:image/png;base64,${cobranca.qr_code_base64}`} alt="QR Code PIX" style={{ width: 210, height: 210, borderRadius: 20, border: '1px solid rgba(0,0,0,0.08)', background: '#fff', padding: 8 }} />
+                {cobranca.qr_code_base64 || cobranca.qr_code_url ? (
+                  <motion.img
+                    initial={{ opacity: 0, scale: 0.92 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    src={cobranca.qr_code_base64 ? `data:image/png;base64,${cobranca.qr_code_base64}` : cobranca.qr_code_url || undefined}
+                    alt="QR Code PIX"
+                    style={{ width: 210, height: 210, display: 'block', margin: '0 auto', borderRadius: 20, border: '1px solid rgba(0,0,0,0.08)', background: '#fff', padding: 8 }}
+                  />
                 ) : (
                   <div style={{ fontSize: 13, color: '#64748b', padding: 20 }}>Use o código copia-e-cola abaixo 👇</div>
                 )}
@@ -718,6 +724,7 @@ type PerfilClienteCheckout = {
   cpf?: string | null
   cpf_check_status?: string | null
   email_verificado?: boolean | null
+  telefone?: string | null
 }
 
 function dinheiro(v: number) {
@@ -766,6 +773,8 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
   const total = Math.max(0, Math.round((subtotal - desconto) * 100) / 100)
   const radarReal = gpsFonte === 'gps' || gpsFonte === 'manual' || gpsFonte === 'memoria'
   const cpfOk = perfilCliente?.cpf_check_status === 'aprovado'
+  const telefoneSalvo = telefoneValido(telefoneCliente)
+    && telefoneCliente.replace(/\D/g, '') === String(perfilCliente?.telefone || '').replace(/\D/g, '')
   const beneficioElegivel = Boolean(sessao?.id && emailConfirmado && cpfOk && primeiraCompra)
   const cuponsParaMostrar = useMemo(() => cuponsDisponiveis
     .map(c => {
@@ -875,17 +884,27 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
     return d.length === 10 || d.length === 11
   }
 
-  async function salvarTelefone() {
-    if (!sessao?.id) return
-    if (!telefoneValido(telefoneCliente)) { setErro('Informe o telefone com DDD (ex: 13 99999-8888).'); return }
+  async function salvarTelefone(): Promise<boolean> {
+    if (!sessao?.id) return false
+    if (!telefoneValido(telefoneCliente)) {
+      setErro('Informe o telefone com DDD (ex: 13 99999-8888).')
+      return false
+    }
+    const telefone = telefoneCliente.replace(/\D/g, '')
+    if (telefone === String(perfilCliente?.telefone || '').replace(/\D/g, '')) return true
     setSalvandoTel(true)
     const { error } = await supabase
       .from('profiles')
-      .update({ telefone: telefoneCliente.replace(/\D/g, '') })
+      .update({ telefone })
       .eq('id', sessao.id)
     setSalvandoTel(false)
-    if (error) { setErro('Nao foi possivel salvar o telefone agora.'); return }
+    if (error) {
+      setErro('Nao foi possivel salvar o telefone agora.')
+      return false
+    }
+    setPerfilCliente(perfil => ({ ...(perfil || {}), telefone }))
     setErro('')
+    return true
   }
 
   async function salvarCpfCliente() {
@@ -897,7 +916,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
       .from('profiles')
       .update({ cpf: apenasDigitosCpf(cpfCliente) })
       .eq('id', sessao.id)
-      .select('cpf,cpf_check_status,email_verificado')
+      .select('cpf,cpf_check_status,email_verificado,telefone')
       .maybeSingle()
     setSalvandoCpf(false)
     if (error || !data) {
@@ -983,6 +1002,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
   }
 
   async function handleConfirm() {
+    const usaPagamentoOnline = isPagamentoOnline(pagamento)
     if (!sessao?.id) {
       setErro('Entre ou crie sua conta para fechar pedido no PraiaGo.')
       await alertDialog({ title: 'Login necessario', message: 'Para sua seguranca, pedido agora so com conta cadastrada.', tone: 'default' })
@@ -995,18 +1015,27 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
     if (modo === 'fixa' && !reta.trim() && !barraca.trim()) { setErro('Informe a reta ou barraca para te acharmos.'); return }
     if (modo === 'tempo_real' && !radarReal) { setErro('Ative a localizacao do celular para usar o Radar GPS real.'); return }
     if (querCpfNota && !validarCpf(cpfNota)) { setErro('CPF da nota invalido. Confira os numeros ou desmarque a opcao.'); return }
+    if (usaPagamentoOnline && !telefoneValido(telefoneCliente)) {
+      setErro('Informe o telefone com DDD antes de iniciar o pagamento.')
+      return
+    }
     setErro('')
     setConfirming(true)
+    if (usaPagamentoOnline && !await salvarTelefone()) {
+      setConfirming(false)
+      return
+    }
     const entrega: Entrega = { reta: reta.trim(), barraca: barraca.trim(), modo, pagamento, lat: clientePos[0], lng: clientePos[1], cpfNota: querCpfNota ? cpfNota.replace(/\D/g, '') : undefined }
-    const usaPagamentoOnline = isPagamentoOnline(pagamento)
     let pedido: Awaited<ReturnType<typeof criarPedido>>
     try {
       pedido = await criarPedido(entrega, {
         limparCarrinho: !usaPagamentoOnline,
         desconto: cupomAplicado ? { codigo: cupomAplicado.codigo, valor: desconto, motivo: cupomAplicado.motivo } : undefined,
       })
-    } catch {
-      pedido = null
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : 'Nao foi possivel criar o pedido agora.')
+      setConfirming(false)
+      return
     }
     if (!pedido) {
       setErro('Não deu pra criar o pedido. Confira os itens do carrinho e tente de novo.')
@@ -1020,7 +1049,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
         // PIX transparente: QR + copia-e-cola DENTRO do app, sem redirect.
         try {
           const cobranca = await criarPix(pedido.id)
-          const valor = total
+          const valor = pedido.total
           limparCarrinho()
           setConfirming(false)
           setPix({ cobranca, pedidoId: pedido.id, entrega, valor })
@@ -1031,7 +1060,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
         return
       }
       // Cartão transparente: formulário DENTRO do app (token gerado no gateway).
-      const valor = total
+      const valor = pedido.total
       limparCarrinho()
       setConfirming(false)
       setCartao({ tipo: pagamento === 'debito_online' ? 'debit' : 'credit', pedidoId: pedido.id, entrega, valor })
@@ -1130,8 +1159,8 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
                 <label style={{ fontSize: 10.5, fontWeight: 900, color: '#64748b', display: 'block', marginBottom: 6, letterSpacing: 0.6 }}>TELEFONE (COM DDD)</label>
                 <input inputMode="numeric" value={telefoneCliente} onChange={e => setTelefoneCliente(formatarTelefone(e.target.value))} placeholder="(13) 99999-8888" style={darkInput} />
               </div>
-              <button type="button" disabled={salvandoTel} onClick={salvarTelefone} style={{ height: 48, border: 'none', background: telefoneValido(telefoneCliente) ? '#dcfce7' : '#0ea5e9', color: telefoneValido(telefoneCliente) ? '#15803d' : '#fff', borderRadius: 15, padding: '0 14px', fontSize: 12, fontWeight: 900, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                {salvandoTel ? 'Salvando' : 'Salvar'}
+              <button type="button" disabled={salvandoTel || telefoneSalvo} onClick={salvarTelefone} style={{ height: 48, border: 'none', background: telefoneSalvo ? '#dcfce7' : '#0ea5e9', color: telefoneSalvo ? '#15803d' : '#fff', borderRadius: 15, padding: '0 14px', fontSize: 12, fontWeight: 900, cursor: telefoneSalvo ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
+                {salvandoTel ? 'Salvando' : telefoneSalvo ? 'Salvo' : 'Salvar'}
               </button>
             </div>
           )}

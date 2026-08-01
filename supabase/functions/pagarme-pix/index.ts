@@ -43,6 +43,7 @@ Deno.serve(async (req: Request) => {
 
   if (!pedido) return json({ error: 'Pedido nao encontrado.' }, { status: 404 })
   if (pedido.payment_status === 'aprovado') return json({ error: 'Este pedido ja foi pago.' }, { status: 409 })
+  if (pedido.payment_status === 'estornado') return json({ error: 'Este pedido ja foi estornado.' }, { status: 409 })
   if (pedido.status === 'cancelado') return json({ error: 'Este pedido foi cancelado.' }, { status: 409 })
 
   const valor = Number(pedido.total)
@@ -50,10 +51,21 @@ Deno.serve(async (req: Request) => {
 
   const admin = adminClient()
 
+  // Uma tentativa recusada pode ser refeita no mesmo pedido. O webhook so
+  // aprova pedidos pendentes, entao reabre o estado antes de gerar o novo PIX.
+  if (['recusado', 'rejeitado'].includes(String(pedido.payment_status))) {
+    const { error: erroReabrir } = await admin
+      .from('pedidos')
+      .update({ payment_status: 'pendente' })
+      .eq('id', pedidoId)
+      .eq('status', 'aguardando_pagamento')
+    if (erroReabrir) return json({ error: 'Nao foi possivel reabrir o pagamento.' }, { status: 409 })
+  }
+
   // Idempotencia: se ja existe um PIX pendente e valido, devolve o mesmo.
   const { data: existente } = await admin
     .from('pagamentos')
-    .select('id,status,pix_qr_code,pix_qr_code_base64,pix_expira_em,provider_charge_id')
+    .select('id,status,pix_qr_code,pix_qr_code_base64,pix_qr_code_url,pix_expira_em,provider_charge_id')
     .eq('pedido_id', pedidoId)
     .eq('metodo', 'pix')
     .eq('status', 'pendente')
@@ -70,7 +82,7 @@ Deno.serve(async (req: Request) => {
         status: 'pendente',
         qr_code: existente.pix_qr_code,
         qr_code_base64: existente.pix_qr_code_base64 ?? null,
-        qr_code_url: null,
+        qr_code_url: existente.pix_qr_code_url ?? null,
         expires_at: existente.pix_expira_em,
       })
     }
@@ -164,6 +176,7 @@ Deno.serve(async (req: Request) => {
       provider_charge_id: cobranca.chargeId,
       status_detalhe: cobranca.statusDetalhe || null,
       pix_qr_code: cobranca.pixQrCode,
+      pix_qr_code_url: cobranca.pixQrCodeUrl || null,
       pix_expira_em: expiraEm,
       raw: cobranca.raw as Record<string, unknown>,
       updated_at: new Date().toISOString(),
