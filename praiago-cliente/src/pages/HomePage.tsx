@@ -1,16 +1,23 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Bell, Check, ChevronRight, Clock, Heart, MapPin, Percent, Plus, Search,
-  ShoppingBag, Star, Store, Ticket, Utensils, X,
+  Bell, Check, ChevronRight, Clock, Grid2X2, Heart, MapPin, Percent, Plus,
+  Search, ShoppingBag, Star, Store, Ticket, Utensils, X,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { CATEGORIAS, type Produto, type Vendedor } from '../lib/catalogo'
+import {
+  CATEGORIAS,
+  pertenceACategoria,
+  type CategoriaId,
+  type Produto,
+  type Vendedor,
+} from '../lib/catalogo'
 import { useCatalogo } from '../store/useCatalogo'
 import { useStore } from '../store/useStore'
 import { theme } from '../lib/theme'
 import { supabase } from '../lib/supabase'
 
 type ProdutoDestaque = Produto & { vendedorId: string; vendedorNome: string }
+type Categoria = typeof CATEGORIAS[number]
 type Cupom = {
   id: string
   codigo: string
@@ -28,6 +35,8 @@ type Cupom = {
 }
 
 const cardShadow = '0 16px 40px rgba(15,23,42,0.10)'
+const CATEGORY_SPRITE = '/images/categorias-comida-v1.png'
+const CATEGORIAS_DESTAQUE: readonly CategoriaId[] = ['bebidas', 'espetos', 'salgados', 'porcoes', 'almoco', 'acai']
 
 function NotifPanel({ onClose }: { onClose: () => void }) {
   const notificacoes = useStore(s => s.notificacoes)
@@ -57,6 +66,99 @@ function NotifPanel({ onClose }: { onClose: () => void }) {
   )
 }
 
+function CategoryPhoto({ categoria, className }: { categoria: Categoria; className?: string }) {
+  const [coluna, linha] = categoria.sprite
+  const zoom = 1.25
+  const posicaoX = ((coluna * zoom + (zoom - 1) / 2) / (5 * zoom - 1)) * 100
+  const posicaoY = ((linha * zoom + (zoom - 1) / 2) / (6 * zoom - 1)) * 100
+  return (
+    <span
+      aria-hidden="true"
+      className={className}
+      style={{
+        display: 'block',
+        backgroundImage: `url(${CATEGORY_SPRITE})`,
+        backgroundRepeat: 'no-repeat',
+        backgroundSize: `${5 * zoom * 100}% ${6 * zoom * 100}%`,
+        backgroundPosition: `${posicaoX}% ${posicaoY}%`,
+      }}
+    />
+  )
+}
+
+function CategoriasPanel({
+  catalogo,
+  selecionada,
+  onClose,
+  onSelect,
+}: {
+  catalogo: Vendedor[]
+  selecionada: CategoriaId | null
+  onClose: () => void
+  onSelect: (categoriaId: CategoriaId) => void
+}) {
+  useEffect(() => {
+    const overflowAnterior = document.body.style.overflow
+    const fecharComEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', fecharComEscape)
+    return () => {
+      document.body.style.overflow = overflowAnterior
+      window.removeEventListener('keydown', fecharComEscape)
+    }
+  }, [onClose])
+
+  return (
+    <div
+      className="prg-category-backdrop"
+      role="presentation"
+      onClick={onClose}
+      style={{ position: 'fixed', inset: 0, zIndex: 10020, background: 'rgba(15,23,42,0.48)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+    >
+      <section
+        className="prg-category-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="categorias-title"
+        onClick={event => event.stopPropagation()}
+        style={{ width: '100%', maxWidth: 620, height: 'min(88dvh, 780px)', overflowY: 'auto', background: '#f8fafc', borderRadius: '24px 24px 0 0', boxShadow: '0 -18px 52px rgba(15,23,42,0.22)' }}
+      >
+        <div style={{ position: 'sticky', top: 0, zIndex: 2, minHeight: 68, display: 'grid', gridTemplateColumns: '44px 1fr 44px', alignItems: 'center', padding: '8px 14px', background: 'rgba(248,250,252,0.96)', backdropFilter: 'blur(14px)', borderBottom: '1px solid #e2e8f0' }}>
+          <button type="button" aria-label="Fechar categorias" onClick={onClose} style={{ ...iconButton('#fff'), borderRadius: 12 }}>
+            <X size={21} color="#0f172a" />
+          </button>
+          <h2 id="categorias-title" style={{ margin: 0, textAlign: 'center', fontSize: 20, fontWeight: 950, color: '#0f172a' }}>Todos</h2>
+          <span />
+        </div>
+
+        <div className="prg-category-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, padding: '14px 14px 112px' }}>
+          {CATEGORIAS.map(categoria => {
+            const selecionadaAgora = selecionada === categoria.id
+            const count = catalogo.filter(vendedor => vendedor.produtos.some(produto => pertenceACategoria(produto.categoria, categoria.id))).length
+            return (
+              <button
+                key={categoria.id}
+                type="button"
+                aria-pressed={selecionadaAgora}
+                aria-label={`${categoria.nome}: ${count} ${count === 1 ? 'loja' : 'lojas'}`}
+                onClick={() => onSelect(categoria.id)}
+                className="prg-category-tile"
+                style={{ position: 'relative', minHeight: 112, overflow: 'hidden', borderRadius: 14, border: `1px solid ${selecionadaAgora ? categoria.cor : '#e2e8f0'}`, background: '#fff', padding: '14px 10px 12px 14px', textAlign: 'left', cursor: 'pointer', boxShadow: selecionadaAgora ? `0 10px 24px ${categoria.cor}28` : '0 5px 16px rgba(15,23,42,0.05)' }}
+              >
+                <span style={{ position: 'relative', zIndex: 1, display: 'block', maxWidth: '62%', fontSize: 15, fontWeight: 900, color: '#0f172a', lineHeight: 1.15 }}>{categoria.nome}</span>
+                <span style={{ position: 'absolute', zIndex: 1, left: 14, bottom: 13, fontSize: 10, fontWeight: 800, color: selecionadaAgora ? categoria.cor : '#64748b' }}>{count} {count === 1 ? 'loja' : 'lojas'}</span>
+                <CategoryPhoto categoria={categoria} className="prg-category-photo-large" />
+              </button>
+            )
+          })}
+        </div>
+      </section>
+    </div>
+  )
+}
+
 function QuickAction({
   title, subtitle, icon, color, onClick, disabled,
 }: {
@@ -69,26 +171,31 @@ function QuickAction({
 }) {
   return (
     <button
+      aria-label={`${title}: ${subtitle}`}
       onClick={onClick}
       disabled={disabled}
-      className={disabled ? undefined : 'prg-lift'}
+      className={disabled ? 'prg-action-card' : 'prg-action-card prg-lift'}
       style={{
         minHeight: 112,
-        border: '1px solid #e2e8f0',
-        borderRadius: 22,
-        background: '#fff',
+        border: `1px solid ${color}38`,
+        borderRadius: 20,
+        background: `linear-gradient(145deg, #ffffff 18%, ${color}12 100%)`,
         padding: 16,
         textAlign: 'left',
         cursor: disabled ? 'default' : 'pointer',
-        boxShadow: '0 10px 28px rgba(15,23,42,0.06)',
+        boxShadow: `0 12px 30px rgba(15,23,42,0.08), 0 5px 18px ${color}18`,
         opacity: disabled ? 0.65 : 1,
+        position: 'relative',
+        overflow: 'hidden',
       }}
     >
-      <div style={{ width: 42, height: 42, borderRadius: 15, background: `${color}16`, color, display: 'grid', placeItems: 'center', marginBottom: 12 }}>
+      <span className="prg-action-sheen" aria-hidden="true" />
+      <ChevronRight className="prg-action-arrow" size={17} color={color} aria-hidden="true" />
+      <div className="prg-action-icon" style={{ width: 42, height: 42, borderRadius: 14, background: color, color: '#fff', display: 'grid', placeItems: 'center', marginBottom: 12, boxShadow: `0 8px 20px ${color}42` }}>
         {icon}
       </div>
-      <div style={{ fontSize: 14, fontWeight: 900, color: '#0f172a', lineHeight: 1.15 }}>{title}</div>
-      <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginTop: 5, lineHeight: 1.3 }}>{subtitle}</div>
+      <div style={{ position: 'relative', zIndex: 1, fontSize: 14, fontWeight: 900, color: '#0f172a', lineHeight: 1.15 }}>{title}</div>
+      <div style={{ position: 'relative', zIndex: 1, fontSize: 11, fontWeight: 800, color, marginTop: 5, lineHeight: 1.3 }}>{subtitle}</div>
     </button>
   )
 }
@@ -212,7 +319,8 @@ function iconButton(bg: string): React.CSSProperties {
 export default function HomePage() {
   const navigate = useNavigate()
   const [busca, setBusca] = useState('')
-  const [catSel, setCatSel] = useState<string | null>(null)
+  const [catSel, setCatSel] = useState<CategoriaId | null>(null)
+  const [categoriasOpen, setCategoriasOpen] = useState(false)
   const [soFavoritos, setSoFavoritos] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
   const [addedId, setAddedId] = useState<string | null>(null)
@@ -240,7 +348,7 @@ export default function HomePage() {
     const termo = busca.trim().toLowerCase()
     return catalogo.filter(v => {
       if (soFavoritos && !favoritos.includes(v.id)) return false
-      if (catSel && !v.produtos.some(p => p.categoria === catSel)) return false
+      if (catSel && !v.produtos.some(p => pertenceACategoria(p.categoria, catSel))) return false
       if (!termo) return true
       return (
         v.nome.toLowerCase().includes(termo) ||
@@ -300,6 +408,17 @@ export default function HomePage() {
   return (
     <div style={{ minHeight: '100vh', background: '#fff', color: '#0f172a', paddingBottom: 98 }}>
       {notifOpen && <NotifPanel onClose={() => setNotifOpen(false)} />}
+      {categoriasOpen && (
+        <CategoriasPanel
+          catalogo={catalogo}
+          selecionada={catSel}
+          onClose={() => setCategoriasOpen(false)}
+          onSelect={(categoriaId) => {
+            setCatSel(categoriaId)
+            setCategoriasOpen(false)
+          }}
+        />
+      )}
 
       <header style={{ padding: '16px 18px 12px', position: 'sticky', top: 0, zIndex: 100, background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(16px)', borderBottom: '1px solid rgba(226,232,240,0.66)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
@@ -383,32 +502,58 @@ export default function HomePage() {
         </section>
 
         <section style={{ marginBottom: 24 }}>
-          <SectionHeader title="Categorias" action={catSel ? 'Limpar' : undefined} onAction={() => setCatSel(null)} />
-          <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
-            {CATEGORIAS.map(cat => {
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <div style={{ minWidth: 0 }}>
+              <h3 style={{ fontSize: 19, fontWeight: 950, color: '#0f172a', margin: 0 }}>Categorias</h3>
+              {catSel && (
+                <span style={{ display: 'block', marginTop: 3, color: '#64748b', fontSize: 10, fontWeight: 800 }}>
+                  Filtro: {CATEGORIAS.find(categoria => categoria.id === catSel)?.nome}
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+              {catSel && (
+                <button type="button" onClick={() => setCatSel(null)} style={{ border: 0, background: 'transparent', color: '#64748b', padding: '8px 6px', fontSize: 11, fontWeight: 900, cursor: 'pointer' }}>
+                  Limpar
+                </button>
+              )}
+              <button type="button" onClick={() => setCategoriasOpen(true)} style={{ minHeight: 36, border: '1px solid #bae6fd', borderRadius: 11, background: '#e0f2fe', color: '#0369a1', padding: '0 11px', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 950, cursor: 'pointer' }}>
+                <Grid2X2 size={15} aria-hidden="true" /> Todos
+              </button>
+            </div>
+          </div>
+          <div className="prg-category-strip" style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '2px 1px 8px', scrollbarWidth: 'none', scrollSnapType: 'x proximity' }}>
+            {CATEGORIAS.filter(cat => CATEGORIAS_DESTAQUE.includes(cat.id)).map(cat => {
               const sel = catSel === cat.id
-              const count = catalogo.filter(v => v.produtos.some(p => p.categoria === cat.id)).length
+              const count = catalogo.filter(v => v.produtos.some(p => pertenceACategoria(p.categoria, cat.id))).length
               return (
-                <button key={cat.id} onClick={() => setCatSel(sel ? null : cat.id)} style={{
+                <button
+                  key={cat.id}
+                  type="button"
+                  aria-pressed={sel}
+                  aria-label={`Filtrar por ${cat.nome}: ${count} ${count === 1 ? 'loja' : 'lojas'}`}
+                  className="prg-category-chip"
+                  onClick={() => setCatSel(sel ? null : cat.id)}
+                  style={{
                   flexShrink: 0,
-                  minWidth: 116,
-                  minHeight: 56,
-                  borderRadius: 18,
-                  border: `1px solid ${sel ? cat.cor : '#e2e8f0'}`,
+                  width: 146,
+                  minHeight: 76,
+                  borderRadius: 16,
+                  border: `1px solid ${sel ? cat.cor : `${cat.cor}35`}`,
                   background: sel ? `${cat.cor}12` : '#fff',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  padding: '10px 12px',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  padding: '11px 9px 10px 12px',
                   cursor: 'pointer',
-                  boxShadow: sel ? `0 10px 24px ${cat.cor}20` : '0 8px 18px rgba(15,23,42,0.04)',
+                  boxShadow: sel ? `0 12px 25px ${cat.cor}38` : `0 8px 20px rgba(15,23,42,0.06), 0 3px 10px ${cat.cor}12`,
                   textAlign: 'left',
+                  scrollSnapAlign: 'start',
                 }}>
-                  <span style={{ width: 34, height: 34, borderRadius: 13, display: 'grid', placeItems: 'center', background: sel ? cat.cor : '#f8fafc', fontSize: 19 }}>{cat.emoji}</span>
-                  <span>
-                    <span style={{ display: 'block', fontSize: 12, fontWeight: 950, color: sel ? cat.cor : '#0f172a' }}>{cat.nome}</span>
-                    <span style={{ display: 'block', fontSize: 10, fontWeight: 800, color: '#94a3b8', marginTop: 2 }}>{count} lojas</span>
+                  <span style={{ position: 'relative', zIndex: 1, display: 'block', maxWidth: '62%', fontSize: 12, fontWeight: 950, color: '#0f172a', lineHeight: 1.15 }}>{cat.nome}</span>
+                  <span style={{ position: 'absolute', zIndex: 1, left: 12, bottom: 10, display: 'block', fontSize: 10, fontWeight: 850, color: sel ? cat.cor : '#64748b', whiteSpace: 'nowrap' }}>
+                    {count} {count === 1 ? 'loja' : 'lojas'}
                   </span>
+                  <CategoryPhoto categoria={cat} className="prg-category-photo-small" />
                 </button>
               )
             })}
