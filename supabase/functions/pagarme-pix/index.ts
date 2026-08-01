@@ -150,12 +150,16 @@ Deno.serve(async (req: Request) => {
         status_detalhe: `sem qr_code | order=${cobranca.status} charge=${cobranca.statusDetalhe}`.slice(0, 300),
         updated_at: new Date().toISOString(),
       }).eq('id', pagamento.id)
-      console.error('PIX sem qr_code', JSON.stringify(resposta).slice(0, 1500))
+      // O payload completo contem CPF, e-mail e telefone do pagador.
+      console.error('PIX sem qr_code', {
+        orderStatus: cobranca.status,
+        transactionStatus: cobranca.statusDetalhe || 'sem detalhe',
+      })
       throw new Error('O PIX nao foi gerado. Tente de novo.')
     }
 
     const expiraEm = cobranca.pixExpiraEm || new Date(Date.now() + EXPIRA_SEGUNDOS * 1000).toISOString()
-    await admin.from('pagamentos').update({
+    const { error: erroSalvarPix } = await admin.from('pagamentos').update({
       provider_order_id: cobranca.orderId,
       provider_charge_id: cobranca.chargeId,
       status_detalhe: cobranca.statusDetalhe || null,
@@ -164,10 +168,19 @@ Deno.serve(async (req: Request) => {
       raw: cobranca.raw as Record<string, unknown>,
       updated_at: new Date().toISOString(),
     }).eq('id', pagamento.id)
+    if (erroSalvarPix) {
+      // O QR continua valido. O webhook localiza o pagamento pelo code do
+      // pedido e reconcilia assim que o gateway enviar o evento.
+      console.error('PIX criado; persistencia local pendente', { code: erroSalvarPix.code })
+    }
 
     // Pix ja nascer pago e raro, mas se vier, o registro trata na hora.
     if (cobranca.status && cobranca.status !== 'pending') {
-      await registrarResultado(admin, pagamento.id, cobranca)
+      try {
+        await registrarResultado(admin, pagamento.id, cobranca)
+      } catch {
+        console.error('PIX criado; confirmacao local pendente')
+      }
     }
 
     return json({

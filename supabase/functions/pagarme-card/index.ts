@@ -95,6 +95,7 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'Nao foi possivel iniciar o pagamento.' }, { status: 500 })
   }
 
+  let gatewayRespondeu = false
   try {
     const meio = tipo === 'debit' ? 'debit_card' : 'credit_card'
     const dadosCartao: Record<string, unknown> = {
@@ -123,6 +124,7 @@ Deno.serve(async (req: Request) => {
         payments: [{ payment_method: meio, [meio]: dadosCartao }],
       }),
     })
+    gatewayRespondeu = true
 
     const cobranca = lerCobranca(resposta)
     const status = await registrarResultado(admin, pagamento.id, cobranca)
@@ -136,6 +138,18 @@ Deno.serve(async (req: Request) => {
       status_detail: cobranca.statusDetalhe || mapearStatus(cobranca.status),
     })
   } catch (erro) {
+    // Se o gateway ja criou/avaliou a cobranca, nunca informa "falhou" por
+    // causa de um erro posterior no banco. O webhook faz a reconciliacao.
+    if (gatewayRespondeu) {
+      console.error('Cobranca criada; confirmacao local pendente')
+      return json({
+        ok: false,
+        payment_id: pagamento.id,
+        status: 'pending',
+        status_detail: 'Confirmacao em processamento.',
+      }, { status: 202 })
+    }
+
     await admin.from('pagamentos').update({
       status: 'falhou',
       status_detalhe: erro instanceof Error ? erro.message.slice(0, 300) : 'erro desconhecido',

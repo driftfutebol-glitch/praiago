@@ -38,11 +38,13 @@ export async function pagarme<T = Record<string, unknown>>(
   try { corpo = texto ? JSON.parse(texto) : null } catch { corpo = texto }
 
   if (!res.ok) {
-    const detalhe = corpo && typeof corpo === 'object'
-      ? JSON.stringify(corpo).slice(0, 600)
-      : String(corpo).slice(0, 600)
-    // O log guarda o motivo real; quem chama devolve mensagem amigavel.
-    console.error('Pagar.me erro', res.status, caminho, detalhe)
+    // Nao registra o corpo: erros podem repetir dados pessoais enviados na
+    // requisicao. O id permite correlacionar o erro com o suporte do gateway.
+    console.error('Pagar.me erro', {
+      status: res.status,
+      caminho,
+      requestId: res.headers.get('x-request-id') || undefined,
+    })
     throw Object.assign(new Error(mensagemAmigavel(res.status, corpo)), { status: res.status, corpo })
   }
 
@@ -148,38 +150,70 @@ export async function registrarResultado(
   const status = mapearStatus(cobranca.status)
   const agora = new Date().toISOString()
 
-  await admin.from('pagamentos').update({
-    provider_order_id: cobranca.orderId || null,
-    provider_charge_id: cobranca.chargeId || null,
-    status,
-    status_detalhe: cobranca.statusDetalhe || null,
-    raw: cobranca.raw as Record<string, unknown>,
-    paid_at: status === 'pago' ? agora : null,
-    updated_at: agora,
-  }).eq('id', pagamentoId)
+  const { data: pag, error: erroPagamento } = await admin
+    .from('pagamentos')
+    .update({
+      provider_order_id: cobranca.orderId || null,
+      provider_charge_id: cobranca.chargeId || null,
+      status,
+      status_detalhe: cobranca.statusDetalhe || null,
+      raw: cobranca.raw as Record<string, unknown>,
+      paid_at: status === 'pago' ? agora : null,
+      updated_at: agora,
+    })
+    .eq('id', pagamentoId)
+    .select('pedido_id')
+    .maybeSingle()
 
-  const { data: pag } = await admin.from('pagamentos').select('pedido_id').eq('id', pagamentoId).maybeSingle()
+  if (erroPagamento || !pag) {
+    console.error('Falha ao persistir pagamento', { code: erroPagamento?.code || 'sem_linha' })
+    throw new Error('Nao foi possivel confirmar o pagamento agora.')
+  }
+
   const pedidoId = pag?.pedido_id
   if (!pedidoId) return status
 
   if (status === 'pago') {
     // libera o pedido pro vendedor
-    await admin.from('pedidos').update({
-      payment_status: 'aprovado',
-      status: 'novo',
-      paid_at: agora,
-      payment_reference: cobranca.chargeId || cobranca.orderId || null,
-    }).eq('id', pedidoId).eq('payment_status', 'pendente')
+    const { error } = await admin
+      .from('pedidos')
+      .update({
+        payment_status: 'aprovado',
+        status: 'novo',
+        paid_at: agora,
+        payment_reference: cobranca.chargeId || cobranca.orderId || null,
+      })
+      .eq('id', pedidoId)
+      .eq('payment_status', 'pendente')
+    if (error) {
+      console.error('Falha ao aprovar pedido pago', { code: error.code })
+      throw new Error('Nao foi possivel confirmar o pedido agora.')
+    }
   } else if (status === 'falhou' || status === 'cancelado') {
-    await admin.from('pedidos').update({
-      payment_status: status === 'cancelado' ? 'cancelado' : 'recusado',
-      payment_reference: cobranca.chargeId || cobranca.orderId || null,
-    }).eq('id', pedidoId).eq('payment_status', 'pendente')
+    const { error } = await admin
+      .from('pedidos')
+      .update({
+        payment_status: status === 'cancelado' ? 'cancelado' : 'recusado',
+        payment_reference: cobranca.chargeId || cobranca.orderId || null,
+      })
+      .eq('id', pedidoId)
+      .eq('payment_status', 'pendente')
+    if (error) {
+      console.error('Falha ao registrar pedido recusado', { code: error.code })
+      throw new Error('Nao foi possivel atualizar o pedido agora.')
+    }
   } else if (status === 'estornado') {
-    await admin.from('pedidos').update({
-      payment_status: 'estornado',
-      refunded_at: agora,
-    }).eq('id', pedidoId)
+    const { error } = await admin
+      .from('pedidos')
+      .update({
+        payment_status: 'estornado',
+        refunded_at: agora,
+      })
+      .eq('id', pedidoId)
+    if (error) {
+      console.error('Falha ao registrar estorno', { code: error.code })
+      throw new Error('Nao foi possivel atualizar o estorno agora.')
+    }
   }
 
   return status
