@@ -180,31 +180,18 @@ export default function App() {
         padding: '12px 20px', position: 'sticky', top: 0, zIndex: 60,
         borderBottom: '1px solid rgba(0,0,0,0.05)'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{
-            background: 'linear-gradient(135deg, rgba(14,165,233,0.2), rgba(34,197,94,0.2))',
-            borderRadius: 12, padding: 6, display: 'flex'
-          }}>
-            <svg width="28" height="28" viewBox="0 0 34 34" fill="none">
-              <rect width="34" height="34" rx="9" fill="url(#cli-logo)"/>
-              <defs>
-                <linearGradient id="cli-logo" x1="0" y1="0" x2="34" y2="34" gradientUnits="userSpaceOnUse">
-                  <stop stopColor="#0ea5e9"/>
-                  <stop offset="1" stopColor="#22c55e"/>
-                </linearGradient>
-              </defs>
-              <path d="M6 24 Q10 20 14 24 Q18 28 22 24 Q26 20 28 24" stroke="white" strokeWidth="2.2" fill="none" strokeLinecap="round"/>
-              <circle cx="23" cy="10" r="5" fill="#fbbf24"/>
-              <path d="M10 30 Q11 23 13 19" stroke="white" strokeWidth="2" strokeLinecap="round" fill="none"/>
-              <path d="M13 19 Q9 15 6 16 M13 19 Q13 14 11 12 M13 19 Q17 15 17 12" stroke="white" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
-            </svg>
-          </div>
-          <div>
-            <div style={{ fontSize: 18, fontWeight: 900, letterSpacing: -0.5, lineHeight: 1 }} className="beach-gradient-text">
-              PraiaGo
-            </div>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, color: '#64748b', textTransform: 'uppercase' }}>Premium</div>
-          </div>
+        <div
+          aria-label="PraiaGo"
+          style={{ width: 140, height: 59, overflow: 'hidden', position: 'relative', flexShrink: 0 }}
+        >
+          <img
+            src="/praiago-logo-original.jpg"
+            alt="PraiaGo"
+            style={{
+              position: 'absolute', width: 231, height: 231, maxWidth: 'none',
+              left: -56, top: -67, display: 'block',
+            }}
+          />
         </div>
         <motion.div 
           animate={{ opacity: [0.5, 1, 0.5] }} 
