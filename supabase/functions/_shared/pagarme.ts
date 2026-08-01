@@ -69,6 +69,24 @@ export function somenteDigitos(v: unknown) {
 }
 
 /**
+ * O Pagar.me EXIGE ao menos um telefone do pagador (o PIX falha com
+ * "At least one customer phone is required"). Converte "(13) 99999-8888"
+ * no formato que a API espera. Devolve null se nao der pra aproveitar.
+ */
+export function telefonePagarme(bruto: unknown): { mobile_phone: { country_code: string; area_code: string; number: string } } | null {
+  let d = somenteDigitos(bruto)
+  if (d.startsWith('55') && d.length >= 12) d = d.slice(2) // tira o +55
+  if (d.length < 10 || d.length > 11) return null          // precisa de DDD + numero
+  return {
+    mobile_phone: {
+      country_code: '55',
+      area_code: d.slice(0, 2),
+      number: d.slice(2),
+    },
+  }
+}
+
+/**
  * Mapeia o status do gateway pro nosso vocabulario interno.
  * Referencia: charge.status da v5 (paid, pending, failed, canceled...) e
  * transaction.status (captured, authorized_pending_capture, not_authorized...).

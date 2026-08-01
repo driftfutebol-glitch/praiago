@@ -9,7 +9,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2'
 import { corsHeaders, json, readJson } from '../_shared/cors.ts'
 import {
   adminClient, centavos, env, gatewayConfigurado, lerCobranca,
-  mapearStatus, pagarme, registrarResultado, somenteDigitos,
+  mapearStatus, pagarme, registrarResultado, somenteDigitos, telefonePagarme,
 } from '../_shared/pagarme.ts'
 
 type Body = {
@@ -64,13 +64,18 @@ Deno.serve(async (req: Request) => {
   const { data: { user } } = await comoUsuario.auth.getUser(authHeader.slice(7))
   const { data: perfil } = await admin
     .from('profiles')
-    .select('nome,cpf')
+    .select('nome,cpf,telefone')
     .eq('id', pedido.cliente_id)
     .maybeSingle()
 
   const documento = somenteDigitos(perfil?.cpf || body.cpf || pedido.cpf_nota)
   if (documento.length !== 11) {
     return json({ error: 'Valide seu CPF no perfil antes de pagar com cartao.', code: 'cpf_obrigatorio' }, { status: 422 })
+  }
+
+  const telefone = telefonePagarme(perfil?.telefone)
+  if (!telefone) {
+    return json({ error: 'Informe seu telefone com DDD para pagar com cartao.', code: 'telefone_obrigatorio' }, { status: 422 })
   }
 
   const { data: pagamento, error: erroInsert } = await admin
@@ -113,6 +118,7 @@ Deno.serve(async (req: Request) => {
           email: user?.email || body.email || 'cliente@praiago.com.br',
           type: 'individual',
           document: documento,
+          phones: telefone,
         },
         payments: [{ payment_method: meio, [meio]: dadosCartao }],
       }),

@@ -8,7 +8,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2'
 import { corsHeaders, json, readJson } from '../_shared/cors.ts'
 import {
   adminClient, centavos, env, gatewayConfigurado, lerCobranca,
-  pagarme, registrarResultado, somenteDigitos,
+  pagarme, registrarResultado, somenteDigitos, telefonePagarme,
 } from '../_shared/pagarme.ts'
 
 const EXPIRA_SEGUNDOS = 3600 // 1 hora
@@ -89,6 +89,12 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'Valide seu CPF no perfil antes de pagar com PIX.', code: 'cpf_obrigatorio' }, { status: 422 })
   }
 
+  // O gateway recusa a cobranca sem telefone do pagador.
+  const telefone = telefonePagarme(perfil?.telefone)
+  if (!telefone) {
+    return json({ error: 'Informe seu telefone com DDD para pagar com PIX.', code: 'telefone_obrigatorio' }, { status: 422 })
+  }
+
   // Cria o registro ANTES de cobrar: se a resposta se perder, o rastro fica.
   const { data: pagamento, error: erroInsert } = await admin
     .from('pagamentos')
@@ -123,6 +129,7 @@ Deno.serve(async (req: Request) => {
           email: user?.email || 'cliente@praiago.com.br',
           type: 'individual',
           document: documento,
+          phones: telefone,
         },
         payments: [{
           payment_method: 'pix',
@@ -132,7 +139,20 @@ Deno.serve(async (req: Request) => {
     })
 
     const cobranca = lerCobranca(resposta)
-    if (!cobranca.pixQrCode) throw new Error('O PIX nao foi gerado. Tente de novo.')
+
+    if (!cobranca.pixQrCode) {
+      // Guarda a resposta crua: sem isso, "PIX nao gerado" vira um mistério.
+      // Costuma ser conta sem PIX habilitado ou cobranca recusada na origem.
+      await admin.from('pagamentos').update({
+        provider_order_id: cobranca.orderId || null,
+        provider_charge_id: cobranca.chargeId || null,
+        raw: cobranca.raw as Record<string, unknown>,
+        status_detalhe: `sem qr_code | order=${cobranca.status} charge=${cobranca.statusDetalhe}`.slice(0, 300),
+        updated_at: new Date().toISOString(),
+      }).eq('id', pagamento.id)
+      console.error('PIX sem qr_code', JSON.stringify(resposta).slice(0, 1500))
+      throw new Error('O PIX nao foi gerado. Tente de novo.')
+    }
 
     const expiraEm = cobranca.pixExpiraEm || new Date(Date.now() + EXPIRA_SEGUNDOS * 1000).toISOString()
     await admin.from('pagamentos').update({

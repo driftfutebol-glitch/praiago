@@ -522,6 +522,14 @@ function formatarValidade(v: string) {
   const d = v.replace(/\D/g, '').slice(0, 4)
   return d.length > 2 ? `${d.slice(0, 2)}/${d.slice(2)}` : d
 }
+function formatarTelefone(v: string) {
+  const d = v.replace(/\D/g, '').slice(0, 11)
+  if (d.length <= 2) return d
+  if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`
+  if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
+}
+
 function formatarCpf(v: string) {
   const d = v.replace(/\D/g, '').slice(0, 11)
   return d.replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d{1,2})$/, '.$1-$2')
@@ -725,6 +733,10 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
   const [pagamento, setPagamento] = useState<Entrega['pagamento']>('pix')
   const [erro, setErro] = useState('')
   const [cpfCliente, setCpfCliente] = useState('')
+  // O gateway EXIGE telefone do pagador pra gerar PIX/cartao. Sem isso a
+  // cobranca e recusada na origem, entao pedimos junto do CPF.
+  const [telefoneCliente, setTelefoneCliente] = useState('')
+  const [salvandoTel, setSalvandoTel] = useState(false)
   const [salvandoCpf, setSalvandoCpf] = useState(false)
   const [perfilCliente, setPerfilCliente] = useState<PerfilClienteCheckout | null>(null)
   const [emailConfirmado, setEmailConfirmado] = useState(false)
@@ -798,13 +810,14 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
       setCarregandoBeneficio(true)
       const [{ data: userData }, { data: profile }, { data: pedidos }] = await Promise.all([
         supabase.auth.getUser(),
-        supabase.from('profiles').select('cpf,cpf_check_status,email_verificado').eq('id', sessao.id).maybeSingle(),
+        supabase.from('profiles').select('cpf,cpf_check_status,email_verificado,telefone').eq('id', sessao.id).maybeSingle(),
         supabase.from('pedidos').select('id,status').eq('cliente_id', sessao.id).neq('status', 'cancelado').limit(1),
       ])
       if (!alive) return
       const perfil = (profile || {}) as PerfilClienteCheckout
       setPerfilCliente(perfil)
       setCpfCliente(formatarCpfCliente(perfil.cpf || ''))
+      setTelefoneCliente(formatarTelefone(String((perfil as { telefone?: string | null }).telefone || '')))
       setEmailConfirmado(Boolean(userData.user?.email_confirmed_at || perfil.email_verificado))
       setPrimeiraCompra(!pedidos || pedidos.length === 0)
       setCarregandoBeneficio(false)
@@ -856,6 +869,24 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
     carregarCuponsCheckout()
     return () => { alive = false }
   }, [sessao?.id, vendedor.id, vendedor.tipo])
+
+  function telefoneValido(v: string) {
+    const d = v.replace(/\D/g, '')
+    return d.length === 10 || d.length === 11
+  }
+
+  async function salvarTelefone() {
+    if (!sessao?.id) return
+    if (!telefoneValido(telefoneCliente)) { setErro('Informe o telefone com DDD (ex: 13 99999-8888).'); return }
+    setSalvandoTel(true)
+    const { error } = await supabase
+      .from('profiles')
+      .update({ telefone: telefoneCliente.replace(/\D/g, '') })
+      .eq('id', sessao.id)
+    setSalvandoTel(false)
+    if (error) { setErro('Nao foi possivel salvar o telefone agora.'); return }
+    setErro('')
+  }
 
   async function salvarCpfCliente() {
     if (!sessao?.id) return
@@ -1089,6 +1120,18 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
               </div>
               <button type="button" disabled={salvandoCpf || cpfOk} onClick={salvarCpfCliente} style={{ height: 48, border: 'none', background: cpfOk ? '#dcfce7' : '#0ea5e9', color: cpfOk ? '#15803d' : '#fff', borderRadius: 15, padding: '0 14px', fontSize: 12, fontWeight: 900, cursor: cpfOk ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
                 {cpfOk ? 'Validado' : salvandoCpf ? 'Salvando' : 'Validar'}
+              </button>
+            </div>
+          )}
+          {/* Telefone: o gateway recusa PIX/cartao sem telefone do pagador. */}
+          {sessao && (
+            <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'end' }}>
+              <div>
+                <label style={{ fontSize: 10.5, fontWeight: 900, color: '#64748b', display: 'block', marginBottom: 6, letterSpacing: 0.6 }}>TELEFONE (COM DDD)</label>
+                <input inputMode="numeric" value={telefoneCliente} onChange={e => setTelefoneCliente(formatarTelefone(e.target.value))} placeholder="(13) 99999-8888" style={darkInput} />
+              </div>
+              <button type="button" disabled={salvandoTel} onClick={salvarTelefone} style={{ height: 48, border: 'none', background: telefoneValido(telefoneCliente) ? '#dcfce7' : '#0ea5e9', color: telefoneValido(telefoneCliente) ? '#15803d' : '#fff', borderRadius: 15, padding: '0 14px', fontSize: 12, fontWeight: 900, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                {salvandoTel ? 'Salvando' : 'Salvar'}
               </button>
             </div>
           )}
