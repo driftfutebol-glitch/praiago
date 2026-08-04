@@ -133,7 +133,7 @@ function LocationModal({ pedido, onClose }: { pedido: Pedido; onClose: () => voi
         {myPos ? (
           <MapContainer center={myPos} zoom={15} style={{ height: '100%', width: '100%' }} zoomControl={false}>
             {/* Dark map style */}
-            <TileLayer attribution='&copy; CARTO' url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" subdomains="abcd" />
+            <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>' url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" subdomains="abcd" />
             <FitBounds a={myPos} b={clientePos} />
             <Marker position={myPos} icon={myIcon}><Popup className="dark-popup"><b>🥥 Você (ambulante)</b></Popup></Marker>
             <Marker position={clientePos} icon={clienteIcon}><Popup className="dark-popup"><b>👤 {pedido.cliente}</b><br />{pedido.clienteTel}</Popup></Marker>
@@ -545,7 +545,7 @@ export default function PedidosPage() {
       <style>{`
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        .dark-popup .leaflet-popup-content-wrapper { background: rgba(255,255,255,0.9); backdrop-filter: blur(10px); color: #f8fafc; border: 1px solid rgba(0,0,0,0.08); border-radius: 12px; }
+        .dark-popup .leaflet-popup-content-wrapper { background: rgba(255,255,255,0.9); backdrop-filter: blur(10px); color: #0f172a; border: 1px solid rgba(0,0,0,0.08); border-radius: 12px; }
         .dark-popup .leaflet-popup-tip { background: rgba(255,255,255,0.9); }
       `}</style>
     </div>

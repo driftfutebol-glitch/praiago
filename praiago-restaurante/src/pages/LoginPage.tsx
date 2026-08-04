@@ -50,10 +50,10 @@ function MapClickHandler({ onPick }: { onPick: (pos: [number, number]) => void }
 function AddressPreviewMap({ pos, onPick }: { pos: [number, number]; onPick: (pos: [number, number]) => void }) {
   return (
     <div style={{ height: 190, borderRadius: 18, overflow: 'hidden', border: '1px solid rgba(249,115,22,0.22)', marginTop: 12 }}>
-      <MapContainer center={pos} zoom={16} style={{ height: '100%', width: '100%' }} zoomControl={false} attributionControl={false}>
+      <MapContainer center={pos} zoom={16} style={{ height: '100%', width: '100%' }} zoomControl={false}>
         <Recenter pos={pos} />
         <MapClickHandler onPick={onPick} />
-        <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" subdomains="abcd" />
+        <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>' url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" subdomains="abcd" />
         <Marker
           position={pos}
           draggable

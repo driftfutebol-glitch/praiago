@@ -171,19 +171,16 @@ export default function MapaPage() {
 
   useEffect(() => {
     const style = document.createElement('style');
+    // O mapa e claro (CARTO Voyager, dados do OpenStreetMap). Nao inverter as
+    // cores: o invert existia so pra escurecer um mapa claro e faria o
+    // contrario agora — deixaria tudo escuro de novo.
     style.innerHTML = `
-      .leaflet-layer,
-      .leaflet-control-zoom-in,
-      .leaflet-control-zoom-out,
-      .leaflet-control-attribution {
-        filter: invert(100%) hue-rotate(180deg) brightness(85%) contrast(100%);
-      }
       .leaflet-popup-content-wrapper, .leaflet-popup-tip {
         background: rgba(255,255,255,0.95);
-        color: #f8fafc;
+        color: #0f172a;
         border: 1px solid rgba(249,115,22,0.3);
         backdrop-filter: blur(10px);
-        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        box-shadow: 0 10px 30px rgba(15,23,42,0.18);
       }
     `;
     document.head.appendChild(style);
@@ -385,8 +382,8 @@ export default function MapaPage() {
             <FlyTo center={mapCenter} zoom={mapZoom} />
 
             <TileLayer
-              attribution='&copy; <a href="https://carto.com">CARTO</a>'
-              url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+              url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
               subdomains="abcd"
             />
 

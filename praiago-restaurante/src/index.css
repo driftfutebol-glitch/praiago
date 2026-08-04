@@ -150,3 +150,15 @@ input:focus, select:focus, textarea:focus {
 .prg-lift:active { transform: translateY(-1px) scale(.99); }
 .prg-sheen { background: linear-gradient(100deg,transparent 30%,rgba(255,255,255,.45) 50%,transparent 70%); background-size: 200% 100%; animation: prgSheen 2.4s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .prg-fade-up,.prg-float,.prg-stagger > *,.prg-lift,.prg-sheen { animation: none !important; transition: none !important; } }
+
+/* Credito do OpenStreetMap/CARTO: a licenca dos dados (ODbL) exige que ele
+   apareca. Fica discreto pra nao competir com o mapa, mas legivel. */
+.leaflet-control-attribution {
+  background: rgba(255,255,255,.72) !important;
+  color: #475569 !important;
+  font-size: 9px !important;
+  line-height: 1.5 !important;
+  padding: 1px 5px !important;
+  border-radius: 6px 0 0 0 !important;
+}
+.leaflet-control-attribution a { color: #0284c7 !important; text-decoration: none !important; }

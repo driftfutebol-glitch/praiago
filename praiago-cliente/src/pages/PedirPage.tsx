@@ -266,7 +266,7 @@ function RastreamentoModal({ vendedor, clientePos, pedidoId, onClose }: { vended
         {atrasado ? (
           <MapContainer center={pos} zoom={16} style={{ height: '100%', width: '100%' }} zoomControl={false}>
             {/* Mapa estilo Dark/Tático */}
-            <TileLayer attribution='&copy; CARTO' url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" subdomains="abcd" />
+            <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>' url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" subdomains="abcd" />
             <RecenterMap a={pos} b={clientePos} />
             <Marker position={pos} icon={vendorIcon} />
             <Marker position={clientePos} icon={clienteIcon} />
