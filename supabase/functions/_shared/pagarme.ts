@@ -139,6 +139,57 @@ export function adminClient() {
 }
 
 /**
+ * Mesma ideia do pedido de comida, mas para ingresso de evento: so aqui a
+ * compra vira "pago" e entra na fila de entrega do ingresso.
+ * O estoque do lote e devolvido pelo gatilho restore_event_ticket_stock quando
+ * o status vira recusado/cancelado.
+ */
+async function registrarResultadoIngresso(
+  admin: ReturnType<typeof adminClient>,
+  ticketOrderId: string,
+  status: 'pendente' | 'pago' | 'falhou' | 'estornado' | 'cancelado',
+  cobranca: Cobranca,
+  agora: string,
+) {
+  const referencia = cobranca.chargeId || cobranca.orderId || null
+  const patch: Record<string, unknown> = {
+    payment_status: status === 'pago' ? 'aprovado'
+      : status === 'estornado' ? 'estornado'
+      : status === 'cancelado' ? 'cancelado'
+      : status === 'falhou' ? 'recusado'
+      : 'pendente',
+    payment_reference: referencia,
+    updated_at: agora,
+  }
+
+  if (status === 'pago') {
+    patch.status = 'entrega_pendente'
+    patch.delivery_status = 'entrega_pendente'
+    patch.paid_at = agora
+  } else if (status === 'falhou') {
+    patch.status = 'pagamento_recusado'
+  } else if (status === 'cancelado') {
+    patch.status = 'cancelado'
+    patch.canceled_at = agora
+  } else if (status === 'estornado') {
+    patch.status = 'reembolsado'
+    patch.refunded_at = agora
+  }
+
+  const query = admin.from('event_ticket_orders').update(patch).eq('id', ticketOrderId)
+  // So avanca compra que ainda estava esperando: evita que um evento atrasado
+  // do gateway reabra ou rebaixe uma compra ja resolvida.
+  const { error } = status === 'pago' || status === 'falhou'
+    ? await query.eq('status', 'aguardando_pagamento')
+    : await query
+
+  if (error) {
+    console.error('Falha ao registrar resultado do ingresso', { code: error.code })
+    throw new Error('Nao foi possivel confirmar a compra do ingresso agora.')
+  }
+}
+
+/**
  * Confirma (ou nao) o pagamento no BANCO — ponto unico de verdade.
  * Só aqui o pedido vira "pago" e fica visivel pro vendedor.
  */
@@ -162,12 +213,19 @@ export async function registrarResultado(
       updated_at: agora,
     })
     .eq('id', pagamentoId)
-    .select('pedido_id')
+    .select('pedido_id,ticket_order_id')
     .maybeSingle()
 
   if (erroPagamento || !pag) {
     console.error('Falha ao persistir pagamento', { code: erroPagamento?.code || 'sem_linha' })
     throw new Error('Nao foi possivel confirmar o pagamento agora.')
+  }
+
+  // Ingresso de evento vive em outra tabela (event_ticket_orders) e tem o seu
+  // proprio vocabulario de status. Um pagamento aponta para um OU para o outro.
+  if (pag.ticket_order_id) {
+    await registrarResultadoIngresso(admin, String(pag.ticket_order_id), status, cobranca, agora)
+    return status
   }
 
   const pedidoId = pag?.pedido_id

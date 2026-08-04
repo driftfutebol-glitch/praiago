@@ -82,7 +82,7 @@ Deno.serve(async (req: Request) => {
   const admin = adminClient()
   let consulta = await admin
     .from('pagamentos')
-    .select('id,status,valor,pedido_id')
+    .select('id,status,valor,pedido_id,ticket_order_id')
     .eq('provider', 'pagarme')
     .eq('provider_order_id', orderId)
     .order('created_at', { ascending: false })
@@ -91,12 +91,13 @@ Deno.serve(async (req: Request) => {
 
   // O webhook pode chegar antes de a resposta da criacao do pedido ser salva.
   // Nesse intervalo, o campo code do Pagar.me permite localizar o pagamento.
+  // O code e o id do pedido de comida OU o da compra de ingresso.
   if (!consulta.data && !consulta.error && pedidoId) {
     consulta = await admin
       .from('pagamentos')
-      .select('id,status,valor,pedido_id')
+      .select('id,status,valor,pedido_id,ticket_order_id')
       .eq('provider', 'pagarme')
-      .eq('pedido_id', pedidoId)
+      .or(`pedido_id.eq.${pedidoId},ticket_order_id.eq.${pedidoId}`)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
@@ -145,7 +146,10 @@ Deno.serve(async (req: Request) => {
     // publico serve apenas para apontar qual recurso deve ser reconciliado.
     const resposta = await pagarme<Record<string, unknown>>(`/orders/${orderId}`, { method: 'GET' })
     if (String(resposta.id || '') !== orderId) throw new Error('Pedido divergente no gateway.')
-    if (String(resposta.code || '') !== String(pagamento.pedido_id || '')) {
+    // O code enviado ao gateway e o id do alvo do pagamento: pedido de comida
+    // ou compra de ingresso. Um pagamento aponta pra exatamente um dos dois.
+    const alvoEsperado = String(pagamento.pedido_id || pagamento.ticket_order_id || '')
+    if (String(resposta.code || '') !== alvoEsperado) {
       console.error('Webhook com codigo de pedido divergente')
       return json({ error: 'pagamento divergente' }, { status: 409 })
     }
