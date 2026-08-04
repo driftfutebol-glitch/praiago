@@ -15,6 +15,7 @@ import EmailVerificationBanner from './components/EmailVerificationBanner'
 import AiChatbot from './components/AiChatbot'
 import { DialogHost } from './lib/dialog'
 import PasswordRecoveryHandler from './components/PasswordRecoveryHandler'
+import IntroSplash, { deveMostrarIntro } from './components/IntroSplash'
 
 const navItems = [
   { to: '/',            icon: Home,          label: 'Início'    },
@@ -108,6 +109,8 @@ export default function App() {
   const navigate = useNavigate()
   const sessao = useStore(s => s.sessao)
   const limparNotificacoesTeste = useStore(s => s.limparNotificacoesTeste)
+  // Decide na montagem: assim a abertura nao reaparece a cada re-render.
+  const [mostrarIntro, setMostrarIntro] = useState(deveMostrarIntro)
 
   // Carrega o catálogo real (lojas/produtos do banco) + realtime, uma vez.
   useEffect(() => { iniciarCatalogo() }, [])
@@ -173,6 +176,9 @@ export default function App() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'transparent' }}>
+      <AnimatePresence>
+        {mostrarIntro && <IntroSplash key="intro" onFim={() => setMostrarIntro(false)} />}
+      </AnimatePresence>
       <PasswordRecoveryHandler />
       {/* Logo bar - Glassmorphism */}
       <div className="glass-panel" style={{
@@ -185,7 +191,7 @@ export default function App() {
           style={{ width: 140, height: 59, overflow: 'hidden', position: 'relative', flexShrink: 0 }}
         >
           <img
-            src="/praiago-logo-original.jpg"
+            src="/praiago-logo-transparent.png"
             alt="PraiaGo"
             style={{
               position: 'absolute', width: 231, height: 231, maxWidth: 'none',
