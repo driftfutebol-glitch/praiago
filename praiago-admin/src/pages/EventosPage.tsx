@@ -41,6 +41,9 @@ type TicketLot = {
   preco_origem: number
   markup_percent: number
   preco_venda: number
+  markup_percent_credito: number
+  preco_venda_credito: number
+  lote_ordem: number | null
   estoque_disponivel: number | null
   status: 'pendente_aprovacao' | 'disponivel' | 'pausado' | 'esgotado'
   fonte_url: string | null
@@ -130,7 +133,7 @@ export default function EventosPage() {
     const [{ data }, { data: pedidos }, { data: reembolsos }] = await Promise.all([
       supabase
         .from('eventos')
-        .select('*, event_ticket_lots(id,nome,preco_origem,markup_percent,preco_venda,estoque_disponivel,status,fonte_url)')
+        .select('*, event_ticket_lots(id,nome,preco_origem,markup_percent,preco_venda,markup_percent_credito,preco_venda_credito,lote_ordem,estoque_disponivel,status,fonte_url)')
         .neq('status', 'inativo')
         .or(`data.is.null,data.gte.${hoje}`)
         .order('created_at', { ascending: false }),
@@ -523,9 +526,16 @@ export default function EventosPage() {
                       {lotes.map(lote => (
                         <div key={lote.id} className="rounded-xl bg-slate-950/35 border border-slate-800/70 px-3 py-2 flex items-center gap-3">
                           <div className="min-w-0 flex-1">
-                            <div className="text-xs font-black text-slate-200 truncate">{lote.nome}</div>
+                            <div className="text-xs font-black text-slate-200 truncate">
+                              {lote.nome}
+                              {lote.lote_ordem != null && (
+                                <span className="ml-1.5 text-[10px] font-bold text-sky-300">
+                                  {lote.lote_ordem === 0 ? 'promocional' : `${lote.lote_ordem}º lote`}
+                                </span>
+                              )}
+                            </div>
                             <div className="text-[11px] text-slate-500 mt-0.5">
-                              Origem {fmtMoney(lote.preco_origem)} · venda {fmtMoney(lote.preco_venda)} · +{Number(lote.markup_percent || 10)}%
+                              Origem {fmtMoney(lote.preco_origem)} · pix/débito {fmtMoney(lote.preco_venda)} (+{Number(lote.markup_percent)}%) · crédito {fmtMoney(lote.preco_venda_credito)} (+{Number(lote.markup_percent_credito)}%)
                               {lote.estoque_disponivel != null ? ` · ${lote.estoque_disponivel} disp.` : ''}
                             </div>
                           </div>

@@ -10,7 +10,8 @@ const corsHeaders = {
 }
 
 const ROBO_VERSION = 'v2'
-const DEFAULT_MARKUP_PERCENT = 10
+const DEFAULT_MARKUP_PERCENT = 25
+const DEFAULT_MARKUP_PERCENT_CREDITO = 35
 
 const ALVOS_SUGERIDOS = [
   { nome: 'Rocket Blue', foco: 'balada, shows, madrugada, ingressos' },
@@ -69,6 +70,11 @@ const BAIRROS_PG = 'boqueirao|canto do forte|guilhermina|aviacao|tupi|ocian|miri
 const RE_BAIRROS_PG = new RegExp(`\\b(pg|${BAIRROS_PG})\\b`)
 const RE_BAIRROS_OU_ALVO_PG = new RegExp(`\\b(pg|${BAIRROS_PG}|rocket|porks|embaixador|quiosque)\\b`)
 
+// Cidades vizinhas aceitas alem de Praia Grande: o cliente de PG vai a esses
+// eventos, e sem elas o Guiche Web rende zero (nao tem nenhum evento em PG).
+const CIDADES_BAIXADA = 'santos|sao vicente|mongagua|itanhaem|guaruja|cubatao|bertioga|peruibe'
+const RE_BAIXADA = new RegExp(`\\b(${CIDADES_BAIXADA})\\b`)
+
 type Periodo = 'manha' | 'tarde' | 'noite' | 'madrugada'
 
 type IngressoBruto = {
@@ -89,6 +95,8 @@ type IngressoBruto = {
   availability?: string
   estoque_disponivel?: number | string | null
   fonte_url?: string
+  lote?: string
+  esgotado_na_fonte?: boolean
   metadata?: Record<string, unknown>
 }
 
@@ -126,6 +134,7 @@ type EventoBruto = {
   url_amigavel?: string
   fonte_url?: string
   periodo?: string
+  guiche_id_evento?: string
   ingressos?: IngressoBruto[]
 }
 
@@ -171,6 +180,9 @@ type IngressoNormalizado = {
   moeda: string
   estoque_disponivel: number | null
   fonte_url: string | null
+  lote_ordem: number | null
+  lote_grupo: string
+  esgotado_na_fonte: boolean
   metadata: Record<string, unknown>
 }
 
@@ -365,6 +377,45 @@ function periodoPelaHora(hora?: string | null, periodo?: string): Periodo {
   return 'noite'
 }
 
+// As fontes tem lixo do proprio organizador (o ArTicket serve tickets chamados
+// literalmente "erro"). Sem isso o lixo vira lote e chega no app do cliente.
+const RE_INGRESSO_LIXO = /^(erro|erro\s*-.*|teste?s?|test\d*|x+|a+|asd\w*|sem nome|nao usar|não usar|\W*)$/i
+
+function ingressoEhLixo(nome: string) {
+  const limpo = nome.trim()
+  if (limpo.length < 2) return true
+  return RE_INGRESSO_LIXO.test(semAcento(limpo))
+}
+
+// Extrai a ORDEM do lote do nome do ingresso ("Front Stage - 2º Lote" -> 2) e o
+// GRUPO, que e o nome sem o trecho do lote ("front stage"). O grupo agrupa os
+// lotes que competem entre si, pra so o vigente aparecer.
+const RE_LOTE_NUMERADO = /\b(\d{1,2})\s*[ºo°ª]?\s*lote\b|\blote\s*[ºo°]?\s*(\d{1,2})\b/i
+const RE_LOTE_PROMO = /\b(lote\s+)?(promocional|promo|pre[- ]?venda|primeiro lote|1\s*[ºo°]?\s*lote)\b/i
+const RE_LOTE_ULTIMO = /\b(ultimo|último)\s+lote\b/i
+
+function parseLote(nome: string, loteFonte?: string) {
+  const alvo = semAcento(`${nome} ${loteFonte || ''}`)
+  let ordem: number | null = null
+
+  const numerado = alvo.match(RE_LOTE_NUMERADO)
+  if (numerado) ordem = Number(numerado[1] ?? numerado[2])
+  else if (RE_LOTE_ULTIMO.test(alvo)) ordem = 99
+  else if (RE_LOTE_PROMO.test(alvo)) ordem = 0
+
+  // grupo = nome sem o trecho do lote, sem pontuacao solta nas pontas
+  const grupo = semAcento(nome)
+    .replace(RE_LOTE_NUMERADO, ' ')
+    .replace(RE_LOTE_ULTIMO, ' ')
+    .replace(RE_LOTE_PROMO, ' ')
+    .replace(/\blote\b/gi, ' ')
+    .replace(/[-–—|:,]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  return { ordem, grupo: grupo || semAcento(nome).trim() }
+}
+
 function normalizarIngressos(items: IngressoBruto[] | undefined, fonteUrl: string | null, fallbackPreco: number | null): IngressoNormalizado[] {
   const candidatos = Array.isArray(items) ? [...items] : []
   if (!candidatos.length && fallbackPreco && fallbackPreco > 0) {
@@ -381,12 +432,16 @@ function normalizarIngressos(items: IngressoBruto[] | undefined, fonteUrl: strin
     const preco = money(item.preco, item.price)
     if (preco === null || preco <= 0) continue
     const nome = text(item.nome, item.title, item.name, 'Entrada')
+    if (ingressoEhLixo(nome)) continue
     const sourceTicketId = text(item.source_ticket_id, item.id) || null
-    const key = `${sourceTicketId || nome}|${preco}`
+    // Quando a fonte da um id proprio ele manda sozinho: incluir o preco na
+    // chave fazia o mesmo ingresso virar dois registros a cada troca de lote.
+    const key = sourceTicketId ? `id:${sourceTicketId}` : `nome:${semAcento(nome)}|${preco}`
     if (vistos.has(key)) continue
     vistos.add(key)
 
     const estoque = number(item.estoque_disponivel)
+    const lote = parseLote(nome, text(item.lote))
     ingressos.push({
       source_ticket_id: sourceTicketId,
       nome,
@@ -396,9 +451,13 @@ function normalizarIngressos(items: IngressoBruto[] | undefined, fonteUrl: strin
       moeda: text(item.moeda, item.currency, 'BRL') || 'BRL',
       estoque_disponivel: estoque === null ? null : Math.max(0, Math.floor(estoque)),
       fonte_url: absolutizarUrl(text(item.fonte_url, fonteUrl), fonteUrl || undefined) || fonteUrl,
+      lote_ordem: lote.ordem,
+      lote_grupo: lote.grupo,
+      esgotado_na_fonte: item.esgotado_na_fonte === true,
       metadata: {
         status_origem: text(item.status),
         availability: text(item.availability),
+        lote_fonte: text(item.lote) || null,
         origem: item.metadata || null,
       },
     })
@@ -464,6 +523,7 @@ function dentroDePraiaGrande(ev: EventoNormalizado) {
   if (!blob) return false
   if (blob.includes('praia grande')) return true
   if (RE_BAIRROS_PG.test(blob)) return true
+  if (RE_BAIXADA.test(blob)) return true
   if (mencionaAlvoPg(blob)) return true
   return false
 }
@@ -479,6 +539,7 @@ function pareceSerPraiaGrande(e: EventoBruto): boolean {
   if (!blob) return false
   if (blob.includes('praia grande')) return true
   if (RE_BAIRROS_OU_ALVO_PG.test(blob)) return true
+  if (RE_BAIXADA.test(blob)) return true
   if (mencionaAlvoPg(blob)) return true
   return false
 }
@@ -1021,6 +1082,7 @@ function extrairJson(payload: unknown, fonte: Fonte) {
 function eventosGuicheDoPayload(payload: unknown, fonte: Fonte) {
   return objetosDeEvento(payload).map(obj => ({
     ...brutoDeObjeto(obj, fonte),
+    guiche_id_evento: text(obj.id_evento) || undefined,
     titulo: text(obj.nome, obj.titulo, obj.title, obj.name),
     data: text(obj.data, obj.data_evento, obj.date, obj.startDate),
     local_nome: text(obj.local, obj.local_nome, obj.venue, fonte.local_nome, fonte.nome),
@@ -1049,6 +1111,55 @@ async function postGuicheWeb(acao: string, offset?: number) {
   return await res.json()
 }
 
+// Lotes do Guiche Web. E a fonte mais completa que temos: alem do preco, ela
+// diz o NOME do lote, se esgotou e quanto sobrou — exatamente o que a regra de
+// vigencia precisa. A listagem (carregar_eventos) nao traz preco nenhum.
+async function buscarIngressosGuicheWeb(idEvento: string, fonteUrl: string): Promise<IngressoBruto[]> {
+  const body = new URLSearchParams()
+  body.set('a', 'setores')
+  body.set('id_evento', idEvento)
+  body.set('id_comissario', '')
+  body.set('exclusivo_comissarios', '')
+
+  const res = await fetch('https://www.guicheweb.com.br/webservices/api/services/ingressos.php', {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json, text/plain, */*',
+      'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+      'User-Agent': `PraiaGoCacaEventos/${ROBO_VERSION}`,
+    },
+    body: body.toString(),
+  })
+  if (!res.ok) return []
+
+  const payload = await res.json().catch(() => null)
+  const setores = Array.isArray(payload?.item) ? payload.item : []
+  const ingressos: IngressoBruto[] = []
+
+  for (const setor of setores) {
+    const nomeSetor = text(setor?.nome, setor?.setor, setor?.descricao)
+    for (const ing of (Array.isArray(setor?.ings) ? setor.ings : [])) {
+      const nomeIngresso = text(ing?.ingresso, ing?.nome, ing?.descricao)
+      const nome = [nomeSetor, nomeIngresso].filter(Boolean).join(' - ') || nomeIngresso || nomeSetor
+      if (!nome) continue
+      const qtd = number(ing?.qtd_disp)
+      ingressos.push({
+        id: text(ing?.id_lote, ing?.id_ingresso) || undefined,
+        source_ticket_id: text(ing?.id_lote, ing?.id_ingresso) || undefined,
+        nome,
+        preco: ing?.valor,
+        lote: text(ing?.lote) || undefined,
+        estoque_disponivel: qtd === null ? null : qtd,
+        esgotado_na_fonte: ing?.ing_esgotado === 'SIM' || ing?.forcar_esgotado === 'S',
+        fonte_url: fonteUrl,
+        metadata: { id_setor: setor?.id_setor ?? null, setor: nomeSetor || null, lote: text(ing?.lote) || null },
+      })
+    }
+  }
+
+  return ingressos
+}
+
 async function buscarGuicheWeb(fonte: Fonte) {
   const eventos: EventoBruto[] = []
   const vistos = new Set<string>()
@@ -1069,6 +1180,19 @@ async function buscarGuicheWeb(fonte: Fonte) {
     const candidatos = eventosGuicheDoPayload(payload, fonte)
     if (!candidatos.length) break
     coletar(candidatos)
+  }
+
+  // A listagem nao traz preco. Busca os lotes so de quem parece ser da regiao —
+  // a fonte lista o Brasil inteiro e sao ~360 eventos por rodada.
+  for (const evento of eventos) {
+    const idEvento = text(evento.guiche_id_evento)
+    if (!idEvento || !pareceSerPraiaGrande(evento)) continue
+    try {
+      const ingressos = await buscarIngressosGuicheWeb(idEvento, text(evento.fonte_url, evento.url, fonte.url))
+      if (ingressos.length) evento.ingressos = [...(evento.ingressos || []), ...ingressos]
+    } catch {
+      // fonte fora do ar nao derruba a rodada; o evento entra sem preco
+    }
   }
 
   return eventos
@@ -1136,25 +1260,40 @@ async function localizarEvento(supabase: ReturnType<typeof createClient>, ev: Ev
   return null
 }
 
-// Margem do PraiaGo na revenda do ingresso (nosso lucro). Padrao 10% — mesmo
-// valor usado pelos lotes criados manualmente pelo admin (markup_percent
-// default no banco). Ajustável via EVENTOS_MARKUP_PERCENT se precisar mudar.
+// Margem do PraiaGo na revenda do ingresso. Varia por metodo de pagamento
+// porque a taxa do gateway no credito e maior: 25% no pix/debito, 35% no
+// credito. Mesmo valor dos lotes criados manualmente pelo admin.
 function markupPercent() {
   const m = Number(env('EVENTOS_MARKUP_PERCENT'))
   return Number.isFinite(m) && m >= 0 && m <= 500 ? m : DEFAULT_MARKUP_PERCENT
 }
 
+function markupCreditoPercent() {
+  const m = Number(env('EVENTOS_MARKUP_PERCENT_CREDITO'))
+  return Number.isFinite(m) && m >= 0 && m <= 500 ? m : DEFAULT_MARKUP_PERCENT_CREDITO
+}
+
 async function salvarIngressos(supabase: ReturnType<typeof createClient>, eventoId: string, ingressos: IngressoNormalizado[] | undefined) {
   const ingressosValidos = (ingressos || []).filter(ingresso => Number.isFinite(ingresso.preco_origem) && ingresso.preco_origem > 0)
-  if (!ingressosValidos.length) return { salvos: 0 }
+  if (!ingressosValidos.length) return { salvos: 0, encerrados: 0, vigentes: 0 }
 
   const markup = markupPercent()
+  const markupCredito = markupCreditoPercent()
+  const rodadaEm = new Date().toISOString()
   let salvos = 0
-  let menorPreco = Number.POSITIVE_INFINITY
+
+  // Grupos que ja tiveram algum lote aprovado pelo admin: quando o lote vira
+  // (1o esgota, 2o entra), o novo herda a aprovacao — senao o evento ficava sem
+  // nenhum lote vendavel ate alguem aprovar de novo na mao.
+  const { data: aprovadosAntes } = await supabase
+    .from('event_ticket_lots')
+    .select('lote_grupo')
+    .eq('evento_id', eventoId)
+    .eq('status', 'disponivel')
+  const gruposAprovados = new Set((aprovadosAntes || []).map((l: { lote_grupo: string | null }) => l.lote_grupo || ''))
 
   for (const ingresso of ingressosValidos) {
     const precoBase = Math.max(0, ingresso.preco_origem + ingresso.taxa_origem)
-    const precoVenda = Math.round((precoBase * (1 + markup / 100)) * 100) / 100
     const metadata = {
       ...ingresso.metadata,
       robo_version: ROBO_VERSION,
@@ -1162,17 +1301,9 @@ async function salvarIngressos(supabase: ReturnType<typeof createClient>, evento
       taxa_origem: ingresso.taxa_origem,
       preco_base: precoBase,
       markup_percent: markup,
-      preco_venda_estimado: precoVenda,
-    }
-    // "a partir de R$": menor preço PAGO com estoque (ignora cortesia/R$0 pra
-    // não mostrar "a partir de R$0" quando existe ingresso pago)
-    if (precoVenda > 0 && (ingresso.estoque_disponivel === null || ingresso.estoque_disponivel > 0)) {
-      menorPreco = Math.min(menorPreco, precoVenda)
+      markup_percent_credito: markupCredito,
     }
 
-    // Procura o lote existente pra PRESERVAR a aprovação do admin quando o robô
-    // roda de novo (monitoramento de estoque). Sem isso, re-caçar zeraria a
-    // aprovação. O gatilho do banco marca 'esgotado' sozinho quando estoque = 0.
     let existenteId: string | null = null
     let existenteStatus: string | null = null
     if (ingresso.source_ticket_id) {
@@ -1184,18 +1315,23 @@ async function salvarIngressos(supabase: ReturnType<typeof createClient>, evento
       if (data) { existenteId = data.id as string; existenteStatus = data.status as string }
     }
 
+    const semEstoque = ingresso.esgotado_na_fonte || ingresso.estoque_disponivel === 0
+
     if (existenteId) {
       const patch: Record<string, unknown> = {
+        nome: ingresso.nome,
         preco_origem: ingresso.preco_origem,
         markup_percent: markup,
+        markup_percent_credito: markupCredito,
         taxa_origem: ingresso.taxa_origem,
         estoque_disponivel: ingresso.estoque_disponivel,
+        lote_ordem: ingresso.lote_ordem,
+        lote_grupo: ingresso.lote_grupo,
+        visto_na_fonte_em: rodadaEm,
         metadata,
       }
-      // se estava esgotado e voltou a ter estoque, reabre a venda
-      if (existenteStatus === 'esgotado' && (ingresso.estoque_disponivel === null || ingresso.estoque_disponivel > 0)) {
-        patch.status = 'disponivel'
-      }
+      if (semEstoque) patch.status = 'esgotado'
+      else if (existenteStatus === 'esgotado') patch.status = 'disponivel'
       const { error } = await supabase.from('event_ticket_lots').update(patch).eq('id', existenteId)
       if (!error) salvos++
     } else {
@@ -1206,12 +1342,16 @@ async function salvarIngressos(supabase: ReturnType<typeof createClient>, evento
         descricao: ingresso.descricao,
         preco_origem: ingresso.preco_origem,
         markup_percent: markup,
+        markup_percent_credito: markupCredito,
         taxa_origem: ingresso.taxa_origem,
         moeda: ingresso.moeda,
         estoque_total: ingresso.estoque_disponivel,
         estoque_disponivel: ingresso.estoque_disponivel,
-        status: 'pendente_aprovacao',
+        status: semEstoque ? 'esgotado' : (gruposAprovados.has(ingresso.lote_grupo) ? 'disponivel' : 'pendente_aprovacao'),
         fonte_url: ingresso.fonte_url,
+        lote_ordem: ingresso.lote_ordem,
+        lote_grupo: ingresso.lote_grupo,
+        visto_na_fonte_em: rodadaEm,
         metadata,
         criado_por: 'robo',
       })
@@ -1219,13 +1359,137 @@ async function salvarIngressos(supabase: ReturnType<typeof createClient>, evento
     }
   }
 
+  // Lote que sumiu da fonte esta fora de venda. Sem isso o lote velho (mais
+  // barato) ficava 'disponivel' pra sempre e o app anunciava um preco que a
+  // origem nao pratica mais — vendendo abaixo do custo.
+  const { data: sumidos } = await supabase
+    .from('event_ticket_lots')
+    .update({ status: 'esgotado', updated_at: rodadaEm })
+    .eq('evento_id', eventoId)
+    .eq('criado_por', 'robo')
+    .in('status', ['disponivel', 'pendente_aprovacao', 'pausado'])
+    .or(`visto_na_fonte_em.is.null,visto_na_fonte_em.lt."${rodadaEm}"`)
+    .select('id')
+
+  const vigentes = await aplicarVigenciaDeLotes(supabase, eventoId)
+
   if (salvos > 0) {
     const update: Record<string, unknown> = { ingressos_enabled: true }
-    if (Number.isFinite(menorPreco)) update.preco = menorPreco
+    if (vigentes.menorPreco !== null) update.preco = vigentes.menorPreco
     await supabase.from('eventos').update(update).eq('id', eventoId)
   }
 
-  return { salvos }
+  return { salvos, encerrados: sumidos?.length || 0, vigentes: vigentes.total }
+}
+
+// Dentro de cada grupo de lote (ex.: "front stage"), so o lote de MENOR ordem
+// que ainda esta em pe pode ser vendido. Os proximos ficam 'pausado' esperando
+// a vez — e assumem sozinhos quando o vigente esgota.
+async function aplicarVigenciaDeLotes(supabase: ReturnType<typeof createClient>, eventoId: string) {
+  const { data: lotes } = await supabase
+    .from('event_ticket_lots')
+    .select('id,status,lote_grupo,lote_ordem,preco_venda,estoque_disponivel')
+    .eq('evento_id', eventoId)
+    .eq('criado_por', 'robo')
+    .in('status', ['disponivel', 'pausado', 'pendente_aprovacao'])
+
+  type Lote = { id: string; status: string; lote_grupo: string | null; lote_ordem: number | null; preco_venda: number; estoque_disponivel: number | null }
+  const abertos = (lotes || []) as Lote[]
+  if (!abertos.length) return { total: 0, menorPreco: null as number | null }
+
+  const porGrupo = new Map<string, Lote[]>()
+  for (const lote of abertos) {
+    const grupo = lote.lote_grupo || lote.id
+    if (!porGrupo.has(grupo)) porGrupo.set(grupo, [])
+    porGrupo.get(grupo)!.push(lote)
+  }
+
+  let menorPreco = Number.POSITIVE_INFINITY
+  let total = 0
+
+  for (const doGrupo of porGrupo.values()) {
+    // sem ordem de lote nao ha fila: todos convivem (ex.: "Pista" e "Camarote")
+    const comOrdem = doGrupo.filter(l => l.lote_ordem !== null)
+    const vigentes = comOrdem.length
+      ? [comOrdem.reduce((a, b) => (a.lote_ordem! <= b.lote_ordem! ? a : b))]
+      : doGrupo
+    const vigenteIds = new Set(vigentes.map(l => l.id))
+
+    for (const lote of doGrupo) {
+      const ehVigente = vigenteIds.has(lote.id)
+      const alvo = ehVigente ? (lote.status === 'pausado' ? 'disponivel' : lote.status) : 'pausado'
+      if (alvo !== lote.status) {
+        await supabase.from('event_ticket_lots').update({ status: alvo }).eq('id', lote.id)
+      }
+      if (ehVigente && alvo === 'disponivel') {
+        total++
+        const preco = Number(lote.preco_venda)
+        if (preco > 0) menorPreco = Math.min(menorPreco, preco)
+      }
+    }
+  }
+
+  return { total, menorPreco: Number.isFinite(menorPreco) ? menorPreco : null }
+}
+
+// Reconfere na fonte os lotes dos eventos JA salvos. Sem isso, evento que sai
+// da home da fonte nunca mais era reconferido e os precos congelavam — era o
+// caminho pelo qual um lote encerrado seguia anunciado por semanas.
+async function revalidarLotesSalvos(
+  supabase: ReturnType<typeof createClient>,
+  deadlineAt: number,
+) {
+  const hojeSp = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+  const { data: eventos } = await supabase
+    .from('eventos')
+    .select('id,fonte_url')
+    .in('status', ['ativo', 'pendente'])
+    .gte('data', hojeSp)
+    .not('fonte_url', 'is', null)
+    .order('data', { ascending: true })
+    .limit(80)
+
+  type Ev = { id: string; fonte_url: string }
+  let revalidados = 0
+  let encerrados = 0
+  let semPreco = 0
+
+  for (const ev of ((eventos || []) as Ev[])) {
+    if (Date.now() >= deadlineAt) break
+    const url = ev.fonte_url
+    let ingressos: IngressoBruto[] = []
+
+    try {
+      if (url.includes('guicheweb.com.br')) {
+        const idEvento = url.match(/_(\d+)(?:[/?#]|$)/)?.[1]
+        if (!idEvento) continue
+        ingressos = await buscarIngressosGuicheWeb(idEvento, url)
+      } else if (url.includes('articket.com.br/e/')) {
+        const res = await fetchComRetry(url, {
+          headers: { Accept: 'text/html,*/*', 'User-Agent': `PraiaGoCacaEventos/${ROBO_VERSION}` },
+        })
+        if (!res.ok) continue
+        ingressos = extrairIngressosArticket(await res.text(), { url, nome: 'revalidacao' } as Fonte)
+      } else {
+        continue
+      }
+    } catch {
+      continue // fonte instavel nao pode encerrar lote por engano
+    }
+
+    // Lista vazia é ambígua (bloqueio, layout novo, evento removido). Encerrar
+    // tudo aqui apagaria um evento válido, então só reconfere quando veio algo.
+    if (!ingressos.length) { semPreco++; continue }
+
+    const normalizados = normalizarIngressos(ingressos, url, null)
+    if (!normalizados.length) { semPreco++; continue }
+
+    const resultado = await salvarIngressos(supabase, ev.id, normalizados)
+    revalidados++
+    encerrados += resultado.encerrados
+  }
+
+  return { revalidados, encerrados, sem_preco: semPreco }
 }
 
 async function aplicarCicloDeVidaEventos(supabase: ReturnType<typeof createClient>) {
@@ -1362,6 +1626,14 @@ Deno.serve(async (req: Request) => {
       stats,
     }
 
+    // Reconfere os lotes dos eventos JA publicados antes de sair cacando evento
+    // novo: preco errado no ar custa mais caro que evento novo que so entra na
+    // proxima rodada. Orcamento proprio pra nao ficar sem tempo no fim.
+    const revalidacao = await revalidarLotesSalvos(
+      supabase,
+      Math.min(ctx.deadlineAt, Date.now() + Math.max(10000, Math.min(90000, number(env('CACA_EVENTOS_REVALIDACAO_MS')) || 45000))),
+    )
+
     for (const fonte of fontes) {
       try {
         brutos.push(...await buscarFonte(fonte, ctx))
@@ -1419,6 +1691,7 @@ Deno.serve(async (req: Request) => {
       ignorados,
       ingressos_salvos: ingressos_salvos + stats.ingressosIncrementais,
       eventos_encerrados: lifecycle.eventos_encerrados,
+      revalidacao,
       lifecycle,
       status: 'pendente',
       fontes_consultadas: fontes.length,
