@@ -33,29 +33,24 @@ function LogoBar({ gpsStatus }: { gpsStatus: string }) {
       borderBottom: '1px solid rgba(0,0,0,0.05)',
       position: 'sticky', top: 0, zIndex: 60,
     }}>
-      {/* Logo */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div className="neon-border" style={{ borderRadius: 12, display: 'flex' }}>
-          <svg width="38" height="38" viewBox="0 0 38 38" fill="none">
-            <rect width="38" height="38" rx="12" fill="url(#amb-g)"/>
-            <defs>
-              <linearGradient id="amb-g" x1="0" y1="0" x2="38" y2="38" gradientUnits="userSpaceOnUse">
-                <stop stopColor="#0ea5e9"/>
-                <stop offset="1" stopColor="#22c55e"/>
-              </linearGradient>
-            </defs>
-            <path d="M7 26 Q11 22 15 26 Q19 30 23 26 Q27 22 30 26" stroke="white" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
-            <circle cx="25" cy="12" r="5" fill="#fbbf24" stroke="rgba(255,255,255,0.8)" strokeWidth="1.5"/>
-            <path d="M12 32 Q13 25 15 21" stroke="white" strokeWidth="2.2" strokeLinecap="round" fill="none"/>
-            <path d="M15 21 Q11 17 8 18 M15 21 Q15 16 13 14 M15 21 Q19 17 19 14" stroke="white" strokeWidth="1.8" strokeLinecap="round" fill="none"/>
-          </svg>
+      {/* Logo — mesma marca e mesmo recorte do app do cliente.
+          O PNG e quadrado (1600x1600) com muita margem: a caixa de 140x59
+          recorta so o brasao, e por isso a imagem e maior que o container. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div
+          aria-label="PraiaGo"
+          style={{ width: 140, height: 59, overflow: 'hidden', position: 'relative', flexShrink: 0 }}
+        >
+          <img
+            src="/praiago-logo-transparent.png"
+            alt="PraiaGo"
+            style={{
+              position: 'absolute', width: 231, height: 231, maxWidth: 'none',
+              left: -56, top: -67, display: 'block',
+            }}
+          />
         </div>
-        <div>
-          <div style={{ fontSize: 20, fontWeight: 900, letterSpacing: -0.5, lineHeight: 1, display: 'flex', alignItems: 'baseline' }}>
-            <span style={{ color: '#0f172a' }}>Praia</span><span className="tactical-gradient-text" style={{ marginLeft: 1 }}>Go</span>
-          </div>
-          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 2, color: '#4ade80', textTransform: 'uppercase', marginTop: 2 }}>Ambulante</div>
-        </div>
+        <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 2, color: '#4ade80', textTransform: 'uppercase' }}>Ambulante</div>
       </div>
 
       {/* GPS badge */}

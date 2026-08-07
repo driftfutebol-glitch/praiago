@@ -10,7 +10,7 @@ import { useGPS, type GPSFonte, type GPSStatus } from '../hooks/useGPS'
 import { criarMonitorSentido, type SentidoStatus } from '../lib/trafego'
 import { broadcastOrder } from '../hooks/useOrderBroadcast'
 import { type Vendedor } from '../lib/catalogo'
-import { criarPix, isPagamentoOnline, pagarComCartao, mensagemRecusaCartao, type PixCobranca } from '../lib/pagamento'
+import { criarPix, isPagamentoOnline, pagarComCartao, mensagemRecusaCartao, verificarPagamento, type PixCobranca } from '../lib/pagamento'
 import { tokenizarCartao } from '../lib/pagamentosdk'
 import { labelHorario } from '../lib/horario'
 import { useCatalogo } from '../store/useCatalogo'
@@ -425,10 +425,21 @@ function PixPagamentoModal({ cobranca, pedidoId, total, onPago, onClose }: {
       })
       .subscribe()
 
+    // Pergunta pro GATEWAY, nao so pra nossa tabela. Ler o banco so funciona se
+    // o webhook do gateway tiver chegado — se ele atrasar (ou nao estiver
+    // configurado), o cliente ja pagou e a tela ficava girando pra sempre.
+    // Esta consulta confirma na fonte e grava o resultado.
     const poll = setInterval(async () => {
       if (pagoRef.current) return
-      const { data } = await supabase.from('pedidos').select('payment_status').eq('id', pedidoId).maybeSingle()
-      if (data) confirmar(data)
+      try {
+        const r = await verificarPagamento(pedidoId)
+        confirmar({ payment_status: r.payment_status })
+      } catch {
+        // Rede instavel: cai pro que o banco sabe e tenta o gateway de novo
+        // na proxima volta. Nunca deixa o cliente presoo sem saida.
+        const { data } = await supabase.from('pedidos').select('payment_status').eq('id', pedidoId).maybeSingle()
+        if (data) confirmar(data)
+      }
     }, 5000)
 
     return () => { supabase.removeChannel(ch); clearInterval(poll) }
@@ -561,20 +572,34 @@ function CartaoPagamentoModal({ tipo, pedidoId, total, emailCliente, onPago, onC
   const aprovadoRef = useRef(false)
 
   // Segurança extra: se cair em "em análise", o realtime avisa quando aprovar.
+  // O realtime sozinho nao basta — ele so dispara se o webhook do gateway
+  // tiver chegado. Por isso tambem perguntamos direto ao gateway em intervalo.
   useEffect(() => {
     if (!emAnalise) return
+
+    function confirmar(status?: string | null) {
+      if (status !== 'aprovado' || aprovadoRef.current) return
+      aprovadoRef.current = true
+      setAprovado(true)
+      setTimeout(onPago, 2000)
+    }
+
     const ch = supabase
       .channel(`card_${pedidoId}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pedidos', filter: `id=eq.${pedidoId}` }, payload => {
-        const novo = payload.new as { payment_status?: string | null }
-        if (novo?.payment_status === 'aprovado' && !aprovadoRef.current) {
-          aprovadoRef.current = true
-          setAprovado(true)
-          setTimeout(onPago, 2000)
-        }
+        confirmar((payload.new as { payment_status?: string | null })?.payment_status)
       })
       .subscribe()
-    return () => { supabase.removeChannel(ch) }
+
+    const poll = setInterval(async () => {
+      if (aprovadoRef.current) return
+      try {
+        const r = await verificarPagamento(pedidoId)
+        confirmar(r.payment_status)
+      } catch { /* rede instavel: tenta de novo na proxima volta */ }
+    }, 5000)
+
+    return () => { supabase.removeChannel(ch); clearInterval(poll) }
   }, [emAnalise, pedidoId, onPago])
 
   async function pagar() {

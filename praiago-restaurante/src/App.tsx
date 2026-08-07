@@ -290,26 +290,27 @@ export default function App() {
 
           {/* Logo + status */}
           <div style={{ padding: '24px 20px 20px', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
-              <motion.svg initial={{ scale: 0.8, rotate: -10 }} animate={{ scale: 1, rotate: 0 }} width="44" height="44" viewBox="0 0 34 34" fill="none">
-                <rect width="34" height="34" rx="12" fill="url(#app-rest-g)"/>
-                <defs>
-                  <linearGradient id="app-rest-g" x1="0" y1="0" x2="34" y2="34" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="#f97316"/><stop offset="1" stopColor="#ea580c"/>
-                  </linearGradient>
-                </defs>
-                <path d="M6 24 Q10 20 14 24 Q18 28 22 24 Q26 20 28 24" stroke="white" strokeWidth="2.2" fill="none" strokeLinecap="round"/>
-                <circle cx="23" cy="10" r="5" fill="#fbbf24"/>
-                <path d="M10 30 Q11 23 13 19" stroke="white" strokeWidth="2" strokeLinecap="round" fill="none"/>
-                <path d="M13 19 Q9 15 6 16 M13 19 Q13 14 11 12 M13 19 Q17 15 17 12" stroke="white" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
-              </motion.svg>
-              <div>
-                <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: -0.5, lineHeight: 1 }}>
-                  <span style={{ color: '#f97316', textShadow: '0 0 15px rgba(249,115,22,0.6)' }}>Praia</span><span style={{ color: '#0f172a' }}>Go</span>
-                </div>
-                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 2.5, color: '#f97316', textTransform: 'uppercase', marginTop: 4 }}>
-                  Restaurante
-                </div>
+            {/* Logo — mesma marca e mesmo recorte do app do cliente.
+                O PNG e quadrado (1600x1600) com muita margem: a caixa de
+                140x59 recorta so o brasao, por isso a imagem e maior que ela. */}
+            <div style={{ marginBottom: 18 }}>
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                aria-label="PraiaGo"
+                style={{ width: 140, height: 59, overflow: 'hidden', position: 'relative', flexShrink: 0 }}
+              >
+                <img
+                  src="/praiago-logo-transparent.png"
+                  alt="PraiaGo"
+                  style={{
+                    position: 'absolute', width: 231, height: 231, maxWidth: 'none',
+                    left: -56, top: -67, display: 'block',
+                  }}
+                />
+              </motion.div>
+              <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 2.5, color: '#f97316', textTransform: 'uppercase', marginTop: 2 }}>
+                Restaurante
               </div>
             </div>
 

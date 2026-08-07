@@ -157,12 +157,23 @@ export default function LoginPage() {
       display: 'flex', flexDirection: 'column', alignItems: 'center',
       justifyContent: 'center', padding: '32px 24px',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 32 }}>
-        <div style={{ width: 48, height: 48, borderRadius: 12, background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>🌴</div>
-        <div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: '#0f172a' }}>PraiaGo</div>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, color: '#0ea5e9', textTransform: 'uppercase' }}>Ambulante</div>
+      {/* Marca oficial, mesmo recorte do app do cliente (PNG quadrado com
+          margem: a caixa recorta so o brasao). */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 32 }}>
+        <div
+          aria-label="PraiaGo"
+          style={{ width: 170, height: 72, overflow: 'hidden', position: 'relative' }}
+        >
+          <img
+            src="/praiago-logo-transparent.png"
+            alt="PraiaGo"
+            style={{
+              position: 'absolute', width: 280, height: 280, maxWidth: 'none',
+              left: -68, top: -81, display: 'block',
+            }}
+          />
         </div>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2, color: '#0ea5e9', textTransform: 'uppercase', marginTop: 6 }}>Ambulante</div>
       </div>
 
       <div style={{ background: '#fff', borderRadius: 24, padding: 28, width: '100%', maxWidth: 380, boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }}>

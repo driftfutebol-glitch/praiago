@@ -5,6 +5,7 @@ import { Wallet, ArrowLeft, TrendingUp, Clock, ArrowDownToLine, Loader2, Receipt
 import { supabase } from '../lib/supabase'
 import { useSessao } from '../lib/auth'
 import { confirmDialog, alertDialog } from '../lib/dialog'
+import { validarChavePix, TIPOS_CHAVE_PIX } from '../lib/chavePix'
 
 type Espelho = {
   vendas_brutas: number; comissao_praiago: number; taxa_provedor: number; valor_liquido: number
@@ -40,15 +41,34 @@ export default function CarteiraPage() {
   const [editandoPix, setEditandoPix] = useState(false)
   const [pixInput, setPixInput] = useState('')
   const [salvandoPix, setSalvandoPix] = useState(false)
+  const [pixErro, setPixErro] = useState('')
+
+  // Mostra pro vendedor o tipo reconhecido enquanto ele digita.
+  const pixPreview = pixInput.trim() ? validarChavePix(pixInput) : null
 
   async function salvarPix() {
-    if (!sessao?.id || !pixInput.trim()) return
+    if (!sessao?.id) return
+    // Valida ANTES de gravar: chave errada aqui so daria erro la na frente, na
+    // hora do saque — com o dinheiro parado e o vendedor sem entender por que.
+    const chave = validarChavePix(pixInput)
+    if (!chave.ok) { setPixErro(chave.erro); return }
+    setPixErro('')
     setSalvandoPix(true)
     const { error } = await supabase.from('vendor_payment_accounts')
-      .upsert({ vendedor_id: sessao.id, provider: 'pix', pix_key: pixInput.trim(), status: 'ativo', updated_at: new Date().toISOString() }, { onConflict: 'vendedor_id' })
+      .upsert({
+        vendedor_id: sessao.id,
+        provider: 'pix',
+        pix_key: chave.valor,
+        // Nao mandar `status`: a coluna ja nasce 'pendente' e o valor que estava
+        // aqui ('ativo') nem existe no CHECK da tabela — o cadastro quebrava.
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'vendedor_id' })
     setSalvandoPix(false)
-    if (error) { alertDialog({ title: 'Erro', message: error.message, tone: 'danger' }); return }
-    setChavePix(pixInput.trim()); setEditandoPix(false)
+    if (error) {
+      setPixErro('Não deu pra salvar a chave agora. Tente de novo em instantes.')
+      return
+    }
+    setChavePix(chave.valor); setEditandoPix(false)
   }
 
   const carregar = useCallback(async () => {
@@ -129,10 +149,25 @@ export default function CarteiraPage() {
             )}
           </div>
           {editandoPix && (
-            <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-              <input value={pixInput} onChange={e => setPixInput(e.target.value)} placeholder="CPF, e-mail, telefone ou aleatória" style={{ flex: 1, border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '11px 12px', fontSize: 14, fontWeight: 600, color: '#0f172a', background: '#f8fafc', outline: 'none' }} />
-              <button onClick={salvarPix} disabled={salvandoPix} style={{ border: 'none', background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', color: '#fff', borderRadius: 12, padding: '0 16px', fontSize: 14, fontWeight: 800, cursor: 'pointer' }}>{salvandoPix ? '...' : 'Salvar'}</button>
-            </div>
+            <>
+              <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+                <input value={pixInput} onChange={e => { setPixInput(e.target.value); setPixErro('') }} placeholder={TIPOS_CHAVE_PIX} style={{ flex: 1, border: `1px solid ${pixErro ? 'rgba(239,68,68,0.5)' : 'rgba(0,0,0,0.1)'}`, borderRadius: 12, padding: '11px 12px', fontSize: 14, fontWeight: 600, color: '#0f172a', background: '#f8fafc', outline: 'none' }} />
+                <button onClick={salvarPix} disabled={salvandoPix} style={{ border: 'none', background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', color: '#fff', borderRadius: 12, padding: '0 16px', fontSize: 14, fontWeight: 800, cursor: 'pointer' }}>{salvandoPix ? '...' : 'Salvar'}</button>
+              </div>
+              {pixErro ? (
+                <div style={{ marginTop: 8, fontSize: 12.5, fontWeight: 700, color: '#ef4444', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <AlertCircle size={13} /> {pixErro}
+                </div>
+              ) : pixPreview?.ok ? (
+                <div style={{ marginTop: 8, fontSize: 12.5, fontWeight: 700, color: '#16a34a' }}>
+                  ✓ {pixPreview.rotulo} reconhecido
+                </div>
+              ) : (
+                <div style={{ marginTop: 8, fontSize: 12, fontWeight: 600, color: '#64748b' }}>
+                  Aceitamos: {TIPOS_CHAVE_PIX}.
+                </div>
+              )}
+            </>
           )}
         </div>
 

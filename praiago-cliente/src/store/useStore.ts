@@ -351,27 +351,72 @@ export const useStore = create<State>()(
         return pedido
       },
 
+      // Busca os pedidos DO SERVIDOR, nao so atualiza o que ja estava na
+      // memoria. Antes lia apenas os ids que ja existiam no store local — e
+      // como sair da conta zera esse store, os pedidos sumiam da tela pra
+      // sempre (continuavam no banco, o cliente e que nunca mais os via).
       sincronizarPedidos: async () => {
-        const ids = get().pedidos.map(p => p.id).filter(Boolean)
-        if (ids.length === 0) return
+        const sessao = get().sessao
+        if (!sessao?.id) return
 
         const { data, error } = await supabase
           .from('pedidos')
-          .select('id,status')
-          .in('id', ids)
+          .select('id,status,total,subtotal_amount,discount_amount,discount_code,vendedor_id,vendedor_nome,itens,reta,barraca,pagamento,created_at')
+          .eq('cliente_id', sessao.id)
+          .order('created_at', { ascending: false })
+          .limit(40)
 
         if (error || !data) {
-          if (error) console.error('Erro ao sincronizar pedidos', error)
+          if (error) console.error('Erro ao sincronizar pedidos', { code: error.code })
           return
         }
 
-        const statusById = new Map(data.map(row => [String(row.id), mapDbStatusToPedidoStatus(String(row.status ?? 'novo'))]))
-        set(s => ({
-          pedidos: s.pedidos.map(p => {
-            const status = statusById.get(p.id)
-            return status ? { ...p, status } : p
-          }),
-        }))
+        const doServidor: Pedido[] = data.map(row => {
+          // O historico do banco guarda os itens como texto ("2x Agua de coco").
+          // Recompoe o suficiente pra listar; o local (quando existe) e mais rico.
+          const itens: PedidoItem[] = Array.isArray(row.itens)
+            ? (row.itens as unknown[]).map(linha => {
+                const texto = String(linha ?? '')
+                const m = texto.match(/^\s*(\d+)\s*x\s*(.+)$/i)
+                return { nome: m ? m[2].trim() : texto, qtd: m ? Number(m[1]) : 1, preco: 0 }
+              })
+            : []
+          return {
+            id: String(row.id),
+            vendedorId: String(row.vendedor_id ?? ''),
+            vendedorNome: String(row.vendedor_nome ?? 'Vendedor'),
+            itens,
+            total: Number(row.total ?? 0),
+            subtotal: Number(row.subtotal_amount ?? row.total ?? 0),
+            desconto: Number(row.discount_amount ?? 0),
+            cupom: row.discount_code ?? null,
+            data: new Date(String(row.created_at)).getTime(),
+            status: mapDbStatusToPedidoStatus(String(row.status ?? 'novo')),
+            entrega: {
+              reta: String(row.reta ?? ''),
+              barraca: String(row.barraca ?? ''),
+              modo: 'fixa',
+              pagamento: String(row.pagamento ?? 'pix'),
+            } as Entrega,
+          }
+        })
+
+        set(s => {
+          const locais = new Map(s.pedidos.map(p => [p.id, p]))
+          const mesclados = doServidor.map(remoto => {
+            const local = locais.get(remoto.id)
+            // O local tem detalhe que o banco nao guarda (preco por item, GPS
+            // da entrega). Mantem esse detalhe e confia no servidor pro status.
+            return local
+              ? { ...local, ...remoto, itens: local.itens.length ? local.itens : remoto.itens, entrega: local.entrega ?? remoto.entrega }
+              : remoto
+          })
+          // Pedido que so existe localmente (acabou de ser criado e o servidor
+          // ainda nao devolveu) nao pode desaparecer da tela.
+          const idsRemotos = new Set(doServidor.map(p => p.id))
+          const somenteLocais = s.pedidos.filter(p => !idsRemotos.has(p.id))
+          return { pedidos: [...mesclados, ...somenteLocais].sort((a, b) => b.data - a.data) }
+        })
       },
 
       cancelarPedido: async (pedidoId) => {

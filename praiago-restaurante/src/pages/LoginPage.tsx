@@ -415,19 +415,25 @@ export default function LoginPage() {
 
       <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ duration: 0.5, ease: "easeOut" }} style={{ width: '100%', maxWidth: 420, position: 'relative', zIndex: 1 }}>
         <div style={{ textAlign: 'center', marginBottom: 40 }}>
-          <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.2, type: 'spring', stiffness: 200, damping: 15 }} style={{
-            width: 80, height: 80, borderRadius: 24, margin: '0 auto 20px',
-            background: 'linear-gradient(135deg, rgba(249,115,22,0.2), rgba(234,88,12,0.05))',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 40,
-            border: '1px solid rgba(249,115,22,0.4)',
-            boxShadow: '0 10px 30px rgba(249,115,22,0.3), inset 0 0 20px rgba(249,115,22,0.1)',
-            backdropFilter: 'blur(10px)'
-          }}>
-            <span style={{ filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.5))' }}>🍽️</span>
+          {/* Marca oficial, mesmo recorte do app do cliente (PNG quadrado com
+              margem: a caixa recorta so o brasao). */}
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: 0.2, type: 'spring', stiffness: 200, damping: 15 }}
+            aria-label="PraiaGo"
+            style={{ width: 200, height: 84, margin: '0 auto', overflow: 'hidden', position: 'relative' }}
+          >
+            <img
+              src="/praiago-logo-transparent.png"
+              alt="PraiaGo"
+              style={{
+                position: 'absolute', width: 330, height: 330, maxWidth: 'none',
+                left: -80, top: -96, display: 'block',
+              }}
+            />
           </motion.div>
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-            <div style={{ fontSize: 36, fontWeight: 900, color: '#0f172a', textShadow: '0 0 30px rgba(0,0,0,0.08)', letterSpacing: -1 }}>PraiaGo</div>
-            <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: 3, color: '#f97316', textTransform: 'uppercase', marginTop: 8, textShadow: '0 0 10px rgba(249,115,22,0.5)' }}>Central do Restaurante</div>
+            <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: 3, color: '#f97316', textTransform: 'uppercase', marginTop: 10, textShadow: '0 0 10px rgba(249,115,22,0.5)' }}>Central do Restaurante</div>
           </motion.div>
         </div>
 
