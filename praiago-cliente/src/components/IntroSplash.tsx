@@ -7,18 +7,13 @@ import { motion } from 'framer-motion'
 // frame final. Regras que valem mais que o efeito visual:
 //  * NUNCA prender a entrada — timer fixo, sem espera de asset externo;
 //  * qualquer toque pula.
+//
+// Design: menos e melhor. Versoes anteriores tinham sol, raios de luz e
+// particulas; com a marca no centro isso virava poluicao e competia com ela.
+// Ficou so o que constroi profundidade de verdade: gradiente de mar, a marca
+// entrando em 3D e a sombra dela no chao.
 const CHAVE_SESSAO = 'praiago_intro_vista'
 const DURACAO_MS = 2100 // tempo de tela antes do fade automatico
-
-// Particulas ambiente (bolhas subindo). Formula fixa em vez de Math.random
-// pra nao "pular" de posicao a cada re-render.
-const PARTICULAS = Array.from({ length: 16 }).map((_, i) => ({
-  esquerda: (i * 47) % 100,
-  tamanho: 3 + (i % 4) * 2,
-  duracao: 4.5 + (i % 5) * 0.9,
-  atraso: (i % 8) * 0.28,
-  deriva: (i % 2 === 0 ? 1 : -1) * (8 + (i % 3) * 7),
-}))
 
 export default function IntroSplash({ onFim }: { onFim: () => void }) {
   const [saindo, setSaindo] = useState(false)
@@ -48,130 +43,69 @@ export default function IntroSplash({ onFim }: { onFim: () => void }) {
         // etc. usam ate 100000) — a intro tem que cobrir a tela inteira.
         position: 'fixed', inset: 0, zIndex: 999999, overflow: 'hidden',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'linear-gradient(160deg, #012a4a 0%, #036fa3 32%, #0891b2 55%, #0d9c6f 78%, #16a34a 100%)',
+        background: 'linear-gradient(170deg, #012a4a 0%, #04629b 38%, #0891b2 68%, #10a37a 100%)',
       }}
     >
-      {/* Grao sutil — tira a cara de gradiente 100% liso/digital */}
-      <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.05, mixBlendMode: 'overlay', pointerEvents: 'none' }}>
-        <filter id="graoIntro">
-          <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch" />
-        </filter>
-        <rect width="100%" height="100%" filter="url(#graoIntro)" />
-      </svg>
-
-      {/* Blobs de luz coloridos dando profundidade atmosferica (bem sutis) */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 0.5, x: [0, 26, 0], y: [0, -18, 0], scale: [1, 1.08, 1] }}
-        transition={{ opacity: { duration: 1 }, x: { duration: 9, repeat: Infinity, ease: 'easeInOut' }, y: { duration: 7, repeat: Infinity, ease: 'easeInOut' }, scale: { duration: 8, repeat: Infinity, ease: 'easeInOut' } }}
-        style={{ position: 'absolute', top: '-8%', right: '-10%', width: 320, height: 320, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,214,140,0.55) 0%, rgba(255,214,140,0) 70%)', filter: 'blur(50px)', mixBlendMode: 'screen' }}
-      />
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 0.5, x: [0, -22, 0], y: [0, 20, 0], scale: [1, 1.1, 1] }}
-        transition={{ opacity: { duration: 1, delay: 0.15 }, x: { duration: 10, repeat: Infinity, ease: 'easeInOut' }, y: { duration: 8.5, repeat: Infinity, ease: 'easeInOut' }, scale: { duration: 9, repeat: Infinity, ease: 'easeInOut' } }}
-        style={{ position: 'absolute', bottom: '-10%', left: '-12%', width: 340, height: 340, borderRadius: '50%', background: 'radial-gradient(circle, rgba(140,255,224,0.4) 0%, rgba(140,255,224,0) 70%)', filter: 'blur(55px)', mixBlendMode: 'screen' }}
-      />
-
-      {/* Sol com brilho pulsante */}
-      <motion.div
-        initial={{ opacity: 0, scale: 0.6 }}
-        animate={{ opacity: 0.5, scale: [0.6, 1, 0.94, 1] }}
-        transition={{ opacity: { duration: 0.8 }, scale: { duration: 2.4, repeat: Infinity, ease: 'easeInOut' } }}
+      {/* Vinheta: escurece as bordas e empurra o olho pro centro. Faz o
+          trabalho que o "sol" fazia, sem desenhar uma bola na tela. */}
+      <div
         style={{
-          // Sem `transform` aqui (framer-motion ja anima `scale` e sobrescreveria
-          // um translate manual) — centraliza com calc() em vez de transform.
-          position: 'absolute', top: '12%', left: 'calc(50% - 130px)', width: 260, height: 260,
-          borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(255,247,214,0.9) 0%, rgba(255,247,214,0.25) 55%, rgba(255,247,214,0) 75%)',
-          filter: 'blur(2px)',
+          position: 'absolute', inset: 0, pointerEvents: 'none',
+          background: 'radial-gradient(ellipse at 50% 42%, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0) 45%, rgba(1,20,35,0.35) 100%)',
         }}
       />
 
-      {/* Raios de luz atras da logo, girando bem devagar */}
+      {/* Mar no rodape: duas curvas com deriva lenta e defasada — uma sobe
+          enquanto a outra desce, e e essa diferenca que da sensacao de agua. */}
       <motion.svg
-        initial={{ opacity: 0, rotate: -6 }}
-        animate={{ opacity: 0.4, rotate: 6 }}
-        transition={{ opacity: { duration: 1 }, rotate: { duration: 7, repeat: Infinity, repeatType: 'mirror', ease: 'easeInOut' } }}
-        width="520" height="520" viewBox="0 0 520 520"
-        style={{ position: 'absolute' }}
+        initial={{ y: 30, opacity: 0 }}
+        animate={{ y: [0, -5, 0], opacity: 1 }}
+        transition={{ opacity: { duration: 0.7, delay: 0.25 }, y: { duration: 6, repeat: Infinity, ease: 'easeInOut' } }}
+        viewBox="0 0 1440 200" preserveAspectRatio="none"
+        style={{ position: 'absolute', bottom: -2, left: 0, width: '100%', height: '22%' }}
       >
-        {Array.from({ length: 8 }).map((_, i) => (
-          <line
-            key={i}
-            x1="260" y1="260"
-            x2={260 + 250 * Math.cos((i * Math.PI) / 4)}
-            y2={260 + 250 * Math.sin((i * Math.PI) / 4)}
-            stroke="rgba(255,255,255,0.3)"
-            strokeWidth="3"
-            strokeLinecap="round"
-          />
-        ))}
+        <path d="M0,110 C260,170 520,50 780,95 C1020,136 1240,70 1440,105 L1440,200 L0,200 Z" fill="rgba(255,255,255,0.10)" />
       </motion.svg>
-
-      {/* Particulas ambiente subindo, tipo bolha/luz na agua */}
-      {PARTICULAS.map((p, i) => (
-        <motion.div
-          key={i}
-          initial={{ opacity: 0, y: '10%' }}
-          animate={{ opacity: [0, 0.7, 0], y: '-115%', x: [0, p.deriva, 0] }}
-          transition={{ delay: p.atraso, duration: p.duracao, repeat: Infinity, ease: 'easeInOut' }}
-          style={{
-            position: 'absolute', bottom: 0, left: `${p.esquerda}%`,
-            width: p.tamanho, height: p.tamanho, borderRadius: '50%',
-            background: 'rgba(255,255,255,0.8)', filter: 'blur(0.5px)',
-          }}
-        />
-      ))}
-
-      {/* Ondas no rodape, com deriva suave (parallax) */}
       <motion.svg
         initial={{ y: 40, opacity: 0 }}
-        animate={{ y: [0, -6, 0], opacity: 1 }}
-        transition={{ opacity: { duration: 0.6, delay: 0.2 }, y: { duration: 5, repeat: Infinity, ease: 'easeInOut' } }}
-        viewBox="0 0 1440 220" preserveAspectRatio="none"
-        style={{ position: 'absolute', bottom: -4, left: 0, width: '100%', height: '26%' }}
+        animate={{ y: [0, 6, 0], opacity: 1 }}
+        transition={{ opacity: { duration: 0.7, delay: 0.4 }, y: { duration: 4.6, repeat: Infinity, ease: 'easeInOut' } }}
+        viewBox="0 0 1440 200" preserveAspectRatio="none"
+        style={{ position: 'absolute', bottom: -2, left: 0, width: '100%', height: '16%' }}
       >
-        <path d="M0,120 C240,180 480,40 720,90 C960,140 1200,60 1440,110 L1440,220 L0,220 Z" fill="rgba(255,255,255,0.14)" />
-      </motion.svg>
-      <motion.svg
-        initial={{ y: 50, opacity: 0 }}
-        animate={{ y: [0, 8, 0], opacity: 1 }}
-        transition={{ opacity: { duration: 0.6, delay: 0.35 }, y: { duration: 4.2, repeat: Infinity, ease: 'easeInOut' } }}
-        viewBox="0 0 1440 220" preserveAspectRatio="none"
-        style={{ position: 'absolute', bottom: -4, left: 0, width: '100%', height: '20%' }}
-      >
-        <path d="M0,150 C220,90 460,190 720,130 C980,70 1220,160 1440,100 L1440,220 L0,220 Z" fill="rgba(255,255,255,0.24)" />
-        <path d="M0,150 C220,90 460,190 720,130 C980,70 1220,160 1440,100" fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth="2.5" strokeLinecap="round" />
+        <path d="M0,140 C240,85 500,175 760,120 C1000,70 1230,150 1440,95 L1440,200 L0,200 Z" fill="rgba(255,255,255,0.2)" />
+        {/* Linha de espuma na crista: detalhe pequeno que faz a onda parecer
+            desenhada a mao em vez de uma forma solida. */}
+        <path d="M0,140 C240,85 500,175 760,120 C1000,70 1230,150 1440,95" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="2.5" strokeLinecap="round" />
       </motion.svg>
 
       {/* Marca em espaco 3D real: "voa" de longe ate encaixar no lugar */}
       <div style={{ perspective: 1400, position: 'relative' }}>
         <motion.div
-          initial={{ opacity: 0, scale: 0.5, rotateX: 55, rotateY: -26, z: -300 }}
+          initial={{ opacity: 0, scale: 0.55, rotateX: 48, rotateY: -22, z: -260 }}
           animate={{ opacity: 1, scale: 1, rotateX: 0, rotateY: 0, z: 0 }}
-          transition={{ type: 'spring', stiffness: 150, damping: 16, mass: 0.9 }}
+          transition={{ type: 'spring', stiffness: 140, damping: 17, mass: 0.9 }}
           style={{ transformStyle: 'preserve-3d' }}
         >
           {/* Depois que aterrissa, flutua/inclina bem de leve (efeito 3D continuo) */}
           <motion.div
-            animate={{ y: [0, -8, 0], rotateX: [0, 3, 0, -2, 0], rotateY: [0, -4, 0, 3, 0] }}
-            transition={{ delay: 0.6, duration: 5, repeat: Infinity, ease: 'easeInOut' }}
-            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}
+            animate={{ y: [0, -7, 0], rotateX: [0, 2.5, 0, -1.5, 0], rotateY: [0, -3, 0, 2.5, 0] }}
+            transition={{ delay: 0.65, duration: 5.5, repeat: Infinity, ease: 'easeInOut' }}
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18 }}
           >
             {/* Recorte da logo (mesma proporcao usada no cabecalho: 140x59) */}
-            <div style={{ position: 'relative', width: 'clamp(220px, 62vw, 320px)', aspectRatio: '140 / 59' }}>
-              {/* Sombra de contato no "chao" — reforca a profundidade 3D sem
-                  ser um brilho atras da logo (a marca flutua, a sombra fica embaixo) */}
+            <div style={{ position: 'relative', width: 'clamp(230px, 66vw, 330px)', aspectRatio: '140 / 59' }}>
+              {/* Sombra de contato no "chao": reforca a profundidade sem por
+                  nenhuma forma clara atras da marca. */}
               <motion.div
                 initial={{ opacity: 0, scaleX: 0.7 }}
-                animate={{ opacity: 0.5, scaleX: [0.85, 1, 0.85] }}
-                transition={{ opacity: { duration: 0.4, delay: 0.5 }, scaleX: { delay: 0.6, duration: 5, repeat: Infinity, ease: 'easeInOut' } }}
+                animate={{ opacity: 0.45, scaleX: [0.88, 1, 0.88] }}
+                transition={{ opacity: { duration: 0.5, delay: 0.55 }, scaleX: { delay: 0.65, duration: 5.5, repeat: Infinity, ease: 'easeInOut' } }}
                 style={{
-                  position: 'absolute', left: '18%', width: '64%', bottom: '-14%', height: '16%',
+                  position: 'absolute', left: '20%', width: '60%', bottom: '-13%', height: '14%',
                   borderRadius: '50%',
-                  background: 'radial-gradient(ellipse, rgba(1,10,8,0.55) 0%, rgba(1,10,8,0) 72%)',
-                  filter: 'blur(3px)',
+                  background: 'radial-gradient(ellipse, rgba(1,14,10,0.5) 0%, rgba(1,14,10,0) 72%)',
+                  filter: 'blur(4px)',
                 }}
               />
 
@@ -180,8 +114,9 @@ export default function IntroSplash({ onFim }: { onFim: () => void }) {
                 style={{
                   position: 'relative', width: '100%', height: '100%', overflow: 'hidden',
                   // Contorno escuro colado na silhueta das letras (drop-shadow
-                  // segue o alpha do PNG) — da contraste sem nenhuma bolha atras.
-                  filter: 'drop-shadow(0 0 2.5px rgba(0,14,10,0.95)) drop-shadow(0 0 3px rgba(0,14,10,0.9)) drop-shadow(0 0 10px rgba(0,14,10,0.65)) drop-shadow(0 22px 28px rgba(2,14,9,0.45))',
+                  // segue o alpha do PNG). E o que da contraste — a logo tem
+                  // gradiente azul->verde igual ao fundo e sumiria sem isso.
+                  filter: 'drop-shadow(0 0 2.5px rgba(0,14,10,0.95)) drop-shadow(0 0 3px rgba(0,14,10,0.9)) drop-shadow(0 0 10px rgba(0,14,10,0.6)) drop-shadow(0 20px 26px rgba(2,14,9,0.45))',
                 }}
               >
                 <img
@@ -197,16 +132,16 @@ export default function IntroSplash({ onFim }: { onFim: () => void }) {
             </div>
 
             <motion.div
-              initial={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.75, duration: 0.5 }}
+              transition={{ delay: 0.8, duration: 0.5 }}
               style={{
-                fontSize: 12.5, fontWeight: 700, color: 'rgba(255,255,255,0.95)',
-                letterSpacing: 2.5, textTransform: 'uppercase', textAlign: 'center',
-                textShadow: '0 2px 8px rgba(0,18,12,0.5)',
+                fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.95)',
+                letterSpacing: 4, textTransform: 'uppercase', textAlign: 'center',
+                textShadow: '0 2px 10px rgba(0,18,12,0.55)',
               }}
             >
-              Praia Grande na palma da mão
+              Praia na sua mão
             </motion.div>
           </motion.div>
         </motion.div>
