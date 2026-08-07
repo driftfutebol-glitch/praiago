@@ -8,7 +8,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2'
 import { corsHeaders, json, readJson } from '../_shared/cors.ts'
 import {
-  adminClient, centavos, env, gatewayConfigurado, lerCobranca,
+  adminClient, centavos, env, gatewayConfigurado, lerCobranca, montarSplit,
   mapearStatus, pagarme, registrarResultado, somenteDigitos, telefonePagarme,
 } from '../_shared/pagarme.ts'
 
@@ -49,7 +49,7 @@ Deno.serve(async (req: Request) => {
 
   const { data: pedido } = await comoUsuario
     .from('pedidos')
-    .select('id,cliente_id,cliente_nome,total,status,payment_status,cpf_nota')
+    .select('id,cliente_id,cliente_nome,total,status,payment_status,cpf_nota,vendedor_id,platform_fee_amount')
     .eq('id', pedidoId)
     .maybeSingle()
 
@@ -104,6 +104,8 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'Nao foi possivel iniciar o pagamento.' }, { status: 500 })
   }
 
+  const split = await montarSplit(admin, pedido)
+
   let gatewayRespondeu = false
   try {
     const meio = tipo === 'debit' ? 'debit_card' : 'credit_card'
@@ -130,7 +132,9 @@ Deno.serve(async (req: Request) => {
           document: documento,
           phones: telefone,
         },
-        payments: [{ payment_method: meio, [meio]: dadosCartao }],
+        // Divide na origem: a parte do vendedor cai direto no saldo dele no
+        // gateway, nunca na conta da PraiaGo. Sem recebedor ainda -> sem split.
+        payments: [{ payment_method: meio, [meio]: dadosCartao, ...(split ? { split } : {}) }],
       }),
     })
     gatewayRespondeu = true

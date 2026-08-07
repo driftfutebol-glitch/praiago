@@ -7,7 +7,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2'
 import { corsHeaders, json, readJson } from '../_shared/cors.ts'
 import {
-  adminClient, centavos, env, gatewayConfigurado, lerCobranca,
+  adminClient, centavos, env, gatewayConfigurado, lerCobranca, montarSplit,
   pagarme, registrarResultado, somenteDigitos, telefonePagarme,
 } from '../_shared/pagarme.ts'
 
@@ -37,7 +37,7 @@ Deno.serve(async (req: Request) => {
 
   const { data: pedido } = await comoUsuario
     .from('pedidos')
-    .select('id,cliente_id,cliente_nome,total,status,payment_status,pagamento,cpf_nota')
+    .select('id,cliente_id,cliente_nome,total,status,payment_status,pagamento,cpf_nota,vendedor_id,platform_fee_amount')
     .eq('id', pedidoId)
     .maybeSingle()
 
@@ -125,6 +125,11 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'Nao foi possivel iniciar o pagamento.' }, { status: 500 })
   }
 
+  // Divide o dinheiro na origem: a parte do vendedor cai direto no saldo dele
+  // no gateway, nunca na conta da PraiaGo. Null = ainda sem recebedor; cobra
+  // sem dividir (cobrar importa mais que dividir).
+  const split = await montarSplit(admin, pedido)
+
   try {
     const resposta = await pagarme<Record<string, unknown>>('/orders', {
       method: 'POST',
@@ -146,6 +151,7 @@ Deno.serve(async (req: Request) => {
         payments: [{
           payment_method: 'pix',
           pix: { expires_in: EXPIRA_SEGUNDOS },
+          ...(split ? { split } : {}),
         }],
       }),
     })

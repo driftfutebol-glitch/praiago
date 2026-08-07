@@ -14,6 +14,7 @@ import EventosPage from './pages/EventosPage'
 import CuponsPage from './pages/CuponsPage'
 import PromocoesPage from './pages/PromocoesPage'
 import FinanceiroPage from './pages/FinanceiroPage'
+import TrocaContaPage from './pages/TrocaContaPage'
 import AdminsPage from './pages/AdminsPage'
 import LocalizacoesPage from './pages/LocalizacoesPage'
 import Sidebar from './components/Sidebar'
@@ -283,6 +284,7 @@ export default function App() {
             <Route path="/cupons" element={guard('cupons', <CuponsPage />)} />
             <Route path="/promocoes" element={guard('promocoes', <PromocoesPage />)} />
             <Route path="/financeiro" element={guard('financeiro', <FinanceiroPage />)} />
+            <Route path="/troca-conta" element={guard('financeiro', <TrocaContaPage />)} />
             <Route path="/erros" element={guard('erros', <ErrorsPage />)} />
             <Route path="/admins" element={perfil?.role === 'sysadmin' ? <AdminsPage /> : <Navigate to="/" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />

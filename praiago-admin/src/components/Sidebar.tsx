@@ -6,7 +6,8 @@ import type { PerfilAdmin } from '../App'
 import {
   Activity, Package, Users, AlertOctagon, LogOut, ShieldAlert,
   ShieldCheck, Headphones, ChevronDown, CalendarDays, LayoutGrid,
-  Smartphone, TabletSmartphone, UtensilsCrossed, Umbrella, UserCircle, Ticket, Megaphone, WalletCards, MapPin
+  Smartphone, TabletSmartphone, UtensilsCrossed, Umbrella, UserCircle, Ticket, Megaphone, WalletCards, MapPin,
+  Landmark
 } from 'lucide-react'
 
 const atendimentoSubItems = [
@@ -106,6 +107,7 @@ export default function Sidebar({ onLogout, perfil }: { onLogout: () => void; pe
     { to: '/', key: 'dashboard', icon: Activity, label: 'Dashboard' },
     { to: '/pedidos', key: 'pedidos', icon: Package, label: 'Pedidos Globais' },
     { to: '/financeiro', key: 'financeiro', icon: WalletCards, label: 'Financeiro' },
+    { to: '/troca-conta', key: 'financeiro', icon: Landmark, label: 'Troca de conta' },
     { to: '/usuarios', key: 'usuarios', icon: Users, label: 'Usuários' },
   ].filter(m => podeVer(m.key))
 

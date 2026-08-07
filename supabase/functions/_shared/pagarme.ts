@@ -131,6 +131,80 @@ export function lerCobranca(pedido: Record<string, any>): Cobranca {
   }
 }
 
+export type RegraSplit = {
+  amount: number
+  recipient_id: string
+  type: 'flat'
+  options: { liable: boolean; charge_processing_fee: boolean; charge_remainder_fee: boolean }
+}
+
+/**
+ * Monta a divisao do dinheiro entre a PraiaGo e o vendedor.
+ *
+ * Com split, a parte do vendedor cai DIRETO no saldo dele no gateway — nunca
+ * na conta da PraiaGo. Isso tira da plataforma a custodia de dinheiro de
+ * terceiro (que poderia enquadra-la como instituicao de pagamento no BACEN).
+ *
+ * Devolve null quando ainda nao da pra dividir (vendedor sem recebedor, ou
+ * plataforma sem recebedor configurado). Nesse caso a cobranca sai SEM split,
+ * como era antes — cobrar e mais importante que dividir, e a carteira continua
+ * registrando o que cada um tem a receber.
+ */
+export async function montarSplit(
+  admin: ReturnType<typeof adminClient>,
+  pedido: { vendedor_id?: string | null; total?: unknown; platform_fee_amount?: unknown },
+): Promise<RegraSplit[] | null> {
+  if (!pedido.vendedor_id) return null
+
+  const [{ data: config }, { data: recebedor }] = await Promise.all([
+    admin.from('payment_settings').select('platform_recipient_id').eq('id', true).maybeSingle(),
+    admin.from('seller_recipients')
+      .select('recipient_id,status')
+      .eq('vendedor_id', pedido.vendedor_id)
+      .maybeSingle(),
+  ])
+
+  const idPlataforma = config?.platform_recipient_id
+  const idVendedor = recebedor?.recipient_id
+  if (!idPlataforma || !idVendedor || recebedor?.status === 'bloqueado') return null
+
+  const totalCent = centavos(Number(pedido.total))
+  let taxaCent = centavos(Number(pedido.platform_fee_amount ?? 0))
+
+  // A soma do split TEM que fechar com o total do pedido, senao o gateway
+  // recusa a cobranca inteira. Limita a taxa pra nunca passar do total.
+  if (!Number.isFinite(taxaCent) || taxaCent < 0) taxaCent = 0
+  if (taxaCent > totalCent) taxaCent = totalCent
+  const vendedorCent = totalCent - taxaCent
+  if (totalCent <= 0) return null
+
+  const regras: RegraSplit[] = []
+
+  // A plataforma e a responsavel (liable) e paga as taxas do gateway: o
+  // vendedor recebe exatamente o vendor_amount que a carteira prometeu a ele.
+  if (taxaCent > 0) {
+    regras.push({
+      amount: taxaCent,
+      recipient_id: idPlataforma,
+      type: 'flat',
+      options: { liable: true, charge_processing_fee: true, charge_remainder_fee: true },
+    })
+  }
+  if (vendedorCent > 0) {
+    regras.push({
+      amount: vendedorCent,
+      recipient_id: idVendedor,
+      type: 'flat',
+      options: { liable: false, charge_processing_fee: false, charge_remainder_fee: false },
+    })
+  }
+
+  // Um unico recebedor nao e split — e cobranca normal. Se a taxa comeu tudo
+  // (ou nao sobrou nada pro vendedor), nao ha o que dividir.
+  if (regras.length < 2) return null
+  return regras
+}
+
 /** Cliente com service role: usado so pra gravar o resultado do pagamento. */
 export function adminClient() {
   return createClient(env('SUPABASE_URL'), env('SUPABASE_SERVICE_ROLE_KEY'), {

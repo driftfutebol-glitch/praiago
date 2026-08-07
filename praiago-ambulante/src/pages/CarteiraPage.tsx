@@ -5,7 +5,7 @@ import { Wallet, ArrowLeft, TrendingUp, Clock, ArrowDownToLine, Loader2, Receipt
 import { supabase } from '../lib/supabase'
 import { useSessao } from '../lib/auth'
 import { confirmDialog, alertDialog } from '../lib/dialog'
-import { validarChavePix, TIPOS_CHAVE_PIX } from '../lib/chavePix'
+import ContaRecebimento from '../components/ContaRecebimento'
 
 type Espelho = {
   vendas_brutas: number; comissao_praiago: number; taxa_provedor: number; valor_liquido: number
@@ -35,54 +35,21 @@ export default function CarteiraPage() {
   const [esp, setEsp] = useState<Espelho | null>(null)
   const [saques, setSaques] = useState<Payout[]>([])
   const [extrato, setExtrato] = useState<Lancamento[]>([])
-  const [chavePix, setChavePix] = useState<string | null>(null)
+  const [temConta, setTemConta] = useState(false)
   const [loading, setLoading] = useState(true)
   const [sacando, setSacando] = useState(false)
-  const [editandoPix, setEditandoPix] = useState(false)
-  const [pixInput, setPixInput] = useState('')
-  const [salvandoPix, setSalvandoPix] = useState(false)
-  const [pixErro, setPixErro] = useState('')
-
-  // Mostra pro vendedor o tipo reconhecido enquanto ele digita.
-  const pixPreview = pixInput.trim() ? validarChavePix(pixInput) : null
-
-  async function salvarPix() {
-    if (!sessao?.id) return
-    // Valida ANTES de gravar: chave errada aqui so daria erro la na frente, na
-    // hora do saque — com o dinheiro parado e o vendedor sem entender por que.
-    const chave = validarChavePix(pixInput)
-    if (!chave.ok) { setPixErro(chave.erro); return }
-    setPixErro('')
-    setSalvandoPix(true)
-    const { error } = await supabase.from('vendor_payment_accounts')
-      .upsert({
-        vendedor_id: sessao.id,
-        provider: 'pix',
-        pix_key: chave.valor,
-        // Nao mandar `status`: a coluna ja nasce 'pendente' e o valor que estava
-        // aqui ('ativo') nem existe no CHECK da tabela — o cadastro quebrava.
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'vendedor_id' })
-    setSalvandoPix(false)
-    if (error) {
-      setPixErro('Não deu pra salvar a chave agora. Tente de novo em instantes.')
-      return
-    }
-    setChavePix(chave.valor); setEditandoPix(false)
-  }
-
   const carregar = useCallback(async () => {
     if (!sessao?.id) return
     const [{ data: espData }, { data: pays }, { data: led }, { data: vpa }] = await Promise.all([
       supabase.rpc('carteira_espelho', { p_vendedor: sessao.id }),
       supabase.from('payouts').select('id,valor,status,chave_pix,created_at').eq('vendedor_id', sessao.id).order('created_at', { ascending: false }).limit(10),
       supabase.from('financial_ledger').select('id,tipo,valor,status,created_at,disponivel_em').eq('vendedor_id', sessao.id).order('created_at', { ascending: false }).limit(15),
-      supabase.from('vendor_payment_accounts').select('pix_key').eq('vendedor_id', sessao.id).maybeSingle(),
+      supabase.from('seller_recipients').select('recipient_id').eq('vendedor_id', sessao.id).maybeSingle(),
     ])
     setEsp((Array.isArray(espData) ? espData[0] : espData) as Espelho ?? null)
     setSaques((pays as Payout[]) ?? [])
     setExtrato((led as Lancamento[]) ?? [])
-    setChavePix((vpa as { pix_key?: string } | null)?.pix_key ?? null)
+    setTemConta(!!(vpa as { recipient_id?: string } | null)?.recipient_id)
     setLoading(false)
   }, [sessao?.id])
 
@@ -91,8 +58,8 @@ export default function CarteiraPage() {
   async function solicitarSaque() {
     const disponivel = esp?.saldo_disponivel ?? 0
     if (disponivel <= 0) { alertDialog({ title: 'Sem saldo disponível', message: 'Você ainda não tem saldo liberado pra sacar.', tone: 'danger' }); return }
-    if (!chavePix) { alertDialog({ title: 'Cadastre sua chave Pix', message: 'Antes de sacar, cadastre a chave Pix em Perfil → Dados de recebimento.', tone: 'danger' }); return }
-    const ok = await confirmDialog({ title: 'Solicitar saque?', message: `Vamos transferir ${brl(disponivel)} para sua chave Pix ${chavePix}. O prazo depende do provedor.`, confirmText: 'Sacar' })
+    if (!temConta) { alertDialog({ title: 'Cadastre sua conta', message: 'Antes de sacar, cadastre a conta bancária que recebe suas vendas aqui na Carteira.', tone: 'danger' }); return }
+    const ok = await confirmDialog({ title: 'Sacar pra sua conta?', message: `Vamos transferir ${brl(disponivel)} para a sua conta bancária. O prazo depende do banco.`, confirmText: 'Sacar' })
     if (!ok) return
     setSacando(true)
     const { data, error } = await supabase.functions.invoke('solicitar-saque', { body: { valor: disponivel } })
@@ -126,50 +93,17 @@ export default function CarteiraPage() {
             <Clock size={13} /> Pendente (liberando): <strong style={{ color: '#0f172a' }}>{brl(esp?.saldo_pendente ?? 0)}</strong>
           </div>
           <button onClick={solicitarSaque} disabled={sacando || loading} style={{ width: '100%', border: 'none', borderRadius: 16, padding: 15, fontSize: 15, fontWeight: 900, color: '#fff', background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', cursor: sacando ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-            {sacando ? <Loader2 size={18} className="animate-spin-slow" /> : <ArrowDownToLine size={18} />} Solicitar saque via Pix
+            {sacando ? <Loader2 size={18} className="animate-spin-slow" /> : <ArrowDownToLine size={18} />} Sacar pra minha conta
           </button>
-          {!chavePix && !loading && (
+          {!temConta && !loading && (
             <div style={{ marginTop: 10, fontSize: 12, color: '#b45309', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-              <AlertCircle size={13} /> Cadastre sua chave Pix no perfil pra sacar
+              <AlertCircle size={13} /> Cadastre sua conta bancária abaixo pra poder sacar
             </div>
           )}
         </motion.div>
 
-        {/* Dados de recebimento (chave Pix) */}
-        <div className="glass-panel" style={{ ...cardBase, marginBottom: 14 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 900, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1 }}>Chave Pix pra receber</div>
-              <div style={{ fontSize: 14, fontWeight: 800, color: chavePix ? '#0f172a' : '#ef4444', marginTop: 4 }}>{chavePix || 'Não cadastrada'}</div>
-            </div>
-            {!editandoPix && (
-              <button onClick={() => { setPixInput(chavePix || ''); setEditandoPix(true) }} style={{ border: '1px solid rgba(14,165,233,0.3)', background: '#eff6ff', color: '#0284c7', borderRadius: 12, padding: '8px 14px', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
-                {chavePix ? 'Alterar' : 'Cadastrar'}
-              </button>
-            )}
-          </div>
-          {editandoPix && (
-            <>
-              <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-                <input value={pixInput} onChange={e => { setPixInput(e.target.value); setPixErro('') }} placeholder={TIPOS_CHAVE_PIX} style={{ flex: 1, border: `1px solid ${pixErro ? 'rgba(239,68,68,0.5)' : 'rgba(0,0,0,0.1)'}`, borderRadius: 12, padding: '11px 12px', fontSize: 14, fontWeight: 600, color: '#0f172a', background: '#f8fafc', outline: 'none' }} />
-                <button onClick={salvarPix} disabled={salvandoPix} style={{ border: 'none', background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', color: '#fff', borderRadius: 12, padding: '0 16px', fontSize: 14, fontWeight: 800, cursor: 'pointer' }}>{salvandoPix ? '...' : 'Salvar'}</button>
-              </div>
-              {pixErro ? (
-                <div style={{ marginTop: 8, fontSize: 12.5, fontWeight: 700, color: '#ef4444', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <AlertCircle size={13} /> {pixErro}
-                </div>
-              ) : pixPreview?.ok ? (
-                <div style={{ marginTop: 8, fontSize: 12.5, fontWeight: 700, color: '#16a34a' }}>
-                  ✓ {pixPreview.rotulo} reconhecido
-                </div>
-              ) : (
-                <div style={{ marginTop: 8, fontSize: 12, fontWeight: 600, color: '#64748b' }}>
-                  Aceitamos: {TIPOS_CHAVE_PIX}.
-                </div>
-              )}
-            </>
-          )}
-        </div>
+        {/* Conta bancaria: e ela que abre o saldo do vendedor no gateway. */}
+        <ContaRecebimento onMudou={carregar} />
 
         {/* Resumo espelho */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
