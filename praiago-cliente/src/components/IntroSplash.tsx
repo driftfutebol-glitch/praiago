@@ -136,12 +136,16 @@ export default function IntroSplash({ onFim }: { onFim: () => void }) {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.8, duration: 0.5 }}
               style={{
-                fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.95)',
-                letterSpacing: 4, textTransform: 'uppercase', textAlign: 'center',
+                // Assinatura longa: com espacamento generoso ela ia de ponta a
+                // ponta no celular, colada nas bordas. O padding garante margem
+                // mesmo na tela mais estreita.
+                fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.95)',
+                letterSpacing: 2.2, textTransform: 'uppercase', textAlign: 'center',
                 textShadow: '0 2px 10px rgba(0,18,12,0.55)',
+                padding: '0 20px', maxWidth: '100vw',
               }}
             >
-              Praia na sua mão
+              A Praia na palma da sua mão
             </motion.div>
           </motion.div>
         </motion.div>
