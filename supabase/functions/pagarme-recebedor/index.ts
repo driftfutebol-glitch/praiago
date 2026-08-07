@@ -72,30 +72,56 @@ Deno.serve(async (req: Request) => {
   // So o sysadmin roda. E leitura pura: nao cria nem altera nada la.
   if (acao === 'diagnostico') {
     if (perfil.role !== 'sysadmin') return json({ error: 'Nao autorizado.' }, { status: 403 })
+
+    let recebedores: Array<Record<string, unknown>> = []
     try {
       const lista = await pagarme<{ data?: Array<Record<string, unknown>> }>('/recipients?size=30', { method: 'GET' })
-      const itens = Array.isArray(lista?.data) ? lista.data : []
-      return json({
-        ok: true,
-        split_disponivel: true,
-        recebedores_existentes: itens.length,
-        // Necessario pra montar a regra de split: a parte da PraiaGo precisa
-        // apontar pro recebedor da propria plataforma.
-        recebedores: itens.map(r => ({
-          id: r.id, nome: r.name, status: r.status,
-          documento_final: String(r.document ?? '').slice(-4),
-        })),
+      recebedores = Array.isArray(lista?.data) ? lista.data : []
+    } catch { /* listar falhando ja e sinal de conta sem marketplace */ }
+
+    // LISTAR recebedores nao prova nada: toda conta lista (nem que seja so o
+    // recebedor principal dela). O que importa e se a conta pode CRIAR
+    // recebedor — permissao separada, que o Pagar.me libera sob pedido.
+    // Sonda com documento invalido de proposito: nao cria nada, mas a mensagem
+    // de erro diz se o bloqueio e de permissao ou so dos dados.
+    let podeCriar = false
+    let motivo = ''
+    try {
+      await pagarme('/recipients', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'SONDAGEM PRAIAGO',
+          email: 'sondagem@praiago.com.br',
+          document: '00000000000',
+          type: 'individual',
+          default_bank_account: {
+            holder_name: 'SONDAGEM', holder_type: 'individual', holder_document: '00000000000',
+            bank: '260', branch_number: '0001', account_number: '1', account_check_digit: '1',
+            type: 'checking',
+          },
+          transfer_settings: { transfer_enabled: false, transfer_interval: 'Monthly', transfer_day: 1 },
+        }),
       })
+      // Nao deveria passar com CPF invalido; se passou, a conta cria recebedor.
+      podeCriar = true
+      motivo = 'ATENCAO: a sondagem criou um recebedor de teste — apague no painel do gateway.'
     } catch (erro) {
-      const e = erro as { status?: number; message?: string }
-      return json({
-        ok: true,
-        split_disponivel: false,
-        status: e.status ?? null,
-        // Mensagem tecnica: este endpoint e so do admin, nao aparece pro vendedor.
-        detalhe: e.message || 'Falha ao consultar recebedores.',
-      })
+      const msg = (erro as { message?: string }).message || ''
+      // Erro de PERMISSAO = conta sem marketplace. Erro de DADOS = tudo certo.
+      podeCriar = !/split settings/i.test(msg)
+      motivo = msg
     }
+
+    return json({
+      ok: true,
+      pode_criar_recebedor: podeCriar,
+      recebedores_existentes: recebedores.length,
+      recebedores: recebedores.map(r => ({
+        id: r.id, nome: r.name, status: r.status,
+        documento_final: String(r.document ?? '').slice(-4),
+      })),
+      detalhe: motivo,
+    })
   }
 
   if (!PAPEIS_VENDEDOR.includes(String(perfil.role))) {
@@ -179,6 +205,11 @@ Deno.serve(async (req: Request) => {
           // DESLIGADO de proposito: quem libera o dinheiro e a nossa regra de
           // entrega confirmada + D+N, nao o calendario do gateway.
           transfer_enabled: false,
+          // O gateway EXIGE intervalo e dia mesmo com o saque desligado
+          // ("The transfer_interval value is required" / 422). Sao inertes
+          // enquanto transfer_enabled for false — mas precisam existir.
+          transfer_interval: 'Monthly',
+          transfer_day: 1,
         },
       }),
     })
@@ -220,6 +251,17 @@ Deno.serve(async (req: Request) => {
   } catch (erro) {
     const e = erro as { status?: number; message?: string }
     console.error('Falha ao criar recebedor', { status: e.status })
+
+    // Conta do gateway sem marketplace liberado: e problema NOSSO, nao dos
+    // dados que o vendedor digitou. Nao adianta ele conferir a conta e tentar
+    // de novo — a mensagem tem que dizer isso, senao ele fica em loop.
+    if (/split settings/i.test(e.message || '')) {
+      return json({
+        error: 'O recebimento automatico ainda esta sendo liberado pela nossa operadora. Seus dados nao foram perdidos — nossa equipe avisa assim que estiver pronto.',
+        code: 'split_nao_habilitado',
+      }, { status: 503 })
+    }
+
     return json({ error: e.message || 'Nao foi possivel criar sua conta de recebimento agora.' }, {
       status: e.status && e.status < 500 ? 422 : 502,
     })
