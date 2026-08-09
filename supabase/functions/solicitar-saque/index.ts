@@ -83,7 +83,7 @@ Deno.serve(async (req: Request) => {
 
       return json({ ok: true, payout, transferencia: 'enviada' })
     } catch (erroGateway) {
-      const e = erroGateway as { message?: string }
+      const e = erroGateway as { message?: string; status?: number }
       // A transferencia falhou, mas o payout ja existe. Marca como falho e
       // devolve o saldo pro vendedor cancelando o lancamento do saque — senao
       // o dinheiro sumiria da carteira sem nunca ter saido.
@@ -95,6 +95,17 @@ Deno.serve(async (req: Request) => {
         .update({ status: 'cancelado', descricao: 'Saque nao concluido — saldo devolvido' })
         .eq('vendedor_id', vendedorId).eq('tipo', 'saque').eq('status', 'solicitado')
       await admin.rpc('reconciliar_carteira', { p_vendedor: vendedorId })
+
+      // 412 do gateway = o saldo nao esta na conta do vendedor la. Acontece
+      // com venda ANTERIOR ao split (o dinheiro caiu inteiro na plataforma) ou
+      // com venda no credito ainda nao liquidada (D+30). Nos dois casos
+      // "tente de novo" e mentira: repetir nunca vai funcionar.
+      if (e.status === 412) {
+        return json({
+          error: 'Esse saldo ainda nao esta liberado pelo nosso processador de pagamentos. Seu dinheiro continua na carteira — nossa equipe ja foi avisada e vai concluir manualmente.',
+          code: 'saldo_nao_liquidado',
+        }, { status: 409 })
+      }
 
       return json({
         error: 'Nao foi possivel concluir a transferencia agora. Seu saldo continua disponivel — tente de novo em instantes.',
