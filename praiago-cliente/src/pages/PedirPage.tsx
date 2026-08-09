@@ -5,6 +5,7 @@ import { MapContainer, TileLayer, Marker, Polyline, Circle, useMap } from 'react
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { motion, AnimatePresence } from 'framer-motion'
+import QRCode from 'qrcode'
 import { useRoute } from '../hooks/useRoute'
 import { useGPS, type GPSFonte, type GPSStatus } from '../hooks/useGPS'
 import { criarMonitorSentido, type SentidoStatus } from '../lib/trafego'
@@ -404,7 +405,26 @@ function PixPagamentoModal({ cobranca, pedidoId, total, onPago, onClose }: {
   const [copiado, setCopiado] = useState(false)
   const [pago, setPago] = useState(false)
   const [restante, setRestante] = useState('30:00')
+  const [qrImagem, setQrImagem] = useState('')
   const pagoRef = useRef(false)
+
+  // Desenha o QR AQUI, a partir do copia-e-cola. A imagem que o gateway manda
+  // vem de api.pagar.me, dominio que o CSP do app nao libera em img-src — o
+  // navegador bloqueava e o cliente ficava sem QR nenhum. Gerando local nao
+  // depende de rede, de CSP nem do gateway estar de pe.
+  useEffect(() => {
+    let vivo = true
+    if (!cobranca.qr_code) return
+    QRCode.toDataURL(cobranca.qr_code, {
+      width: 420, margin: 1,
+      color: { dark: '#0f172a', light: '#ffffff' },
+      errorCorrectionLevel: 'M',
+    })
+      .then(url => { if (vivo) setQrImagem(url) })
+      // Sem QR o cliente ainda paga pelo copia-e-cola: nao trava a tela.
+      .catch(() => { if (vivo) setQrImagem('') })
+    return () => { vivo = false }
+  }, [cobranca.qr_code])
 
   // Confirmação ao vivo: realtime na linha do pedido + poll de segurança.
   // Quando o webhook aprovar o pagamento, o app comemora e segue sozinho.
@@ -499,11 +519,13 @@ function PixPagamentoModal({ cobranca, pedidoId, total, onPago, onClose }: {
               <div style={{ textAlign: 'center', background: '#f8fafc', borderRadius: 24, border: '1px solid rgba(0,0,0,0.06)', padding: '18px 16px', marginBottom: 14 }}>
                 <div style={{ fontSize: 12, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1 }}>Total a pagar</div>
                 <div style={{ fontSize: 32, fontWeight: 900, color: '#16a34a', margin: '2px 0 12px' }}>R$ {total.toFixed(2).replace('.', ',')}</div>
-                {cobranca.qr_code_base64 || cobranca.qr_code_url ? (
+                {/* base64 do gateway quando vier; senao o QR que desenhamos
+                    aqui. A URL de imagem do gateway nao entra: o CSP bloqueia. */}
+                {cobranca.qr_code_base64 || qrImagem ? (
                   <motion.img
                     initial={{ opacity: 0, scale: 0.92 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    src={cobranca.qr_code_base64 ? `data:image/png;base64,${cobranca.qr_code_base64}` : cobranca.qr_code_url || undefined}
+                    src={cobranca.qr_code_base64 ? `data:image/png;base64,${cobranca.qr_code_base64}` : qrImagem}
                     alt="QR Code PIX"
                     style={{ width: 210, height: 210, display: 'block', margin: '0 auto', borderRadius: 20, border: '1px solid rgba(0,0,0,0.08)', background: '#fff', padding: 8 }}
                   />
