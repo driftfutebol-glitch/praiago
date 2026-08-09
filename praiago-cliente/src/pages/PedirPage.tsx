@@ -12,6 +12,7 @@ import { criarMonitorSentido, type SentidoStatus } from '../lib/trafego'
 import { broadcastOrder } from '../hooks/useOrderBroadcast'
 import { type Vendedor } from '../lib/catalogo'
 import { criarPix, isPagamentoOnline, pagarComCartao, mensagemRecusaCartao, verificarPagamento, type PixCobranca } from '../lib/pagamento'
+import { obterTaxaCredito } from '../store/useStore'
 import { tokenizarCartao } from '../lib/pagamentosdk'
 import { labelHorario } from '../lib/horario'
 import { useCatalogo } from '../store/useCatalogo'
@@ -815,9 +816,18 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
   const sessao = useStore(s => s.sessao)
 
   const itensList = vendedor.produtos.filter(p => (carrinho[p.id] ?? 0) > 0)
+  const [taxaCreditoPercent, setTaxaCreditoPercent] = useState(0)
+  useEffect(() => { obterTaxaCredito().then(setTaxaCreditoPercent).catch(() => setTaxaCreditoPercent(0)) }, [])
+
   const subtotal = itensList.reduce((acc, p) => acc + p.preco * carrinho[p.id], 0)
   const desconto = Math.max(0, Math.min(subtotal, cupomAplicado?.valor ?? 0))
-  const total = Math.max(0, Math.round((subtotal - desconto) * 100) / 100)
+  const base = Math.max(0, Math.round((subtotal - desconto) * 100) / 100)
+  // Acrescimo do credito: mesma conta do servidor, so pra MOSTRAR antes de
+  // cobrar. Quem define o valor real e o trigger — a tela nunca decide preco.
+  const acrescimoCredito = pagamento === 'credito_online'
+    ? Math.round(base * taxaCreditoPercent) / 100
+    : 0
+  const total = Math.round((base + acrescimoCredito) * 100) / 100
   const radarReal = gpsFonte === 'gps' || gpsFonte === 'manual' || gpsFonte === 'memoria'
   const cpfOk = perfilCliente?.cpf_check_status === 'aprovado'
   const telefoneSalvo = telefoneValido(telefoneCliente)
@@ -1252,6 +1262,14 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#16a34a' }}>
                 <span style={{ fontSize: 13, fontWeight: 900 }}>{cupomAplicado?.codigo}</span>
                 <span style={{ fontSize: 14, fontWeight: 900 }}>- R$ {dinheiro(desconto)}</span>
+              </div>
+            )}
+            {/* A lei permite preco diferente por forma de pagamento, mas exige
+                que o cliente veja a diferenca ANTES de confirmar. */}
+            {acrescimoCredito > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#b45309' }}>
+                <span style={{ fontSize: 13, fontWeight: 800 }}>Acréscimo do cartão de crédito</span>
+                <span style={{ fontSize: 14, fontWeight: 900 }}>+ R$ {dinheiro(acrescimoCredito)}</span>
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8 }}>

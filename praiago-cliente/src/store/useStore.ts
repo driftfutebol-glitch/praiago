@@ -102,7 +102,7 @@ function isTestNotification(n: Pick<Notificacao, 'titulo' | 'texto'>) {
 async function getPaymentSettings() {
   const { data } = await supabase
     .from('payment_settings')
-    .select('platform_fee_percent,platform_fee_fixed,presencial_fee_mode')
+    .select('platform_fee_percent,platform_fee_fixed,presencial_fee_mode,taxa_credito_cliente_percent')
     .eq('id', true)
     .maybeSingle()
 
@@ -110,7 +110,16 @@ async function getPaymentSettings() {
     platformFeePercent: Number(data?.platform_fee_percent ?? 10),
     platformFeeFixed: Number(data?.platform_fee_fixed ?? 0),
     presencialFeeMode: String(data?.presencial_fee_mode ?? 'cobrar_vendedor'),
+    // Acrescimo do credito: quem manda e o servidor (o trigger recalcula o
+    // total). Isto aqui e so pra tela poder MOSTRAR antes de o cliente pagar.
+    taxaCreditoPercent: Number(data?.taxa_credito_cliente_percent ?? 0),
   }
+}
+
+/** Percentual de acrescimo do credito, pra tela avisar antes de cobrar. */
+export async function obterTaxaCredito(): Promise<number> {
+  const cfg = await getPaymentSettings()
+  return cfg.taxaCreditoPercent
 }
 
 function isPresencialPayment(method?: string) {

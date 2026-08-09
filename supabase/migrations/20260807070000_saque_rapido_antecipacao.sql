@@ -40,3 +40,18 @@
 -- antecipacao contratada no gateway faria o saque falhar la na frente, porque
 -- o dinheiro so existe no gateway em D+30 — a carteira diria "disponivel" e a
 -- transferencia quebraria.
+
+-- ── Acrescimo do credito no checkout (migration acrescimo_credito_no_checkout)
+-- Venda no credito custa mais pra plataforma (MDR do gateway + 30 dias de
+-- dinheiro preso). O acrescimo cobre isso e vai INTEIRO pra plataforma: o
+-- vendedor recebe o mesmo, tendo o cliente pago no PIX ou no credito.
+--
+-- A comissao incide sobre o valor DOS PRODUTOS, nao sobre o acrescimo — senao
+-- a plataforma cobraria comissao em cima da propria taxa.
+--
+-- Cobrar diferente por forma de pagamento e legal (Lei 13.455/2017), MAS o
+-- preco final tem que estar visivel antes de o cliente confirmar. Por isso o
+-- valor virou coluna propria (pedidos.credit_surcharge_amount) e aparece como
+-- linha separada no checkout — nunca embutido no total.
+--
+-- Config: payment_settings.taxa_credito_cliente_percent (0 = desligado).
