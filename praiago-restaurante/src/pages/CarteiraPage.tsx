@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Wallet, ArrowLeft, TrendingUp, Clock, ArrowDownToLine, Loader2, Receipt, Building2, AlertCircle } from 'lucide-react'
+import { Wallet, ArrowLeft, TrendingUp, Clock, ArrowDownToLine, Loader2, Receipt, Building2, AlertCircle, Zap } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useSessao } from '../lib/auth'
 import { confirmDialog, alertDialog } from '../lib/dialog'
@@ -11,6 +11,10 @@ type Espelho = {
   vendas_brutas: number; comissao_praiago: number; taxa_provedor: number; valor_liquido: number
   saldo_pendente: number; saldo_disponivel: number; transferido: number
   estornos: number; chargebacks: number; proxima_liquidacao: string | null
+}
+type Previa = {
+  disponivel_agora: number; antecipavel: number; taxa_percent: number
+  taxa_valor: number; receberia: number; ativo: boolean
 }
 type Payout = { id: string; valor: number; status: string; chave_pix: string | null; created_at: string }
 type Lancamento = { id: string; tipo: string; valor: number; status: string; created_at: string; disponivel_em: string | null }
@@ -27,6 +31,7 @@ const STATUS_SAQUE: Record<string, { label: string; cor: string }> = {
 const TIPO_LABEL: Record<string, string> = {
   repasse_vendedor: 'Venda (seu líquido)', taxa_plataforma: 'Comissão Praia Go',
   taxa_provedor: 'Taxa do provedor', saque: 'Saque', estorno: 'Estorno', chargeback: 'Chargeback',
+  taxa_antecipacao: 'Taxa de antecipação',
 }
 
 export default function CarteiraPage() {
@@ -38,22 +43,44 @@ export default function CarteiraPage() {
   const [temConta, setTemConta] = useState(false)
   const [loading, setLoading] = useState(true)
   const [sacando, setSacando] = useState(false)
+  const [previa, setPrevia] = useState<Previa | null>(null)
+  const [antecipando, setAntecipando] = useState(false)
+
   const carregar = useCallback(async () => {
     if (!sessao?.id) return
-    const [{ data: espData }, { data: pays }, { data: led }, { data: vpa }] = await Promise.all([
+    const [{ data: espData }, { data: pays }, { data: led }, { data: vpa }, { data: prev }] = await Promise.all([
       supabase.rpc('carteira_espelho', { p_vendedor: sessao.id }),
       supabase.from('payouts').select('id,valor,status,chave_pix,created_at').eq('vendedor_id', sessao.id).order('created_at', { ascending: false }).limit(10),
       supabase.from('financial_ledger').select('id,tipo,valor,status,created_at,disponivel_em').eq('vendedor_id', sessao.id).order('created_at', { ascending: false }).limit(15),
       supabase.from('seller_recipients').select('recipient_id').eq('vendedor_id', sessao.id).maybeSingle(),
+      supabase.rpc('previa_saque_rapido', { p_vendedor: sessao.id }),
     ])
     setEsp((Array.isArray(espData) ? espData[0] : espData) as Espelho ?? null)
     setSaques((pays as Payout[]) ?? [])
     setExtrato((led as Lancamento[]) ?? [])
     setTemConta(!!(vpa as { recipient_id?: string } | null)?.recipient_id)
+    setPrevia((Array.isArray(prev) ? prev[0] : prev) as Previa ?? null)
     setLoading(false)
   }, [sessao?.id])
 
   useEffect(() => { carregar() }, [carregar])
+
+  async function anteciparSaldo() {
+    if (!previa) return
+    const ok = await confirmDialog({
+      title: 'Antecipar seu saldo?',
+      message: `Você recebe ${brl(previa.receberia)} agora, em vez de ${brl(previa.antecipavel)} no prazo. A taxa de ${previa.taxa_percent}% (${brl(previa.taxa_valor)}) é descontada na hora e não tem volta.`,
+      confirmText: 'Antecipar',
+      cancelText: 'Prefiro esperar',
+    })
+    if (!ok) return
+    setAntecipando(true)
+    const { error } = await supabase.rpc('antecipar_saldo', { p_vendedor: sessao!.id })
+    setAntecipando(false)
+    if (error) { alertDialog({ title: 'Não deu pra antecipar', message: error.message, tone: 'danger' }); return }
+    await alertDialog({ title: 'Saldo liberado!', message: 'Já pode sacar pra sua conta.', tone: 'success' })
+    carregar()
+  }
 
   async function solicitarSaque() {
     const disponivel = esp?.saldo_disponivel ?? 0
@@ -98,6 +125,29 @@ export default function CarteiraPage() {
           {!temConta && !loading && (
             <div style={{ marginTop: 10, fontSize: 12, color: '#b45309', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
               <AlertCircle size={13} /> Cadastre sua conta bancária abaixo pra poder sacar
+            </div>
+          )}
+
+          {/* Antecipacao: so aparece quando ha saldo de pedido JA ENTREGUE
+              esperando o prazo. Mostra o desconto antes de o vendedor decidir —
+              taxa que so aparece depois de clicar e o que gera reclamacao. */}
+          {previa?.ativo && (previa.antecipavel ?? 0) > 0 && (
+            <div style={{ marginTop: 12, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.28)', borderRadius: 16, padding: 14, textAlign: 'left' }}>
+              <div style={{ fontSize: 12.5, fontWeight: 900, color: '#b45309', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Zap size={14} /> Receber agora, sem esperar
+              </div>
+              <div style={{ fontSize: 12.5, color: '#475569', fontWeight: 600, marginTop: 6, lineHeight: 1.5 }}>
+                Você tem <strong>{brl(previa.antecipavel)}</strong> de pedidos entregues aguardando o prazo.
+                Antecipando, a taxa é de {previa.taxa_percent}% ({brl(previa.taxa_valor)}) e você fica com{' '}
+                <strong style={{ color: '#0f172a' }}>{brl(previa.receberia)}</strong>.
+              </div>
+              <button
+                onClick={anteciparSaldo} disabled={antecipando}
+                style={{ width: '100%', marginTop: 10, border: 'none', borderRadius: 14, padding: 13, fontSize: 14, fontWeight: 900, color: '#fff', background: 'linear-gradient(135deg, #f59e0b, #f97316)', cursor: antecipando ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              >
+                {antecipando ? <Loader2 size={16} className="animate-spin-slow" /> : <Zap size={16} />}
+                Antecipar {brl(previa.antecipavel)}
+              </button>
             </div>
           )}
         </motion.div>

@@ -1,0 +1,27 @@
+-- ============================================================================
+-- SAQUE RAPIDO (antecipacao do D+N) — aplicado via Management API
+-- ============================================================================
+-- O vendedor paga uma taxa pra receber antes do prazo. So entra saldo de
+-- pedido JA ENTREGUE (status 'em_espera' = entrega confirmada, contando D+N).
+--
+-- Pedido nao entregue fica de fora de proposito: se o dinheiro sair antes e o
+-- cliente nao receber, a plataforma ja pagou o vendedor e ainda tem que
+-- devolver ao cliente — prejuizo dobrado.
+--
+-- A taxa e RECEITA, nao repasse de custo: o PIX liquida em D+1 no gateway.
+-- Quem segura o dinheiro ate o D+N e a nossa propria regra de entrega.
+--
+-- Objetos criados (ver historico das migrations no Supabase):
+--   payment_settings.saque_rapido_ativo / saque_rapido_percent
+--   financial_ledger tipo 'taxa_antecipacao'
+--   previa_saque_rapido(uuid)  -> quanto da e quanto custa
+--   antecipar_saldo(uuid)      -> libera e cobra, atomico
+--   reconciliar_carteira / carteira_espelho: descontam taxa_antecipacao
+--
+-- Duas armadilhas achadas em TESTE (nao em revisao):
+--  1. "FOR UPDATE is not allowed with aggregate functions" — nao da pra travar
+--     linhas e somar na mesma consulta. O proprio UPDATE ... RETURNING trava e
+--     mede de uma vez, e dois cliques simultaneos nao antecipam duas vezes.
+--  2. A previa fazia round(bruto - bruto*pct) e a execucao bruto - round(...):
+--     1 centavo de diferenca. Prometer R$14,54 e pagar R$14,53 destroi a
+--     confianca numa tela de dinheiro. As duas arredondam a TAXA primeiro.
