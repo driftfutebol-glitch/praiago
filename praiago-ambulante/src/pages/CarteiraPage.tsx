@@ -15,6 +15,8 @@ type Espelho = {
 type Previa = {
   disponivel_agora: number; antecipavel: number; taxa_percent: number
   taxa_valor: number; receberia: number; ativo: boolean
+  antecipavel_credito: number; taxa_percent_credito: number
+  taxa_valor_credito: number; receberia_credito: number; credito_ativo: boolean
 }
 type Payout = { id: string; valor: number; status: string; chave_pix: string | null; created_at: string }
 type Lancamento = { id: string; tipo: string; valor: number; status: string; created_at: string; disponivel_em: string | null }
@@ -65,17 +67,23 @@ export default function CarteiraPage() {
 
   useEffect(() => { carregar() }, [carregar])
 
-  async function anteciparSaldo() {
+  // Credito liquida em D+30 e PIX/debito em D+1: prazos diferentes, taxas
+  // diferentes. O grupo diz de qual saldo estamos falando.
+  async function anteciparSaldo(grupo: 'rapido' | 'credito' = 'rapido') {
     if (!previa) return
+    const bruto = grupo === 'credito' ? previa.antecipavel_credito : previa.antecipavel
+    const liquido = grupo === 'credito' ? previa.receberia_credito : previa.receberia
+    const pct = grupo === 'credito' ? previa.taxa_percent_credito : previa.taxa_percent
+    const taxa = grupo === 'credito' ? previa.taxa_valor_credito : previa.taxa_valor
     const ok = await confirmDialog({
       title: 'Antecipar seu saldo?',
-      message: `Você recebe ${brl(previa.receberia)} agora, em vez de ${brl(previa.antecipavel)} no prazo. A taxa de ${previa.taxa_percent}% (${brl(previa.taxa_valor)}) é descontada na hora e não tem volta.`,
+      message: `Você recebe ${brl(liquido)} agora, em vez de ${brl(bruto)} no prazo. A taxa de ${pct}% (${brl(taxa)}) é descontada na hora e não tem volta.`,
       confirmText: 'Antecipar',
       cancelText: 'Prefiro esperar',
     })
     if (!ok) return
     setAntecipando(true)
-    const { error } = await supabase.rpc('antecipar_saldo', { p_vendedor: sessao!.id })
+    const { error } = await supabase.rpc('antecipar_saldo', { p_vendedor: sessao!.id, p_grupo: grupo })
     setAntecipando(false)
     if (error) { alertDialog({ title: 'Não deu pra antecipar', message: error.message, tone: 'danger' }); return }
     await alertDialog({ title: 'Saldo liberado!', message: 'Já pode sacar pra sua conta.', tone: 'success' })
@@ -142,11 +150,32 @@ export default function CarteiraPage() {
                 <strong style={{ color: '#0f172a' }}>{brl(previa.receberia)}</strong>.
               </div>
               <button
-                onClick={anteciparSaldo} disabled={antecipando}
+                onClick={() => anteciparSaldo('rapido')} disabled={antecipando}
                 style={{ width: '100%', marginTop: 10, border: 'none', borderRadius: 14, padding: 13, fontSize: 14, fontWeight: 900, color: '#fff', background: 'linear-gradient(135deg, #f59e0b, #f97316)', cursor: antecipando ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
               >
                 {antecipando ? <Loader2 size={16} className="animate-spin-slow" /> : <Zap size={16} />}
                 Antecipar {brl(previa.antecipavel)}
+              </button>
+            </div>
+          )}
+
+          {/* Credito tem prazo (e taxa) proprios: o gateway so libera em D+30. */}
+          {previa?.credito_ativo && (previa.antecipavel_credito ?? 0) > 0 && (
+            <div style={{ marginTop: 10, background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.28)', borderRadius: 16, padding: 14, textAlign: 'left' }}>
+              <div style={{ fontSize: 12.5, fontWeight: 900, color: '#7c3aed', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Zap size={14} /> Antecipar vendas no cartão de crédito
+              </div>
+              <div style={{ fontSize: 12.5, color: '#475569', fontWeight: 600, marginTop: 6, lineHeight: 1.5 }}>
+                Venda no crédito só cai em 30 dias. Você tem <strong>{brl(previa.antecipavel_credito)}</strong> nesse prazo —
+                antecipando, a taxa é de {previa.taxa_percent_credito}% ({brl(previa.taxa_valor_credito)}) e você fica com{' '}
+                <strong style={{ color: '#0f172a' }}>{brl(previa.receberia_credito)}</strong>.
+              </div>
+              <button
+                onClick={() => anteciparSaldo('credito')} disabled={antecipando}
+                style={{ width: '100%', marginTop: 10, border: 'none', borderRadius: 14, padding: 13, fontSize: 14, fontWeight: 900, color: '#fff', background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', cursor: antecipando ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              >
+                {antecipando ? <Loader2 size={16} className="animate-spin-slow" /> : <Zap size={16} />}
+                Antecipar {brl(previa.antecipavel_credito)}
               </button>
             </div>
           )}

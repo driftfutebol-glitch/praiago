@@ -25,3 +25,18 @@
 --  2. A previa fazia round(bruto - bruto*pct) e a execucao bruto - round(...):
 --     1 centavo de diferenca. Prometer R$14,54 e pagar R$14,53 destroi a
 --     confianca numa tela de dinheiro. As duas arredondam a TAXA primeiro.
+
+-- ── Taxa separada por metodo (migration antecipacao_taxa_por_metodo) ────────
+-- PIX/debito liquidam em D+1/D+2: quando o vendedor antecipa, o dinheiro JA
+-- esta no gateway. Custo zero pra plataforma — os 5% sao margem limpa.
+--
+-- Credito liquida em D+30: antecipar significa bancar do proprio bolso por um
+-- mes, ou contratar a antecipacao do gateway (1,49% a 4,5%/mes no mercado em
+-- 2026, negociada por volume). Padrao 8% = cobre o PIOR caso e deixa ~3,5%.
+-- 8% e numero DEFENSIVO, nao ideal: baixar quando o gateway informar a taxa
+-- real do contrato.
+--
+-- saque_rapido_credito_ativo nasce FALSE de proposito: liberar credito sem a
+-- antecipacao contratada no gateway faria o saque falhar la na frente, porque
+-- o dinheiro so existe no gateway em D+30 — a carteira diria "disponivel" e a
+-- transferencia quebraria.
