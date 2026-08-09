@@ -173,6 +173,14 @@ Deno.serve(async (req: Request) => {
   if (!conta) return json({ error: 'Informe o numero da conta.' }, { status: 422 })
   if (!contaDv) return json({ error: 'Informe o digito da conta.' }, { status: 422 })
   if (titularNome.length < 3) return json({ error: 'Informe o nome do titular da conta.' }, { status: 422 })
+  // Limite do gateway ("holder name must be lower than 30 character"). Barra
+  // aqui tambem: a tela pode ser antiga (app nao atualizado) e o erro cru do
+  // gateway em ingles nao ajudaria o vendedor a resolver.
+  if (titularNome.length > 29) {
+    return json({
+      error: 'O nome do titular precisa ter ate 29 letras. Abrevie os nomes do meio (ex: "Pedro H. F. Oliveira").',
+    }, { status: 422 })
+  }
   if (documento.length !== 11 && documento.length !== 14) {
     return json({ error: 'Informe o CPF ou CNPJ do titular.' }, { status: 422 })
   }

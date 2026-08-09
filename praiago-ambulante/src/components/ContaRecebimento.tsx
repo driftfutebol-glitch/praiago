@@ -10,8 +10,8 @@ import { supabase } from '../lib/supabase'
 import { useSessao } from '../lib/auth'
 import { alertDialog } from '../lib/dialog'
 import {
-  BANCOS, cadastrarRecebimento, consultarRecebimento, validarConta,
-  type ContaRecebimento as Conta,
+  BANCOS, MAX_TITULAR, abreviarTitular, cadastrarRecebimento, consultarRecebimento,
+  validarConta, type ContaRecebimento as Conta,
 } from '../lib/recebimento'
 
 type PedidoTroca = { id: string; status: string; created_at: string; parecer: string | null; liberado_ate: string | null }
@@ -128,6 +128,8 @@ export default function ContaRecebimento({ onMudou }: { onMudou?: () => void }) 
     carregar()
   }
 
+  const titularLongo = form.titular_nome.trim().length > MAX_TITULAR
+
   const campo = (k: keyof Conta) => ({
     value: String(form[k] ?? ''),
     onChange: (e: React.ChangeEvent<HTMLInputElement>) => { setForm(f => ({ ...f, [k]: e.target.value })); setErro('') },
@@ -230,6 +232,23 @@ export default function ContaRecebimento({ onMudou }: { onMudou?: () => void }) 
           <div>
             <label style={labelBase}>Nome do titular</label>
             <input {...campo('titular_nome')} placeholder="Como está no banco" style={inputBase} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 4 }}>
+              <span style={{ fontSize: 11.5, fontWeight: 700, color: titularLongo ? '#dc2626' : '#64748b' }}>
+                {form.titular_nome.trim().length}/{MAX_TITULAR} letras
+              </span>
+              {/* O banco confere o 1o e o ultimo nome; os do meio podem ir
+                  abreviados. Um clique resolve em vez de o vendedor ficar
+                  apagando letra por letra. */}
+              {titularLongo && (
+                <button
+                  type="button"
+                  onClick={() => setForm(f => ({ ...f, titular_nome: abreviarTitular(f.titular_nome) }))}
+                  style={{ border: '1px solid rgba(14,165,233,0.3)', background: '#eff6ff', color: '#0284c7', borderRadius: 10, padding: '5px 10px', fontSize: 11.5, fontWeight: 800, cursor: 'pointer' }}
+                >
+                  Abreviar automaticamente
+                </button>
+              )}
+            </div>
           </div>
 
           <div>

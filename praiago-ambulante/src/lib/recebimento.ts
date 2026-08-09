@@ -68,6 +68,13 @@ export function cadastrarRecebimento(conta: ContaRecebimento) {
   )
 }
 
+/**
+ * Limite do gateway: "Bank account holder name must be lower than 30
+ * character". Nome completo brasileiro passa disso com facilidade, entao a
+ * tela precisa avisar ANTES — descobrir isso so no envio e frustrante.
+ */
+export const MAX_TITULAR = 29
+
 /** Valida no navegador o que o gateway rejeitaria depois — erro cedo e melhor. */
 export function validarConta(c: Partial<ContaRecebimento>): string {
   const d = (v?: string) => String(v ?? '').replace(/\D/g, '')
@@ -75,8 +82,27 @@ export function validarConta(c: Partial<ContaRecebimento>): string {
   if (!d(c.agencia)) return 'Informe a agência (só números).'
   if (!d(c.conta)) return 'Informe o número da conta.'
   if (!d(c.conta_dv)) return 'Informe o dígito da conta (vem depois do traço).'
-  if (String(c.titular_nome ?? '').trim().length < 3) return 'Informe o nome do titular da conta.'
+  const titular = String(c.titular_nome ?? '').trim()
+  if (titular.length < 3) return 'Informe o nome do titular da conta.'
+  if (titular.length > MAX_TITULAR) {
+    return `O nome do titular precisa ter até ${MAX_TITULAR} letras. Abrevie os nomes do meio (ex: "Pedro H. F. Oliveira").`
+  }
   const doc = d(c.titular_documento)
   if (doc.length !== 11 && doc.length !== 14) return 'Informe o CPF ou CNPJ do titular.'
   return ''
+}
+
+/** Abrevia os nomes do meio pra caber no limite, preservando o 1o e o ultimo. */
+export function abreviarTitular(nome: string): string {
+  const partes = String(nome ?? '').trim().split(/\s+/).filter(Boolean)
+  if (partes.length < 3) return partes.join(' ').slice(0, MAX_TITULAR)
+
+  // Abrevia do meio pra fora ate caber; primeiro e ultimo nome ficam inteiros
+  // porque sao os que o banco confere.
+  const saida = [...partes]
+  for (let i = 1; i < saida.length - 1; i++) {
+    if (saida.join(' ').length <= MAX_TITULAR) break
+    saida[i] = `${saida[i][0]}.`
+  }
+  return saida.join(' ').slice(0, MAX_TITULAR)
 }
