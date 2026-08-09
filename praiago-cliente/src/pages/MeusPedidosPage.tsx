@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ShoppingBag, Clock, Bike, CheckCircle2, RotateCcw, XCircle, LifeBuoy, Trash2, Send, CreditCard } from 'lucide-react'
+import { ShoppingBag, Clock, Bike, CheckCircle2, RotateCcw, XCircle, LifeBuoy, Trash2, Send, CreditCard, KeyRound } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { theme } from '../lib/theme'
 import { confirmDialog, alertDialog } from '../lib/dialog'
 import { verificarPagamento as verificarPagamentoServidor } from '../lib/pagamento'
+import { supabase } from '../lib/supabase'
 
 const STATUS_CFG = {
   aguardando_pagamento: { label: 'Verificando pagamento', cor: '#d97706', bg: 'rgba(245,158,11,0.12)', icon: CreditCard },
@@ -28,6 +29,9 @@ export default function MeusPedidosPage() {
   const sincronizarPedidos = useStore(s => s.sincronizarPedidos)
   const cancelarPedido = useStore(s => s.cancelarPedido)
   const removerPedido = useStore(s => s.removerPedido)
+  // Codigo de entrega fica so em memoria: sai da tela quando o app fecha.
+  const [codigos, setCodigos] = useState<Record<string, string>>({})
+  const [buscandoCodigo, setBuscandoCodigo] = useState<string | null>(null)
   const solicitarAjudaPedido = useStore(s => s.solicitarAjudaPedido)
   const [verificandoId, setVerificandoId] = useState<string | null>(null)
 
@@ -91,13 +95,38 @@ export default function MeusPedidosPage() {
   async function cancelar(id: string) {
     const ok = await confirmDialog({
       title: 'Cancelar pedido?',
-      message: 'O suporte também será avisado para acompanhar o caso.',
+      message: 'Depois que o vendedor começar a preparar, o cancelamento não é mais possível. O suporte também será avisado.',
       confirmText: 'Sim, cancelar',
       cancelText: 'Voltar',
       tone: 'danger',
     })
     if (!ok) return
-    await cancelarPedido(id)
+    const feito = await cancelarPedido(id)
+    // O vendedor pode ter aceitado o pedido entre a tela carregar e o clique:
+    // nesse caso o servidor recusa, e o cliente precisa saber por que.
+    if (!feito) {
+      await alertDialog({
+        title: 'Não deu pra cancelar',
+        message: 'O vendedor já começou a preparar seu pedido. Se precisar, fale com a gente pelo botão Ajuda.',
+        tone: 'danger',
+      })
+    }
+  }
+
+  /** Busca o código no servidor — ele nunca fica guardado no aparelho. */
+  async function gerarCodigo(id: string) {
+    setBuscandoCodigo(id)
+    const { data, error } = await supabase.rpc('obter_codigo_entrega', { p_pedido_id: id })
+    setBuscandoCodigo(null)
+    if (error || typeof data !== 'string') {
+      await alertDialog({
+        title: 'Não deu pra gerar o código',
+        message: 'Tente de novo em instantes.',
+        tone: 'danger',
+      })
+      return
+    }
+    setCodigos(c => ({ ...c, [id]: data }))
   }
 
   async function pedirAjuda(id: string, tipo: 'ajuda' | 'reembolso') {
@@ -167,14 +196,46 @@ export default function MeusPedidosPage() {
                   </div>
                 )}
 
-                <div style={{ display: 'grid', gridTemplateColumns: (p.status === 'enviado' || p.status === 'preparando' || p.status === 'entregue' || p.status === 'cancelado') ? '1fr 1fr' : '1fr', gap: 8 }}>
+                {/* Codigo de entrega: o cliente so entrega o codigo quando
+                    recebe o pedido na mao. E o que impede o vendedor de marcar
+                    "entregue" sem ter entregado — e o que libera o dinheiro. */}
+                {p.status === 'a_caminho' && (
+                  <div style={{ marginBottom: 12, background: 'rgba(14,165,233,0.06)', border: '1px solid rgba(14,165,233,0.22)', borderRadius: 14, padding: 12 }}>
+                    {codigos[p.id] ? (
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 11.5, fontWeight: 800, color: '#0369a1', textTransform: 'uppercase', letterSpacing: 1 }}>
+                          Código de entrega
+                        </div>
+                        <div style={{ fontSize: 30, fontWeight: 950, letterSpacing: 8, color: '#0f172a', margin: '6px 0 4px' }}>
+                          {codigos[p.id]}
+                        </div>
+                        <div style={{ fontSize: 11.5, color: '#64748b', fontWeight: 600, lineHeight: 1.4 }}>
+                          Mostre só na hora de receber. Sem ele o pedido não é dado como entregue.
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => gerarCodigo(p.id)}
+                        disabled={buscandoCodigo === p.id}
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, background: 'transparent', border: 'none', color: '#0284c7', fontSize: 13, fontWeight: 800, cursor: 'pointer', padding: 2 }}
+                      >
+                        <KeyRound size={15} /> {buscandoCodigo === p.id ? 'Gerando…' : 'Ver código de entrega'}
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: (p.status === 'enviado' || p.status === 'entregue' || p.status === 'cancelado') ? '1fr 1fr' : '1fr', gap: 8 }}>
                   {p.status === 'aguardando_pagamento' && (
                     <button disabled={verificandoId === p.id} onClick={() => verificarPagamento(p.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.24)', borderRadius: 12, padding: '10px 12px', color: '#b45309', fontSize: 12, fontWeight: 800, cursor: verificandoId === p.id ? 'default' : 'pointer' }}>
                       <CreditCard size={14} /> {verificandoId === p.id ? 'Verificando...' : 'Verificar pagamento'}
                     </button>
                   )}
 
-                  {(p.status === 'enviado' || p.status === 'preparando') && (
+                  {/* Cancelar so enquanto o vendedor ainda nao comecou a
+                      preparar. Depois disso ele ja gastou insumo e tempo —
+                      cancelar ali seria prejuizo dele, nao arrependimento. */}
+                  {p.status === 'enviado' && (
                     <button onClick={() => cancelar(p.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.22)', borderRadius: 12, padding: '10px 12px', color: '#dc2626', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
                       <XCircle size={14} /> Cancelar
                     </button>

@@ -423,15 +423,24 @@ export const useStore = create<State>()(
         const pedido = get().pedidos.find(p => p.id === pedidoId)
         if (!pedido) return false
 
-        const { error } = await supabase
+        // So cancela enquanto o vendedor NAO comecou a preparar. O filtro vai
+        // no proprio UPDATE (e nao num if antes) porque o vendedor pode aceitar
+        // o pedido no exato instante do clique — assim quem decide e o banco,
+        // com o estado real, e nao a tela com um estado que ja envelheceu.
+        const { data: cancelados, error } = await supabase
           .from('pedidos')
           .update({ status: 'cancelado' })
           .eq('id', pedidoId)
+          .eq('status', 'novo')
+          .select('id')
 
         if (error) {
-          console.error('Erro ao cancelar pedido', error)
+          console.error('Erro ao cancelar pedido', { code: error.code })
           return false
         }
+        // Nenhuma linha alterada = o pedido ja saiu de 'novo'. Nao e erro
+        // tecnico, e regra de negocio: a tela precisa dizer isso pro cliente.
+        if (!cancelados || cancelados.length === 0) return false
 
         await supabase.from('tickets').insert({
           plataforma: 'cliente',
