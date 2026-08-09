@@ -15,6 +15,7 @@ export type ContaRecebimento = {
   tipo_conta: 'corrente' | 'poupanca'
   titular_nome: string
   titular_documento: string
+  banco_nome?: string
 }
 
 export type StatusRecebimento = {

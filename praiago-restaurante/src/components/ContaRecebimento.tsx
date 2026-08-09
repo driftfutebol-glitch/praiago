@@ -70,15 +70,11 @@ export default function ContaRecebimento({ onMudou }: { onMudou?: () => void }) 
     if (msg) { setErro(msg); return }
     setErro(''); setSalvando(true)
     try {
-      const r = await cadastrarRecebimento(form)
+      // Quem grava o espelho (banco, conta mascarada) e a edge function: o
+      // vendedor nao tem permissao de escrita em seller_recipients, entao um
+      // update daqui falharia calado e a tela ficaria sem o nome do banco.
       const banco = BANCOS.find(b => b.codigo === form.banco.replace(/\D/g, ''))
-      // Espelho local so pra exibir. A conta completa fica no gateway.
-      await supabase.from('seller_recipients').update({
-        banco_codigo: form.banco, banco_nome: banco?.nome ?? null,
-        conta_mascarada: r.conta_mascarada ?? null,
-        titular_nome: form.titular_nome.trim(),
-        titular_documento_final: form.titular_documento.replace(/\D/g, '').slice(-4),
-      }).eq('vendedor_id', sessao!.id)
+      await cadastrarRecebimento({ ...form, banco_nome: banco?.nome })
 
       setEditando(false)
       await alertDialog({

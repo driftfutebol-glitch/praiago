@@ -26,6 +26,7 @@ type Corpo = {
   tipo_conta?: string
   titular_nome?: string
   titular_documento?: string
+  banco_nome?: string
 }
 
 /** Mostra a conta sem expor o numero inteiro. */
@@ -234,6 +235,14 @@ Deno.serve(async (req: Request) => {
         vendedor_id: usuarioId,
         provider: PROVIDER,
         recipient_id: criado.id,
+        // Espelho so pra exibir ("Nubank ...123-4"). O numero completo fica no
+        // gateway. Gravado AQUI porque o vendedor nao tem (e nao deve ter)
+        // permissao de escrita nesta tabela — a tela tentava e falhava calada.
+        banco_codigo: banco,
+        banco_nome: String(corpo.banco_nome || '').slice(0, 60) || null,
+        conta_mascarada: `${banco} / ${agencia} / ${mascararConta(conta)}-${contaDv}`,
+        titular_nome: titularNome,
+        titular_documento_final: documento.slice(-4),
         // O gateway ainda analisa os dados; o webhook/consulta atualiza depois.
         status: criado.status === 'active' ? 'ativo' : 'pendente',
         kyc_status: criado.status === 'active' ? 'aprovado' : 'em_analise',
