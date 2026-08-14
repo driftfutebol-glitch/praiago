@@ -1568,8 +1568,9 @@ function LojaCard({ v, index, onOpen }: { v: Vendedor; index: number; onOpen: ()
         <img src={v.image} alt={v.nome} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: v.aberto ? 'none' : 'grayscale(0.9) brightness(0.9)' }} />
         <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(255,255,255,0.95), transparent 55%)' }} />
         {/* Badge aberto/fechado com horário */}
-        <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', alignItems: 'center', gap: 6, background: v.aberto ? 'rgba(34,197,94,0.95)' : 'rgba(100,116,139,0.95)', color: '#fff', borderRadius: 999, padding: '6px 12px', fontSize: 11, fontWeight: 900, boxShadow: '0 6px 16px rgba(0,0,0,0.18)' }}>
-          <Clock size={12} /> {labelHorario(v.aberto, v.horarioAbre, v.horarioFecha)}
+        <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', alignItems: 'center', gap: 6, background: !v.localizacaoConfirmada ? 'rgba(245,158,11,0.96)' : v.aberto ? 'rgba(34,197,94,0.95)' : 'rgba(100,116,139,0.95)', color: '#fff', borderRadius: 999, padding: '6px 12px', fontSize: 11, fontWeight: 900, boxShadow: '0 6px 16px rgba(0,0,0,0.18)' }}>
+          {!v.localizacaoConfirmada ? <MapPin size={12} /> : <Clock size={12} />}
+          {!v.localizacaoConfirmada ? 'Local em ajuste' : labelHorario(v.aberto, v.horarioAbre, v.horarioFecha)}
         </div>
         {(temPromocao || rapido) && (
           <div style={{ position: 'absolute', top: 12, left: 12, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.96)', color: temPromocao ? '#16a34a' : '#0284c7', borderRadius: 999, padding: '6px 11px', fontSize: 11, fontWeight: 900, boxShadow: '0 6px 16px rgba(0,0,0,0.12)' }}>
@@ -1604,8 +1605,10 @@ function LojaCard({ v, index, onOpen }: { v: Vendedor; index: number; onOpen: ()
             <TicketPercent size={11} /> BEMVINDO20
           </span>
         </div>
-        <div style={{ marginTop: 10, fontSize: 12, fontWeight: 800, color: v.aberto ? '#0ea5e9' : '#94a3b8' }}>
-          {v.aberto ? `Ver cardápio · ${v.produtos.length} ite${v.produtos.length === 1 ? 'm' : 'ns'} →` : 'Loja fechada — toque pra espiar o cardápio'}
+        <div style={{ marginTop: 10, fontSize: 12, fontWeight: 800, color: !v.localizacaoConfirmada ? '#d97706' : v.aberto ? '#0ea5e9' : '#94a3b8' }}>
+          {!v.localizacaoConfirmada
+            ? 'Localizacao sendo configurada - cardapio disponivel'
+            : v.aberto ? `Ver cardápio · ${v.produtos.length} ite${v.produtos.length === 1 ? 'm' : 'ns'} →` : 'Loja fechada — toque pra espiar o cardápio'}
         </div>
       </div>
     </motion.button>
@@ -1772,10 +1775,18 @@ export default function PedirPage() {
 
   const meuCarrinho = carrinhoVendedor === vendedor.id ? carrinho : {}
   const vendedorId = vendedor.id
+  const localizacaoConfirmada = vendedor.localizacaoConfirmada
   const totalItens = vendedor.produtos.reduce((a, p) => a + (meuCarrinho[p.id] ?? 0), 0)
   const totalPreco = vendedor.produtos.reduce((a, p) => a + (meuCarrinho[p.id] ?? 0) * p.preco, 0)
 
   async function alterarQuantidade(produto: Vendedor['produtos'][number], delta: number) {
+    if (delta > 0 && !localizacaoConfirmada) {
+      await alertDialog({
+        title: 'Localizacao da loja em configuracao',
+        message: 'Voce ja pode consultar o cardapio. Os pedidos serao liberados assim que o restaurante confirmar o ponto fixo.',
+      })
+      return
+    }
     const exigeMaioridade = pertenceACategoria(produto.categoria, 'bebidas_alcoolicas')
     if (delta > 0 && exigeMaioridade && !maioridadeConfirmada) {
       const confirmou = await confirmDialog({
@@ -1812,8 +1823,9 @@ export default function PedirPage() {
         <div style={{ background: '#f8fafc', borderRadius: 32, padding: '24px', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 20px 40px rgba(0,0,0,0.4)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <h1 style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', letterSpacing: -0.5 }}>{vendedor.nome}</h1>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: vendedor.aberto ? 'rgba(34,197,94,0.15)' : 'rgba(100,116,139,0.14)', color: vendedor.aberto ? '#16a34a' : '#64748b', padding: '6px 14px', borderRadius: 14, fontSize: 11.5, fontWeight: 900, border: `1px solid ${vendedor.aberto ? 'rgba(34,197,94,0.3)' : 'rgba(100,116,139,0.25)'}`, whiteSpace: 'nowrap' }}>
-              <Clock size={13} /> {labelHorario(vendedor.aberto, vendedor.horarioAbre, vendedor.horarioFecha)}
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: !vendedor.localizacaoConfirmada ? '#fffbeb' : vendedor.aberto ? 'rgba(34,197,94,0.15)' : 'rgba(100,116,139,0.14)', color: !vendedor.localizacaoConfirmada ? '#b45309' : vendedor.aberto ? '#16a34a' : '#64748b', padding: '6px 14px', borderRadius: 14, fontSize: 11.5, fontWeight: 900, border: `1px solid ${!vendedor.localizacaoConfirmada ? '#fde68a' : vendedor.aberto ? 'rgba(34,197,94,0.3)' : 'rgba(100,116,139,0.25)'}`, whiteSpace: 'nowrap' }}>
+              {!vendedor.localizacaoConfirmada ? <MapPin size={13} /> : <Clock size={13} />}
+              {!vendedor.localizacaoConfirmada ? 'Local em ajuste' : labelHorario(vendedor.aberto, vendedor.horarioAbre, vendedor.horarioFecha)}
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 14 }}>
@@ -1831,6 +1843,12 @@ export default function PedirPage() {
             <Zap size={14} color="#0ea5e9" className="animate-pulse-neon" style={{ boxShadow: 'none' }} />
             <span style={{ fontSize: 12, fontWeight: 800, color: '#0284c7' }}>Cupom BEMVINDO20 · 1 uso por conta</span>
           </div>
+          {!vendedor.localizacaoConfirmada && (
+            <div role="status" style={{ display: 'flex', alignItems: 'flex-start', gap: 9, marginTop: 14, padding: '11px 13px', borderRadius: 14, border: '1px solid #fde68a', background: '#fffbeb', color: '#92400e' }}>
+              <MapPin size={17} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span style={{ fontSize: 12, lineHeight: 1.45, fontWeight: 750 }}>Este restaurante esta confirmando o ponto fixo. O cardapio fica visivel, mas pedidos e rotas permanecem bloqueados por seguranca.</span>
+            </div>
+          )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 18 }}>
             {[
               { icon: <Navigation size={16} color="#0ea5e9" />, title: 'Radar PraiaGo', text: 'GPS, reta ou barraca' },
@@ -1901,7 +1919,7 @@ export default function PedirPage() {
             <motion.button whileTap={{ scale: vendedor.aberto ? 0.98 : 1 }} disabled={!vendedor.aberto} onClick={() => { if (vendedor.aberto) setStep('checkout') }} style={{ width: '100%', background: vendedor.aberto ? 'linear-gradient(135deg, #0ea5e9, #22c55e)' : '#94a3b8', color: '#fff', border: 'none', borderRadius: 28, padding: '22px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: vendedor.aberto ? '0 20px 40px rgba(34,197,94,0.4)' : 'none', cursor: vendedor.aberto ? 'pointer' : 'not-allowed' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: 14, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 900 }}>{totalItens}</div>
-                <span style={{ fontSize: 16, fontWeight: 900 }}>{vendedor.aberto ? 'Finalizar Pedido' : 'Loja fechada agora 😴'}</span>
+                <span style={{ fontSize: 16, fontWeight: 900 }}>{!vendedor.localizacaoConfirmada ? 'Localizacao em configuracao' : vendedor.aberto ? 'Finalizar Pedido' : 'Loja fechada agora 😴'}</span>
               </div>
               <span style={{ fontSize: 20, fontWeight: 900 }}>R$ {totalPreco.toFixed(2)}</span>
             </motion.button>

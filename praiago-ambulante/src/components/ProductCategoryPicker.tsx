@@ -23,10 +23,16 @@ export function CategoryPhoto({ category, size = 54 }: CategoryPhotoProps) {
         height: size,
         flexShrink: 0,
         display: 'block',
+        overflow: 'hidden',
+        borderRadius: '50%',
+        border: `1px solid ${category.color}2e`,
+        backgroundColor: `${category.color}18`,
         backgroundImage: `url(${category.image || '/images/categorias-comida-v1.webp'})`,
         backgroundRepeat: 'no-repeat',
-        backgroundSize: category.image ? 'contain' : `${size * 5}px ${size * 6}px`,
+        backgroundSize: category.image ? '145%' : `${size * 5}px ${size * 6}px`,
         backgroundPosition: category.image ? 'center' : `${-column * size}px ${-row * size}px`,
+        backgroundBlendMode: 'multiply',
+        boxShadow: `0 5px 14px ${category.color}1f`,
       }}
     />
   )

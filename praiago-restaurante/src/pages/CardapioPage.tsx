@@ -434,9 +434,9 @@ export default function CardapioPage() {
       {/* Modal Adicionar */}
       <AnimatePresence>
         {adicionando && (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 12000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setAdicionando(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)' }} />
-            <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} style={{ width: '100%', maxWidth: 480, maxHeight: 'calc(100vh - 40px)', overflowY: 'auto', background: '#ffffff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 24, padding: 32, position: 'relative', zIndex: 101, boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }}>
+            <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} style={{ width: '100%', maxWidth: 480, maxHeight: 'calc(100vh - 40px)', overflowY: 'auto', background: '#ffffff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 24, padding: 32, position: 'relative', zIndex: 12001, boxShadow: '0 25px 50px rgba(0,0,0,0.5)' }}>
               <button onClick={() => setAdicionando(false)} style={{ position: 'absolute', top: 20, right: 20, background: 'transparent', border: 'none', cursor: 'pointer', padding: 4 }}>
                 <X size={24} color="#94a3b8" />
               </button>

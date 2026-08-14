@@ -310,7 +310,9 @@ function VendorCard({ v, onClick }: { v: Vendedor; onClick: () => void }) {
           <span style={{ background: '#fff', color: '#0f172a', borderRadius: 999, padding: '5px 10px', fontSize: 10, fontWeight: 900 }}>
             {v.tipo === 'restaurante' ? 'Restaurante' : 'Ambulante'}
           </span>
-          {v.aberto && <span style={{ background: '#16a34a', color: '#fff', borderRadius: 999, padding: '5px 9px', fontSize: 10, fontWeight: 900 }}>Aberto</span>}
+          {!v.localizacaoConfirmada
+            ? <span style={{ background: '#f59e0b', color: '#fff', borderRadius: 999, padding: '5px 9px', fontSize: 10, fontWeight: 900 }}>Local em ajuste</span>
+            : v.aberto && <span style={{ background: '#16a34a', color: '#fff', borderRadius: 999, padding: '5px 9px', fontSize: 10, fontWeight: 900 }}>Aberto</span>}
         </div>
         <button
           aria-label={isFav ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
@@ -331,7 +333,7 @@ function VendorCard({ v, onClick }: { v: Vendedor; onClick: () => void }) {
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: '#64748b', fontWeight: 700 }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#16a34a' }}><Clock size={12} />{v.tempo}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: v.localizacaoConfirmada ? '#16a34a' : '#d97706' }}><Clock size={12} />{v.localizacaoConfirmada ? v.tempo : 'Cardapio disponivel'}</span>
           <span>{v.distancia}</span>
         </div>
       </div>

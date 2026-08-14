@@ -10,6 +10,14 @@ const config: CapacitorConfig = {
   appName: 'PraiaGo Ambulante',
   webDir: 'dist',
   plugins: {
+    SplashScreen: {
+      launchShowDuration: 350,
+      launchAutoHide: true,
+      launchFadeOutDuration: 150,
+      backgroundColor: '#3027E6',
+      androidScaleType: 'CENTER_INSIDE',
+      showSpinner: false,
+    },
     CapacitorUpdater: {
       autoUpdate: 'atBackground',
       updateUrl: otaUpdateUrl,

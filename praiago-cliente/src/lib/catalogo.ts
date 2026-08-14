@@ -34,6 +34,7 @@ export type Vendedor = {
   emoji: string
   gradiente: string
   aberto: boolean
+  localizacaoConfirmada: boolean
   tag?: string
   image: string
   avatar?: string | null

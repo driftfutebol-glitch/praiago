@@ -78,6 +78,8 @@ function coordenadasValidas(lat: number | null | undefined, lng: number | null |
     && lng <= 180
 }
 
+const CENTRO_PRAIA_GRANDE: [number, number] = [-24.008, -46.412]
+
 function precoComPromocao(preco: number, promo?: PromocaoRow): number {
   if (!promo) return preco
   if (promo.desconto_tipo === 'preco_promocional') {
@@ -137,19 +139,21 @@ export const useCatalogo = create<State>((set, get) => ({
       // Vendedor só aparece pro cliente se estiver verificado (CNPJ/CPF aprovado)
       if (profs[vid]?.verificado !== true) continue
       if (profs[vid]?.status === 'banido' || (profs[vid]?.status && profs[vid]?.status !== 'ativo')) continue
-      // Nao inventa um ponto no mapa. O vendedor so fica publico depois que o
-      // ponto real foi gravado no perfil e sincronizado para esta tabela.
-      if (!coordenadasValidas(profs[vid]?.lat, profs[vid]?.lng)) continue
       if (!byVend.has(vid)) {
         const pf = profs[vid]
         const vendedorEmoji = r.vendedor_emoji || pf?.emoji || '🥥'
         const tipo = (pf?.role as VendedorTipo) || 'ambulante'
+        const localizacaoConfirmada = coordenadasValidas(pf?.lat, pf?.lng)
+        // Ambulantes dependem do GPS ao vivo para aparecer no radar. Restaurantes
+        // mantem o cardapio visivel durante a correcao, sem liberar pedido ou rota.
+        if (tipo === 'ambulante' && !localizacaoConfirmada) continue
         // Aberto de verdade: horário do vendedor manda; ambulante também precisa
         // estar online (radar ligado). Sem horário definido → cai no online.
         const noHorario = dentroDoHorario(pf?.horario_abre, pf?.horario_fecha)
-        const aberto = tipo === 'ambulante'
+        const disponivelAgora = tipo === 'ambulante'
           ? (pf?.online ?? false) && (noHorario ?? true)
           : (noHorario ?? (pf?.online ?? true))
+        const aberto = localizacaoConfirmada && disponivelAgora
         byVend.set(vid, {
           id: vid,
           nome: r.vendedor_nome || pf?.nome || 'Vendedor PraiaGo',
@@ -157,13 +161,16 @@ export const useCatalogo = create<State>((set, get) => ({
           avaliacao: Number(pf?.avaliacao_media ?? 0) || 0,
           avaliacoes: Number(pf?.total_avaliacoes ?? 0) || 0,
           tempo: '10-20 min',
-          distancia: 'Perto de voce',
+          distancia: localizacaoConfirmada ? 'Perto de voce' : 'Localizacao em ajuste',
           emoji: vendedorEmoji,
           gradiente: 'linear-gradient(135deg,#0ea5e9,#22c55e)',
           aberto,
+          localizacaoConfirmada,
           image: sellerPhoto(pf?.foto_capa_path) || hero(vendedorEmoji),
           avatar: sellerPhoto(pf?.foto_perfil_path),
-          pos: [pf.lat as number, pf.lng as number],
+          pos: localizacaoConfirmada
+            ? [pf.lat as number, pf.lng as number]
+            : CENTRO_PRAIA_GRANDE,
           zona: pf?.zona || 'Praia Grande',
           produtos: [],
           tipo,

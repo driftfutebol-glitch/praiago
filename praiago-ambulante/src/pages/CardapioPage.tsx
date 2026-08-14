@@ -361,7 +361,7 @@ export default function CardapioPage() {
 
       <AnimatePresence>
         {modalOpen && (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 120, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 12000, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
             <motion.button
               type="button"
               aria-label="Fechar formulário"

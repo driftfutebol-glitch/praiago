@@ -173,6 +173,24 @@ function montarEndereco(endereco: EnderecoSelecionado, numero: string) {
   ].filter(Boolean).join(', ')
 }
 
+function normalizarNumeroEndereco(numero: string) {
+  const valor = numero.trim()
+  return /^s\s*\/?\s*n$/i.test(valor) ? 'S/N' : valor
+}
+
+function extrairNumeroEndereco(valor: string) {
+  const endereco = valor.trim()
+  const porVirgula = endereco.match(/,\s*((?:s\s*\/?\s*n)|\d+[a-z0-9./-]*)\s*$/i)
+  if (porVirgula?.[1]) return normalizarNumeroEndereco(porVirgula[1])
+
+  const aoFinal = endereco.match(/\s+((?:s\s*\/?\s*n)|\d+[a-z0-9./-]*)\s*$/i)
+  return aoFinal?.[1] ? normalizarNumeroEndereco(aoFinal[1]) : ''
+}
+
+function enderecoCompletoDigitado(endereco: EnderecoSelecionado, numero: string) {
+  return [endereco.rua, normalizarNumeroEndereco(numero)].filter(Boolean).join(', ')
+}
+
 const painelConteudo: Record<Painel, { titulo: string; texto: string; itens: string[] }> = {
   notificacoes: {
     titulo: 'Notificacoes e alertas',
@@ -280,11 +298,13 @@ export default function PerfilPage() {
       const unicos = resultados.filter((feature, index, lista) => {
         const chave = [
           feature.properties.street || feature.properties.name,
+          feature.properties.housenumber,
           feature.properties.district,
           feature.properties.postcode,
         ].join('|').toLowerCase()
         return lista.findIndex(item => [
           item.properties.street || item.properties.name,
+          item.properties.housenumber,
           item.properties.district,
           item.properties.postcode,
         ].join('|').toLowerCase() === chave) === index
@@ -400,7 +420,10 @@ export default function PerfilPage() {
 
   useEffect(() => {
     const termo = novoEndereco.trim()
-    if (solicitacaoLocal?.status !== 'aprovada' || termo.length < 3 || enderecoSelecionado?.rua === termo) {
+    const enderecoEscolhido = enderecoSelecionado
+      ? enderecoCompletoDigitado(enderecoSelecionado, numeroEndereco)
+      : ''
+    if (solicitacaoLocal?.status !== 'aprovada' || termo.length < 3 || termo === enderecoEscolhido) {
       setBuscandoEndereco(false)
       setSugestoesEndereco([])
       return
@@ -415,7 +438,7 @@ export default function PerfilPage() {
       }
       buscaEnderecoControllerRef.current?.abort()
     }
-  }, [novoEndereco, solicitacaoLocal?.status, enderecoSelecionado?.rua, agendarBuscaEndereco])
+  }, [novoEndereco, numeroEndereco, solicitacaoLocal?.status, enderecoSelecionado, agendarBuscaEndereco])
 
   async function salvarHorario() {
     if (!sessao) return
@@ -457,11 +480,16 @@ export default function PerfilPage() {
   function selecionarEndereco(feature: PhotonFeature) {
     const endereco = enderecoDaFeature(feature)
     if (!endereco) return
-    setNovoEndereco(endereco.rua)
-    setNumeroEndereco(feature.properties.housenumber || '')
+    const numero = normalizarNumeroEndereco(
+      feature.properties.housenumber || extrairNumeroEndereco(novoEndereco) || numeroEndereco,
+    )
+    setNovoEndereco(enderecoCompletoDigitado(endereco, numero))
+    setNumeroEndereco(numero)
     setEnderecoSelecionado(endereco)
     setSugestoesEndereco([])
-    setLocalMsg('Rua selecionada. Agora informe somente o numero da loja.')
+    setLocalMsg(numero
+      ? 'Endereco selecionado. Confira a rua e o numero antes de salvar.'
+      : 'Rua selecionada. Acrescente o numero no mesmo campo para continuar.')
   }
 
   async function capturarReferenciaBusca() {
@@ -543,10 +571,13 @@ export default function PerfilPage() {
       const endereco = feature ? enderecoDaFeature(feature, referencia.lat, referencia.lng) : null
       if (!endereco) throw new Error('rua nao encontrada')
 
-      setNovoEndereco(endereco.rua)
-      setNumeroEndereco(feature?.properties.housenumber || '')
+      const numero = normalizarNumeroEndereco(feature?.properties.housenumber || '')
+      setNovoEndereco(enderecoCompletoDigitado(endereco, numero))
+      setNumeroEndereco(numero)
       setEnderecoSelecionado(endereco)
-      setLocalMsg(`Ponto preciso encontrado (${Math.round(referencia.accuracy)} m). Confira a rua e informe somente o numero.`)
+      setLocalMsg(numero
+        ? `Ponto preciso encontrado (${Math.round(referencia.accuracy)} m). Confira o endereco.`
+        : `Ponto preciso encontrado (${Math.round(referencia.accuracy)} m). Acrescente o numero no mesmo campo.`)
     } catch (error) {
       const codigo = (error as { code?: number }).code
       setLocalMsg(codigo === 1
@@ -563,7 +594,7 @@ export default function PerfilPage() {
       setLocalMsg('Escolha um endereco da lista ou use sua localizacao atual.')
       return
     }
-    const numero = numeroEndereco.trim()
+    const numero = normalizarNumeroEndereco(numeroEndereco || extrairNumeroEndereco(novoEndereco))
     if (!numero) {
       setLocalMsg('Informe o numero da loja. Use S/N se o local nao tiver numero.')
       return
@@ -584,18 +615,13 @@ export default function PerfilPage() {
 
         if (pontoFixo.origem !== 'gps') {
           const pontoExato = await buscarPontoExato(enderecoSelecionado, numero)
-          if (!pontoExato) {
-            setSalvandoLocal(false)
-            setLocalMsg('Esse numero nao possui um ponto exato no mapa. Va ate a entrada da loja e toque em "Usar localizacao atual da loja" para gravar sem erro.')
-            return
-          }
-          pontoFixo = pontoExato
+          if (pontoExato) pontoFixo = pontoExato
         }
       }
     } catch {
-      setSalvandoLocal(false)
-      setLocalMsg('Nao consegui confirmar o ponto agora. Confira a internet e tente novamente.')
-      return
+      // A rua escolhida continua sendo um ponto fixo valido mesmo quando o
+      // provedor nao possui a numeracao exata ou esta temporariamente offline.
+      pontoFixo = enderecoSelecionado
     }
 
     const endereco = montarEndereco(enderecoSelecionado, numero)
@@ -617,7 +643,9 @@ export default function PerfilPage() {
     setLng(pontoFixo.lng)
     setPerfil(atual => ({ ...atual, endereco }))
     setSolicitacaoLocal(data as SolicitacaoLocalizacao)
-    setLocalMsg('Localizacao corrigida e travada no novo ponto.')
+    setLocalMsg(pontoFixo.origem === 'gps'
+      ? 'Localizacao corrigida e travada no ponto preciso da loja.'
+      : 'Localizacao corrigida e travada no endereco selecionado.')
     setTimeout(() => setLocalMsg(''), 6000)
   }
 
@@ -749,7 +777,7 @@ export default function PerfilPage() {
           <MapPin size={18} color={(lat != null && lng != null) ? '#16a34a' : '#d97706'} />
           <div style={{ flex: 1, fontSize: 13, fontWeight: 800, color: (lat != null && lng != null) ? '#15803d' : '#b45309' }}>
             {(lat != null && lng != null)
-              ? `Ponto fixo atual (${lat.toFixed(5)}, ${lng.toFixed(5)})`
+              ? 'Ponto fixo confirmado para esta loja'
               : 'Sem ponto definido — sua loja ainda nao aparece no mapa.'}
           </div>
           {lat != null && lng != null && (
@@ -799,17 +827,19 @@ export default function PerfilPage() {
             </button>
             <div style={{ position: 'relative' }}>
               <label style={{ fontSize: 11, fontWeight: 900, color: '#166534' }}>
-                RUA OU AVENIDA
+                ENDERECO COMPLETO (RUA E NUMERO)
                 <div style={{ position: 'relative', marginTop: 6 }}>
                   <input
                     value={novoEndereco}
                     onFocus={() => { void capturarReferenciaBusca() }}
                     onChange={e => {
-                      setNovoEndereco(e.target.value)
+                      const valor = e.target.value
+                      setNovoEndereco(valor)
+                      setNumeroEndereco(extrairNumeroEndereco(valor))
                       setEnderecoSelecionado(null)
                       setLocalMsg('')
                     }}
-                    placeholder="Ex.: Rua Darcy"
+                    placeholder="Ex.: Rua Darcy Alves Costa, 123"
                     autoComplete="off"
                     aria-autocomplete="list"
                     aria-expanded={sugestoesEndereco.length > 0}
@@ -840,6 +870,7 @@ export default function PerfilPage() {
                 <div role="listbox" style={{ position: 'absolute', zIndex: 20, top: '100%', left: 0, right: 0, marginTop: 6, overflow: 'hidden', border: '1px solid #cbd5e1', borderRadius: 8, background: '#fff', boxShadow: '0 12px 28px rgba(15,23,42,0.16)' }}>
                   {sugestoesEndereco.map(feature => {
                     const rua = feature.properties.street || feature.properties.name || 'Endereco'
+                    const titulo = [rua, feature.properties.housenumber].filter(Boolean).join(', ')
                     const detalhe = [feature.properties.district, feature.properties.city, feature.properties.postcode].filter(Boolean).join(' - ')
                     return (
                       <button
@@ -849,7 +880,7 @@ export default function PerfilPage() {
                         onClick={() => selecionarEndereco(feature)}
                         style={{ width: '100%', border: 0, borderBottom: '1px solid #e2e8f0', background: '#fff', padding: '11px 12px', textAlign: 'left', cursor: 'pointer' }}
                       >
-                        <span style={{ display: 'block', color: '#0f172a', fontSize: 13, fontWeight: 900 }}>{rua}</span>
+                        <span style={{ display: 'block', color: '#0f172a', fontSize: 13, fontWeight: 900 }}>{titulo}</span>
                         {detalhe && <span style={{ display: 'block', marginTop: 3, color: '#64748b', fontSize: 11, fontWeight: 700 }}>{detalhe}</span>}
                       </button>
                     )
@@ -857,21 +888,10 @@ export default function PerfilPage() {
                 </div>
               )}
             </div>
-            <label style={{ fontSize: 11, fontWeight: 900, color: '#166534' }}>
-              NUMERO
-              <input
-                value={numeroEndereco}
-                onChange={e => setNumeroEndereco(e.target.value)}
-                placeholder="Ex.: 123 ou S/N"
-                inputMode="text"
-                maxLength={20}
-                style={{ display: 'block', width: '100%', boxSizing: 'border-box', marginTop: 6, border: '1px solid rgba(22,101,52,0.25)', borderRadius: 12, padding: 12, background: '#fff', color: '#0f172a', fontSize: 14, fontWeight: 700 }}
-              />
-            </label>
             {enderecoSelecionado && (
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px', border: '1px solid rgba(34,197,94,0.25)', borderRadius: 10, background: '#fff', color: '#166534', fontSize: 12, fontWeight: 800, lineHeight: 1.45 }}>
                 <MapPin size={16} style={{ flexShrink: 0, marginTop: 1 }} />
-                <span>{montarEndereco(enderecoSelecionado, numeroEndereco.trim() || 'numero pendente')}</span>
+                <span>{montarEndereco(enderecoSelecionado, numeroEndereco || 'numero pendente')}</span>
               </div>
             )}
             {referenciaBusca && (
