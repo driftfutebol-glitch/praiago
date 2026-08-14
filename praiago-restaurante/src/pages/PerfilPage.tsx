@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Bell, CheckCircle2, ChevronRight, Clock, CreditCard, HelpCircle, Loader2, LogOut, MapPin, Navigation, Phone, Search, Send, Shield, Star, Store, TrendingUp, Wallet, XCircle } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
+import { Capacitor } from '@capacitor/core'
+import { Geolocation } from '@capacitor/geolocation'
 import { supabase } from '../lib/supabase'
 import { getSessao, logout } from '../lib/auth'
 import SuportePanel from '../components/SuportePanel'
@@ -59,9 +61,87 @@ type EnderecoSelecionado = {
   origem: 'busca' | 'gps'
 }
 
+type ReferenciaBusca = {
+  lat: number
+  lng: number
+  accuracy: number
+}
+
 type Painel = 'notificacoes' | 'seguranca' | 'ajuda'
 
 const CENTRO_PRAIA_GRANDE = { lat: -24.008, lng: -46.412 }
+const PRECISAO_MAXIMA_PONTO_FIXO_METROS = 150
+
+function normalizarTexto(valor: string) {
+  return valor
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\b(rua|avenida|av|travessa|alameda|estrada|rodovia)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+}
+
+function mesmaRua(a: string, b: string) {
+  const ruaA = normalizarTexto(a)
+  const ruaB = normalizarTexto(b)
+  return ruaA.length > 3 && ruaB.length > 3 && (ruaA === ruaB || ruaA.includes(ruaB) || ruaB.includes(ruaA))
+}
+
+function cidadeDaFeature(feature: PhotonFeature) {
+  return `${feature.properties.city ?? ''} ${feature.properties.county ?? ''}`.toLowerCase()
+}
+
+function distanciaMetros(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const raioTerra = 6_371_000
+  const rad = Math.PI / 180
+  const dLat = (b.lat - a.lat) * rad
+  const dLng = (b.lng - a.lng) * rad
+  const latA = a.lat * rad
+  const latB = b.lat * rad
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(latA) * Math.cos(latB) * Math.sin(dLng / 2) ** 2
+  return 2 * raioTerra * Math.asin(Math.sqrt(h))
+}
+
+async function obterLocalizacaoAtual(): Promise<ReferenciaBusca> {
+  if (Capacitor.isNativePlatform()) {
+    let permissao = await Geolocation.checkPermissions()
+    if (permissao.location !== 'granted' && permissao.coarseLocation !== 'granted') {
+      permissao = await Geolocation.requestPermissions({ permissions: ['location'] })
+    }
+    if (permissao.location !== 'granted' && permissao.coarseLocation !== 'granted') {
+      throw Object.assign(new Error('Permissao de localizacao negada.'), { code: 1 })
+    }
+
+    const posicao = await Geolocation.getCurrentPosition({
+      enableHighAccuracy: true,
+      timeout: 20000,
+      maximumAge: 0,
+    })
+    return {
+      lat: posicao.coords.latitude,
+      lng: posicao.coords.longitude,
+      accuracy: posicao.coords.accuracy ?? 999,
+    }
+  }
+
+  if (typeof navigator === 'undefined' || !navigator.geolocation) {
+    throw new Error('GPS indisponivel.')
+  }
+
+  const posicao = await new Promise<GeolocationPosition>((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      timeout: 20000,
+      maximumAge: 0,
+    })
+  })
+  return {
+    lat: posicao.coords.latitude,
+    lng: posicao.coords.longitude,
+    accuracy: posicao.coords.accuracy ?? 999,
+  }
+}
 
 function enderecoDaFeature(feature: PhotonFeature, lat?: number, lng?: number): EnderecoSelecionado | null {
   const [featureLng, featureLat] = feature.geometry.coordinates
@@ -160,6 +240,7 @@ export default function PerfilPage() {
   const [enderecoSelecionado, setEnderecoSelecionado] = useState<EnderecoSelecionado | null>(null)
   const [buscandoEndereco, setBuscandoEndereco] = useState(false)
   const [buscandoGps, setBuscandoGps] = useState(false)
+  const [referenciaBusca, setReferenciaBusca] = useState<ReferenciaBusca | null>(null)
   const [enviandoSolicitacao, setEnviandoSolicitacao] = useState(false)
   const buscaEnderecoTimerRef = useRef<number | null>(null)
   const buscaEnderecoControllerRef = useRef<AbortController | null>(null)
@@ -180,10 +261,11 @@ export default function PerfilPage() {
       const url = new URL('https://photon.komoot.io/api/')
       url.searchParams.set('q', `${termo}, Praia Grande, Sao Paulo, Brasil`)
       url.searchParams.set('limit', '8')
-      url.searchParams.set('lat', String(CENTRO_PRAIA_GRANDE.lat))
-      url.searchParams.set('lon', String(CENTRO_PRAIA_GRANDE.lng))
-      url.searchParams.set('zoom', '12')
-      url.searchParams.set('location_bias_scale', '0.2')
+      const referencia = referenciaBusca ?? CENTRO_PRAIA_GRANDE
+      url.searchParams.set('lat', String(referencia.lat))
+      url.searchParams.set('lon', String(referencia.lng))
+      url.searchParams.set('zoom', referenciaBusca ? '15' : '12')
+      url.searchParams.set('location_bias_scale', referenciaBusca ? '0.1' : '0.2')
       url.searchParams.append('layer', 'street')
       url.searchParams.append('layer', 'house')
 
@@ -194,10 +276,7 @@ export default function PerfilPage() {
       if (!resposta.ok) throw new Error('busca indisponivel')
 
       const data = (await resposta.json()) as { features?: PhotonFeature[] }
-      const resultados = (data.features ?? []).filter(feature => {
-        const cidade = `${feature.properties.city ?? ''} ${feature.properties.county ?? ''}`.toLowerCase()
-        return cidade.includes('praia grande')
-      })
+      const resultados = (data.features ?? []).filter(feature => cidadeDaFeature(feature).includes('praia grande'))
       const unicos = resultados.filter((feature, index, lista) => {
         const chave = [
           feature.properties.street || feature.properties.name,
@@ -209,6 +288,10 @@ export default function PerfilPage() {
           item.properties.district,
           item.properties.postcode,
         ].join('|').toLowerCase() === chave) === index
+      }).sort((a, b) => {
+        const [lngA, latA] = a.geometry.coordinates
+        const [lngB, latB] = b.geometry.coordinates
+        return distanciaMetros(referencia, { lat: latA, lng: lngA }) - distanciaMetros(referencia, { lat: latB, lng: lngB })
       })
 
       if (signal?.aborted) return
@@ -224,7 +307,7 @@ export default function PerfilPage() {
     } finally {
       if (!signal?.aborted) setBuscandoEndereco(false)
     }
-  }, [])
+  }, [referenciaBusca])
 
   const agendarBuscaEndereco = useCallback((termo: string, atrasoMs: number) => {
     if (buscaEnderecoTimerRef.current != null) {
@@ -381,46 +464,92 @@ export default function PerfilPage() {
     setLocalMsg('Rua selecionada. Agora informe somente o numero da loja.')
   }
 
-  async function usarLocalizacaoAtual() {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      setLocalMsg('Seu aparelho nao tem GPS disponivel.')
-      return
-    }
+  async function capturarReferenciaBusca() {
+    if (referenciaBusca || buscandoGps) return referenciaBusca
 
+    setBuscandoGps(true)
+    setLocalMsg('Buscando enderecos perto da sua localizacao...')
+    try {
+      const referencia = await obterLocalizacaoAtual()
+      setReferenciaBusca(referencia)
+      setLocalMsg(`Busca ajustada para perto de voce (precisao de ${Math.round(referencia.accuracy)} m).`)
+      return referencia
+    } catch (error) {
+      const codigo = (error as { code?: number }).code
+      setLocalMsg(codigo === 1
+        ? 'Permita o acesso a localizacao para ver primeiro os enderecos perto de voce.'
+        : 'Nao consegui obter o GPS. A busca continua limitada a Praia Grande.')
+      return null
+    } finally {
+      setBuscandoGps(false)
+    }
+  }
+
+  async function buscarEnderecoNoGps(referencia: ReferenciaBusca) {
+    const url = new URL('https://photon.komoot.io/reverse')
+    url.searchParams.set('lat', String(referencia.lat))
+    url.searchParams.set('lon', String(referencia.lng))
+    url.searchParams.set('limit', '5')
+    url.searchParams.set('radius', '1')
+
+    const resposta = await fetch(url, { headers: { Accept: 'application/json' } })
+    if (!resposta.ok) throw new Error('endereco indisponivel')
+    const data = (await resposta.json()) as { features?: PhotonFeature[] }
+    return (data.features ?? []).find(item => item.properties.street || item.properties.name) ?? null
+  }
+
+  async function buscarPontoExato(endereco: EnderecoSelecionado, numero: string) {
+    if (numero.toUpperCase() === 'S/N') return null
+
+    const url = new URL('https://photon.komoot.io/structured')
+    url.searchParams.set('street', endereco.rua)
+    url.searchParams.set('housenumber', numero)
+    url.searchParams.set('city', 'Praia Grande')
+    url.searchParams.set('state', 'Sao Paulo')
+    url.searchParams.set('countrycode', 'BR')
+    url.searchParams.set('limit', '10')
+    const referencia = referenciaBusca ?? CENTRO_PRAIA_GRANDE
+    url.searchParams.set('lat', String(referencia.lat))
+    url.searchParams.set('lon', String(referencia.lng))
+
+    const resposta = await fetch(url, { headers: { Accept: 'application/json' } })
+    if (!resposta.ok) throw new Error('busca indisponivel')
+    const data = (await resposta.json()) as { features?: PhotonFeature[] }
+    const numeroNormalizado = normalizarTexto(numero)
+    const feature = (data.features ?? []).find(item => {
+      const rua = item.properties.street || item.properties.name || ''
+      const numeroEncontrado = normalizarTexto(item.properties.housenumber || '')
+      return cidadeDaFeature(item).includes('praia grande')
+        && mesmaRua(rua, endereco.rua)
+        && numeroEncontrado === numeroNormalizado
+    })
+    return feature ? enderecoDaFeature(feature) : null
+  }
+
+  async function usarLocalizacaoAtual() {
     setBuscandoGps(true)
     setSugestoesEndereco([])
     setLocalMsg('Localizando a rua mais proxima...')
 
     try {
-      const posicao = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 15000,
-          maximumAge: 0,
-        })
-      })
-      const gpsLat = posicao.coords.latitude
-      const gpsLng = posicao.coords.longitude
-      const url = new URL('https://photon.komoot.io/reverse')
-      url.searchParams.set('lat', String(gpsLat))
-      url.searchParams.set('lon', String(gpsLng))
-      url.searchParams.set('limit', '5')
-      url.searchParams.set('radius', '1')
+      const referencia = await obterLocalizacaoAtual()
+      setReferenciaBusca(referencia)
+      if (referencia.accuracy > PRECISAO_MAXIMA_PONTO_FIXO_METROS) {
+        setLocalMsg(`O GPS esta impreciso (${Math.round(referencia.accuracy)} m). Va ate a entrada da loja, ative a localizacao precisa e tente novamente.`)
+        return
+      }
 
-      const resposta = await fetch(url, { headers: { Accept: 'application/json' } })
-      if (!resposta.ok) throw new Error('endereco indisponivel')
-      const data = (await resposta.json()) as { features?: PhotonFeature[] }
-      const feature = (data.features ?? []).find(item => item.properties.street || item.properties.name)
-      const endereco = feature ? enderecoDaFeature(feature, gpsLat, gpsLng) : null
+      const feature = await buscarEnderecoNoGps(referencia)
+      const endereco = feature ? enderecoDaFeature(feature, referencia.lat, referencia.lng) : null
       if (!endereco) throw new Error('rua nao encontrada')
 
       setNovoEndereco(endereco.rua)
       setNumeroEndereco(feature?.properties.housenumber || '')
       setEnderecoSelecionado(endereco)
-      setLocalMsg('Localizacao atual encontrada. Confira a rua e informe somente o numero.')
+      setLocalMsg(`Ponto preciso encontrado (${Math.round(referencia.accuracy)} m). Confira a rua e informe somente o numero.`)
     } catch (error) {
-      const codigo = (error as GeolocationPositionError).code
-      setLocalMsg(codigo
+      const codigo = (error as { code?: number }).code
+      setLocalMsg(codigo === 1
         ? 'Precisamos da permissao de localizacao. Ative o GPS e permita o acesso.'
         : 'O GPS foi capturado, mas nao encontrei a rua. Digite o endereco para buscar.')
     } finally {
@@ -439,13 +568,42 @@ export default function PerfilPage() {
       setLocalMsg('Informe o numero da loja. Use S/N se o local nao tiver numero.')
       return
     }
-    const endereco = montarEndereco(enderecoSelecionado, numero)
     setSalvandoLocal(true)
+    setLocalMsg('Confirmando o numero e o ponto fixo...')
+
+    let pontoFixo = enderecoSelecionado
+    try {
+      if (enderecoSelecionado.origem !== 'gps') {
+        if (referenciaBusca && referenciaBusca.accuracy <= PRECISAO_MAXIMA_PONTO_FIXO_METROS) {
+          const featureGps = await buscarEnderecoNoGps(referenciaBusca)
+          const ruaGps = featureGps?.properties.street || featureGps?.properties.name || ''
+          if (mesmaRua(ruaGps, enderecoSelecionado.rua)) {
+            pontoFixo = { ...enderecoSelecionado, lat: referenciaBusca.lat, lng: referenciaBusca.lng, origem: 'gps' }
+          }
+        }
+
+        if (pontoFixo.origem !== 'gps') {
+          const pontoExato = await buscarPontoExato(enderecoSelecionado, numero)
+          if (!pontoExato) {
+            setSalvandoLocal(false)
+            setLocalMsg('Esse numero nao possui um ponto exato no mapa. Va ate a entrada da loja e toque em "Usar localizacao atual da loja" para gravar sem erro.')
+            return
+          }
+          pontoFixo = pontoExato
+        }
+      }
+    } catch {
+      setSalvandoLocal(false)
+      setLocalMsg('Nao consegui confirmar o ponto agora. Confira a internet e tente novamente.')
+      return
+    }
+
+    const endereco = montarEndereco(enderecoSelecionado, numero)
     setLocalMsg('Salvando o novo ponto fixo...')
     const { data, error } = await supabase.rpc('aplicar_correcao_localizacao', {
       p_solicitacao_id: solicitacaoLocal.id,
-      p_lat: enderecoSelecionado.lat,
-      p_lng: enderecoSelecionado.lng,
+      p_lat: pontoFixo.lat,
+      p_lng: pontoFixo.lng,
       p_endereco: endereco,
     })
     setSalvandoLocal(false)
@@ -455,8 +613,8 @@ export default function PerfilPage() {
         : 'Nao foi possivel corrigir o ponto. Tente novamente.')
       return
     }
-    setLat(enderecoSelecionado.lat)
-    setLng(enderecoSelecionado.lng)
+    setLat(pontoFixo.lat)
+    setLng(pontoFixo.lng)
     setPerfil(atual => ({ ...atual, endereco }))
     setSolicitacaoLocal(data as SolicitacaoLocalizacao)
     setLocalMsg('Localizacao corrigida e travada no novo ponto.')
@@ -645,6 +803,7 @@ export default function PerfilPage() {
                 <div style={{ position: 'relative', marginTop: 6 }}>
                   <input
                     value={novoEndereco}
+                    onFocus={() => { void capturarReferenciaBusca() }}
                     onChange={e => {
                       setNovoEndereco(e.target.value)
                       setEnderecoSelecionado(null)
@@ -713,6 +872,12 @@ export default function PerfilPage() {
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px', border: '1px solid rgba(34,197,94,0.25)', borderRadius: 10, background: '#fff', color: '#166534', fontSize: 12, fontWeight: 800, lineHeight: 1.45 }}>
                 <MapPin size={16} style={{ flexShrink: 0, marginTop: 1 }} />
                 <span>{montarEndereco(enderecoSelecionado, numeroEndereco.trim() || 'numero pendente')}</span>
+              </div>
+            )}
+            {referenciaBusca && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: '#0369a1', fontSize: 11, fontWeight: 800 }}>
+                <Navigation size={14} />
+                Sugestoes ordenadas pela sua localizacao atual ({Math.round(referenciaBusca.accuracy)} m de precisao)
               </div>
             )}
             <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" style={{ color: '#64748b', fontSize: 10, fontWeight: 700, textDecoration: 'none' }}>

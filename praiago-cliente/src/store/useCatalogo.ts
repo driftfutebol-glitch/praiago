@@ -67,6 +67,17 @@ function sellerPhoto(path?: string | null) {
   return supabase.storage.from('perfis-vendedores').getPublicUrl(path).data.publicUrl
 }
 
+function coordenadasValidas(lat: number | null | undefined, lng: number | null | undefined) {
+  return typeof lat === 'number'
+    && Number.isFinite(lat)
+    && lat >= -90
+    && lat <= 90
+    && typeof lng === 'number'
+    && Number.isFinite(lng)
+    && lng >= -180
+    && lng <= 180
+}
+
 function precoComPromocao(preco: number, promo?: PromocaoRow): number {
   if (!promo) return preco
   if (promo.desconto_tipo === 'preco_promocional') {
@@ -126,6 +137,9 @@ export const useCatalogo = create<State>((set, get) => ({
       // Vendedor só aparece pro cliente se estiver verificado (CNPJ/CPF aprovado)
       if (profs[vid]?.verificado !== true) continue
       if (profs[vid]?.status === 'banido' || (profs[vid]?.status && profs[vid]?.status !== 'ativo')) continue
+      // Nao inventa um ponto no mapa. O vendedor so fica publico depois que o
+      // ponto real foi gravado no perfil e sincronizado para esta tabela.
+      if (!coordenadasValidas(profs[vid]?.lat, profs[vid]?.lng)) continue
       if (!byVend.has(vid)) {
         const pf = profs[vid]
         const vendedorEmoji = r.vendedor_emoji || pf?.emoji || '🥥'
@@ -149,7 +163,7 @@ export const useCatalogo = create<State>((set, get) => ({
           aberto,
           image: sellerPhoto(pf?.foto_capa_path) || hero(vendedorEmoji),
           avatar: sellerPhoto(pf?.foto_perfil_path),
-          pos: [pf?.lat ?? -24.0228, pf?.lng ?? -46.4305],
+          pos: [pf.lat as number, pf.lng as number],
           zona: pf?.zona || 'Praia Grande',
           produtos: [],
           tipo,
