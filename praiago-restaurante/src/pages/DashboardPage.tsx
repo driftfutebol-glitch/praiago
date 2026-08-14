@@ -195,7 +195,7 @@ export default function DashboardPage() {
   }))
 
   return (
-    <div style={{ padding: '32px 40px 48px', minHeight: '100vh', position: 'relative' }}>
+    <div className="restaurant-page" style={{ padding: '32px 40px 48px', minHeight: '100vh', position: 'relative' }}>
 
       {/* Notificação flutuante */}
       <AnimatePresence>
@@ -222,7 +222,7 @@ export default function DashboardPage() {
       </motion.div>
 
       {/* ── Stats ─────────────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 24, marginBottom: 36 }}>
+      <div className="restaurant-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 24, marginBottom: 36 }}>
         <StatCard delay={0.1} icon={ShoppingBag} label="Pedidos hoje"  value={String(todayCount)}         sub={`${allPedidos.filter(p=>p.status==='novo').length} em andamento`}  gradient="linear-gradient(135deg,#f97316,#ea580c)" change="+0%"  live />
         <StatCard delay={0.2} icon={TrendingUp}  label="Faturamento"   value={`R$ ${revenue.toLocaleString('pt-BR',{minimumFractionDigits:0})}`} sub="meta: R$ 0" gradient="linear-gradient(135deg,#22c55e,#16a34a)" change="+0%" live />
         <StatCard delay={0.3} icon={Users}       label="Clientes hoje" value="0"                          sub="0 novos"                                                              gradient="linear-gradient(135deg,#0ea5e9,#0284c7)" />
@@ -230,7 +230,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Grid principal ────────────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 400px', gap: 28 }}>
+      <div className="restaurant-dashboard-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 400px', gap: 28 }}>
 
         {/* Pedidos ativos */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>

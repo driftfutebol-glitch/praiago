@@ -413,7 +413,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#eef2f7', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 32, position: 'relative', overflow: 'hidden' }}>
+    <div className="restaurant-login" style={{ minHeight: '100vh', background: '#eef2f7', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 32, position: 'relative', overflow: 'hidden' }}>
       {/* Efeito luminoso de fundo */}
       <div style={{
         position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
@@ -423,7 +423,7 @@ export default function LoginPage() {
       }} />
 
       <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ duration: 0.5, ease: "easeOut" }} style={{ width: '100%', maxWidth: 420, position: 'relative', zIndex: 1 }}>
-        <div style={{ textAlign: 'center', marginBottom: 40 }}>
+        <div className="restaurant-login-brand" style={{ textAlign: 'center', marginBottom: 40 }}>
           {/* Marca oficial, mesmo recorte do app do cliente (PNG quadrado com
               margem: a caixa recorta so o brasao). */}
           <motion.div
@@ -446,7 +446,7 @@ export default function LoginPage() {
           </motion.div>
         </div>
 
-        <div className="glass-panel" style={{ borderRadius: 28, padding: '40px 32px', border: '1px solid rgba(249,115,22,0.2)', boxShadow: '0 24px 48px rgba(0,0,0,0.4), inset 0 0 20px rgba(249,115,22,0.05)' }}>
+        <div className="glass-panel restaurant-login-card" style={{ borderRadius: 28, padding: '40px 32px', border: '1px solid rgba(249,115,22,0.2)', boxShadow: '0 24px 48px rgba(0,0,0,0.4), inset 0 0 20px rgba(249,115,22,0.05)' }}>
           <h2 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>{isLogin ? 'Entrar no Sistema' : 'Criar Conta'}</h2>
           <p style={{ fontSize: 14, color: '#64748b', marginBottom: 32, fontWeight: 500 }}>{isLogin ? 'Acesse sua central para gerenciar seu negócio' : 'Crie sua conta de Restaurante e gerencie pedidos'}</p>
 

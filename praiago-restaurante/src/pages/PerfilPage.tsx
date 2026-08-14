@@ -650,7 +650,7 @@ export default function PerfilPage() {
   const fotoCapa = sellerPhotoUrl(perfil.fotoCapaPath)
 
   return (
-    <div style={{ padding: '32px 40px 48px', minHeight: '100vh' }}>
+    <div className="restaurant-page" style={{ padding: '32px 40px 48px', minHeight: '100vh' }}>
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
         <h1 style={{ fontSize: 38, fontWeight: 900, color: '#0f172a', margin: '0 0 8px', letterSpacing: -1 }}>Central do Restaurante</h1>
         <p style={{ fontSize: 15, color: '#64748b', margin: '0 0 32px', fontWeight: 600 }}>Gerencie seu perfil e configuracoes da conta</p>

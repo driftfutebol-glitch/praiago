@@ -19,8 +19,9 @@ html { scroll-behavior: smooth; }
 
 body {
   margin: 0;
-  min-width: 1024px;
+  min-width: 320px;
   min-height: 100vh;
+  overflow-x: hidden;
   font-family: 'Inter', sans-serif;
   background-color: #ffffff;
   background-image:
@@ -120,6 +121,109 @@ input:focus, select:focus, textarea:focus {
 
 .animate-pulse-neon {
   animation: pulse-neon 2s infinite ease-in-out;
+}
+
+@media (max-width: 767px) {
+  .restaurant-shell {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .restaurant-sidebar {
+    width: 100% !important;
+    height: calc(72px + env(safe-area-inset-bottom));
+    inset: auto 0 0 !important;
+    border-right: 0 !important;
+    border-top: 1px solid rgba(15, 23, 42, 0.1);
+    box-shadow: 0 -8px 28px rgba(15, 23, 42, 0.12) !important;
+  }
+
+  .restaurant-sidebar-header,
+  .restaurant-sidebar-footer,
+  .restaurant-sidebar-nav > p,
+  .restaurant-radar-card {
+    display: none !important;
+  }
+
+  .restaurant-sidebar-nav {
+    width: 100%;
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom)) !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    scrollbar-width: none;
+  }
+
+  .restaurant-sidebar-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .restaurant-nav-link {
+    flex: 0 0 70px;
+    min-height: 58px;
+    margin: 0 !important;
+    padding: 6px 4px !important;
+    border-left: 0 !important;
+    border-bottom: 3px solid transparent;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px !important;
+    text-align: center;
+    font-size: 10px !important;
+  }
+
+  .restaurant-nav-link > span:first-of-type {
+    flex: 0 !important;
+  }
+
+  .restaurant-main {
+    width: 100%;
+    min-width: 0;
+    margin-left: 0 !important;
+    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+  }
+
+  .restaurant-topbar {
+    padding: 10px 14px !important;
+  }
+
+  .restaurant-route-frame {
+    height: auto !important;
+    min-height: calc(100vh - 52px);
+  }
+
+  .restaurant-page {
+    width: 100%;
+    min-width: 0;
+    padding: 22px 16px 36px !important;
+  }
+
+  .restaurant-page h1 {
+    font-size: 29px !important;
+    letter-spacing: 0 !important;
+  }
+
+  .restaurant-login {
+    padding: 24px 16px !important;
+    overflow-y: auto !important;
+  }
+
+  .restaurant-login-brand {
+    margin-bottom: 24px !important;
+  }
+
+  .restaurant-login-card {
+    padding: 28px 20px !important;
+    border-radius: 20px !important;
+  }
+
+  .restaurant-stats-grid,
+  .restaurant-dashboard-grid {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+  }
 }
 
 .restaurant-field-label {

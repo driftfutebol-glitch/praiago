@@ -273,12 +273,12 @@ export default function App() {
   function sair() { logout(); navigate('/login') }
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'system-ui,-apple-system,sans-serif' }}>
+    <div className="restaurant-shell" style={{ display: 'flex', minHeight: '100vh', fontFamily: 'system-ui,-apple-system,sans-serif' }}>
       <PasswordRecoveryHandler />
 
       {/* ══ SIDEBAR ══════════════════════════════════════════ */}
       {!isPublic && !kycLocked && (
-        <aside style={{
+        <aside className="restaurant-sidebar" style={{
           width: 256,
           background: 'rgba(255,255,255,0.92)',
           backdropFilter: 'blur(20px)',
@@ -289,7 +289,7 @@ export default function App() {
         }}>
 
           {/* Logo + status */}
-          <div style={{ padding: '24px 20px 20px', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+          <div className="restaurant-sidebar-header" style={{ padding: '24px 20px 20px', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
             {/* Logo — mesma marca e mesmo recorte do app do cliente.
                 O PNG e quadrado (1600x1600) com muita margem: a caixa de
                 140x59 recorta so o brasao, por isso a imagem e maior que ela. */}
@@ -349,14 +349,14 @@ export default function App() {
           </div>
 
           {/* Navegação */}
-          <nav style={{ flex: 1, padding: '20px 14px', overflowY: 'auto' }}>
+          <nav className="restaurant-sidebar-nav" style={{ flex: 1, padding: '20px 14px', overflowY: 'auto' }}>
             <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.5, color: '#64748b', textTransform: 'uppercase', marginBottom: 12, paddingLeft: 10 }}>
               Gestão
             </p>
             {navItems.map(({ to, icon: Icon, label, badge }) => {
               const badgeVal = to === '/pedidos' ? (novos > 0 ? String(novos) : null) : badge
               return (
-                <NavLink key={to} to={to} style={({ isActive }) => ({
+                <NavLink className="restaurant-nav-link" key={to} to={to} style={({ isActive }) => ({
                   display: 'flex', alignItems: 'center', gap: 14,
                   padding: '12px 16px', borderRadius: 14, marginBottom: 6,
                   textDecoration: 'none',
@@ -382,7 +382,7 @@ export default function App() {
             <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.5, color: '#64748b', textTransform: 'uppercase', margin: '24px 0 12px', paddingLeft: 10 }}>
               Radar da Praia
             </p>
-            <div className="glass-panel" style={{
+            <div className="glass-panel restaurant-radar-card" style={{
               background: 'linear-gradient(135deg, rgba(168,85,247,0.1), rgba(139,92,246,0.05))',
               border: '1px solid rgba(168,85,247,0.3)', borderRadius: 16, padding: '16px',
               position: 'relative', overflow: 'hidden'
@@ -404,7 +404,7 @@ export default function App() {
           </nav>
 
           {/* Rodapé */}
-          <div style={{ padding: '16px', borderTop: '1px solid rgba(0,0,0,0.05)', position: 'relative' }}>
+          <div className="restaurant-sidebar-footer" style={{ padding: '16px', borderTop: '1px solid rgba(0,0,0,0.05)', position: 'relative' }}>
             <button onClick={() => setNotifOpen(v => !v)} style={{
               width: '100%', display: 'flex', alignItems: 'center', gap: 12,
               padding: '12px 16px', borderRadius: 14, border: '1px solid rgba(0,0,0,0.05)',
@@ -453,10 +453,10 @@ export default function App() {
       )}
 
       {/* ══ MAIN ═════════════════════════════════════════════ */}
-      <main style={{ flex: 1, marginLeft: isPublic || kycLocked ? 0 : 256, overflowY: 'auto', minHeight: '100vh', position: 'relative' }}>
+      <main className="restaurant-main" style={{ flex: 1, marginLeft: isPublic || kycLocked ? 0 : 256, overflowY: 'auto', minHeight: '100vh', position: 'relative' }}>
         <AnimatePresence mode="wait">
           {!isPublic && !kycLocked && (
-            <motion.div initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} style={{
+            <motion.div className="restaurant-topbar" initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} style={{
               position: 'sticky', top: 0, zIndex: 30,
               background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(16px)',
               borderBottom: '1px solid rgba(0,0,0,0.05)', padding: '14px 32px',
@@ -476,7 +476,8 @@ export default function App() {
         </AnimatePresence>
 
         <AnimatePresence mode="wait">
-          <motion.div 
+          <motion.div
+            className="restaurant-route-frame"
             key={location.pathname}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
