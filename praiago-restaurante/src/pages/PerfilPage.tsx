@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Bell, CheckCircle2, ChevronRight, Clock, CreditCard, HelpCircle, Loader2, LogOut, MapPin, Navigation, Phone, Search, Send, Shield, Star, Store, TrendingUp, Wallet, XCircle } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
@@ -161,6 +161,84 @@ export default function PerfilPage() {
   const [buscandoEndereco, setBuscandoEndereco] = useState(false)
   const [buscandoGps, setBuscandoGps] = useState(false)
   const [enviandoSolicitacao, setEnviandoSolicitacao] = useState(false)
+  const buscaEnderecoTimerRef = useRef<number | null>(null)
+  const buscaEnderecoControllerRef = useRef<AbortController | null>(null)
+
+  const buscarSugestoesEndereco = useCallback(async (termoBruto: string, signal?: AbortSignal) => {
+    const termo = termoBruto.trim()
+    if (termo.length < 3) {
+      setSugestoesEndereco([])
+      setLocalMsg('Digite pelo menos 3 letras da rua ou avenida.')
+      return
+    }
+
+    setBuscandoEndereco(true)
+    setSugestoesEndereco([])
+    setLocalMsg('')
+
+    try {
+      const url = new URL('https://photon.komoot.io/api/')
+      url.searchParams.set('q', `${termo}, Praia Grande, Sao Paulo, Brasil`)
+      url.searchParams.set('limit', '8')
+      url.searchParams.set('lat', String(CENTRO_PRAIA_GRANDE.lat))
+      url.searchParams.set('lon', String(CENTRO_PRAIA_GRANDE.lng))
+      url.searchParams.set('zoom', '12')
+      url.searchParams.set('location_bias_scale', '0.2')
+      url.searchParams.append('layer', 'street')
+      url.searchParams.append('layer', 'house')
+
+      const resposta = await fetch(url, {
+        signal,
+        headers: { Accept: 'application/json' },
+      })
+      if (!resposta.ok) throw new Error('busca indisponivel')
+
+      const data = (await resposta.json()) as { features?: PhotonFeature[] }
+      const resultados = (data.features ?? []).filter(feature => {
+        const cidade = `${feature.properties.city ?? ''} ${feature.properties.county ?? ''}`.toLowerCase()
+        return cidade.includes('praia grande')
+      })
+      const unicos = resultados.filter((feature, index, lista) => {
+        const chave = [
+          feature.properties.street || feature.properties.name,
+          feature.properties.district,
+          feature.properties.postcode,
+        ].join('|').toLowerCase()
+        return lista.findIndex(item => [
+          item.properties.street || item.properties.name,
+          item.properties.district,
+          item.properties.postcode,
+        ].join('|').toLowerCase() === chave) === index
+      })
+
+      if (signal?.aborted) return
+      setSugestoesEndereco(unicos)
+      setLocalMsg(unicos.length
+        ? 'Selecione a rua correta na lista abaixo.'
+        : 'Nenhuma rua encontrada em Praia Grande. Confira o nome e tente novamente.')
+    } catch (error) {
+      if ((error as Error).name !== 'AbortError') {
+        setSugestoesEndereco([])
+        setLocalMsg('Nao consegui buscar enderecos agora. Confira a internet e tente novamente.')
+      }
+    } finally {
+      if (!signal?.aborted) setBuscandoEndereco(false)
+    }
+  }, [])
+
+  const agendarBuscaEndereco = useCallback((termo: string, atrasoMs: number) => {
+    if (buscaEnderecoTimerRef.current != null) {
+      window.clearTimeout(buscaEnderecoTimerRef.current)
+    }
+    buscaEnderecoControllerRef.current?.abort()
+
+    const controller = new AbortController()
+    buscaEnderecoControllerRef.current = controller
+    buscaEnderecoTimerRef.current = window.setTimeout(() => {
+      buscaEnderecoTimerRef.current = null
+      void buscarSugestoesEndereco(termo, controller.signal)
+    }, atrasoMs)
+  }, [buscarSugestoesEndereco])
 
   const carregarSolicitacaoLocal = useCallback(async () => {
     if (!sessao?.id) return
@@ -245,61 +323,16 @@ export default function PerfilPage() {
       return
     }
 
-    const controller = new AbortController()
-    const timer = window.setTimeout(async () => {
-      setBuscandoEndereco(true)
-      try {
-        const url = new URL('https://photon.komoot.io/api/')
-        url.searchParams.set('q', `${termo}, Praia Grande, Sao Paulo, Brasil`)
-        url.searchParams.set('limit', '6')
-        url.searchParams.set('lat', String(CENTRO_PRAIA_GRANDE.lat))
-        url.searchParams.set('lon', String(CENTRO_PRAIA_GRANDE.lng))
-        url.searchParams.set('zoom', '12')
-        url.searchParams.set('location_bias_scale', '0.2')
-        url.searchParams.append('layer', 'street')
-        url.searchParams.append('layer', 'house')
-
-        const resposta = await fetch(url, {
-          signal: controller.signal,
-          headers: { Accept: 'application/json' },
-        })
-        if (!resposta.ok) throw new Error('busca indisponivel')
-        const data = (await resposta.json()) as { features?: PhotonFeature[] }
-        const resultados = (data.features ?? []).filter(feature => {
-          const cidade = `${feature.properties.city ?? ''} ${feature.properties.county ?? ''}`.toLowerCase()
-          return cidade.includes('praia grande')
-        })
-        const unicos = resultados.filter((feature, index, lista) => {
-          const chave = [
-            feature.properties.street || feature.properties.name,
-            feature.properties.district,
-            feature.properties.postcode,
-          ].join('|').toLowerCase()
-          return lista.findIndex(item => [
-            item.properties.street || item.properties.name,
-            item.properties.district,
-            item.properties.postcode,
-          ].join('|').toLowerCase() === chave) === index
-        })
-        setSugestoesEndereco(unicos)
-        if (!unicos.length) {
-          setLocalMsg('Nenhuma rua encontrada em Praia Grande. Confira o nome e tente novamente.')
-        }
-      } catch (error) {
-        if ((error as Error).name !== 'AbortError') {
-          setSugestoesEndereco([])
-          setLocalMsg('Nao consegui buscar enderecos agora. Confira a internet e tente novamente.')
-        }
-      } finally {
-        if (!controller.signal.aborted) setBuscandoEndereco(false)
-      }
-    }, 650)
+    agendarBuscaEndereco(termo, 500)
 
     return () => {
-      window.clearTimeout(timer)
-      controller.abort()
+      if (buscaEnderecoTimerRef.current != null) {
+        window.clearTimeout(buscaEnderecoTimerRef.current)
+        buscaEnderecoTimerRef.current = null
+      }
+      buscaEnderecoControllerRef.current?.abort()
     }
-  }, [novoEndereco, solicitacaoLocal?.status, enderecoSelecionado?.rua])
+  }, [novoEndereco, solicitacaoLocal?.status, enderecoSelecionado?.rua, agendarBuscaEndereco])
 
   async function salvarHorario() {
     if (!sessao) return
@@ -610,7 +643,6 @@ export default function PerfilPage() {
               <label style={{ fontSize: 11, fontWeight: 900, color: '#166534' }}>
                 RUA OU AVENIDA
                 <div style={{ position: 'relative', marginTop: 6 }}>
-                  <Search size={17} color="#64748b" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
                   <input
                     value={novoEndereco}
                     onChange={e => {
@@ -622,9 +654,27 @@ export default function PerfilPage() {
                     autoComplete="off"
                     aria-autocomplete="list"
                     aria-expanded={sugestoesEndereco.length > 0}
-                    style={{ display: 'block', width: '100%', boxSizing: 'border-box', border: '1px solid rgba(22,101,52,0.25)', borderRadius: 12, padding: '12px 42px 12px 38px', background: '#fff', color: '#0f172a', fontSize: 14, fontWeight: 700 }}
+                    onKeyDown={event => {
+                      if (event.key !== 'Enter') return
+                      event.preventDefault()
+                      setEnderecoSelecionado(null)
+                      agendarBuscaEndereco(novoEndereco, 0)
+                    }}
+                    style={{ display: 'block', width: '100%', boxSizing: 'border-box', border: '1px solid rgba(22,101,52,0.25)', borderRadius: 12, padding: '12px 50px 12px 12px', background: '#fff', color: '#0f172a', fontSize: 14, fontWeight: 700 }}
                   />
-                  {buscandoEndereco && <Loader2 size={17} color="#16a34a" className="animate-spin-slow" style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)' }} />}
+                  <button
+                    type="button"
+                    title="Buscar endereco"
+                    aria-label="Buscar endereco"
+                    disabled={buscandoEndereco || novoEndereco.trim().length < 3}
+                    onClick={() => {
+                      setEnderecoSelecionado(null)
+                      agendarBuscaEndereco(novoEndereco, 0)
+                    }}
+                    style={{ position: 'absolute', right: 5, top: '50%', transform: 'translateY(-50%)', width: 34, height: 34, border: 0, borderRadius: 9, background: '#16a34a', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: buscandoEndereco ? 'wait' : 'pointer', opacity: novoEndereco.trim().length < 3 ? 0.45 : 1 }}
+                  >
+                    {buscandoEndereco ? <Loader2 size={17} className="animate-spin-slow" /> : <Search size={17} />}
+                  </button>
                 </div>
               </label>
               {sugestoesEndereco.length > 0 && (
