@@ -229,8 +229,8 @@ export default function LoginPage() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '28px 18px', backgroundImage: 'linear-gradient(180deg, rgba(255,255,255,0.78) 0%, rgba(244,247,250,0.96) 48%, #f4f7fa 100%), url(/images/ambulante-beach-header-v1.webp)', backgroundPosition: 'center top', backgroundSize: 'auto 380px', backgroundRepeat: 'no-repeat' }}>
       <div style={{ width: '100%', maxWidth: 400 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: 58, marginBottom: 18 }}>
-          <div aria-label="PraiaGo" style={{ width: 144, height: 58, overflow: 'hidden', position: 'relative' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: 64, marginBottom: 18 }}>
+          <div aria-label="PraiaGo" style={{ width: 150, height: 64, overflow: 'hidden', position: 'relative' }}>
             <img src="/praiago-logo-transparent.png" alt="PraiaGo" style={{ position: 'absolute', width: 238, height: 238, maxWidth: 'none', left: -58, top: -69, display: 'block' }} />
           </div>
           <span style={{ border: '1px solid #cce9d8', borderRadius: 999, background: 'rgba(238,249,242,0.94)', color: '#148447', padding: '6px 9px', fontSize: 9, fontWeight: 850, textTransform: 'uppercase' }}>Ambulante</span>
