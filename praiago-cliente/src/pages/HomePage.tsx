@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Bell, Check, ChevronRight, Clock, Grid2X2, Heart, MapPin, Percent, Plus,
-  Search, ShoppingBag, Star, Store, Ticket, Utensils, X,
+  Bell, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Grid2X2, Heart, Percent, Plus,
+  MapPin, Search, ShoppingBag, SlidersHorizontal, Star, Ticket, Utensils, X,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { BannerEventos, CartaoLocal, CARTAO } from '../components/ui'
 import {
   CATEGORIAS,
   pertenceACategoria,
@@ -17,6 +18,16 @@ import { theme } from '../lib/theme'
 import { supabase } from '../lib/supabase'
 
 type ProdutoDestaque = Produto & { vendedorId: string; vendedorNome: string }
+/** Só o que a faixa "em destaque" da Home precisa do evento. */
+type EventoDestaque = {
+  id: string
+  titulo: string
+  categoria: string | null
+  local_nome: string | null
+  data: string | null
+  hora: string | null
+  imagem_url: string | null
+}
 type Categoria = typeof CATEGORIAS[number]
 type Cupom = {
   id: string
@@ -35,7 +46,7 @@ type Cupom = {
 }
 
 const cardShadow = '0 16px 40px rgba(15,23,42,0.10)'
-const CATEGORY_SPRITE = '/images/categorias-comida-v1.png'
+const CATEGORY_SPRITE = '/images/categorias-comida-v1.webp'
 const CATEGORIAS_DESTAQUE: readonly CategoriaId[] = ['bebidas', 'espetos', 'salgados', 'porcoes', 'almoco', 'acai']
 
 function NotifPanel({ onClose }: { onClose: () => void }) {
@@ -97,6 +108,18 @@ function CategoriasPanel({
   onClose: () => void
   onSelect: (categoriaId: CategoriaId) => void
 }) {
+  const [buscaCategoria, setBuscaCategoria] = useState('')
+
+  // Busca sem acento: "acai" tem que achar "Açaí", senão o campo parece quebrado.
+  const categoriasFiltradas = useMemo(() => {
+    const termo = buscaCategoria.trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
+    if (!termo) return CATEGORIAS
+    return CATEGORIAS.filter(c =>
+      c.nome.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').includes(termo)
+      || c.aliases.some(a => a.includes(termo)),
+    )
+  }, [buscaCategoria])
+
   useEffect(() => {
     const overflowAnterior = document.body.style.overflow
     const fecharComEscape = (event: KeyboardEvent) => {
@@ -125,16 +148,46 @@ function CategoriasPanel({
         onClick={event => event.stopPropagation()}
         style={{ width: '100%', maxWidth: 620, height: 'min(88dvh, 780px)', overflowY: 'auto', background: '#f8fafc', borderRadius: '24px 24px 0 0', boxShadow: '0 -18px 52px rgba(15,23,42,0.22)' }}
       >
-        <div style={{ position: 'sticky', top: 0, zIndex: 2, minHeight: 68, display: 'grid', gridTemplateColumns: '44px 1fr 44px', alignItems: 'center', padding: '8px 14px', background: 'rgba(248,250,252,0.96)', backdropFilter: 'blur(14px)', borderBottom: '1px solid #e2e8f0' }}>
-          <button type="button" aria-label="Fechar categorias" onClick={onClose} style={{ ...iconButton('#fff'), borderRadius: 12 }}>
-            <X size={21} color="#0f172a" />
-          </button>
-          <h2 id="categorias-title" style={{ margin: 0, textAlign: 'center', fontSize: 20, fontWeight: 950, color: '#0f172a' }}>Todos</h2>
-          <span />
+        {/* Cabeçalho com a cena de praia, igual à Home e à tela de Eventos */}
+        <div style={{ position: 'sticky', top: 0, zIndex: 2, background: 'rgba(255,255,255,0.97)', backdropFilter: 'blur(14px)', borderBottom: '1px solid #eef2f7', overflow: 'hidden' }}>
+          <img src="/images/home-beach-v2.webp" alt="" aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: 132, objectFit: 'cover', objectPosition: 'center', opacity: 0.48, pointerEvents: 'none' }} />
+          <span aria-hidden="true" style={{ position: 'absolute', inset: 0, height: 132, background: 'linear-gradient(90deg, #fff 0%, rgba(255,255,255,0.92) 42%, rgba(255,255,255,0.3) 100%)', pointerEvents: 'none' }} />
+          <div style={{ position: 'relative', zIndex: 1, display: 'grid', gridTemplateColumns: '44px 1fr 44px', alignItems: 'center', padding: '10px 14px 4px' }}>
+            <button type="button" aria-label="Fechar categorias" onClick={onClose} style={{ ...iconButton('#fff'), borderRadius: 13 }}>
+              <ChevronLeft size={21} color="#0f172a" />
+            </button>
+            <h2 id="categorias-title" style={{ margin: 0, textAlign: 'center', fontSize: 21, fontWeight: 950, color: '#0f172a', letterSpacing: 0 }}>Todos</h2>
+            <span />
+          </div>
+          <p style={{ position: 'relative', zIndex: 1, margin: '0 0 12px', textAlign: 'center', fontSize: 12.5, fontWeight: 700, color: '#64748b' }}>
+            Comidas e bebidas perto da praia
+          </p>
+
+          <div style={{ position: 'relative', zIndex: 1, display: 'flex', gap: 9, padding: '0 14px 12px' }}>
+            <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+              <Search size={17} color="#94a3b8" style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)' }} />
+              <input
+                type="text"
+                value={buscaCategoria}
+                onChange={e => setBuscaCategoria(e.target.value)}
+                placeholder="Buscar categoria"
+                aria-label="Buscar categoria"
+                style={{ width: '100%', height: 48, background: '#fff', border: '1px solid #eef2f7', borderRadius: 16, padding: '0 14px 0 42px', fontSize: 13.5, fontWeight: 700, outline: 'none', boxSizing: 'border-box', boxShadow: '0 1px 2px rgba(15,23,42,0.04)' }}
+              />
+            </div>
+            <span style={{ ...CARTAO, flexShrink: 0, width: 48, height: 48, display: 'grid', placeItems: 'center', borderRadius: 16 }}>
+              <SlidersHorizontal size={19} color="#16a34a" strokeWidth={2.4} />
+            </span>
+          </div>
         </div>
 
-        <div className="prg-category-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, padding: '14px 14px 112px' }}>
-          {CATEGORIAS.map(categoria => {
+        <div className="prg-category-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 11, padding: '14px 14px 112px' }}>
+          {categoriasFiltradas.length === 0 ? (
+            <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
+              <Search size={28} color="#cbd5e1" style={{ margin: '0 auto 10px' }} />
+              <div style={{ fontSize: 14.5, fontWeight: 900, color: '#0f172a' }}>Nenhuma categoria com esse nome</div>
+            </div>
+          ) : categoriasFiltradas.map(categoria => {
             const selecionadaAgora = selecionada === categoria.id
             const count = catalogo.filter(vendedor => vendedor.produtos.some(produto => pertenceACategoria(produto.categoria, categoria.id))).length
             return (
@@ -145,10 +198,18 @@ function CategoriasPanel({
                 aria-label={`${categoria.nome}: ${count} ${count === 1 ? 'loja' : 'lojas'}`}
                 onClick={() => onSelect(categoria.id)}
                 className="prg-category-tile"
-                style={{ position: 'relative', minHeight: 112, overflow: 'hidden', borderRadius: 14, border: `1px solid ${selecionadaAgora ? categoria.cor : '#e2e8f0'}`, background: '#fff', padding: '14px 10px 12px 14px', textAlign: 'left', cursor: 'pointer', boxShadow: selecionadaAgora ? `0 10px 24px ${categoria.cor}28` : '0 5px 16px rgba(15,23,42,0.05)' }}
+                style={{ position: 'relative', minHeight: 128, overflow: 'hidden', borderRadius: 18, border: `1px solid ${selecionadaAgora ? categoria.cor : '#eef2f7'}`, background: '#fff', padding: '13px 10px 12px 13px', textAlign: 'left', cursor: 'pointer', boxShadow: selecionadaAgora ? `0 12px 26px -12px ${categoria.cor}` : '0 1px 2px rgba(15,23,42,0.04), 0 10px 24px -16px rgba(15,23,42,0.28)' }}
               >
-                <span style={{ position: 'relative', zIndex: 1, display: 'block', maxWidth: '62%', fontSize: 15, fontWeight: 900, color: '#0f172a', lineHeight: 1.15 }}>{categoria.nome}</span>
-                <span style={{ position: 'absolute', zIndex: 1, left: 14, bottom: 13, fontSize: 10, fontWeight: 800, color: selecionadaAgora ? categoria.cor : '#64748b' }}>{count} {count === 1 ? 'loja' : 'lojas'}</span>
+                {/* Chip colorido com a inicial — o mockup traz um ícone por
+                    categoria, mas não existe um ícone próprio no catálogo e
+                    inventar 20 ícones deixaria metade sem sentido. */}
+                <span style={{ position: 'relative', zIndex: 1, display: 'grid', placeItems: 'center', width: 34, height: 34, borderRadius: 11, marginBottom: 9, background: `${categoria.cor}18`, color: categoria.cor, fontSize: 15, fontWeight: 950 }}>
+                  {categoria.nome.charAt(0)}
+                </span>
+                <span style={{ position: 'relative', zIndex: 1, display: 'block', maxWidth: '62%', fontSize: 14.5, fontWeight: 950, color: '#0f172a', lineHeight: 1.15, letterSpacing: 0 }}>{categoria.nome}</span>
+                <span style={{ position: 'absolute', zIndex: 1, left: 13, bottom: 12, padding: '3px 8px', borderRadius: 999, fontSize: 9.5, fontWeight: 900, color: selecionadaAgora ? categoria.cor : '#64748b', background: selecionadaAgora ? `${categoria.cor}18` : '#f1f5f9' }}>
+                  {count} {count === 1 ? 'loja' : 'lojas'}
+                </span>
                 <CategoryPhoto categoria={categoria} className="prg-category-photo-large" />
               </button>
             )
@@ -160,10 +221,11 @@ function CategoriasPanel({
 }
 
 function QuickAction({
-  title, subtitle, icon, color, onClick, disabled,
+  title, subtitle, count, icon, color, onClick, disabled,
 }: {
   title: string
   subtitle: string
+  count?: string
   icon: React.ReactNode
   color: string
   onClick: () => void
@@ -171,31 +233,47 @@ function QuickAction({
 }) {
   return (
     <button
-      aria-label={`${title}: ${subtitle}`}
+      aria-label={`${title}: ${subtitle}${count ? `, ${count}` : ''}`}
       onClick={onClick}
       disabled={disabled}
       className={disabled ? 'prg-action-card' : 'prg-action-card prg-lift'}
       style={{
-        minHeight: 112,
-        border: `1px solid ${color}38`,
-        borderRadius: 20,
-        background: `linear-gradient(145deg, #ffffff 18%, ${color}12 100%)`,
-        padding: 16,
+        ...CARTAO,
+        minHeight: 108,
+        padding: 12,
         textAlign: 'left',
         cursor: disabled ? 'default' : 'pointer',
-        boxShadow: `0 12px 30px rgba(15,23,42,0.08), 0 5px 18px ${color}18`,
         opacity: disabled ? 0.65 : 1,
         position: 'relative',
         overflow: 'hidden',
+        display: 'grid',
+        gridTemplateColumns: '46px minmax(0, 1fr)',
+        alignItems: 'center',
+        gap: 9,
       }}
     >
       <span className="prg-action-sheen" aria-hidden="true" />
-      <ChevronRight className="prg-action-arrow" size={17} color={color} aria-hidden="true" />
-      <div className="prg-action-icon" style={{ width: 42, height: 42, borderRadius: 14, background: color, color: '#fff', display: 'grid', placeItems: 'center', marginBottom: 12, boxShadow: `0 8px 20px ${color}42` }}>
+      <ChevronRight className="prg-action-arrow" size={16} color={color} aria-hidden="true" />
+      <div
+        className="prg-action-icon"
+        style={{
+          width: 46, height: 46, borderRadius: 15,
+          background: color,
+          color: '#fff', display: 'grid', placeItems: 'center',
+          boxShadow: `0 12px 24px -10px ${color}`,
+        }}
+      >
         {icon}
       </div>
-      <div style={{ position: 'relative', zIndex: 1, fontSize: 14, fontWeight: 900, color: '#0f172a', lineHeight: 1.15 }}>{title}</div>
-      <div style={{ position: 'relative', zIndex: 1, fontSize: 11, fontWeight: 800, color, marginTop: 5, lineHeight: 1.3 }}>{subtitle}</div>
+      <div style={{ position: 'relative', zIndex: 1, minWidth: 0, paddingRight: 5 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 950, color: '#0f172a', lineHeight: 1.15, whiteSpace: 'nowrap' }}>{title}</div>
+        <div style={{ fontSize: 10.25, fontWeight: 700, color: '#64748b', marginTop: 3, lineHeight: 1.25 }}>{subtitle}</div>
+        {count && (
+          <span style={{ display: 'inline-block', marginTop: 7, padding: '3px 7px', borderRadius: 999, fontSize: 9, fontWeight: 900, color, background: `${color}14` }}>
+            {count}
+          </span>
+        )}
+      </div>
     </button>
   )
 }
@@ -299,7 +377,7 @@ function ProdutoCard({ item, onAdd, added }: { item: ProdutoDestaque; onAdd: () 
 function SectionHeader({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-      <h3 style={{ fontSize: 19, fontWeight: 950, color: '#0f172a', margin: 0, letterSpacing: -0.3 }}>{title}</h3>
+      <h3 style={{ fontSize: 19, fontWeight: 950, color: '#0f172a', margin: 0, letterSpacing: 0 }}>{title}</h3>
       {action && (
         <button onClick={onAction} style={{ border: 0, background: 'transparent', color: theme.color.primary, fontSize: 13, fontWeight: 900, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
           {action}<ChevronRight size={14} />
@@ -307,6 +385,16 @@ function SectionHeader({ title, action, onAction }: { title: string; action?: st
       )}
     </div>
   )
+}
+
+/** "sáb., 17 de ago." — mesma formatação da tela de Eventos. */
+function fmtDataCurta(d: string | null) {
+  if (!d) return ''
+  try {
+    return new Date(d + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' })
+  } catch {
+    return d
+  }
 }
 
 function iconButton(bg: string): React.CSSProperties {
@@ -325,6 +413,7 @@ export default function HomePage() {
   const [notifOpen, setNotifOpen] = useState(false)
   const [addedId, setAddedId] = useState<string | null>(null)
   const [cupons, setCupons] = useState<Cupom[]>([])
+  const [eventoDestaque, setEventoDestaque] = useState<EventoDestaque | null>(null)
 
   const favoritos = useStore(s => s.favoritos)
   const naoLidas = useStore(s => s.notificacoes.filter(n => !n.lida).length)
@@ -369,7 +458,6 @@ export default function HomePage() {
   ), [todosProdutos])
   const restaurantesLabel = restaurantes.length === 1 ? '1 disponível' : `${restaurantes.length} disponíveis`
   const ambulantesLabel = ambulantes.length === 1 ? '1 na praia' : `${ambulantes.length} na praia`
-  const lojasLabel = catalogo.length === 1 ? '1 loja no app' : `${catalogo.length} lojas no app`
 
   useEffect(() => {
     async function carregarCupons() {
@@ -389,6 +477,30 @@ export default function HomePage() {
     carregarCupons()
     const ch = supabase.channel('cliente_cupons')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'cupons' }, () => carregarCupons())
+      .subscribe()
+
+    return () => { supabase.removeChannel(ch) }
+  }, [])
+
+  // Evento em destaque da Home. Mesma regra da tela de Eventos (status ativo +
+  // flag destaque), pegando o mais próximo por data. Se não houver nenhum, o
+  // estado fica null e a faixa simplesmente não é renderizada.
+  useEffect(() => {
+    async function carregarDestaque() {
+      const { data } = await supabase
+        .from('eventos')
+        .select('id,titulo,categoria,local_nome,data,hora,imagem_url')
+        .eq('status', 'ativo')
+        .eq('destaque', true)
+        .order('data', { ascending: true, nullsFirst: false })
+        .limit(1)
+
+      setEventoDestaque(((data as EventoDestaque[]) ?? [])[0] ?? null)
+    }
+
+    carregarDestaque()
+    const ch = supabase.channel('cliente_home_eventos')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'eventos' }, () => carregarDestaque())
       .subscribe()
 
     return () => { supabase.removeChannel(ch) }
@@ -420,46 +532,79 @@ export default function HomePage() {
         />
       )}
 
-      <header style={{ padding: '16px 18px 12px', position: 'sticky', top: 0, zIndex: 100, background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(16px)', borderBottom: '1px solid rgba(226,232,240,0.66)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-          <div>
-            <div style={{ fontSize: 20, fontWeight: 950, letterSpacing: -0.6, color: '#0f172a' }}>O que você quer agora?</div>
-            <div style={{ fontSize: 12, fontWeight: 800, color: '#64748b', marginTop: 2 }}>Comida, bebida e lojas perto da praia</div>
-          </div>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button aria-label="Filtrar favoritos" onClick={() => setSoFavoritos(v => !v)} style={iconButton(soFavoritos ? '#fff1f2' : '#f8fafc')}>
+      <header style={{ position: 'relative', minHeight: 202, padding: '18px 18px 16px', overflow: 'hidden', background: '#fff' }}>
+        <img
+          src="/images/home-beach-v2.webp"
+          alt=""
+          aria-hidden="true"
+          fetchPriority="high"
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', pointerEvents: 'none' }}
+        />
+        <span aria-hidden="true" style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg, #ffffff 0%, rgba(255,255,255,0.96) 30%, rgba(255,255,255,0.48) 58%, rgba(255,255,255,0) 82%)', pointerEvents: 'none' }} />
+
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginBottom: 6 }}>
+            <button aria-label="Filtrar favoritos" onClick={() => setSoFavoritos(v => !v)} style={iconButton(soFavoritos ? '#fff1f2' : '#ffffff')}>
               <Heart size={19} color={soFavoritos ? theme.color.danger : '#64748b'} fill={soFavoritos ? theme.color.danger : 'none'} />
             </button>
-            <button aria-label="Notificações" onClick={abrirNotif} style={{ ...iconButton('#f8fafc'), position: 'relative' }}>
+            <button aria-label="Notificações" onClick={abrirNotif} style={{ ...iconButton('#ffffff'), position: 'relative' }}>
               <Bell size={19} color="#64748b" />
               {naoLidas > 0 && <div style={{ position: 'absolute', top: 9, right: 9, width: 9, height: 9, background: theme.color.danger, borderRadius: '50%', border: '2px solid #fff' }} />}
             </button>
           </div>
-        </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 13, color: '#334155' }}>
-          <MapPin size={16} color={theme.color.primary} />
-          <span style={{ fontSize: 13, fontWeight: 800 }}>Praia Grande</span>
-          <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 700 }}>lojas próximas a você</span>
-        </div>
-
-        <div style={{ position: 'relative' }}>
-          <Search size={18} color="#94a3b8" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }} />
-          <input
-            type="text"
-            value={busca}
-            onChange={e => setBusca(e.target.value)}
-            placeholder="Buscar comida, bebida ou loja"
-            aria-label="Buscar ambulantes, restaurantes e produtos"
-            style={{ width: '100%', height: 50, background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 18, padding: '0 44px 0 48px', fontSize: 14, fontWeight: 700, outline: 'none', boxSizing: 'border-box' }}
-          />
-          {busca && (
-            <button aria-label="Limpar busca" onClick={() => setBusca('')} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', ...iconButton('#fff'), width: 32, height: 32, borderRadius: 11 }}>
-              <X size={15} color="#0ea5e9" />
-            </button>
-          )}
+          <h1 style={{ margin: 0, fontSize: 27.5, fontWeight: 950, letterSpacing: 0, lineHeight: 1.08, color: '#0f172a', maxWidth: '76%' }}>
+            O que você quer
+            <br />
+            <span
+              style={{
+                background: 'linear-gradient(100deg, #0284c7, #0ea5e9 45%, #16a34a)',
+                WebkitBackgroundClip: 'text',
+                backgroundClip: 'text',
+                color: 'transparent',
+              }}
+            >
+              agora?
+            </span>
+          </h1>
+          <p style={{ margin: '9px 0 0', maxWidth: '68%', fontSize: 13.5, fontWeight: 700, color: '#64748b', lineHeight: 1.4 }}>
+            Comida, bebida e eventos perto da praia.
+          </p>
         </div>
       </header>
+
+      <div style={{ padding: '4px 18px 0', display: 'grid', gap: 12 }}>
+        <CartaoLocal cidade="Praia Grande" descricao="Restaurantes, ambulantes e eventos próximos" />
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+            <Search size={18} color="#94a3b8" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }} />
+            <input
+              type="text"
+              value={busca}
+              onChange={e => setBusca(e.target.value)}
+              placeholder="Buscar comida ou vendedor"
+              aria-label="Buscar ambulantes, restaurantes e produtos"
+              style={{ width: '100%', height: 52, background: '#ffffff', border: '1px solid #eef2f7', borderRadius: 18, padding: '0 44px 0 48px', fontSize: 14, fontWeight: 700, outline: 'none', boxSizing: 'border-box', boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 10px 26px -16px rgba(15,23,42,0.2)' }}
+            />
+            {busca && (
+              <button aria-label="Limpar busca" onClick={() => setBusca('')} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', ...iconButton('#f8fafc'), width: 32, height: 32, borderRadius: 11 }}>
+                <X size={15} color="#0ea5e9" />
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            aria-label="Abrir categorias"
+            onClick={() => setCategoriasOpen(true)}
+            style={{ ...CARTAO, flexShrink: 0, width: 52, height: 52, display: 'grid', placeItems: 'center', cursor: 'pointer' }}
+          >
+            <SlidersHorizontal size={20} color="#16a34a" strokeWidth={2.4} />
+          </button>
+        </div>
+
+        <BannerEventos onClick={() => navigate('/eventos')} />
+      </div>
 
       <main style={{ padding: '16px 18px 0' }}>
         {/* Vitrine de promoção: só aparece quando existe OFERTA REAL publicada */}
@@ -479,7 +624,7 @@ export default function HomePage() {
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 999, padding: '6px 10px', background: 'rgba(255,255,255,0.18)', fontSize: 11, fontWeight: 950, marginBottom: 12 }}>
                 <Percent size={13} /> Promoções da praia
               </div>
-              <h1 style={{ margin: 0, fontSize: 25, fontWeight: 950, lineHeight: 1.05, letterSpacing: -0.7 }}>{produtoPromocao.promocao?.titulo || produtoPromocao.nome}</h1>
+              <h1 style={{ margin: 0, fontSize: 25, fontWeight: 950, lineHeight: 1.05, letterSpacing: 0 }}>{produtoPromocao.promocao?.titulo || produtoPromocao.nome}</h1>
               <p style={{ margin: '8px 0 16px', fontSize: 13, fontWeight: 700, opacity: 0.9 }}>
                 {produtoPromocao.nome} em {produtoPromocao.vendedorNome}
                 {produtoPromocao.precoOriginal ? ` de R$ ${produtoPromocao.precoOriginal.toFixed(2).replace('.', ',')}` : ''} por R$ {produtoPromocao.preco.toFixed(2).replace('.', ',')}.
@@ -488,18 +633,92 @@ export default function HomePage() {
                 Ver oferta
               </button>
             </div>
-            <div style={{ position: 'absolute', right: 12, bottom: 12, width: 110, height: 110, borderRadius: 35, background: 'rgba(255,255,255,0.18)', display: 'grid', placeItems: 'center', fontSize: 50 }}>
-              {produtoPromocao.emoji || '🏖️'}
+            <div style={{ position: 'absolute', right: 12, bottom: 12, width: 110, height: 110, borderRadius: 28, overflow: 'hidden', background: 'rgba(255,255,255,0.18)', display: 'grid', placeItems: 'center' }}>
+              {produtoPromocao.foto
+                ? <img src={produtoPromocao.foto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : <Percent size={44} color="rgba(255,255,255,0.92)" />}
             </div>
           </section>
         )}
 
-        <section className="prg-stagger" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
-          <QuickAction title="Restaurantes perto" subtitle={restaurantesLabel} color="#f97316" icon={<Utensils size={21} />} onClick={() => navigate('/pedir?tipo=restaurante')} />
-          <QuickAction title="Ambulantes perto" subtitle={ambulantesLabel} color="#16a34a" icon={<ShoppingBag size={21} />} onClick={() => navigate('/pedir?tipo=ambulante')} />
-          <QuickAction title="Cupons" subtitle={`${cupons.length} ativo${cupons.length === 1 ? '' : 's'}`} color="#7c3aed" icon={<Ticket size={21} />} onClick={() => document.getElementById('cupons')?.scrollIntoView({ behavior: 'smooth', block: 'center' })} />
-          <QuickAction title="Lojas perto de você" subtitle={lojasLabel} color="#0284c7" icon={<Store size={21} />} onClick={() => navigate('/pedir')} />
+        <section className="prg-stagger" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 24 }}>
+          <QuickAction title="Restaurantes" subtitle="Perto de você" count={restaurantesLabel} color="#f97316" icon={<Utensils size={22} />} onClick={() => navigate('/pedir?tipo=restaurante')} />
+          <QuickAction title="Ambulantes" subtitle="Perto da praia" count={ambulantesLabel} color="#16a34a" icon={<ShoppingBag size={22} />} onClick={() => navigate('/pedir?tipo=ambulante')} />
+          <QuickAction title="Radar ao vivo" subtitle="Ache quem está na praia" count={ambulantesLabel} color="#0284c7" icon={<MapPin size={22} />} onClick={() => navigate('/ambulantes')} />
+          <QuickAction title="Cupons" subtitle="Descontos exclusivos" count={cupons.length > 0 ? `${cupons.length} ativo${cupons.length === 1 ? '' : 's'}` : undefined} color="#7c3aed" icon={<Ticket size={22} />} onClick={() => document.getElementById('cupons')?.scrollIntoView({ behavior: 'smooth', block: 'center' })} />
         </section>
+
+        {/* Evento em destaque — só aparece se existir um marcado no banco.
+            Nada de cartão de exemplo: praia sem evento cadastrado não mostra
+            faixa nenhuma. */}
+        {eventoDestaque && (
+          <button
+            type="button"
+            onClick={() => navigate('/eventos')}
+            aria-label={`Evento em destaque: ${eventoDestaque.titulo}`}
+            style={{
+              position: 'relative',
+              overflow: 'hidden',
+              width: '100%',
+              minHeight: 126,
+              marginBottom: 24,
+              padding: 0,
+              border: 'none',
+              borderRadius: 22,
+              cursor: 'pointer',
+              textAlign: 'left',
+              background: 'linear-gradient(120deg, #1e1b4b 0%, #312e81 45%, #7c3aed 100%)',
+              boxShadow: '0 16px 34px -16px rgba(49,46,129,0.9)',
+            }}
+          >
+            {eventoDestaque.imagem_url && (
+              <img
+                src={eventoDestaque.imagem_url}
+                alt=""
+                aria-hidden
+                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.55 }}
+              />
+            )}
+            <span
+              aria-hidden
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background: 'linear-gradient(100deg, rgba(15,10,45,0.92) 12%, rgba(15,10,45,0.55) 62%, rgba(15,10,45,0.25) 100%)',
+              }}
+            />
+            <span style={{ position: 'relative', display: 'block', padding: '15px 16px 16px' }}>
+              <span
+                style={{
+                  display: 'inline-block',
+                  padding: '3px 9px',
+                  borderRadius: 999,
+                  fontSize: 9.5,
+                  fontWeight: 900,
+                  letterSpacing: 0,
+                  color: '#fff',
+                  background: '#16a34a',
+                }}
+              >
+                EM DESTAQUE
+              </span>
+              <span style={{ display: 'block', marginTop: 9, fontSize: 19, fontWeight: 950, letterSpacing: 0, color: '#fff', lineHeight: 1.15 }}>
+                {eventoDestaque.titulo}
+              </span>
+              {eventoDestaque.categoria && (
+                <span style={{ display: 'block', marginTop: 4, fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.82)' }}>
+                  {eventoDestaque.categoria}
+                </span>
+              )}
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.92)' }}>
+                <CalendarDays size={13} strokeWidth={2.6} />
+                {[fmtDataCurta(eventoDestaque.data), eventoDestaque.hora?.slice(0, 5), eventoDestaque.local_nome]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </span>
+            </span>
+          </button>
+        )}
 
         <section style={{ marginBottom: 24 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 12 }}>
@@ -607,7 +826,7 @@ export default function HomePage() {
         </section>
 
         <section style={{ marginBottom: 26 }}>
-          <SectionHeader title={soFavoritos ? 'Seus favoritos' : catSel || busca ? 'Resultado da busca' : 'Lojas perto de você'} action="Ver todas" onAction={() => navigate('/pedir')} />
+          <SectionHeader title={soFavoritos ? 'Seus favoritos' : catSel || busca ? 'Resultado da busca' : 'Perto de você'} action="Explorar" onAction={() => navigate('/pedir')} />
           {loading ? (
             <div style={{ display: 'grid', gap: 12 }}>
               {[0, 1].map(i => <div key={i} className="shimmer" style={{ height: 124, borderRadius: 24 }} />)}
@@ -615,7 +834,7 @@ export default function HomePage() {
           ) : vendedores.length === 0 ? (
             <div style={{ borderRadius: 24, border: '1px solid #e2e8f0', background: '#f8fafc', padding: 24, textAlign: 'center', color: '#64748b' }}>
               <Search size={30} color="#cbd5e1" style={{ margin: '0 auto 10px' }} />
-              <div style={{ fontSize: 15, fontWeight: 900, color: '#0f172a' }}>Nenhuma loja real disponível ainda</div>
+              <div style={{ fontSize: 15, fontWeight: 900, color: '#0f172a' }}>Nenhum vendedor disponível ainda</div>
               <div style={{ fontSize: 13, fontWeight: 700, marginTop: 5 }}>Quando um restaurante ou ambulante publicar cardápio, ele aparece aqui.</div>
             </div>
           ) : (

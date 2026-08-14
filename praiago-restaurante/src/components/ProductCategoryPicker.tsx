@@ -18,7 +18,7 @@ export function CategoryPhoto({ category, size = 54 }: { category: ProductCatego
         height: size,
         flexShrink: 0,
         display: 'block',
-        backgroundImage: 'url(/images/categorias-comida-v1.png)',
+        backgroundImage: 'url(/images/categorias-comida-v1.webp)',
         backgroundRepeat: 'no-repeat',
         backgroundSize: `${size * 5}px ${size * 6}px`,
         backgroundPosition: `${-column * size}px ${-row * size}px`,
