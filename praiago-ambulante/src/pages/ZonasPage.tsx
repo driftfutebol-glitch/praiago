@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { Circle, MapContainer, Marker, Polygon, Popup, TileLayer, useMap } from 'react-leaflet'
-import { Activity, Clock3, LocateFixed, MapPin, ShoppingBag, TreePalm, TrendingUp, Users } from 'lucide-react'
+import { Activity, Clock3, MapPin, ShoppingBag, ShoppingCart, TreePalm, TrendingUp, UserRound, Users } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -38,8 +38,8 @@ function makeIcon(markup: string, className: string, size: number) {
 }
 
 const palmIcon = makeIcon(renderToStaticMarkup(<TreePalm size={21} strokeWidth={2.2} />), 'map-palm-marker', 34)
-const sellerIcon = makeIcon(renderToStaticMarkup(<LocateFixed size={21} strokeWidth={2.6} />), 'map-user-marker', 42)
-const customerIcon = makeIcon(renderToStaticMarkup(<ShoppingBag size={20} strokeWidth={2.6} />), 'map-customer-marker', 42)
+const sellerIcon = makeIcon(renderToStaticMarkup(<ShoppingCart size={21} strokeWidth={2.6} />), 'map-user-marker', 42)
+const customerIcon = makeIcon(renderToStaticMarkup(<UserRound size={20} strokeWidth={2.6} />), 'map-customer-marker', 42)
 const VALID_HEAT_LEVELS = new Set<ZoneNivel>(['frio', 'morno', 'quente', 'explosivo'])
 
 function parseHeatPayload(payload: unknown, beachIds: Set<string>): ZoneHeat[] {

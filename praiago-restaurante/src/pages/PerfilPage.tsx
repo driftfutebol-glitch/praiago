@@ -5,6 +5,8 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { getSessao, logout } from '../lib/auth'
 import SuportePanel from '../components/SuportePanel'
+import SellerPhotoManager from '../components/SellerPhotoManager'
+import { sellerPhotoUrl } from '../lib/sellerPhotos'
 
 type PerfilInfo = {
   nome: string
@@ -12,6 +14,8 @@ type PerfilInfo = {
   totalAvaliacoes: number
   telefone: string | null
   endereco: string | null
+  fotoPerfilPath: string | null
+  fotoCapaPath: string | null
 }
 
 type SolicitacaoLocalizacao = {
@@ -128,6 +132,8 @@ export default function PerfilPage() {
     totalAvaliacoes: 0,
     telefone: null,
     endereco: null,
+    fotoPerfilPath: null,
+    fotoCapaPath: null,
   })
   const [pedidosMes, setPedidosMes] = useState(0)
   const [faturamentoMes, setFaturamentoMes] = useState(0)
@@ -173,7 +179,7 @@ export default function PerfilPage() {
 
     supabase
       .from('profiles')
-      .select('nome, razao_social, avaliacao_media, total_avaliacoes, telefone_comercial, endereco, horario_abre, horario_fecha, lat, lng')
+      .select('nome, razao_social, avaliacao_media, total_avaliacoes, telefone_comercial, endereco, horario_abre, horario_fecha, lat, lng, foto_perfil_path, foto_capa_path')
       .eq('id', sessao.id)
       .maybeSingle()
       .then(({ data }) => {
@@ -184,6 +190,8 @@ export default function PerfilPage() {
           totalAvaliacoes: Number(data.total_avaliacoes) || 0,
           telefone: data.telefone_comercial,
           endereco: data.endereco,
+          fotoPerfilPath: data.foto_perfil_path,
+          fotoCapaPath: data.foto_capa_path,
         })
         setHoraAbre(data.horario_abre || '')
         setHoraFecha(data.horario_fecha || '')
@@ -447,6 +455,8 @@ export default function PerfilPage() {
   const aguardandoAnalise = solicitacaoLocal?.status === 'pendente'
   const localMsgSucesso = /(enviada|corrigida|selecionada|encontrada)/i.test(localMsg)
   const localMsgProcessando = localMsg.endsWith('...')
+  const fotoPerfil = sellerPhotoUrl(perfil.fotoPerfilPath)
+  const fotoCapa = sellerPhotoUrl(perfil.fotoCapaPath)
 
   return (
     <div style={{ padding: '32px 40px 48px', minHeight: '100vh' }}>
@@ -456,12 +466,16 @@ export default function PerfilPage() {
       </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-panel" style={{
-        background: 'linear-gradient(135deg, rgba(249,115,22,0.16), rgba(255,255,255,0.92))',
+        background: fotoCapa ? '#fff' : 'linear-gradient(135deg, rgba(249,115,22,0.16), rgba(255,255,255,0.92))',
         border: '1px solid rgba(249,115,22,0.25)',
         borderRadius: 24,
         padding: 32,
         marginBottom: 32,
+        position: 'relative',
+        overflow: 'hidden',
       }}>
+        {fotoCapa && <img src={fotoCapa} alt="" aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.16 }} />}
+        <div style={{ position: 'relative' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
           <div style={{
             width: 88,
@@ -473,8 +487,11 @@ export default function PerfilPage() {
             justifyContent: 'center',
             border: '1px solid rgba(249,115,22,0.28)',
             boxShadow: '0 10px 24px rgba(249,115,22,0.16)',
+            overflow: 'hidden',
           }}>
-            <Store size={38} color="#f97316" />
+            {fotoPerfil
+              ? <img src={fotoPerfil} alt={perfil.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : <Store size={38} color="#f97316" />}
           </div>
           <div>
             <div style={{ fontSize: 28, fontWeight: 900, color: '#0f172a' }}>{perfil.nome}</div>
@@ -492,7 +509,18 @@ export default function PerfilPage() {
             </div>
           </div>
         </div>
+        </div>
       </motion.div>
+
+      {sessao?.id && (
+        <SellerPhotoManager
+          userId={sessao.id}
+          profilePath={perfil.fotoPerfilPath}
+          coverPath={perfil.fotoCapaPath}
+          accent="#ea580c"
+          onChanged={({ profilePath, coverPath }) => setPerfil(current => ({ ...current, fotoPerfilPath: profilePath, fotoCapaPath: coverPath }))}
+        />
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24, marginBottom: 32 }}>
         <InfoCard title="Desempenho do mes" icon={<TrendingUp size={16} color="#16a34a" />}>

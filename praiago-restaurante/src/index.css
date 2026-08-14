@@ -122,6 +122,118 @@ input:focus, select:focus, textarea:focus {
   animation: pulse-neon 2s infinite ease-in-out;
 }
 
+.restaurant-field-label {
+  color: #334155;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.restaurant-field-help {
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.category-picker-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.category-text-command {
+  border: 0;
+  background: transparent;
+  color: #ea580c;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.category-search {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 10px;
+  padding: 0 12px;
+  border: 1px solid #dbe3eb;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.category-search input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #0f172a;
+}
+
+.category-search button {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.category-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.category-picker-grid.is-expanded {
+  max-height: min(42vh, 410px);
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.category-option {
+  min-width: 0;
+  min-height: 88px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px 4px;
+  overflow: hidden;
+  border: 1px solid #dbe3eb;
+  border-radius: 8px;
+  background: #fff;
+  color: #475569;
+  cursor: pointer;
+}
+
+.category-option span:last-child {
+  width: 100%;
+  overflow: hidden;
+  color: inherit;
+  font-size: 10px;
+  line-height: 1.15;
+  font-weight: 800;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.category-option.is-active {
+  border-color: var(--category-color);
+  color: var(--category-color);
+  background: color-mix(in srgb, var(--category-color) 7%, #fff);
+  box-shadow: inset 0 0 0 1px var(--category-color);
+}
+
 @keyframes popIn {
   0% { opacity: 0; transform: scale(0.9); }
   70% { transform: scale(1.03); }

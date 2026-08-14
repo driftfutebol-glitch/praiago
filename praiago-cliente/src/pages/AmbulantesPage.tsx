@@ -6,15 +6,17 @@
 // ==========================================================
 
 import { useState, useMemo, useEffect, useRef } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { useNavigate } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet'
 import L from 'leaflet'
-import { MapPin, List, Map as MapIcon, Navigation, ChevronRight, Wifi, Eye, Clock, RefreshCw } from 'lucide-react'
+import { MapPin, List, Map as MapIcon, Navigation, ChevronRight, ChevronDown, Wifi, Eye, Clock, RefreshCw, ShoppingCart, LocateFixed, UserRound } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGPS } from '../hooks/useGPS'
 import { useNearbyAmbulantes, type AmbulanteLive } from '../hooks/useNearbyAmbulantes'
 import { useCatalogo } from '../store/useCatalogo'
 import { getZone, BEACH_ZONES } from '../lib/praiagoZones'
+import CamadaPraia from '../components/CamadaPraia'
 import { alertDialog } from '../lib/dialog'
 
 import 'leaflet/dist/leaflet.css'
@@ -30,40 +32,71 @@ L.Icon.Default.mergeOptions({
 
 // ── Custom Marker Icons ──────────────────────────────────────
 
+// Os marcadores antigos eram bolas com borda preta (#0f172a) e brilho neon —
+// sobra do tema escuro. No mapa claro ficavam pesados. Agora seguem o visual
+// novo: pessoa azul com halo para o cliente e carrinho verde para os
+// ambulantes.
+
+const customerMarkup = renderToStaticMarkup(<UserRound size={22} strokeWidth={2.6} />)
+const cartMarkup = renderToStaticMarkup(<ShoppingCart size={20} strokeWidth={2.5} />)
+
 function clienteIcon() {
   return L.divIcon({
     className: '',
-    iconSize: [40, 40],
-    iconAnchor: [20, 20],
-    html: `<div style="
-      width:40px; height:40px; border-radius:50%;
-      background: linear-gradient(135deg, #0ea5e9, #06b6d4);
-      border: 2px solid #0f172a; box-shadow: 0 0 15px rgba(14,165,233,0.6);
-      display:flex; align-items:center; justify-content:center;
-      font-size:18px; animation: clientePulse 2s ease-in-out infinite;
-    ">📍</div>`,
+    // Alto o bastante pro halo caber sem ser cortado pelo Leaflet.
+    iconSize: [86, 86],
+    iconAnchor: [43, 62],
+    html: `<div style="position:relative;width:86px;height:86px;">
+      <div style="
+        position:absolute; left:50%; top:50%; width:76px; height:76px;
+        margin:-38px 0 0 -38px; border-radius:50%;
+        background: rgba(56,189,248,0.22); border:1px solid rgba(56,189,248,0.4);
+        animation: clientePulse 2.4s ease-in-out infinite;
+      "></div>
+      <div style="
+        position:absolute; left:50%; top:50%; margin:-21px 0 0 -21px;
+        width:42px; height:42px; border-radius:50%;
+        background: linear-gradient(140deg,#38bdf8,#0284c7);
+        box-shadow: 0 6px 14px rgba(2,132,199,0.5);
+        border: 3px solid #ffffff; color:#ffffff;
+        display:flex; align-items:center; justify-content:center;
+      ">
+        ${customerMarkup}
+      </div>
+    </div>`,
   })
 }
 
-function ambulanteIcon(emoji: string, aberto: boolean) {
-  const bg = aberto
-    ? 'linear-gradient(135deg, #22c55e, #16a34a)'
-    : 'linear-gradient(135deg, #334155, #475569)'
-  const shadow = aberto
-    ? '0 0 15px rgba(34,197,94,0.6)'
-    : '0 0 8px rgba(0,0,0,0.5)'
+function ambulanteIcon(_emoji: string, aberto: boolean) {
+  const cor = aberto ? '#16a34a' : '#94a3b8'
+  const corClara = aberto ? '#22c55e' : '#cbd5e1'
   return L.divIcon({
     className: '',
-    iconSize: [44, 44],
-    iconAnchor: [22, 22],
-    html: `<div style="
-      width:44px; height:44px; border-radius:50%;
-      background: ${bg};
-      border: 2px solid #0f172a;
-      box-shadow: ${shadow};
-      display:flex; align-items:center; justify-content:center;
-      font-size:20px; transition: transform 0.3s;
-    ">${emoji}</div>`,
+    iconSize: [46, 58],
+    iconAnchor: [23, 54],
+    html: `<div style="position:relative;width:46px;height:58px;">
+      <!-- rabinho do alfinete -->
+      <div style="
+        position:absolute; left:50%; bottom:6px; margin-left:-6px;
+        width:0; height:0; border-left:6px solid transparent;
+        border-right:6px solid transparent; border-top:11px solid #ffffff;
+        filter: drop-shadow(0 3px 3px rgba(15,23,42,0.28));
+      "></div>
+      <div style="
+        position:absolute; left:50%; top:0; margin-left:-21px;
+        width:42px; height:42px; border-radius:50%;
+        background:${cor}; border:3px solid #ffffff;
+        box-shadow: 0 6px 16px rgba(15,23,42,0.3);
+        display:flex; align-items:center; justify-content:center;
+      ">
+        ${cartMarkup}
+      </div>
+      <!-- bolinha de "online" -->
+      <div style="
+        position:absolute; right:1px; top:1px; width:12px; height:12px;
+        border-radius:50%; background:${corClara}; border:2.5px solid #ffffff;
+      "></div>
+    </div>`,
   })
 }
 
@@ -90,17 +123,64 @@ function RecenterMap({ pos }: { pos: [number, number] }) {
     <motion.button
       whileTap={{ scale: 0.9 }}
       onClick={handleRecenter}
+      aria-label="Centralizar no meu local"
       style={{
-        position: 'absolute', bottom: 20, right: 16, zIndex: 1000,
-        width: 48, height: 48, borderRadius: '50%',
-        background: 'linear-gradient(135deg, #0ea5e9, #22c55e)',
-        border: 'none', cursor: 'pointer',
+        // Botão branco com a mira, como no visual novo — antes era um círculo
+        // com gradiente da marca, que competia com o botão do chat logo abaixo.
+        // Sobe pra 76px porque o chat flutuante ocupa o canto.
+        position: 'absolute', bottom: 76, right: 14, zIndex: 1000,
+        width: 44, height: 44, borderRadius: '50%',
+        background: '#ffffff', border: '1px solid #e8eef5', cursor: 'pointer',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        boxShadow: '0 4px 16px rgba(14,165,233,0.4)',
+        boxShadow: '0 2px 4px rgba(15,23,42,0.08), 0 10px 22px -10px rgba(15,23,42,0.4)',
       }}
     >
-      <Navigation size={22} color="#fff" />
+      <LocateFixed size={21} color="#0284c7" strokeWidth={2.4} />
     </motion.button>
+  )
+}
+
+/** Barra de escala do canto inferior esquerdo — recalcula ao dar zoom. */
+function EscalaMapa() {
+  const map = useMap()
+  const [escala, setEscala] = useState<{ px: number; texto: string }>({ px: 70, texto: '' })
+
+  useEffect(() => {
+    const medir = () => {
+      // Quantos metros cabem em 80px na latitude atual
+      const centro = map.getCenter()
+      const pontoA = map.containerPointToLatLng([0, 0])
+      const pontoB = map.containerPointToLatLng([80, 0])
+      const metros = pontoA.distanceTo(pontoB)
+      // Arredonda pra um número "redondo" (1/2/5 × 10^n), como todo mapa faz
+      const potencia = Math.pow(10, Math.floor(Math.log10(metros)))
+      const bonito = [1, 2, 5, 10].find(m => m * potencia >= metros) ?? 10
+      const alvo = bonito * potencia
+      const px = Math.round((alvo / metros) * 80)
+      setEscala({
+        px,
+        texto: alvo >= 1000 ? `${alvo / 1000} km` : `${alvo} m`,
+      })
+      void centro
+    }
+    medir()
+    map.on('zoomend moveend', medir)
+    return () => { map.off('zoomend moveend', medir) }
+  }, [map])
+
+  if (!escala.texto) return null
+
+  return (
+    <div style={{ position: 'absolute', bottom: 14, left: 14, zIndex: 1000, pointerEvents: 'none' }}>
+      <div style={{ fontSize: 11, fontWeight: 900, color: '#475569', textShadow: '0 1px 2px rgba(255,255,255,0.9)' }}>
+        {escala.texto}
+      </div>
+      <div style={{ width: escala.px, height: 3, marginTop: 3, position: 'relative' }}>
+        <div style={{ position: 'absolute', inset: 0, background: '#475569', borderRadius: 1 }} />
+        <div style={{ position: 'absolute', left: 0, bottom: 0, width: 2, height: 8, background: '#475569' }} />
+        <div style={{ position: 'absolute', right: 0, bottom: 0, width: 2, height: 8, background: '#475569' }} />
+      </div>
+    </div>
   )
 }
 
@@ -139,7 +219,11 @@ export default function AmbulantesPage() {
   }
 
   return (
-    <div style={{ minHeight: '100%', background: '#ffffff', color: '#0f172a', display: 'flex', flexDirection: 'column' }}>
+    // Esta tela cabe SEMPRE numa tela só, sem rolagem: cabeçalho, aviso de GPS
+    // e cartão do mais próximo têm altura própria, e o mapa engole a sobra.
+    // Antes o mapa tinha altura mínima fixa, a soma passava da tela e o cartão
+    // só aparecia se a pessoa rolasse.
+    <div style={{ height: '100%', overflow: 'hidden', background: '#ffffff', color: '#0f172a', display: 'flex', flexDirection: 'column' }}>
       {/* ── Header ──────────────────────────────────────── */}
       <div className="glass-panel" style={{
         padding: '16px 20px 12px',
@@ -242,53 +326,75 @@ export default function AmbulantesPage() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             style={{
-              margin: '12px 16px 0', borderRadius: 22, padding: 16,
-              background: 'linear-gradient(135deg, rgba(34,197,94,0.18), rgba(14,165,233,0.12))',
-              border: '1px solid rgba(34,197,94,0.35)', boxShadow: '0 8px 30px rgba(34,197,94,0.12)',
+              // Cartão claro, como no visual novo. Antes o fundo era um
+              // gradiente verde/azul forte e o rótulo verde-claro (#4ade80)
+              // ficava quase ilegível em cima dele.
+              margin: '12px 16px 0', borderRadius: 20, padding: 14,
+              background: 'linear-gradient(150deg, #f0fdf4 0%, #ffffff 55%)',
+              border: '1px solid #bbf7d0',
+              boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 12px 28px -16px rgba(22,163,74,0.5)',
               position: 'relative', overflow: 'hidden',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-              <motion.span animate={{ scale: [1, 1.25, 1] }} transition={{ repeat: Infinity, duration: 1.6 }} style={{ fontSize: 14 }}>⚡</motion.span>
-              <span style={{ fontSize: 11, fontWeight: 900, letterSpacing: 1, color: '#4ade80', textTransform: 'uppercase' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 11 }}>
+              <motion.span animate={{ scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 1.6 }} style={{ fontSize: 13, lineHeight: 1 }}>⚡</motion.span>
+              <span style={{ fontSize: 10, fontWeight: 900, letterSpacing: 0.9, color: '#15803d', textTransform: 'uppercase' }}>
                 Ambulante mais próximo de você
               </span>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              <div style={{ width: 60, height: 60, borderRadius: 20, background: 'rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, border: '1px solid rgba(0,0,0,0.08)', flexShrink: 0 }}>
-                {nearest.emoji}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+              <div style={{ width: 66, height: 66, borderRadius: 18, background: 'linear-gradient(150deg, #e0f2fe, #dcfce7)', display: 'grid', placeItems: 'center', overflow: 'hidden', fontSize: 33, border: '1px solid #d1fae5', flexShrink: 0 }}>
+                {nearest.fotoPerfil
+                  ? <img src={nearest.fotoPerfil} alt={nearest.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : nearest.emoji}
               </div>
+
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 18, fontWeight: 900, color: '#0f172a' }}>{nearest.nome}</div>
-                <div style={{ fontSize: 12.5, color: '#64748b', fontWeight: 600 }}>
-                  {nearest.categoria}{nearest.zona ? ` · ${nearest.zona}` : ''}
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                  <div style={{ flex: 1, minWidth: 0, fontSize: 18, fontWeight: 950, color: '#0f172a', letterSpacing: -0.4, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {nearest.nome}
+                  </div>
+                  <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, fontWeight: 900, color: nearest.aberto ? '#15803d' : '#64748b', background: nearest.aberto ? '#dcfce7' : '#f1f5f9', padding: '4px 9px', borderRadius: 999 }}>
+                    <span style={{ width: 5, height: 5, borderRadius: 999, background: nearest.aberto ? '#22c55e' : '#94a3b8' }} />
+                    {nearest.aberto ? 'Aberto' : 'Fechado'}
+                  </span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 16, fontWeight: 900, color: '#38bdf8' }}>{formatDist(nearest.distancia)}</span>
-                  <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>· ~{walkMin} min a pé</span>
-                  <span style={{ fontSize: 10, fontWeight: 800, color: nearest.aberto ? '#4ade80' : '#94a3b8', background: nearest.aberto ? 'rgba(34,197,94,0.15)' : 'rgba(100,116,139,0.15)', padding: '2px 8px', borderRadius: 8 }}>
-                    {nearest.aberto ? 'ABERTO' : 'FECHADO'}
+
+                <div style={{ fontSize: 12.5, color: '#64748b', fontWeight: 700, marginTop: 1 }}>
+                  {['Ambulante', nearest.categoria, nearest.zona].filter(Boolean).join(' · ')}
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 7, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 17, fontWeight: 950, color: '#0284c7', letterSpacing: -0.3 }}>{formatDist(nearest.distancia)}</span>
+                  <span style={{ width: 1, height: 13, background: '#e2e8f0' }} />
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#64748b', fontWeight: 700 }}>
+                    🚶 ~{walkMin} min a pé
+                  </span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: '#16a34a', fontWeight: 800 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: 999, background: '#22c55e' }} />
+                    Ao vivo
                   </span>
                 </div>
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
-              <motion.button whileTap={{ scale: 0.97 }} onClick={() => setViewMode('map')} style={{ flex: 1, padding: '12px', borderRadius: 14, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.05)', color: '#0f172a', fontWeight: 800, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                <MapPin size={15} /> No mapa
+            <div style={{ display: 'flex', gap: 9, marginTop: 13 }}>
+              <motion.button whileTap={{ scale: 0.97 }} onClick={() => setViewMode('map')} style={{ flex: 1, padding: '12px 10px', borderRadius: 14, border: '1px solid #e2e8f0', background: '#ffffff', color: '#0f172a', fontWeight: 800, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                <MapPin size={15} strokeWidth={2.4} /> No mapa
               </motion.button>
-              <motion.button whileTap={{ scale: 0.97 }} onClick={() => handlePedir(nearest)} disabled={!nearest.aberto} style={{ flex: 2, padding: '12px', borderRadius: 14, border: 'none', background: nearest.aberto ? 'linear-gradient(135deg,#0ea5e9,#22c55e)' : '#475569', color: '#fff', fontWeight: 900, fontSize: 14, cursor: nearest.aberto ? 'pointer' : 'not-allowed', boxShadow: nearest.aberto ? '0 6px 20px rgba(34,197,94,0.3)' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                🛒 {nearest.aberto ? 'Pedir agora' : 'Fechado'}
+              <motion.button whileTap={{ scale: 0.97 }} onClick={() => handlePedir(nearest)} disabled={!nearest.aberto} style={{ flex: 1.6, padding: '12px 10px', borderRadius: 14, border: 'none', background: nearest.aberto ? 'linear-gradient(100deg,#0284c7,#16a34a)' : '#94a3b8', color: '#fff', fontWeight: 900, fontSize: 14, cursor: nearest.aberto ? 'pointer' : 'not-allowed', boxShadow: nearest.aberto ? '0 10px 22px -10px rgba(22,163,74,0.9)' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+                <ShoppingCart size={16} strokeWidth={2.5} /> {nearest.aberto ? 'Pedir agora' : 'Fechado'}
               </motion.button>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* ── Conteúdo ── altura explícita: com flex:1 puro o pai sem altura
-          definida colapsava pra 0px e o mapa ficava invisível */}
-      <div style={{ flex: 1, position: 'relative', minHeight: 'max(420px, calc(100dvh - 330px))' }}>
+      {/* ── Conteúdo ── o mapa ocupa exatamente o que sobrou da tela.
+          `minHeight: 0` é obrigatório: sem ele o item flex se recusa a encolher
+          abaixo do conteúdo e volta a empurrar o cartão pra fora da dobra. */}
+      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
         <AnimatePresence mode="wait">
           {viewMode === 'map' ? (
             <motion.div key="map" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} style={{ height: '100%', width: '100%', position: 'absolute', inset: 0 }}>
@@ -297,6 +403,8 @@ export default function AmbulantesPage() {
                 ambulantes={ambulantes}
                 onPedir={handlePedir}
                 onAjustarPos={definirPosicaoManual}
+                totalOnline={total}
+                onTrocarVisao={() => setViewMode('list')}
               />
             </motion.div>
           ) : (
@@ -312,9 +420,17 @@ export default function AmbulantesPage() {
 
       {/* ── Inline styles (keyframes) ───────────────────── */}
       <style>{`
+        /* O halo agora é um círculo de verdade (não box-shadow), então pulsa
+           por escala — mais barato de animar e não estoura o tile ao lado. */
         @keyframes clientePulse {
-          0%, 100% { box-shadow: 0 0 0 4px rgba(14,165,233,0.3), 0 0 20px rgba(14,165,233,0.6); }
-          50% { box-shadow: 0 0 0 12px rgba(14,165,233,0.1), 0 0 30px rgba(14,165,233,0.8); }
+          0%, 100% { transform: scale(1);    opacity: 0.85; }
+          50%      { transform: scale(1.18); opacity: 0.5;  }
+        }
+        /* Aquece os tiles: a faixa de areia do Voyager é bege e com isso puxa
+           pro amarelo do visual novo. Vai leve de propósito — passar disso
+           deixa as ruas creme e o texto do mapa some. */
+        .prg-tiles-praia {
+          filter: saturate(1.18) contrast(1.02) sepia(0.06) hue-rotate(-4deg) brightness(1.02);
         }
         @keyframes spin {
           to { transform: rotate(360deg); }
@@ -333,14 +449,26 @@ function MapView({
   ambulantes,
   onPedir,
   onAjustarPos,
+  totalOnline,
+  onTrocarVisao,
 }: {
   clientePos: [number, number]
   ambulantes: AmbulanteLive[]
   onPedir: (a: AmbulanteLive) => void
   onAjustarPos: (lat: number, lng: number) => void
+  totalOnline: number
+  onTrocarVisao: () => void
 }) {
   return (
-    <div style={{ position: 'relative', height: '100%', width: '100%', background: '#eef2f7' }}>
+    <div style={{
+      position: 'relative', height: '100%',
+      // Cartão arredondado como no visual novo, em vez do mapa sangrando de
+      // ponta a ponta.
+      margin: '0 16px 12px', width: 'calc(100% - 32px)',
+      borderRadius: 20, overflow: 'hidden', background: '#eef2f7',
+      border: '1px solid #e8eef5',
+      boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 14px 30px -18px rgba(15,23,42,0.28)',
+    }}>
       <MapContainer
         center={clientePos}
         zoom={15}
@@ -351,7 +479,16 @@ function MapView({
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
           url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
           subdomains="abcd"
+          // O Voyager já traz areia bege e parque verde (mesmos dados do OSM).
+          // Este filtro só aquece e satura um pouco pra faixa de praia puxar
+          // mais pro amarelo do visual novo, sem trocar de provedor nem
+          // depender de chave de API.
+          className="prg-tiles-praia"
         />
+
+        {/* Areia amarela + coqueiros desenhados sobre os tiles. Vem antes dos
+            marcadores pra ficar por baixo deles. */}
+        <CamadaPraia />
 
         <FlyToCliente pos={clientePos} />
 
@@ -418,7 +555,11 @@ function MapView({
             <Popup>
               <div style={{ minWidth: 180, fontFamily: 'Inter, sans-serif' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                  <span style={{ fontSize: 32 }}>{a.emoji}</span>
+                  <span style={{ width: 42, height: 42, display: 'grid', placeItems: 'center', overflow: 'hidden', borderRadius: 12, background: '#f0fdf4', fontSize: 26 }}>
+                    {a.fotoPerfil
+                      ? <img src={a.fotoPerfil} alt={a.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      : a.emoji}
+                  </span>
                   <div>
                     <div style={{ fontWeight: 900, fontSize: 15, color: '#0f172a' }}>{a.nome}</div>
                     <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>{a.categoria}</div>
@@ -487,7 +628,45 @@ function MapView({
         })}
 
         <RecenterMap pos={clientePos} />
+        <EscalaMapa />
       </MapContainer>
+
+      {/* ── Chrome sobre o mapa ──────────────────────────────
+          zIndex acima de 400 (padrão dos panes do Leaflet), senão os tiles
+          passam por cima. */}
+      <div style={{ position: 'absolute', top: 12, left: 12, right: 12, zIndex: 1000, display: 'flex', justifyContent: 'space-between', gap: 10, pointerEvents: 'none' }}>
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 7,
+          padding: '8px 14px', borderRadius: 999,
+          background: 'rgba(255,255,255,0.96)', border: '1px solid #e8eef5',
+          boxShadow: '0 2px 4px rgba(15,23,42,0.06), 0 8px 20px -10px rgba(15,23,42,0.35)',
+          fontSize: 12.5, fontWeight: 900, color: '#0f172a',
+        }}>
+          <span style={{
+            width: 8, height: 8, borderRadius: 999,
+            background: totalOnline > 0 ? '#22c55e' : '#94a3b8',
+          }} />
+          Ao vivo
+        </span>
+
+        <button
+          type="button"
+          onClick={onTrocarVisao}
+          aria-label="Ver em lista"
+          style={{
+            pointerEvents: 'auto',
+            display: 'inline-flex', alignItems: 'center', gap: 7,
+            padding: '8px 12px 8px 14px', borderRadius: 999, cursor: 'pointer',
+            background: 'rgba(255,255,255,0.96)', border: '1px solid #e8eef5',
+            boxShadow: '0 2px 4px rgba(15,23,42,0.06), 0 8px 20px -10px rgba(15,23,42,0.35)',
+            fontSize: 12.5, fontWeight: 900, color: '#0f172a',
+          }}
+        >
+          <MapIcon size={16} color="#0284c7" strokeWidth={2.4} />
+          Mapa
+          <ChevronDown size={15} color="#64748b" strokeWidth={2.6} />
+        </button>
+      </div>
 
       {/* Mini-lista sobreposta no mapa (3 mais próximos) */}
       {ambulantes.length > 0 && (
@@ -510,7 +689,11 @@ function MapView({
                 cursor: 'pointer',
               }}
             >
-              <div style={{ width: 36, height: 36, borderRadius: 12, background: 'rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>{a.emoji}</div>
+              <div style={{ width: 36, height: 36, overflow: 'hidden', borderRadius: 12, background: 'rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>
+                {a.fotoPerfil
+                  ? <img src={a.fotoPerfil} alt={a.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : a.emoji}
+              </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>{a.nome}</div>
                 <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
@@ -624,17 +807,19 @@ function ListView({
               cursor: 'pointer', boxShadow: '0 4px 15px rgba(0,0,0,0.15)'
             }}
           >
-            {/* Emoji avatar */}
+            {/* Foto pública do vendedor, com fallback do cadastro antigo. */}
             <div style={{
               width: 56, height: 56, borderRadius: 18,
               background: a.aberto
                 ? 'linear-gradient(135deg, rgba(34,197,94,0.15), rgba(14,165,233,0.15))'
                 : 'rgba(71,85,105,0.15)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 28, flexShrink: 0,
+              overflow: 'hidden', fontSize: 28, flexShrink: 0,
               border: `1px solid ${a.aberto ? 'rgba(34,197,94,0.2)' : 'rgba(71,85,105,0.2)'}`,
             }}>
-              {a.emoji}
+              {a.fotoPerfil
+                ? <img src={a.fotoPerfil} alt={a.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : a.emoji}
             </div>
 
             {/* Info */}

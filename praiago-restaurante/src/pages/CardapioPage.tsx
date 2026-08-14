@@ -4,6 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { getSessao } from '../lib/auth'
 import { alertDialog, confirmDialog } from '../lib/dialog'
+import ProductCategoryPicker, { CategoryPhoto } from '../components/ProductCategoryPicker'
+import { getProductCategory } from '../lib/productCategories'
 
 type Produto = {
   id: string
@@ -16,9 +18,6 @@ type Produto = {
   foto: string | null
   emoji: string
 }
-
-const categorias = ['Pratos', 'Frutos do Mar', 'Bebidas', 'Executivo', 'Sobremesas', 'Petiscos', 'Outros']
-const emojis = ['🦐', '🐟', '🦀', '🦑', '🍽️', '🍹', '🥤', '🍰', '🥗', '🍝', '🥩', '🍖', '🍔']
 
 type NovoForm = {
   nome: string
@@ -33,7 +32,7 @@ const NOVO_INICIAL: NovoForm = {
   nome: '',
   preco: '',
   descricao: '',
-  categoria: 'Pratos',
+  categoria: 'Almoço',
   emoji: '🍽️',
   foto: null,
 }
@@ -64,6 +63,7 @@ export default function CardapioPage() {
   const [editando, setEditando] = useState<string | null>(null)
   const [editNome, setEditNome] = useState('')
   const [editPreco, setEditPreco] = useState('')
+  const [editCategoria, setEditCategoria] = useState('')
   const [adicionando, setAdicionando] = useState(false)
   const [loading, setLoading] = useState(true)
   const [verificado, setVerificado] = useState<boolean | null>(null)
@@ -233,13 +233,14 @@ export default function CardapioPage() {
     }
     const newPreco = editPreco.trim() !== '' ? precoNum : p.preco
 
+    const newCategoria = getProductCategory(editCategoria || p.categoria).label
     setProdutos(prev => prev.map(p => p.id === id
-      ? { ...p, nome: newNome, preco: newPreco }
+      ? { ...p, nome: newNome, preco: newPreco, categoria: newCategoria }
       : p
     ))
     setEditando(null)
     
-    await supabase.from('produtos').update({ nome: newNome, preco: newPreco }).eq('id', id)
+    await supabase.from('produtos').update({ nome: newNome, preco: newPreco, categoria: newCategoria }).eq('id', id)
   }
 
   async function adicionarProduto() {
@@ -290,8 +291,10 @@ export default function CardapioPage() {
     }
   }
 
-  const todasCategorias = ['Todos', ...Array.from(new Set(produtos.map(p => p.categoria)))]
-  const filtrados = categoriaFiltro === 'Todos' ? produtos : produtos.filter(p => p.categoria === categoriaFiltro)
+  const todasCategorias = ['Todos', ...Array.from(new Set(produtos.map(p => getProductCategory(p.categoria).label)))]
+  const filtrados = categoriaFiltro === 'Todos'
+    ? produtos
+    : produtos.filter(p => getProductCategory(p.categoria).label === categoriaFiltro)
 
   return (
     <div style={{ padding: '32px 0 48px', minHeight: '100vh', position: 'relative' }}>
@@ -329,8 +332,9 @@ export default function CardapioPage() {
       {/* Tabs / Filters */}
       <div style={{ padding: '0 40px', marginBottom: 32, display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 8 }} className="hide-scrollbar">
         {todasCategorias.map(cat => (
-          <button key={cat} onClick={() => setCategoriaFiltro(cat)} style={{ padding: '8px 20px', borderRadius: 20, fontSize: 14, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.2s', background: categoriaFiltro === cat ? 'rgba(249,115,22,0.15)' : 'rgba(0,0,0,0.05)', color: categoriaFiltro === cat ? '#f97316' : '#94a3b8', border: `1px solid ${categoriaFiltro === cat ? 'rgba(249,115,22,0.3)' : 'transparent'}` }}>
-            {cat}
+          <button key={cat} onClick={() => setCategoriaFiltro(cat)} style={{ minHeight: 54, padding: cat === 'Todos' ? '8px 20px' : '6px 15px 6px 8px', borderRadius: 14, fontSize: 13, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.2s', background: categoriaFiltro === cat ? '#fff7ed' : '#ffffff', color: categoriaFiltro === cat ? '#ea580c' : '#475569', border: `1px solid ${categoriaFiltro === cat ? '#fdba74' : '#e2e8f0'}`, display: 'inline-flex', alignItems: 'center', gap: 8, boxShadow: categoriaFiltro === cat ? '0 7px 18px rgba(234,88,12,0.12)' : 'none' }}>
+            {cat !== 'Todos' && <CategoryPhoto category={getProductCategory(cat)} size={40} />}
+            <span>{cat}</span>
           </button>
         ))}
       </div>
@@ -349,7 +353,9 @@ export default function CardapioPage() {
 
               <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
                 <div style={{ width: 72, height: 72, borderRadius: 16, background: 'rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, position: 'relative', overflow: 'hidden' }}>
-                  {p.foto ? <img src={p.foto} alt={p.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : p.emoji}
+                  {p.foto
+                    ? <img src={p.foto} alt={p.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : <CategoryPhoto category={getProductCategory(p.categoria)} size={72} />}
                   <button
                     type="button"
                     title={p.foto ? 'Trocar foto' : 'Adicionar foto'}
@@ -372,12 +378,12 @@ export default function CardapioPage() {
                 </div>
                 <div style={{ flex: 1, paddingTop: 4 }}>
                   <div style={{ fontSize: 12, color: '#f97316', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
-                    {p.categoria}
+                    {getProductCategory(p.categoria).label}
                   </div>
                   {editando === p.id ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <input autoFocus value={editNome} onChange={e => setEditNome(e.target.value)} style={{ width: '100%', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(249,115,22,0.3)', borderRadius: 8, padding: '4px 8px', color: '#fff', fontSize: 16, fontWeight: 700 }} />
-                      <input value={editPreco} onChange={e => setEditPreco(e.target.value)} type="number" step="0.01" style={{ width: '100%', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(249,115,22,0.3)', borderRadius: 8, padding: '4px 8px', color: '#fff', fontSize: 16, fontWeight: 700 }} />
+                      <input autoFocus value={editNome} onChange={e => setEditNome(e.target.value)} style={{ width: '100%', background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 8, padding: '7px 9px', color: '#0f172a', fontSize: 16, fontWeight: 700, outline: 'none' }} />
+                      <input value={editPreco} onChange={e => setEditPreco(e.target.value)} type="number" step="0.01" style={{ width: '100%', background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 8, padding: '7px 9px', color: '#0f172a', fontSize: 16, fontWeight: 700, outline: 'none' }} />
                     </div>
                   ) : (
                     <>
@@ -392,6 +398,12 @@ export default function CardapioPage() {
                 {p.descricao}
               </p>
 
+              {editando === p.id && (
+                <div style={{ margin: '0 0 18px' }}>
+                  <ProductCategoryPicker value={editCategoria || p.categoria} onChange={category => setEditCategoria(category.label)} />
+                </div>
+              )}
+
               {/* Ações */}
               <div style={{ display: 'flex', gap: 8, borderTop: '1px solid rgba(0,0,0,0.05)', paddingTop: 16 }}>
                 {editando === p.id ? (
@@ -399,13 +411,13 @@ export default function CardapioPage() {
                     <button onClick={() => salvarEdicao(p.id)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: '#10b981', color: '#fff', border: 'none', padding: '8px', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
                       <Check size={16} /> Salvar
                     </button>
-                    <button onClick={() => setEditando(null)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(0,0,0,0.08)', color: '#fff', border: 'none', padding: '8px', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+                    <button onClick={() => setEditando(null)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', padding: '8px', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
                       <X size={16} /> Cancelar
                     </button>
                   </>
                 ) : (
                   <>
-                    <button onClick={() => { setEditando(p.id); setEditNome(p.nome); setEditPreco(p.preco.toString()) }} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(0,0,0,0.05)', color: '#334155', border: 'none', padding: '8px', borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                    <button onClick={() => { setEditando(p.id); setEditNome(p.nome); setEditPreco(p.preco.toString()); setEditCategoria(getProductCategory(p.categoria).label) }} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(0,0,0,0.05)', color: '#334155', border: 'none', padding: '8px', borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
                       <Edit2 size={16} /> Editar
                     </button>
                     <button onClick={() => deletar(p.id)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)', padding: '8px', borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
@@ -434,25 +446,21 @@ export default function CardapioPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div>
                   <label style={{ display: 'block', fontSize: 14, color: '#64748b', fontWeight: 600, marginBottom: 8 }}>Nome do Produto</label>
-                  <input value={novo.nome} onChange={e => setNovo({...novo, nome: e.target.value})} placeholder="Ex: Porção de Isca de Peixe" style={{ width: '100%', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 12, padding: '12px 16px', color: '#fff', fontSize: 16, outline: 'none' }} />
+                  <input value={novo.nome} onChange={e => setNovo({...novo, nome: e.target.value})} placeholder="Ex: Porção de Isca de Peixe" style={{ width: '100%', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 12, padding: '12px 16px', color: '#0f172a', fontSize: 16, outline: 'none' }} />
                 </div>
                 
-                <div style={{ display: 'flex', gap: 16 }}>
-                  <div style={{ flex: 1 }}>
+                <div>
+                  <div>
                     <label style={{ display: 'block', fontSize: 14, color: '#64748b', fontWeight: 600, marginBottom: 8 }}>Preço (R$)</label>
-                    <input value={novo.preco} onChange={e => setNovo({...novo, preco: e.target.value})} type="number" step="0.01" placeholder="0.00" style={{ width: '100%', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 12, padding: '12px 16px', color: '#fff', fontSize: 16, outline: 'none' }} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', fontSize: 14, color: '#64748b', fontWeight: 600, marginBottom: 8 }}>Categoria</label>
-                    <select value={novo.categoria} onChange={e => setNovo({...novo, categoria: e.target.value})} style={{ width: '100%', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 12, padding: '12px 16px', color: '#fff', fontSize: 16, outline: 'none', appearance: 'none' }}>
-                      {categorias.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
+                    <input value={novo.preco} onChange={e => setNovo({...novo, preco: e.target.value})} type="number" step="0.01" placeholder="0.00" style={{ width: '100%', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 12, padding: '12px 16px', color: '#0f172a', fontSize: 16, outline: 'none' }} />
                   </div>
                 </div>
 
+                <ProductCategoryPicker value={novo.categoria} onChange={category => setNovo({ ...novo, categoria: category.label })} />
+
                 <div>
                   <label style={{ display: 'block', fontSize: 14, color: '#64748b', fontWeight: 600, marginBottom: 8 }}>Descrição</label>
-                  <textarea value={novo.descricao} onChange={e => setNovo({...novo, descricao: e.target.value})} placeholder="Ingredientes e detalhes..." rows={3} style={{ width: '100%', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 12, padding: '12px 16px', color: '#fff', fontSize: 16, outline: 'none', resize: 'none' }} />
+                  <textarea value={novo.descricao} onChange={e => setNovo({...novo, descricao: e.target.value})} placeholder="Ingredientes e detalhes..." rows={3} style={{ width: '100%', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 12, padding: '12px 16px', color: '#0f172a', fontSize: 16, outline: 'none', resize: 'none' }} />
                 </div>
 
                 <div>
@@ -495,17 +503,6 @@ export default function CardapioPage() {
                         </button>
                       ) : 'JPG, PNG ou WebP. Maximo 5 MB.'}
                     </div>
-                  </div>
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: 14, color: '#64748b', fontWeight: 600, marginBottom: 8 }}>Ícone / Emoji</label>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    {emojis.map(e => (
-                      <button key={e} onClick={() => setNovo({...novo, emoji: e})} style={{ width: 44, height: 44, borderRadius: 12, fontSize: 24, background: novo.emoji === e ? 'rgba(249,115,22,0.2)' : 'rgba(0,0,0,0.05)', border: `1px solid ${novo.emoji === e ? '#f97316' : 'rgba(0,0,0,0.08)'}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        {e}
-                      </button>
-                    ))}
                   </div>
                 </div>
 

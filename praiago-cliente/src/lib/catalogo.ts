@@ -36,6 +36,7 @@ export type Vendedor = {
   aberto: boolean
   tag?: string
   image: string
+  avatar?: string | null
   pos: [number, number]
   zona: string
   produtos: Produto[]

@@ -20,6 +20,8 @@ export type AmbulanteLive = {
   aberto: boolean
   zona: string
   distancia: number   // metros (calculado pelo hook)
+  fotoPerfil: string | null
+  fotoCapa: string | null
 }
 
 export type AmbulanteGPSPayload = {
@@ -47,6 +49,8 @@ type ProfileAmbulanteRow = {
   zona: string | null
   status?: string | null
   verificado?: boolean | null
+  foto_perfil_path?: string | null
+  foto_capa_path?: string | null
 }
 
 // ── Haversine ────────────────────────────────────────────────
@@ -67,6 +71,11 @@ function haversine(lat1: number, lng1: number, lat2: number, lng2: number): numb
 const STALE_TIMEOUT = 2 * 60 * 1000 // 2 min sem update → remove
 const PRUNE_INTERVAL = 10_000        // checa inativos a cada 10s
 const MAX_RADIUS = 5_000             // raio máximo 5km
+
+function sellerPhoto(path?: string | null) {
+  if (!path) return null
+  return supabase.storage.from('perfis-vendedores').getPublicUrl(path).data.publicUrl
+}
 
 // ── Hook ─────────────────────────────────────────────────────
 
@@ -116,6 +125,8 @@ export function useNearbyAmbulantes(clientePos: [number, number]) {
       aberto: true,
       zona: row.zona ?? 'Praia Grande',
       distancia: 0,
+      fotoPerfil: sellerPhoto(row.foto_perfil_path),
+      fotoCapa: sellerPhoto(row.foto_capa_path),
     })
     recalcAndSort()
   }, [recalcAndSort])
@@ -131,6 +142,7 @@ export function useNearbyAmbulantes(clientePos: [number, number]) {
         return
       }
 
+      const existing = mapRef.current.get(payload.id)
       const entry: AmbulanteLive = {
         id: payload.id,
         nome: payload.nome ?? 'Ambulante',
@@ -143,6 +155,8 @@ export function useNearbyAmbulantes(clientePos: [number, number]) {
         aberto: payload.aberto ?? true,
         zona: payload.zona ?? '',
         distancia: 0,
+        fotoPerfil: existing?.fotoPerfil ?? null,
+        fotoCapa: existing?.fotoCapa ?? null,
       }
 
       mapRef.current.set(payload.id, entry)
@@ -164,7 +178,7 @@ export function useNearbyAmbulantes(clientePos: [number, number]) {
 
     supabase
       .from('vendedores_publicos')
-      .select('id,nome,emoji,categoria,role,online,lat,lng,zona,status,verificado')
+      .select('id,nome,emoji,categoria,role,online,lat,lng,zona,status,verificado,foto_perfil_path,foto_capa_path')
       .eq('role', 'ambulante')
       .eq('verificado', true)
       .eq('online', true)

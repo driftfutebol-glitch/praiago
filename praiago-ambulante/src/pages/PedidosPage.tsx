@@ -8,7 +8,6 @@ import {
   ChevronRight,
   Clock3,
   CreditCard,
-  LocateFixed,
   MapPin,
   Navigation,
   PackageCheck,
@@ -16,6 +15,7 @@ import {
   QrCode,
   RouteOff,
   ShoppingBag,
+  ShoppingCart,
   Timer,
   UserRound,
   X,
@@ -160,7 +160,7 @@ function makeMapIcon(markup: string, className: string) {
 }
 
 const customerIcon = makeMapIcon(renderToStaticMarkup(<UserRound size={21} strokeWidth={2.6} />), 'map-customer-marker')
-const sellerIcon = makeMapIcon(renderToStaticMarkup(<LocateFixed size={21} strokeWidth={2.6} />), 'map-user-marker')
+const sellerIcon = makeMapIcon(renderToStaticMarkup(<ShoppingCart size={21} strokeWidth={2.6} />), 'map-user-marker')
 
 function FitBounds({ from, to }: { from: [number, number]; to: [number, number] }) {
   const map = useMap()

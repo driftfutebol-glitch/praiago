@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { CheckCircle2, Eye, EyeOff, Loader2, LogIn, MapPin, Search } from 'lucide-react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { CheckCircle2, Eye, EyeOff, Loader2, LogIn, MapPin, Search, Store } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { login } from '../lib/auth'
@@ -15,6 +16,13 @@ L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+})
+
+const restaurantLocationIcon = L.divIcon({
+  className: '',
+  iconSize: [46, 46],
+  iconAnchor: [23, 23],
+  html: `<div style="width:46px;height:46px;border-radius:14px;background:linear-gradient(135deg,#f97316,#ea580c);color:#fff;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 8px 20px rgba(234,88,12,0.35)">${renderToStaticMarkup(<Store size={24} strokeWidth={2.6} />)}</div>`,
 })
 
 type EnderecoSugestao = {
@@ -56,6 +64,7 @@ function AddressPreviewMap({ pos, onPick }: { pos: [number, number]; onPick: (po
         <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>' url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" subdomains="abcd" />
         <Marker
           position={pos}
+          icon={restaurantLocationIcon}
           draggable
           eventHandlers={{
             dragend: e => {

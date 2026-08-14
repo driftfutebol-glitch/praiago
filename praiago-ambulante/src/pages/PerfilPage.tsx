@@ -16,8 +16,10 @@ import {
 import { AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import SuportePanel from '../components/SuportePanel'
+import SellerPhotoManager from '../components/SellerPhotoManager'
 import { logout, useSessao } from '../lib/auth'
 import { supabase } from '../lib/supabase'
+import { sellerPhotoUrl } from '../lib/sellerPhotos'
 
 type Profile = {
   nome: string | null
@@ -29,6 +31,8 @@ type Profile = {
   horario_fecha: string | null
   online: boolean | null
   verificado: boolean | null
+  foto_perfil_path: string | null
+  foto_capa_path: string | null
 }
 
 type MonthStats = {
@@ -61,7 +65,7 @@ export default function PerfilPage() {
     const [{ data: profileData }, { data: orders }] = await Promise.all([
       supabase
         .from('profiles')
-        .select('nome,categoria,zona,avaliacao_media,total_avaliacoes,horario_abre,horario_fecha,online,verificado')
+        .select('nome,categoria,zona,avaliacao_media,total_avaliacoes,horario_abre,horario_fecha,online,verificado,foto_perfil_path,foto_capa_path')
         .eq('id', session.id)
         .maybeSingle(),
       supabase
@@ -119,6 +123,8 @@ export default function PerfilPage() {
 
   const rating = Number(profile?.avaliacao_media) || 0
   const reviewCount = Number(profile?.total_avaliacoes) || 0
+  const profilePhoto = sellerPhotoUrl(profile?.foto_perfil_path)
+  const coverPhoto = sellerPhotoUrl(profile?.foto_capa_path)
   const menuItems = [
     { icon: Wallet, title: 'Carteira', detail: 'Conta bancária, saldo e saques', action: () => navigate('/carteira') },
     { icon: TrendingUp, title: 'Vendas', detail: 'Resumo de pedidos entregues', action: () => navigate('/vendas') },
@@ -128,10 +134,14 @@ export default function PerfilPage() {
 
   return (
     <div className="page-shell">
-      <section className="surface" style={{ marginBottom: 12, padding: 16, boxShadow: 'none' }}>
+      <section className="surface" style={{ marginBottom: 12, padding: 16, boxShadow: 'none', position: 'relative', overflow: 'hidden' }}>
+        {coverPhoto && <img src={coverPhoto} alt="" aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.12 }} />}
+        <div style={{ position: 'relative' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
-          <div style={{ width: 54, height: 54, display: 'grid', placeItems: 'center', flex: '0 0 54px', borderRadius: 8, background: '#eaf6fa', color: '#008fc0' }}>
-            <Store size={26} />
+          <div style={{ width: 54, height: 54, display: 'grid', placeItems: 'center', flex: '0 0 54px', overflow: 'hidden', borderRadius: 8, background: '#eaf6fa', color: '#008fc0' }}>
+            {profilePhoto
+              ? <img src={profilePhoto} alt={profile?.nome || 'Ambulante'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : <Store size={26} />}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <h1 style={{ margin: 0, overflow: 'hidden', color: '#132238', fontSize: 20, fontWeight: 900, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile?.nome || session?.nome || 'Ambulante'}</h1>
@@ -155,7 +165,17 @@ export default function PerfilPage() {
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile?.zona || 'Localização ainda não registrada'}</span>
           </div>
         </div>
+        </div>
       </section>
+
+      {session?.id && (
+        <SellerPhotoManager
+          userId={session.id}
+          profilePath={profile?.foto_perfil_path || null}
+          coverPath={profile?.foto_capa_path || null}
+          onChanged={({ profilePath, coverPath }) => setProfile(current => current ? { ...current, foto_perfil_path: profilePath, foto_capa_path: coverPath } : current)}
+        />
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
         <div className="surface" style={{ padding: 14, boxShadow: 'none' }}>

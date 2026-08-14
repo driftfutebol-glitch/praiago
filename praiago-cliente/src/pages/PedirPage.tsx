@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { ArrowLeft, MapPin, X, WifiOff, Star, Check, Zap, Send, Heart, Shield, Navigation, CreditCard, Banknote, QrCode, Trash2, Clock, Search, UtensilsCrossed, Umbrella, Store, TicketPercent, SlidersHorizontal, Sparkles, FileText } from 'lucide-react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { ArrowLeft, MapPin, X, WifiOff, Star, Check, Zap, Send, Heart, Shield, Navigation, CreditCard, Banknote, QrCode, Trash2, Clock, Search, UtensilsCrossed, Umbrella, Store, TicketPercent, SlidersHorizontal, Sparkles, FileText, ShoppingCart, UserRound } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, Polyline, Circle, useMap } from 'react-leaflet'
 import L from 'leaflet'
@@ -31,8 +32,12 @@ L.Icon.Default.mergeOptions({
 function makeIcon(html: string) {
   return L.divIcon({ className: '', html, iconSize: [44, 44], iconAnchor: [22, 22] })
 }
-const vendorIcon = makeIcon(`<div style="width:44px;height:44px;border-radius:15px;background:linear-gradient(135deg,#0ea5e9,#22c55e);display:flex;align-items:center;justify-content:center;border:2px solid #0f172a;box-shadow:0 0 15px rgba(34,197,94,0.6);font-size:22px">🥥</div>`)
-const clienteIcon = makeIcon(`<div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#f43f5e,#fb7185);display:flex;align-items:center;justify-content:center;border:2px solid #0f172a;box-shadow:0 0 15px rgba(244,63,94,0.6);font-size:22px">📍</div>`)
+const cartMarkup = renderToStaticMarkup(<ShoppingCart size={22} strokeWidth={2.6} />)
+const storeMarkup = renderToStaticMarkup(<Store size={22} strokeWidth={2.6} />)
+const customerMarkup = renderToStaticMarkup(<UserRound size={22} strokeWidth={2.6} />)
+const ambulanteIcon = makeIcon(`<div style="width:44px;height:44px;border-radius:15px;background:linear-gradient(135deg,#0ea5e9,#22c55e);color:#fff;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 8px 20px rgba(22,163,74,0.35)">${cartMarkup}</div>`)
+const restauranteIcon = makeIcon(`<div style="width:44px;height:44px;border-radius:15px;background:linear-gradient(135deg,#f97316,#ea580c);color:#fff;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 8px 20px rgba(234,88,12,0.35)">${storeMarkup}</div>`)
+const clienteIcon = makeIcon(`<div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#38bdf8,#0284c7);color:#fff;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 8px 20px rgba(2,132,199,0.35)">${customerMarkup}</div>`)
 
 
 function calcDist(a: [number, number], b: [number, number]): number {
@@ -68,7 +73,9 @@ function ChatModal({ vendedor, onClose }: { vendedor: Vendedor; onClose: () => v
     <div style={{ position: 'fixed', inset: 0, zIndex: 11000, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-end' }}>
       <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }} style={{ width: '100%', background: '#ffffff', borderTopLeftRadius: 32, borderTopRightRadius: 32, height: '75vh', display: 'flex', flexDirection: 'column', border: '1px solid rgba(0,0,0,0.08)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '20px', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
-          <div style={{ width: 44, height: 44, borderRadius: 16, background: vendedor.gradiente, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>{vendedor.emoji}</div>
+          <div style={{ width: 44, height: 44, overflow: 'hidden', borderRadius: 16, background: vendedor.gradiente, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
+            {vendedor.avatar ? <img src={vendedor.avatar} alt={vendedor.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : vendedor.emoji}
+          </div>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>{vendedor.nome}</div>
             <div style={{ fontSize: 12, color: '#22c55e', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -270,7 +277,7 @@ function RastreamentoModal({ vendedor, clientePos, pedidoId, onClose }: { vended
             {/* Mapa estilo Dark/Tático */}
             <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>' url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" subdomains="abcd" />
             <RecenterMap a={pos} b={clientePos} />
-            <Marker position={pos} icon={vendorIcon} />
+            <Marker position={pos} icon={vendedor.tipo === 'restaurante' ? restauranteIcon : ambulanteIcon} />
             <Marker position={clientePos} icon={clienteIcon} />
             {isRealGPS && <Circle center={pos} radius={accuracy} pathOptions={{ color: '#22c55e', fillColor: '#22c55e', fillOpacity: 0.1, weight: 1, className: 'animate-pulse-neon' }} />}
             {route
@@ -357,7 +364,9 @@ function RastreamentoModal({ vendedor, clientePos, pedidoId, onClose }: { vended
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px', background: '#ffffff', borderRadius: 24, border: '1px solid rgba(0,0,0,0.05)' }}>
-            <div style={{ width: 54, height: 54, borderRadius: 18, background: vendedor.gradiente, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, boxShadow: '0 4px 15px rgba(0,0,0,0.2)' }}>{vendedor.emoji}</div>
+            <div style={{ width: 54, height: 54, overflow: 'hidden', borderRadius: 18, background: vendedor.gradiente, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, boxShadow: '0 4px 15px rgba(0,0,0,0.2)' }}>
+              {vendedor.avatar ? <img src={vendedor.avatar} alt={vendedor.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : vendedor.emoji}
+            </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>{vendedor.nome}</div>
               <div style={{ fontSize: 12, color: '#64748b' }}>Vendedor oficial PraiaGo</div>
@@ -1567,8 +1576,8 @@ function LojaCard({ v, index, onOpen }: { v: Vendedor; index: number; onOpen: ()
             {temPromocao ? <TicketPercent size={12} /> : <Zap size={12} />} {temPromocao ? 'Promo ativa' : 'Rapida'}
           </div>
         )}
-        <div style={{ position: 'absolute', left: 16, bottom: -22, width: 56, height: 56, borderRadius: 18, background: v.gradiente, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, border: '3px solid #ffffff', boxShadow: '0 8px 20px rgba(14,165,233,0.35)' }}>
-          {v.emoji}
+        <div style={{ position: 'absolute', left: 16, bottom: -22, width: 56, height: 56, overflow: 'hidden', borderRadius: 18, background: v.gradiente, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, border: '3px solid #ffffff', boxShadow: '0 8px 20px rgba(14,165,233,0.35)' }}>
+          {v.avatar ? <img src={v.avatar} alt={v.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : v.emoji}
         </div>
       </div>
       <div style={{ padding: '30px 16px 16px' }}>

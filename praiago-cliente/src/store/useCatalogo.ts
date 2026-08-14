@@ -46,6 +46,8 @@ type ProfileRow = {
   status: string | null
   horario_abre: string | null
   horario_fecha: string | null
+  foto_perfil_path: string | null
+  foto_capa_path: string | null
 }
 
 import { dentroDoHorario } from '../lib/horario'
@@ -58,6 +60,11 @@ function hero(emoji: string): string {
     `</linearGradient></defs><rect width='400' height='260' fill='url(#g)'/>` +
     `<text x='200' y='168' font-size='120' text-anchor='middle'>${emoji}</text></svg>`
   return `data:image/svg+xml,${encodeURIComponent(svg)}`
+}
+
+function sellerPhoto(path?: string | null) {
+  if (!path) return null
+  return supabase.storage.from('perfis-vendedores').getPublicUrl(path).data.publicUrl
 }
 
 function precoComPromocao(preco: number, promo?: PromocaoRow): number {
@@ -140,7 +147,8 @@ export const useCatalogo = create<State>((set, get) => ({
           emoji: vendedorEmoji,
           gradiente: 'linear-gradient(135deg,#0ea5e9,#22c55e)',
           aberto,
-          image: hero(vendedorEmoji),
+          image: sellerPhoto(pf?.foto_capa_path) || hero(vendedorEmoji),
+          avatar: sellerPhoto(pf?.foto_perfil_path),
           pos: [pf?.lat ?? -24.0228, pf?.lng ?? -46.4305],
           zona: pf?.zona || 'Praia Grande',
           produtos: [],
