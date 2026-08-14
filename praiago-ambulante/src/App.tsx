@@ -1,17 +1,9 @@
 import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
+import { LoaderCircle, LocateFixed } from 'lucide-react'
 import { logout, useSessao } from './lib/auth'
 import { supabase } from './lib/supabase'
-import LoginPage from './pages/LoginPage'
-import DashboardPage from './pages/DashboardPage'
-import PedidosPage from './pages/PedidosPage'
-import VendasPage from './pages/VendasPage'
-import AvaliacoesPage from './pages/AvaliacoesPage'
-import CardapioPage from './pages/CardapioPage'
-import PerfilPage from './pages/PerfilPage'
-import ZonasPage from './pages/ZonasPage'
-import CarteiraPage from './pages/CarteiraPage'
 import BottomNav from './components/BottomNav'
 import VerificationBar from './components/VerificationBar'
 import { DialogHost } from './lib/dialog'
@@ -22,58 +14,79 @@ import { useOrderNotifications } from './hooks/useOrderNotifications'
 
 const PUBLIC_ROUTES = ['/login']
 
+const LoginPage = lazy(() => import('./pages/LoginPage'))
+const DashboardPage = lazy(() => import('./pages/DashboardPage'))
+const PedidosPage = lazy(() => import('./pages/PedidosPage'))
+const VendasPage = lazy(() => import('./pages/VendasPage'))
+const AvaliacoesPage = lazy(() => import('./pages/AvaliacoesPage'))
+const CardapioPage = lazy(() => import('./pages/CardapioPage'))
+const PerfilPage = lazy(() => import('./pages/PerfilPage'))
+const ZonasPage = lazy(() => import('./pages/ZonasPage'))
+const CarteiraPage = lazy(() => import('./pages/CarteiraPage'))
+
+function RouteLoading() {
+  return (
+    <div style={{ minHeight: 240, display: 'grid', placeItems: 'center', color: '#008fc0' }} role="status" aria-label="Carregando tela">
+      <LoaderCircle size={24} className="animate-spin-slow" />
+    </div>
+  )
+}
+
 // Logo do PraiaGo Ambulante
 function LogoBar({ gpsStatus }: { gpsStatus: string }) {
   const isActive = gpsStatus === 'active'
-  const isError = gpsStatus === 'error'
+  const isError = gpsStatus === 'error' || gpsStatus === 'denied'
+  const statusLabel = isActive ? 'Localizacao ativa' : isError ? 'Sem localizacao' : 'Localizando'
   return (
-    <div className="glass-panel" style={{
+    <header style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '16px 20px',
-      borderBottom: '1px solid rgba(0,0,0,0.05)',
+      minHeight: 66,
+      padding: '8px 16px',
+      borderBottom: '1px solid #e7ecf1',
+      background: 'rgba(255,255,255,0.96)',
+      backdropFilter: 'blur(14px)',
       position: 'sticky', top: 0, zIndex: 60,
     }}>
       {/* Logo — mesma marca e mesmo recorte do app do cliente.
           O PNG e quadrado (1600x1600) com muita margem: a caixa de 140x59
           recorta so o brasao, e por isso a imagem e maior que o container. */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
         <div
           aria-label="PraiaGo"
-          style={{ width: 140, height: 59, overflow: 'hidden', position: 'relative', flexShrink: 0 }}
+          style={{ width: 116, height: 47, overflow: 'hidden', position: 'relative', flexShrink: 0 }}
         >
           <img
             src="/praiago-logo-transparent.png"
             alt="PraiaGo"
             style={{
-              position: 'absolute', width: 231, height: 231, maxWidth: 'none',
-              left: -56, top: -67, display: 'block',
+              position: 'absolute', width: 194, height: 194, maxWidth: 'none',
+              left: -48, top: -57, display: 'block',
             }}
           />
         </div>
-        <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 2, color: '#4ade80', textTransform: 'uppercase' }}>Ambulante</div>
+        <span style={{ border: '1px solid #cce9d8', borderRadius: 999, background: '#eef9f2', color: '#148447', padding: '4px 7px', fontSize: 9, lineHeight: 1, fontWeight: 850, textTransform: 'uppercase' }}>
+          Ambulante
+        </span>
       </div>
 
       {/* GPS badge */}
       <motion.div animate={isActive ? { opacity: [0.7, 1, 0.7] } : {}} transition={{ repeat: Infinity, duration: 2 }} style={{
         display: 'flex', alignItems: 'center', gap: 6,
-        background: isActive ? 'rgba(34,197,94,0.15)' : isError ? 'rgba(239,68,68,0.15)' : 'rgba(100,116,139,0.15)',
-        border: `1px solid ${isActive ? 'rgba(34,197,94,0.3)' : isError ? 'rgba(239,68,68,0.3)' : 'rgba(100,116,139,0.3)'}`,
-        borderRadius: 20, padding: '6px 12px',
-        boxShadow: isActive ? '0 0 10px rgba(34,197,94,0.2)' : 'none'
+        maxWidth: 146,
+        background: isActive ? '#eef9f2' : isError ? '#fff4e5' : '#edf1f5',
+        border: `1px solid ${isActive ? '#cce9d8' : isError ? '#f4d39f' : '#dce3ea'}`,
+        borderRadius: 999, padding: '7px 9px',
+        color: isActive ? '#148447' : isError ? '#b54708' : '#617089',
       }}>
-        <div style={{
-          width: 8, height: 8, borderRadius: '50%',
-          background: isActive ? '#22c55e' : isError ? '#ef4444' : '#64748b',
-          boxShadow: isActive ? '0 0 8px #22c55e' : 'none',
-        }} />
+        <LocateFixed size={14} aria-hidden="true" />
         <span style={{
-          fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5,
-          color: isActive ? '#4ade80' : isError ? '#f87171' : '#94a3b8',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          fontSize: 10, fontWeight: 800,
         }}>
-          {isActive ? 'GPS ON' : isError ? 'ERRO' : 'BUSCA'}
+          {statusLabel}
         </span>
       </motion.div>
-    </div>
+    </header>
   )
 }
 
@@ -282,27 +295,29 @@ export default function App() {
   if (!sessao && !isPublic) return <Navigate to="/login" replace />
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#ffffff' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#f4f7fa' }}>
       <PasswordRecoveryHandler />
       {!isPublic && <LogoBar gpsStatus={gpsStatus} />}
       {!isPublic && <VerificationBar />}
-      <main style={{ flex: 1, overflowY: 'auto', paddingBottom: isPublic ? 0 : '80px', position: 'relative' }}>
+      <main style={{ flex: 1, overflowY: 'auto', paddingBottom: isPublic ? 0 : '82px', position: 'relative' }}>
         {!isPublic && kycLocked ? (
           <KycLockedPanel />
         ) : (
-          <AnimatePresence mode="wait">
-            <Routes location={location} key={location.pathname}>
-              <Route path="/login"    element={<PageWrapper><LoginPage /></PageWrapper>} />
-              <Route path="/"         element={<PageWrapper><DashboardPage /></PageWrapper>} />
-              <Route path="/pedidos"  element={<PageWrapper><PedidosPage /></PageWrapper>} />
-              <Route path="/vendas"   element={<PageWrapper><VendasPage /></PageWrapper>} />
-              <Route path="/avaliacoes" element={<PageWrapper><AvaliacoesPage /></PageWrapper>} />
-              <Route path="/cardapio" element={<PageWrapper><CardapioPage /></PageWrapper>} />
-              <Route path="/zonas"    element={<PageWrapper><ZonasPage /></PageWrapper>} />
-              <Route path="/perfil"   element={<PageWrapper><PerfilPage /></PageWrapper>} />
-              <Route path="/carteira" element={<PageWrapper><CarteiraPage /></PageWrapper>} />
-            </Routes>
-          </AnimatePresence>
+          <Suspense fallback={<RouteLoading />}>
+            <AnimatePresence mode="wait">
+              <Routes location={location} key={location.pathname}>
+                <Route path="/login"    element={<PageWrapper><LoginPage /></PageWrapper>} />
+                <Route path="/"         element={<PageWrapper><DashboardPage /></PageWrapper>} />
+                <Route path="/pedidos"  element={<PageWrapper><PedidosPage /></PageWrapper>} />
+                <Route path="/vendas"   element={<PageWrapper><VendasPage /></PageWrapper>} />
+                <Route path="/avaliacoes" element={<PageWrapper><AvaliacoesPage /></PageWrapper>} />
+                <Route path="/cardapio" element={<PageWrapper><CardapioPage /></PageWrapper>} />
+                <Route path="/zonas"    element={<PageWrapper><ZonasPage /></PageWrapper>} />
+                <Route path="/perfil"   element={<PageWrapper><PerfilPage /></PageWrapper>} />
+                <Route path="/carteira" element={<PageWrapper><CarteiraPage /></PageWrapper>} />
+              </Routes>
+            </AnimatePresence>
+          </Suspense>
         )}
       </main>
       {!isPublic && !kycLocked && <BottomNav />}

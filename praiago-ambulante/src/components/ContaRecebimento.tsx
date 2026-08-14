@@ -17,7 +17,7 @@ import {
 type PedidoTroca = { id: string; status: string; created_at: string; parecer: string | null; liberado_ate: string | null }
 
 const inputBase: React.CSSProperties = {
-  width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12,
+  width: '100%', border: '1px solid #dfe6ed', borderRadius: 8,
   padding: '11px 12px', fontSize: 14, fontWeight: 600, color: '#0f172a',
   background: '#f8fafc', outline: 'none',
 }
@@ -132,7 +132,7 @@ export default function ContaRecebimento({ onMudou }: { onMudou?: () => void }) 
   })
 
   return (
-    <div className="glass-panel" style={{ borderRadius: 20, padding: 18, border: '1px solid rgba(0,0,0,0.06)', marginBottom: 14 }}>
+    <div className="surface" style={{ borderRadius: 8, padding: 16, border: '1px solid #dfe6ed', marginBottom: 14, boxShadow: 'none' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 12, fontWeight: 900, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -271,14 +271,14 @@ export default function ContaRecebimento({ onMudou }: { onMudou?: () => void }) 
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               onClick={() => { setEditando(false); setPedindoTroca(false); setErro('') }}
-              style={{ flex: 1, border: '1px solid rgba(0,0,0,0.1)', background: '#fff', color: '#64748b', borderRadius: 12, padding: '12px', fontSize: 14, fontWeight: 800, cursor: 'pointer' }}
+              style={{ flex: 1, border: '1px solid #dfe6ed', background: '#fff', color: '#64748b', borderRadius: 8, padding: '12px', fontSize: 14, fontWeight: 800, cursor: 'pointer' }}
             >
               Cancelar
             </button>
             <button
               onClick={pedindoTroca ? pedirTroca : salvar}
               disabled={salvando}
-              style={{ flex: 2, border: 'none', background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', color: '#fff', borderRadius: 12, padding: '12px', fontSize: 14, fontWeight: 800, cursor: salvando ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              style={{ flex: 2, border: 'none', background: 'linear-gradient(110deg, #008fc0, #18a957)', color: '#fff', borderRadius: 8, padding: '12px', fontSize: 14, fontWeight: 800, cursor: salvando ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
             >
               {salvando ? <Loader2 size={16} className="animate-spin-slow" /> : <Check size={16} />}
               {pedindoTroca ? 'Enviar pedido' : 'Salvar conta'}

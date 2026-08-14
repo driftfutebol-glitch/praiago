@@ -1,554 +1,507 @@
-import { useState, useEffect, useRef } from 'react'
-import { Bell, MapPin, CheckCircle, Clock, Navigation, X, Timer, QrCode, CreditCard, Banknote, ChevronRight } from 'lucide-react'
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import {
+  AlertTriangle,
+  Banknote,
+  Bell,
+  CheckCircle2,
+  ChevronRight,
+  Clock3,
+  CreditCard,
+  LocateFixed,
+  MapPin,
+  Navigation,
+  PackageCheck,
+  Phone,
+  QrCode,
+  RouteOff,
+  ShoppingBag,
+  Timer,
+  UserRound,
+  X,
+} from 'lucide-react'
+import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from 'react-leaflet'
+import { AnimatePresence, motion } from 'framer-motion'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useRoute } from '../hooks/useRoute'
-import { criarMonitorSentido, type SentidoStatus } from '../lib/trafego'
 import { useOrderNotifications, type IncomingOrder } from '../hooks/useOrderNotifications'
-import { supabase } from '../lib/supabase'
+import { criarMonitorSentido, type SentidoStatus } from '../lib/trafego'
 import { getSessao } from '../lib/auth'
-import { promptDialog, alertDialog } from '../lib/dialog'
-import { ZoneAgent, type ZoneScore } from '../lib/zoneAgent'
-
-delete (L.Icon.Default.prototype as any)._getIconUrl
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-})
-
-function makeIcon(html: string, size = 40) {
-  return L.divIcon({ className: '', html, iconSize: [size, size], iconAnchor: [size / 2, size / 2] })
-}
-
-const clienteIcon = makeIcon(`<div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#0ea5e9,#06b6d4);display:flex;align-items:center;justify-content:center;border:2px solid rgba(255,255,255,0.8);box-shadow:0 0 15px rgba(14,165,233,0.6);font-size:20px;backdrop-filter:blur(4px)">👤</div>`)
-const myIcon = makeIcon(`<div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#22c55e,#16a34a);display:flex;align-items:center;justify-content:center;border:2px solid rgba(255,255,255,0.8);box-shadow:0 0 15px rgba(34,197,94,0.6);font-size:20px;backdrop-filter:blur(4px)">🥥</div>`)
+import { alertDialog, promptDialog } from '../lib/dialog'
+import { PRAIA_GRANDE_CENTER } from '../lib/praiagoZones'
+import { supabase } from '../lib/supabase'
+import { clampNumber, parseCoordinate, sanitizePhone, sanitizeText } from '../lib/validation'
 
 type Status = 'novo' | 'preparando' | 'saiu_entrega' | 'entregue'
 
 type Pedido = {
   id: string
   cliente: string
-  clienteTel: string
+  clienteTelefone: string
   itens: string[]
   total: number
   status: Status
   hora: string
-  clienteLat: number
-  clienteLng: number
+  clienteLat: number | null
+  clienteLng: number | null
   pagamento: string
+  zona: string
+  reta: string
+  barraca: string
   isLive?: boolean
 }
 
-const pedidosIniciais: Pedido[] = []
+const tabs = ['Todos', 'Novos', 'Preparando', 'Em rota', 'Entregues'] as const
+type Tab = typeof tabs[number]
 
-const statusConfig = {
-  novo: { label: 'Novo', bg: 'rgba(245,158,11,0.15)', color: '#f59e0b', icon: Clock },
-  preparando: { label: 'Preparando', bg: 'rgba(14,165,233,0.15)', color: '#0284c7', icon: Timer },
-  saiu_entrega: { label: 'Saiu p/ entrega', bg: 'rgba(249,115,22,0.15)', color: '#ea580c', icon: Navigation },
-  entregue: { label: 'Entregue', bg: 'rgba(34,197,94,0.15)', color: '#16a34a', icon: CheckCircle },
+const statusConfig: Record<Status, { label: string; color: string; background: string; icon: typeof Clock3 }> = {
+  novo: { label: 'Novo', color: '#9a6700', background: '#fff6d8', icon: Clock3 },
+  preparando: { label: 'Preparando', color: '#007fa6', background: '#eaf6fa', icon: Timer },
+  saiu_entrega: { label: 'Em rota', color: '#b54708', background: '#fff4e5', icon: Navigation },
+  entregue: { label: 'Entregue', color: '#148447', background: '#eaf8ef', icon: CheckCircle2 },
 }
 
-function FitBounds({ a, b }: { a: [number, number]; b: [number, number] }) {
+const money = (value: number) => value.toLocaleString('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+})
+
+function shortOrderId(id: string) {
+  return `#${id.replace(/-/g, '').slice(0, 8).toUpperCase()}`
+}
+
+function rowToPedido(row: Record<string, unknown>): Pedido {
+  const rawStatus = sanitizeText(row.status, 24) || 'novo'
+  const status = ['novo', 'preparando', 'saiu_entrega', 'entregue'].includes(rawStatus)
+    ? rawStatus as Status
+    : 'novo'
+  const createdAt = new Date(String(row.created_at || Date.now()))
+
+  return {
+    id: sanitizeText(row.id, 64),
+    cliente: sanitizeText(row.cliente_nome, 60) || 'Cliente PraiaGo',
+    clienteTelefone: sanitizePhone(row.cliente_telefone),
+    itens: Array.isArray(row.itens)
+      ? row.itens.slice(0, 30).map(item => sanitizeText(item, 80)).filter(Boolean)
+      : [],
+    total: clampNumber(row.total, 0, 100_000, 0),
+    status,
+    hora: Number.isNaN(createdAt.getTime())
+      ? ''
+      : createdAt.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }),
+    clienteLat: parseCoordinate(row.lat, -90, 90),
+    clienteLng: parseCoordinate(row.lng, -180, 180),
+    pagamento: sanitizeText(row.pagamento, 20) || 'pix',
+    zona: sanitizeText(row.zona, 60),
+    reta: sanitizeText(row.reta, 30),
+    barraca: sanitizeText(row.barraca, 60),
+  }
+}
+
+function liveToPedido(order: IncomingOrder): Pedido {
+  return {
+    id: order.id,
+    cliente: order.clienteNome,
+    clienteTelefone: order.clienteTel,
+    itens: order.itens,
+    total: order.total,
+    status: 'novo',
+    hora: 'Agora',
+    clienteLat: order.clienteLat,
+    clienteLng: order.clienteLng,
+    pagamento: order.pagamento,
+    zona: order.zona,
+    reta: order.reta,
+    barraca: order.barraca,
+    isLive: true,
+  }
+}
+
+function meetingPoint(order: Pedido) {
+  const parts = [
+    order.reta ? `Reta ${order.reta}` : '',
+    order.barraca ? `Barraca ${order.barraca}` : '',
+  ].filter(Boolean)
+  return parts.join(' · ') || order.zona || 'Ponto de encontro não informado'
+}
+
+function paymentLabel(payment: string) {
+  const normalized = payment.toLowerCase()
+  if (normalized === 'pix') return 'PIX'
+  if (normalized.includes('credito')) return 'Crédito'
+  if (normalized.includes('debito')) return 'Débito'
+  if (normalized === 'cartao') return 'Cartão'
+  if (normalized === 'dinheiro') return 'Dinheiro'
+  return payment
+}
+
+function PaymentIcon({ payment, size = 15 }: { payment: string; size?: number }) {
+  const normalized = payment.toLowerCase()
+  if (normalized === 'pix') return <QrCode size={size} />
+  if (normalized === 'dinheiro') return <Banknote size={size} />
+  return <CreditCard size={size} />
+}
+
+function formatPhone(phone: string) {
+  const digits = phone.replace(/\D/g, '')
+  if (digits.length === 11) return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`
+  if (digits.length === 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`
+  return phone
+}
+
+function makeMapIcon(markup: string, className: string) {
+  return L.divIcon({
+    className: '',
+    iconSize: [42, 42],
+    iconAnchor: [21, 21],
+    html: `<div class="${className}">${markup}</div>`,
+  })
+}
+
+const customerIcon = makeMapIcon(renderToStaticMarkup(<UserRound size={21} strokeWidth={2.6} />), 'map-customer-marker')
+const sellerIcon = makeMapIcon(renderToStaticMarkup(<LocateFixed size={21} strokeWidth={2.6} />), 'map-user-marker')
+
+function FitBounds({ from, to }: { from: [number, number]; to: [number, number] }) {
   const map = useMap()
   useEffect(() => {
-    map.fitBounds(L.latLngBounds([a, b]), { padding: [60, 60], animate: true })
-  }, [a[0], a[1], b[0], b[1]])
+    map.fitBounds(L.latLngBounds([from, to]), { padding: [48, 48], animate: true })
+  }, [from, map, to])
   return null
 }
 
-function LocationModal({ pedido, onClose }: { pedido: Pedido; onClose: () => void }) {
-  const [myPos, setMyPos] = useState<[number, number] | null>(null)
+function LocationModal({ order, onClose }: { order: Pedido; onClose: () => void }) {
+  const [myPosition, setMyPosition] = useState<[number, number] | null>(null)
+  const [gpsUnavailable, setGpsUnavailable] = useState(false)
   const watchId = useRef<number | null>(null)
-  const clientePos: [number, number] = [pedido.clienteLat, pedido.clienteLng]
-  const route = useRoute(myPos, clientePos)
-
-  // Verificação de sentido: a rota OSRM já respeita a mão das vias.
-  // Aqui detectamos se VOCÊ está se movendo contra o sentido planejado.
-  const [sentido, setSentido] = useState<SentidoStatus>('indefinido')
-  const monitorSentido = useRef(criarMonitorSentido())
-  useEffect(() => {
-    if (!myPos) return
-    setSentido(monitorSentido.current.atualizar(route?.coords, myPos))
-  }, [myPos?.[0], myPos?.[1]]) // eslint-disable-line react-hooks/exhaustive-deps
+  const directionMonitor = useRef(criarMonitorSentido())
+  const [direction, setDirection] = useState<SentidoStatus>('indefinido')
+  const customerPosition = order.clienteLat !== null && order.clienteLng !== null
+    ? [order.clienteLat, order.clienteLng] as [number, number]
+    : null
+  const route = useRoute(myPosition, customerPosition)
 
   useEffect(() => {
-    if (navigator.geolocation) {
-      watchId.current = navigator.geolocation.watchPosition(
-        pos => setMyPos([pos.coords.latitude, pos.coords.longitude]),
-        () => setMyPos([-24.0055, -46.4135]),
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 },
-      )
-    } else {
-      setMyPos([-24.0055, -46.4135])
+    if (!navigator.geolocation) {
+      setGpsUnavailable(true)
+      return
     }
+    watchId.current = navigator.geolocation.watchPosition(
+      position => {
+        setMyPosition([position.coords.latitude, position.coords.longitude])
+        setGpsUnavailable(false)
+      },
+      () => setGpsUnavailable(true),
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 5000 },
+    )
     return () => {
       if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current)
     }
   }, [])
 
-  function calcDist(pos: [number, number]): number {
-    const R = 6371000
-    const dLat = (clientePos[0] - pos[0]) * Math.PI / 180
-    const dLng = (clientePos[1] - pos[1]) * Math.PI / 180
-    const a = Math.sin(dLat / 2) ** 2 + Math.cos(pos[0] * Math.PI / 180) * Math.cos(clientePos[0] * Math.PI / 180) * Math.sin(dLng / 2) ** 2
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  useEffect(() => {
+    if (!myPosition) return
+    setDirection(directionMonitor.current.atualizar(route?.coords, myPosition))
+  }, [myPosition, route?.coords])
+
+  const mapCenter = customerPosition || myPosition || PRAIA_GRANDE_CENTER
+  const canNavigate = customerPosition !== null
+
+  function openNavigation() {
+    if (!customerPosition) return
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${customerPosition[0]},${customerPosition[1]}&travelmode=walking`
+    window.open(url, '_blank', 'noopener,noreferrer')
   }
 
-  const distancia = myPos ? (route?.distancia ?? (calcDist(myPos) < 1000 ? `${Math.round(calcDist(myPos))}m` : `${(calcDist(myPos) / 1000).toFixed(1)}km`)) : null
-  const tempo = route?.tempo ?? null
-
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', flexDirection: 'column', background: '#ffffff' }}>
-      <div className="glass-panel" style={{ padding: '16px 20px', borderBottom: '1px solid rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, borderRadius: 0 }}>
-        <div>
-          <div style={{ fontSize: 16, fontWeight: 900, color: '#0f172a' }}>📍 {pedido.cliente}</div>
-          <div style={{ fontSize: 12, color: '#64748b', marginTop: 2, fontWeight: 500 }}>Pedido {pedido.id} · {pedido.clienteTel}</div>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', flexDirection: 'column', background: '#f4f7fa' }}>
+      <header style={{ minHeight: 68, display: 'flex', alignItems: 'center', gap: 12, padding: '10px 15px', borderBottom: '1px solid #dfe6ed', background: '#fff' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ color: '#132238', fontSize: 15, fontWeight: 900 }}>{shortOrderId(order.id)}</div>
+          <div style={{ marginTop: 3, overflow: 'hidden', color: '#617089', fontSize: 12, fontWeight: 650, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{meetingPoint(order)}</div>
         </div>
-        {pedido.isLive && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(14,165,233,0.15)', border: '1px solid rgba(14,165,233,0.3)', borderRadius: 10, padding: '4px 10px' }}>
-            <div className="animate-pulse-neon" style={{ width: 6, height: 6, borderRadius: '50%', background: '#38bdf8' }} />
-            <span style={{ fontSize: 10, fontWeight: 800, color: '#38bdf8' }}>AO VIVO</span>
-          </div>
-        )}
-        <motion.button whileTap={{ scale: 0.9 }} onClick={onClose} style={{ background: 'rgba(0,0,0,0.08)', border: 'none', borderRadius: 12, padding: 8, cursor: 'pointer', minWidth: 40, minHeight: 40, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <X size={20} color="#334155" />
-        </motion.button>
-      </div>
+        <button type="button" className="icon-button" onClick={onClose} aria-label="Fechar mapa"><X size={19} /></button>
+      </header>
 
-      <div style={{ flex: 1, position: 'relative' }}>
-        {/* Aviso de contramão / fora da rota */}
-        {sentido === 'contramao' && (
-          <div className="animate-pulse-neon" style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: '#ef4444', color: '#fff', padding: '10px 18px', borderRadius: 24, fontSize: 13, fontWeight: 900, boxShadow: '0 8px 25px rgba(239,68,68,0.5)' }}>
-            ⚠️ CONTRAMÃO — você está indo contra o sentido da rota!
-          </div>
-        )}
-        {sentido === 'fora_da_rota' && (
-          <div style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, background: 'rgba(245,158,11,0.95)', color: '#fff', padding: '10px 18px', borderRadius: 24, fontSize: 13, fontWeight: 900, boxShadow: '0 8px 25px rgba(245,158,11,0.4)' }}>
-            🧭 Fora da rota — recalculando…
-          </div>
-        )}
-        {myPos ? (
-          <MapContainer center={myPos} zoom={15} style={{ height: '100%', width: '100%' }} zoomControl={false}>
-            {/* Dark map style */}
-            <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>' url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" subdomains="abcd" />
-            <FitBounds a={myPos} b={clientePos} />
-            <Marker position={myPos} icon={myIcon}><Popup className="dark-popup"><b>🥥 Você (ambulante)</b></Popup></Marker>
-            <Marker position={clientePos} icon={clienteIcon}><Popup className="dark-popup"><b>👤 {pedido.cliente}</b><br />{pedido.clienteTel}</Popup></Marker>
-            {route && route.coords.length > 1
-              ? <Polyline positions={route.coords} pathOptions={{ color: '#4ade80', weight: 5, opacity: 0.8 }} />
-              : <Polyline positions={[myPos, clientePos]} pathOptions={{ color: '#4ade80', weight: 3, dashArray: '8 8', opacity: 0.4 }} />
-            }
+      <div style={{ flex: 1, minHeight: 280, position: 'relative' }}>
+        {canNavigate ? (
+          <MapContainer center={mapCenter} zoom={15} style={{ height: '100%', width: '100%' }} zoomControl={false}>
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+              url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+              subdomains="abcd"
+            />
+            {myPosition && customerPosition && <FitBounds from={myPosition} to={customerPosition} />}
+            {myPosition && <Marker position={myPosition} icon={sellerIcon}><Popup>Sua posição</Popup></Marker>}
+            {customerPosition && <Marker position={customerPosition} icon={customerIcon}><Popup>Ponto indicado pelo cliente</Popup></Marker>}
+            {myPosition && customerPosition && (
+              <Polyline
+                positions={route?.coords?.length ? route.coords : [myPosition, customerPosition]}
+                pathOptions={{ color: '#148447', weight: route ? 5 : 3, dashArray: route ? undefined : '8 8', opacity: 0.82 }}
+              />
+            )}
           </MapContainer>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-            <div style={{ textAlign: 'center', color: '#64748b' }}>
-              <MapPin size={40} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
-              <p style={{ fontSize: 15, fontWeight: 700 }}>Buscando sua localização…</p>
+          <div style={{ height: '100%', display: 'grid', placeItems: 'center', padding: 24, textAlign: 'center' }}>
+            <div>
+              <MapPin size={36} color="#8793a5" style={{ margin: '0 auto 12px' }} />
+              <div style={{ color: '#132238', fontSize: 15, fontWeight: 900 }}>Localização não enviada</div>
+              <p style={{ maxWidth: 280, margin: '6px auto 0', color: '#617089', fontSize: 13, lineHeight: 1.45, fontWeight: 600 }}>Use a reta e a barraca informadas no pedido para encontrar o cliente.</p>
             </div>
           </div>
         )}
 
-        {myPos && (
-          <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="glass-panel" style={{ position: 'absolute', top: 16, left: 16, zIndex: 1000, borderRadius: 20, padding: '14px 18px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <div className="animate-pulse-neon" style={{ width: 8, height: 8, borderRadius: '50%', background: '#4ade80' }} />
-              <span style={{ fontSize: 11, color: '#4ade80', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1 }}>
-                {route ? 'Rota Otimizada' : 'Radar Ativo'}
-              </span>
-            </div>
-            <div style={{ display: 'flex', gap: 16 }}>
-              {distancia && <div><div style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', lineHeight: 1 }}>{distancia}</div><div style={{ fontSize: 11, color: '#64748b', marginTop: 2, fontWeight: 500 }}>distância</div></div>}
-              {tempo && <div><div style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', lineHeight: 1 }}>{tempo}</div><div style={{ fontSize: 11, color: '#64748b', marginTop: 2, fontWeight: 500 }}>a pé</div></div>}
-            </div>
-          </motion.div>
+        {direction === 'contramao' && (
+          <div style={{ position: 'absolute', zIndex: 1000, top: 12, left: 12, right: 12, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 8, background: '#fff0f2', border: '1px solid #f0b6bd', color: '#b42335', fontSize: 12, fontWeight: 850 }}>
+            <AlertTriangle size={18} />
+            Confira o sentido antes de continuar.
+          </div>
+        )}
+        {direction === 'fora_da_rota' && (
+          <div style={{ position: 'absolute', zIndex: 1000, top: 12, left: 12, right: 12, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 8, background: '#fff4e5', border: '1px solid #f4d39f', color: '#b54708', fontSize: 12, fontWeight: 850 }}>
+            <RouteOff size={18} />
+            Fora da rota. O trajeto será recalculado.
+          </div>
+        )}
+
+        {route && (
+          <div className="surface" style={{ position: 'absolute', zIndex: 1000, left: 12, bottom: 12, display: 'flex', gap: 14, padding: '10px 12px', boxShadow: '0 8px 20px rgba(23,45,74,0.14)' }}>
+            <div><div style={{ color: '#132238', fontSize: 15, fontWeight: 900 }}>{route.distancia}</div><div style={{ color: '#718096', fontSize: 10, fontWeight: 700 }}>distância</div></div>
+            <div><div style={{ color: '#132238', fontSize: 15, fontWeight: 900 }}>{route.tempo}</div><div style={{ color: '#718096', fontSize: 10, fontWeight: 700 }}>estimativa</div></div>
+          </div>
         )}
       </div>
 
-      <div style={{ padding: '20px', background: '#ffffff', borderTop: '1px solid rgba(0,0,0,0.05)', flexShrink: 0 }}>
-        <motion.button
-          whileTap={{ scale: 0.98 }}
-          onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${pedido.clienteLat},${pedido.clienteLng}`)}
-          style={{ width: '100%', background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', border: 'none', borderRadius: 20, padding: '16px 0', color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, boxShadow: '0 8px 25px rgba(34,197,94,0.4)' }}>
-          <Navigation size={20} /> INICIAR NAVEGAÇÃO
-        </motion.button>
-      </div>
+      <footer style={{ padding: 14, borderTop: '1px solid #dfe6ed', background: '#fff' }}>
+        {gpsUnavailable && canNavigate && <div style={{ marginBottom: 9, color: '#b54708', fontSize: 11, fontWeight: 700 }}>Seu GPS não está disponível; a localização do cliente continua visível.</div>}
+        <div style={{ display: 'flex', gap: 8 }}>
+          {order.clienteTelefone && (
+            <a href={`tel:${order.clienteTelefone.replace(/\D/g, '')}`} className="secondary-button" style={{ flex: 1, color: '#132238', textDecoration: 'none' }}>
+              <Phone size={17} />
+              Ligar
+            </a>
+          )}
+          <button type="button" className="primary-button" disabled={!canNavigate} onClick={openNavigation} style={{ flex: 2 }}>
+            <Navigation size={18} />
+            Abrir navegação
+          </button>
+        </div>
+      </footer>
     </motion.div>
   )
-}
-
-/* ─── BANNER DE NOVO PEDIDO ─────────────────────────────── */
-function NewOrderBanner({ order, onDismiss, onView }: { order: IncomingOrder; onDismiss: () => void; onView: () => void }) {
-  return (
-    <motion.div
-      initial={{ y: -100, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      exit={{ y: -100, opacity: 0 }}
-      transition={{ type: "spring", stiffness: 400, damping: 25 }}
-      style={{
-        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 99999,
-        background: 'linear-gradient(135deg, rgba(14,165,233,0.95), rgba(34,197,94,0.95))',
-        backdropFilter: 'blur(10px)',
-        padding: '16px 20px',
-        boxShadow: '0 10px 40px rgba(14,165,233,0.5)',
-        borderBottom: '1px solid rgba(255,255,255,0.2)'
-      }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-        <motion.div animate={{ scale: [0.8, 1.2, 1] }} transition={{ duration: 0.5 }} style={{ width: 50, height: 50, borderRadius: 16, background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0, boxShadow: 'inset 0 0 10px rgba(255,255,255,0.3)' }}>
-          🔔
-        </motion.div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 11, fontWeight: 900, color: '#fef08a', letterSpacing: 1, marginBottom: 2 }}>
-            🔔 NOVO PEDIDO NA ÁREA
-          </div>
-          <div style={{ fontSize: 16, fontWeight: 900, color: '#fff', lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {order.clienteNome} — {order.itens[0]}{order.itens.length > 1 ? ` +${order.itens.length - 1}` : ''}
-          </div>
-          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 4, fontWeight: 600 }}>
-            R$ {order.total.toFixed(2)} · Zona {order.zona}
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            onClick={onView}
-            style={{ background: '#fff', color: '#0ea5e9', border: 'none', borderRadius: 14, padding: '10px 16px', fontWeight: 900, fontSize: 13, cursor: 'pointer', boxShadow: '0 4px 15px rgba(0,0,0,0.2)' }}
-          >VER</motion.button>
-          <motion.button
-            whileTap={{ scale: 0.9 }}
-            onClick={onDismiss}
-            style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 14, padding: '10px', cursor: 'pointer' }}
-          >
-            <X size={16} color="#fff" />
-          </motion.button>
-        </div>
-      </div>
-    </motion.div>
-  )
-}
-
-/* ─── PAINEL DE ZONAS ─────────────────────────────────── */
-function ZoneAgentPanel({ scores }: { scores: ZoneScore[] }) {
-  const top = scores.slice().sort((a, b) => b.score - a.score).slice(0, 3)
-  return (
-    <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="glass-panel" style={{ margin: '0 20px 20px', borderRadius: 24, padding: '20px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div className="neon-border" style={{ width: 36, height: 36, borderRadius: 12, background: 'linear-gradient(135deg,#a855f7,#7c3aed)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🤖</div>
-        <div>
-          <div style={{ fontSize: 14, fontWeight: 900, color: '#0f172a' }}>Zonas ao Vivo</div>
-          <div style={{ fontSize: 11, color: '#64748b', fontWeight: 500, marginTop: 2 }}>Movimento da praia em tempo real</div>
-        </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(168,85,247,0.15)', borderRadius: 10, padding: '6px 10px', border: '1px solid rgba(168,85,247,0.3)' }}>
-          <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#c084fc', boxShadow: '0 0 8px #c084fc' }} className="animate-pulse-neon" />
-          <span style={{ fontSize: 10, fontWeight: 800, color: '#c084fc' }}>SYNC</span>
-        </div>
-      </div>
-      {top.map((z, i) => {
-        const nivel = z.score > 0.75 ? { emoji: '🔥', color: '#f87171' } : z.score > 0.5 ? { emoji: '🌡️', color: '#fbbf24' } : { emoji: '❄️', color: '#38bdf8' }
-        return (
-          <motion.div initial={{ x: -10, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: i * 0.1 }} key={z.id} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-            <span style={{ fontSize: 18 }}>{nivel.emoji}</span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{z.nome}</span>
-                <span style={{ fontSize: 12, color: nivel.color, fontWeight: 800, flexShrink: 0, marginLeft: 8 }}>{z.pedidosHora} ped/h</span>
-              </div>
-              <div style={{ height: 6, background: 'rgba(0,0,0,0.05)', borderRadius: 10, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${z.score * 100}%`, background: nivel.color, borderRadius: 10, transition: 'width 1s ease', boxShadow: `0 0 8px ${nivel.color}` }} />
-              </div>
-            </div>
-            <div style={{ fontSize: 12, fontWeight: 900, color: z.tendencia === 'subindo' ? '#4ade80' : z.tendencia === 'descendo' ? '#f87171' : '#94a3b8', flexShrink: 0, width: 16, textAlign: 'center' }}>
-              {z.tendencia === 'subindo' ? '↑' : z.tendencia === 'descendo' ? '↓' : '—'}
-            </div>
-          </motion.div>
-        )
-      })}
-    </motion.div>
-  )
-}
-
-/* ─── PÁGINA PRINCIPAL ───────────────────────────────────── */
-const abas = ['Todos', 'Novos', 'Preparando', 'Em rota', 'Entregues'] as const
-
-function rowToPedido(row: Record<string, unknown>): Pedido {
-  const st = String(row.status ?? 'novo')
-  return {
-    id: String(row.id),
-    cliente: String(row.cliente_nome ?? 'Cliente'),
-    clienteTel: String(row.cliente_tel ?? '—'),
-    itens: (row.itens as string[]) ?? [],
-    total: Number(row.total) || 0,
-    status: (['novo', 'preparando', 'saiu_entrega', 'entregue'].includes(st) ? st : 'novo') as Status,
-    hora: new Date(String(row.created_at)).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-    clienteLat: Number(row.lat) || -24.0228,
-    clienteLng: Number(row.lng) || -46.4305,
-    pagamento: String(row.pagamento ?? 'pix'),
-  }
 }
 
 export default function PedidosPage() {
-  const [aba, setAba] = useState<typeof abas[number]>('Todos')
-  const [pedidos, setPedidos] = useState<Pedido[]>(pedidosIniciais)
-  const [locModal, setLocModal] = useState<Pedido | null>(null)
-  const [zoneScores, setZoneScores] = useState<ZoneScore[]>([])
-
-  // Hook de notificações em tempo real
+  const sessao = getSessao()
+  const [tab, setTab] = useState<Tab>('Todos')
+  const [orders, setOrders] = useState<Pedido[]>([])
+  const [loading, setLoading] = useState(true)
+  const [locationOrder, setLocationOrder] = useState<Pedido | null>(null)
   const { orders: liveOrders, latestOrder, dismissLatest } = useOrderNotifications()
 
-  // Carrega os pedidos REAIS deste vendedor ao abrir a tela
   useEffect(() => {
-    const sessao = getSessao()
-    if (!sessao) return
-    supabase
-      .from('pedidos')
-      .select('*')
-      .eq('vendedor_id', sessao.id)
-      // pedido online ainda não pago (ou cancelado) não aparece pro vendedor
-      .not('status', 'in', '(aguardando_pagamento,cancelado)')
-      .order('created_at', { ascending: false })
-      .limit(50)
-      .then(({ data }) => {
-        if (data) setPedidos(data.map(rowToPedido))
-      })
-  }, [])
-
-  // Radar de zonas: acompanha a demanda real recebida pelo app.
-  useEffect(() => {
-    const unsub = ZoneAgent.subscribe(scores => setZoneScores(scores))
-    return unsub
-  }, [])
-
-  // Quando chega pedido ao vivo, registra no agente e adiciona à lista
-  useEffect(() => {
-    if (!liveOrders.length) return
-    const newest = liveOrders[0]
-    ZoneAgent.registerOrder(newest.clienteLat, newest.clienteLng)
-
-    const newPedido: Pedido = {
-      id: newest.id,
-      cliente: newest.clienteNome,
-      clienteTel: newest.clienteTel,
-      itens: newest.itens,
-      total: newest.total,
-      status: 'novo',
-      hora: 'Agora',
-      clienteLat: newest.clienteLat,
-      clienteLng: newest.clienteLng,
-      pagamento: newest.pagamento,
-      isLive: true,
+    if (!sessao?.id) return
+    let active = true
+    const load = async () => {
+      const { data } = await supabase
+        .from('pedidos')
+        .select('id,cliente_nome,cliente_telefone,itens,total,status,created_at,lat,lng,pagamento,zona,reta,barraca')
+        .eq('vendedor_id', sessao.id)
+        .not('status', 'in', '(aguardando_pagamento,cancelado,pagamento_recusado)')
+        .order('created_at', { ascending: false })
+        .limit(60)
+      if (!active) return
+      setOrders((data || []).map(row => rowToPedido(row as Record<string, unknown>)))
+      setLoading(false)
     }
-    setPedidos(prev => {
-      if (prev.find(p => p.id === newest.id)) return prev
-      return [newPedido, ...prev]
-    })
+
+    void load()
+    const channel = supabase
+      .channel(`pedidos_page_${sessao.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos', filter: `vendedor_id=eq.${sessao.id}` }, load)
+      .subscribe()
+    return () => {
+      active = false
+      void supabase.removeChannel(channel)
+    }
+  }, [sessao?.id])
+
+  useEffect(() => {
+    const newest = liveOrders[0]
+    if (!newest) return
+    const liveOrder = liveToPedido(newest)
+    setOrders(current => current.some(order => order.id === liveOrder.id) ? current : [liveOrder, ...current])
   }, [liveOrders])
 
-  const filtrados = pedidos.filter(p => {
-    if (aba === 'Todos') return true
-    if (aba === 'Novos') return p.status === 'novo'
-    if (aba === 'Preparando') return p.status === 'preparando'
-    if (aba === 'Em rota') return p.status === 'saiu_entrega'
-    if (aba === 'Entregues') return p.status === 'entregue'
+  const filteredOrders = useMemo(() => orders.filter(order => {
+    if (tab === 'Novos') return order.status === 'novo'
+    if (tab === 'Preparando') return order.status === 'preparando'
+    if (tab === 'Em rota') return order.status === 'saiu_entrega'
+    if (tab === 'Entregues') return order.status === 'entregue'
     return true
-  })
+  }), [orders, tab])
 
-  async function avancar(id: string) {
-    const map: Record<Status, Status> = { novo: 'preparando', preparando: 'saiu_entrega', saiu_entrega: 'entregue', entregue: 'entregue' }
-    const atual = pedidos.find(p => p.id === id)
-    if (!atual) return
-    const novoStatus = map[atual.status]
-    const patch: Record<string, unknown> = { status: novoStatus }
+  const newCount = orders.filter(order => order.status === 'novo').length
 
-    if (novoStatus === 'entregue') {
-      const codigo = await promptDialog({
-        title: 'Codigo de entrega',
-        message: 'Peca ao cliente o codigo de 6 digitos exibido no app dele.',
+  async function advance(order: Pedido) {
+    if (!sessao?.id || order.status === 'entregue') return
+    const nextStatus: Status = order.status === 'novo'
+      ? 'preparando'
+      : order.status === 'preparando'
+        ? 'saiu_entrega'
+        : 'entregue'
+
+    if (nextStatus === 'entregue') {
+      const code = await promptDialog({
+        title: 'Código de entrega',
+        message: 'Peça ao cliente o código de 6 dígitos mostrado no app.',
         placeholder: '000000',
       })
-      if (codigo === null) return
-      if (!/^\d{6}$/.test(codigo.trim())) {
-        await alertDialog({ title: 'Codigo invalido', message: 'Digite exatamente os 6 numeros mostrados pelo cliente.', tone: 'danger' })
+      if (code === null) return
+      if (!/^\d{6}$/.test(code.trim())) {
+        await alertDialog({ title: 'Código inválido', message: 'Digite os 6 números mostrados pelo cliente.', tone: 'danger' })
         return
       }
-      const { data, error } = await supabase.rpc('confirmar_entrega_pedido', { p_pedido_id: id, p_codigo: codigo.trim() })
-      if (error) {
-        console.error('Falha ao confirmar entrega', error)
-        await alertDialog({ title: 'Codigo nao confirmado', message: error.message || 'Confirme o codigo com o cliente e tente novamente.', tone: 'danger' })
+      const { data, error } = await supabase.rpc('confirmar_entrega_pedido', {
+        p_pedido_id: order.id,
+        p_codigo: code.trim(),
+      })
+      const result = data as { ok?: boolean; message?: string } | null
+      if (error || !result?.ok) {
+        await alertDialog({ title: 'Entrega não confirmada', message: error?.message || result?.message || 'Confira o código e tente novamente.', tone: 'danger' })
         return
       }
-      const resultado = data as { ok?: boolean; message?: string } | null
-      if (!resultado?.ok) {
-        await alertDialog({ title: 'Codigo nao confirmado', message: resultado?.message || 'Confirme o codigo com o cliente e tente novamente.', tone: 'danger' })
-        return
-      }
-      setPedidos(prev => prev.map(p => (p.id === id ? { ...p, status: 'entregue' } : p)))
+      setOrders(current => current.map(item => item.id === order.id ? { ...item, status: 'entregue' } : item))
       return
     }
 
-    // otimista na tela + grava no banco (o cliente acompanha em tempo real)
-    setPedidos(prev => prev.map(p => (p.id === id ? { ...p, status: novoStatus } : p)))
+    setOrders(current => current.map(item => item.id === order.id ? { ...item, status: nextStatus } : item))
     const { error } = await supabase
       .from('pedidos')
-      .update(patch)
-      .eq('id', id)
+      .update({ status: nextStatus })
+      .eq('id', order.id)
+      .eq('vendedor_id', sessao.id)
     if (error) {
-      console.error('Falha ao atualizar status', error)
-      setPedidos(prev => prev.map(p => (p.id === id ? { ...p, status: atual.status } : p)))
-      return
+      setOrders(current => current.map(item => item.id === order.id ? { ...item, status: order.status } : item))
+      await alertDialog({ title: 'Não foi possível atualizar', message: 'Tente novamente.', tone: 'danger' })
     }
   }
 
-  const novosCount = pedidos.filter(p => p.status === 'novo').length
-
   return (
-    <div style={{ minHeight: '100vh', paddingBottom: 40 }}>
-      {/* Banner de notificação ao vivo */}
+    <div className="page-shell">
+      <AnimatePresence>
+        {locationOrder && <LocationModal order={locationOrder} onClose={() => setLocationOrder(null)} />}
+      </AnimatePresence>
+
+      <div className="page-heading">
+        <div>
+          <h1>Pedidos</h1>
+          <p>Acompanhe cada atendimento em tempo real.</p>
+        </div>
+        {newCount > 0 && <span className="status-pill" style={{ color: '#9a6700', background: '#fff6d8' }}>{newCount} {newCount === 1 ? 'novo' : 'novos'}</span>}
+      </div>
+
       <AnimatePresence>
         {latestOrder && (
-          <NewOrderBanner
-            order={latestOrder}
-            onDismiss={dismissLatest}
-            onView={() => {
-              dismissLatest()
-              setAba('Novos')
-            }}
-          />
+          <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="surface" style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 12, padding: 12, borderColor: '#b9e0ed', background: '#f2fbfd', boxShadow: 'none' }}>
+            <div style={{ width: 40, height: 40, display: 'grid', placeItems: 'center', flex: '0 0 40px', borderRadius: 8, background: '#e4f5fa', color: '#008fc0' }}><Bell size={19} /></div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ color: '#132238', fontSize: 13, fontWeight: 900 }}>Novo pedido recebido</div>
+              <div style={{ marginTop: 2, overflow: 'hidden', color: '#617089', fontSize: 11, fontWeight: 650, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{latestOrder.clienteNome} · {money(latestOrder.total)}</div>
+            </div>
+            <button type="button" className="text-command" onClick={() => { setTab('Novos'); dismissLatest() }}>Ver</button>
+            <button type="button" className="icon-button" style={{ width: 34, height: 34, flexBasis: 34 }} onClick={dismissLatest} aria-label="Fechar aviso"><X size={16} /></button>
+          </motion.div>
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {locModal && <LocationModal pedido={locModal} onClose={() => setLocModal(null)} />}
-      </AnimatePresence>
-
-      {/* Header */}
-      <div style={{ padding: '24px 20px 0', borderBottom: '1px solid rgba(0,0,0,0.05)', marginBottom: 24 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <div>
-            <h1 style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', letterSpacing: -0.5 }}>Pedidos</h1>
-            <div style={{ fontSize: 13, color: '#64748b', marginTop: 2, fontWeight: 500 }}>Radar tático em tempo real</div>
-          </div>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            {novosCount > 0 && (
-              <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} style={{ background: 'rgba(239,68,68,0.15)', color: '#f87171', borderRadius: 20, padding: '6px 14px', fontSize: 12, fontWeight: 800, border: '1px solid rgba(239,68,68,0.3)' }}>
-                {novosCount} {novosCount === 1 ? 'NOVO' : 'NOVOS'}
-              </motion.span>
-            )}
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 10 }} className="hide-scrollbar">
-          {abas.map(a => (
-            <button key={a} onClick={() => setAba(a)} style={{ 
-              padding: '10px 20px', background: aba === a ? 'rgba(14,165,233,0.15)' : 'rgba(0,0,0,0.05)',
-              borderRadius: 20, cursor: 'pointer', fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap',
-              color: aba === a ? '#38bdf8' : '#94a3b8', transition: 'all 0.2s', border: `1px solid ${aba === a ? 'rgba(14,165,233,0.3)' : 'transparent'}`
-            }}>
-              {a}
-            </button>
-          ))}
-        </div>
+      <div role="tablist" aria-label="Filtrar pedidos" style={{ display: 'flex', gap: 7, marginBottom: 14, overflowX: 'auto' }} className="hide-scrollbar">
+        {tabs.map(item => (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === item}
+            key={item}
+            onClick={() => setTab(item)}
+            style={{ minHeight: 38, flex: '0 0 auto', padding: '0 13px', border: `1px solid ${tab === item ? '#79bfd4' : '#dfe6ed'}`, borderRadius: 999, background: tab === item ? '#eaf6fa' : '#fff', color: tab === item ? '#007fa6' : '#617089', fontSize: 11, fontWeight: 850, cursor: 'pointer' }}
+          >
+            {item}
+          </button>
+        ))}
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-        {/* Painel de demanda por zona */}
-        {zoneScores.length > 0 && <ZoneAgentPanel scores={zoneScores} />}
+      {loading ? (
+        <div className="surface shimmer" style={{ height: 180 }} />
+      ) : filteredOrders.length === 0 ? (
+        <div className="surface" style={{ padding: '34px 20px', textAlign: 'center', boxShadow: 'none' }}>
+          <ShoppingBag size={34} color="#8793a5" style={{ margin: '0 auto 12px' }} />
+          <div style={{ color: '#132238', fontSize: 15, fontWeight: 900 }}>Nenhum pedido nesta etapa</div>
+          <p style={{ margin: '6px 0 0', color: '#617089', fontSize: 12, fontWeight: 600 }}>Os pedidos confirmados aparecerão aqui.</p>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: 10 }}>
+          {filteredOrders.map(order => {
+            const config = statusConfig[order.status]
+            const StatusIcon = config.icon
+            const hasLocation = order.clienteLat !== null && order.clienteLng !== null
+            const nextLabel = order.status === 'novo'
+              ? 'Aceitar pedido'
+              : order.status === 'preparando'
+                ? 'Iniciar entrega'
+                : 'Confirmar entrega'
 
-        {/* Lista de pedidos */}
-        <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {filtrados.length === 0 && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ textAlign: 'center', padding: '60px 0', color: '#64748b' }}>
-              <Bell size={40} style={{ margin: '0 auto 16px', opacity: 0.5 }} />
-              <p style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>Radar Limpo</p>
-              <p style={{ fontSize: 13, marginTop: 6 }}>Aguardando sinais de clientes...</p>
-            </motion.div>
-          )}
-          
-          <AnimatePresence mode="popLayout">
-            {filtrados.map(pedido => {
-              const { label, bg, color, icon: Icon } = statusConfig[pedido.status]
-              const isNew = pedido.status === 'novo'
-              return (
-                <motion.div
-                  key={pedido.id}
-                  layout
-                  initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.9, y: -20 }}
-                  className="glass-panel"
-                  style={{
-                    borderRadius: 24, padding: 20,
-                    boxShadow: isNew ? '0 10px 30px rgba(0,0,0,0.3)' : '0 4px 15px rgba(0,0,0,0.2)',
-                    border: isNew
-                      ? pedido.isLive ? '1px solid #38bdf8' : '1px solid #fbbf24'
-                      : '1px solid rgba(0,0,0,0.05)',
-                    position: 'relative', overflow: 'hidden',
-                  }}
-                >
-                  {/* Live badge */}
-                  {pedido.isLive && (
-                    <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(14,165,233,0.15)', borderRadius: 10, padding: '4px 10px', border: '1px solid rgba(14,165,233,0.3)' }}>
-                      <div className="animate-pulse-neon" style={{ width: 6, height: 6, borderRadius: '50%', background: '#38bdf8' }} />
-                      <span style={{ fontSize: 10, fontWeight: 900, color: '#38bdf8' }}>AO VIVO</span>
+            return (
+              <motion.article layout key={order.id} className="surface" style={{ padding: 14, boxShadow: 'none', borderLeft: order.status === 'novo' ? '4px solid #e2ae22' : '1px solid #dfe6ed' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                      <h2 style={{ margin: 0, color: '#132238', fontSize: 15, fontWeight: 900 }}>{shortOrderId(order.id)}</h2>
+                      <span className="status-pill" style={{ minHeight: 24, color: config.color, background: config.background }}><StatusIcon size={12} />{config.label}</span>
+                      {order.isLive && <span style={{ color: '#007fa6', fontSize: 9, fontWeight: 850 }}>Agora</span>}
                     </div>
+                    <div style={{ marginTop: 5, color: '#617089', fontSize: 11, fontWeight: 650 }}>{order.hora}</div>
+                  </div>
+                  <div style={{ color: '#148447', fontSize: 16, fontWeight: 900 }}>{money(order.total)}</div>
+                </div>
+
+                <div style={{ display: 'grid', gap: 8, marginTop: 13 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 9, color: '#40506a', fontSize: 12, fontWeight: 700 }}><UserRound size={16} color="#718096" />{order.cliente}</div>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9, color: '#40506a', fontSize: 12, lineHeight: 1.4, fontWeight: 700 }}><MapPin size={16} color="#718096" style={{ flexShrink: 0 }} />{meetingPoint(order)}</div>
+                  {order.clienteTelefone && (
+                    <a href={`tel:${order.clienteTelefone.replace(/\D/g, '')}`} style={{ display: 'flex', alignItems: 'center', gap: 9, color: '#007fa6', fontSize: 12, fontWeight: 800, textDecoration: 'none' }}><Phone size={16} />{formatPhone(order.clienteTelefone)}</a>
                   )}
+                </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: 18, fontWeight: 900, color: '#0f172a' }}>{pedido.id}</span>
-                        <span style={{ background: bg, color, borderRadius: 12, padding: '4px 10px', fontSize: 11, fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 6, border: `1px solid ${color}40` }}>
-                          <Icon size={12} /> {label}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: 13, color: '#64748b', marginTop: 6, fontWeight: 500 }}>{pedido.cliente} · {pedido.hora}</div>
+                <div style={{ marginTop: 12, padding: 11, borderRadius: 8, background: '#f6f8fb' }}>
+                  {order.itens.length ? order.itens.map((item, index) => (
+                    <div key={`${order.id}-${index}`} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, paddingTop: index ? 6 : 0, color: '#40506a', fontSize: 12, lineHeight: 1.4, fontWeight: 650 }}>
+                      <PackageCheck size={14} color="#8793a5" style={{ marginTop: 1, flexShrink: 0 }} />
+                      {item}
                     </div>
-                    <span style={{ fontSize: 18, fontWeight: 900, color: '#4ade80' }}>
-                      R$ {pedido.total.toFixed(2).replace('.', ',')}
-                    </span>
-                  </div>
+                  )) : <div style={{ color: '#718096', fontSize: 12, fontWeight: 650 }}>Itens não informados</div>}
+                </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12, background: 'rgba(0,0,0,0.05)', padding: '6px 12px', borderRadius: 12, width: 'fit-content' }}>
-                    {pedido.pagamento === 'pix' && <QrCode size={14} color="#22c55e" />}
-                    {pedido.pagamento === 'cartao' && <CreditCard size={14} color="#0ea5e9" />}
-                    {pedido.pagamento === 'dinheiro' && <Banknote size={14} color="#fbbf24" />}
-                    <span style={{ fontSize: 12, color: '#0f172a', fontWeight: 800, textTransform: 'uppercase' }}>{pedido.pagamento}</span>
-                  </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 11, color: '#617089', fontSize: 11, fontWeight: 750 }}>
+                  <PaymentIcon payment={order.pagamento} />
+                  {paymentLabel(order.pagamento)}
+                </div>
 
-                  <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 12, padding: 12, marginBottom: 16 }}>
-                    {pedido.itens.map((item, i) => (
-                      <div key={i} style={{ fontSize: 13, color: '#334155', fontWeight: 600, paddingTop: i > 0 ? 6 : 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#475569' }}/>
-                        {item}
-                      </div>
-                    ))}
-                  </div>
-
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    <motion.button whileTap={{ scale: 0.95 }} onClick={() => setLocModal(pedido)} style={{ flex: 1, background: 'rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 16, padding: '14px 0', color: '#0f172a', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                      <MapPin size={16} /> Mapa
-                    </motion.button>
-
-                    {pedido.status !== 'entregue' && (
-                      <motion.button whileTap={{ scale: 0.95 }} onClick={() => avancar(pedido.id)} style={{ flex: 2, background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', border: 'none', borderRadius: 16, padding: '14px 0', color: '#fff', fontSize: 14, fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 4px 15px rgba(34,197,94,0.3)' }}>
-                        {pedido.status === 'novo' ? 'ACEITAR PEDIDO' : pedido.status === 'preparando' ? 'SAIU PRA ENTREGA' : 'MARCAR ENTREGUE'}
-                        <ChevronRight size={18} />
-                      </motion.button>
-                    )}
-                  </div>
-                </motion.div>
-              )
-            })}
-          </AnimatePresence>
+                <div style={{ display: 'flex', gap: 8, marginTop: 13, paddingTop: 11, borderTop: '1px solid #e7ecf1' }}>
+                  <button type="button" className="secondary-button" disabled={!hasLocation} onClick={() => setLocationOrder(order)} style={{ minHeight: 40, width: 46, padding: 0 }} aria-label={hasLocation ? 'Abrir localização do pedido' : 'Pedido sem coordenadas'}>
+                    <MapPin size={17} />
+                  </button>
+                  {order.status !== 'entregue' && (
+                    <button type="button" className="primary-button" onClick={() => void advance(order)} style={{ minHeight: 40, flex: 1 }}>
+                      {nextLabel}
+                      <ChevronRight size={17} />
+                    </button>
+                  )}
+                </div>
+              </motion.article>
+            )
+          })}
         </div>
-      </div>
-      <style>{`
-        .hide-scrollbar::-webkit-scrollbar { display: none; }
-        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        .dark-popup .leaflet-popup-content-wrapper { background: rgba(255,255,255,0.9); backdrop-filter: blur(10px); color: #0f172a; border: 1px solid rgba(0,0,0,0.08); border-radius: 12px; }
-        .dark-popup .leaflet-popup-tip { background: rgba(255,255,255,0.9); }
-      `}</style>
+      )}
     </div>
   )
 }
-

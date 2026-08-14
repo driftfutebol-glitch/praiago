@@ -107,11 +107,11 @@ export type ZoneHeat = {
 }
 
 /** Cor e label por nível de demanda */
-export const NIVEL_CONFIG: Record<ZoneNivel, { cor: string; corFill: string; label: string; emoji: string }> = {
-  frio:      { cor: '#475569', corFill: 'rgba(71,85,105,0.15)',    label: 'Sem movimento',  emoji: '🧊' },
-  morno:     { cor: '#f59e0b', corFill: 'rgba(245,158,11,0.30)',   label: 'Moderado',       emoji: '🌤️' },
-  quente:    { cor: '#ef4444', corFill: 'rgba(239,68,68,0.40)',    label: 'Agitado',        emoji: '🔥' },
-  explosivo: { cor: '#a855f7', corFill: 'rgba(168,85,247,0.50)',   label: 'Explosivo!',     emoji: '⚡' },
+export const NIVEL_CONFIG: Record<ZoneNivel, { cor: string; corFill: string; label: string }> = {
+  frio:      { cor: '#475569', corFill: 'rgba(71,85,105,0.15)',    label: 'Sem movimento' },
+  morno:     { cor: '#f59e0b', corFill: 'rgba(245,158,11,0.30)',   label: 'Moderado' },
+  quente:    { cor: '#ef4444', corFill: 'rgba(239,68,68,0.40)',    label: 'Agitado' },
+  explosivo: { cor: '#a855f7', corFill: 'rgba(168,85,247,0.50)',   label: 'Explosivo!' },
 }
 
 export function scoreToNivel(score: number): ZoneNivel {
@@ -119,11 +119,5 @@ export function scoreToNivel(score: number): ZoneNivel {
   if (score >= 0.55) return 'quente'
   if (score >= 0.25) return 'morno'
   return 'frio'
-}
-
-// Sem movimento real ainda — não geramos NENHUM dado térmico fictício.
-// Quando houver pedidos de verdade, a demanda por zona virá do Supabase.
-export function getMockHeatData(): ZoneHeat[] {
-  return []
 }
 

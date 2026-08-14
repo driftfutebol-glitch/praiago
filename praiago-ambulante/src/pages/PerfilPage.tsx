@@ -1,226 +1,230 @@
-import { useEffect, useState } from 'react'
-import { Star, MapPin, Package, TrendingUp, ChevronRight, LogOut, Bell, Shield, HelpCircle, CreditCard, Loader2, Clock, Wallet } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import {
+  CheckCircle2,
+  ChevronRight,
+  Clock3,
+  HelpCircle,
+  Loader2,
+  LogOut,
+  MapPin,
+  PackageCheck,
+  Star,
+  Store,
+  TrendingUp,
+  Wallet,
+} from 'lucide-react'
+import { AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import SuportePanel from '../components/SuportePanel'
 import { logout, useSessao } from '../lib/auth'
 import { supabase } from '../lib/supabase'
-import SuportePanel from '../components/SuportePanel'
 
-const menuItems = [
-  { icon: Wallet, label: 'Minha Carteira', desc: 'Saldo, repasses e saque via Pix', to: '/carteira' },
-  { icon: TrendingUp, label: 'Resumo de vendas', desc: 'Quanto você vendeu, dia a dia', to: '/vendas' },
-  { icon: Star, label: 'Avaliações', desc: 'O que os clientes acharam de você', to: '/avaliacoes' },
-  { icon: Bell, label: 'Notificações', desc: 'Alertas de pedidos e novidades' },
-  { icon: Shield, label: 'Segurança', desc: 'Sincronização e Conta' },
-  { icon: HelpCircle, label: 'Suporte', desc: 'Central Tática PraiaGo' },
-]
+type Profile = {
+  nome: string | null
+  categoria: string | null
+  zona: string | null
+  avaliacao_media: number | null
+  total_avaliacoes: number | null
+  horario_abre: string | null
+  horario_fecha: string | null
+  online: boolean | null
+  verificado: boolean | null
+}
+
+type MonthStats = {
+  completedOrders: number
+  revenue: number
+}
+
+const money = (value: number) => value.toLocaleString('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+})
 
 export default function PerfilPage() {
   const navigate = useNavigate()
-  const sessao = useSessao()
-  const [suporteAberto, setSuporteAberto] = useState(false)
-  const [horaAbre, setHoraAbre] = useState('')
-  const [horaFecha, setHoraFecha] = useState('')
-  const [salvandoHorario, setSalvandoHorario] = useState(false)
-  const [horarioMsg, setHorarioMsg] = useState('')
+  const session = useSessao()
+  const [profile, setProfile] = useState<Profile | null>(null)
+  const [stats, setStats] = useState<MonthStats>({ completedOrders: 0, revenue: 0 })
+  const [supportOpen, setSupportOpen] = useState(false)
+  const [openingTime, setOpeningTime] = useState('')
+  const [closingTime, setClosingTime] = useState('')
+  const [savingSchedule, setSavingSchedule] = useState(false)
+  const [scheduleMessage, setScheduleMessage] = useState<{ text: string; error: boolean } | null>(null)
+
+  const load = useCallback(async () => {
+    if (!session?.id) return
+    const monthStart = new Date()
+    monthStart.setDate(1)
+    monthStart.setHours(0, 0, 0, 0)
+
+    const [{ data: profileData }, { data: orders }] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('nome,categoria,zona,avaliacao_media,total_avaliacoes,horario_abre,horario_fecha,online,verificado')
+        .eq('id', session.id)
+        .maybeSingle(),
+      supabase
+        .from('pedidos')
+        .select('total,status')
+        .eq('vendedor_id', session.id)
+        .eq('status', 'entregue')
+        .gte('created_at', monthStart.toISOString()),
+    ])
+
+    const nextProfile = (profileData || null) as Profile | null
+    setProfile(nextProfile)
+    setOpeningTime(nextProfile?.horario_abre || '')
+    setClosingTime(nextProfile?.horario_fecha || '')
+    setStats({
+      completedOrders: orders?.length || 0,
+      revenue: (orders || []).reduce((sum, order) => sum + (Number(order.total) || 0), 0),
+    })
+  }, [session?.id])
 
   useEffect(() => {
-    if (!sessao) return
-    supabase.from('profiles').select('horario_abre,horario_fecha').eq('id', sessao.id).maybeSingle()
-      .then(({ data }) => {
-        if (data) {
-          setHoraAbre(data.horario_abre || '')
-          setHoraFecha(data.horario_fecha || '')
-        }
-      })
-  }, [sessao])
+    if (!session?.id) return
+    void load()
+    const channel = supabase
+      .channel(`ambulante_perfil_${session.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${session.id}` }, load)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos', filter: `vendedor_id=eq.${session.id}` }, load)
+      .subscribe()
+    return () => { void supabase.removeChannel(channel) }
+  }, [load, session?.id])
 
-  async function salvarHorario() {
-    if (!sessao) return
-    setSalvandoHorario(true)
-    setHorarioMsg('')
+  async function saveSchedule() {
+    if (!session?.id) return
+    if ((openingTime && !closingTime) || (!openingTime && closingTime)) {
+      setScheduleMessage({ text: 'Informe abertura e fechamento, ou deixe os dois vazios.', error: true })
+      return
+    }
+    setSavingSchedule(true)
     const { error } = await supabase
       .from('profiles')
-      .update({ horario_abre: horaAbre || null, horario_fecha: horaFecha || null })
-      .eq('id', sessao.id)
-    setSalvandoHorario(false)
-    setHorarioMsg(error ? 'Não deu pra salvar. Tenta de novo.' : 'Horário salvo! Já aparece pros clientes ✅')
-    setTimeout(() => setHorarioMsg(''), 3500)
+      .update({ horario_abre: openingTime || null, horario_fecha: closingTime || null })
+      .eq('id', session.id)
+    setSavingSchedule(false)
+    setScheduleMessage(error
+      ? { text: 'Não foi possível salvar o horário.', error: true }
+      : { text: 'Horário atualizado para os clientes.', error: false })
+    if (!error) void load()
   }
 
-  function sair() {
+  function signOut() {
     logout()
-    navigate('/login')
+    void supabase.auth.signOut()
+    navigate('/login', { replace: true })
   }
+
+  const rating = Number(profile?.avaliacao_media) || 0
+  const reviewCount = Number(profile?.total_avaliacoes) || 0
+  const menuItems = [
+    { icon: Wallet, title: 'Carteira', detail: 'Conta bancária, saldo e saques', action: () => navigate('/carteira') },
+    { icon: TrendingUp, title: 'Vendas', detail: 'Resumo de pedidos entregues', action: () => navigate('/vendas') },
+    { icon: Star, title: 'Avaliações', detail: 'Notas e comentários dos clientes', action: () => navigate('/avaliacoes') },
+    { icon: HelpCircle, title: 'Suporte', detail: 'Atendimento da equipe PraiaGo', action: () => setSupportOpen(true) },
+  ]
 
   return (
-    <div style={{ minHeight: '100vh', paddingBottom: 40 }}>
-      {/* Header com avatar */}
-      <div style={{
-        background: 'linear-gradient(135deg, rgba(14,165,233,0.2), rgba(34,197,94,0.2))',
-        padding: '32px 20px 48px', position: 'relative', overflow: 'hidden',
-        borderBottom: '1px solid rgba(0,0,0,0.05)'
-      }}>
-        <div style={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, borderRadius: '50%', background: 'linear-gradient(135deg, rgba(14,165,233,0.3), rgba(34,197,94,0.3))', filter: 'blur(50px)' }} />
+    <div className="page-shell">
+      <section className="surface" style={{ marginBottom: 12, padding: 16, boxShadow: 'none' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
+          <div style={{ width: 54, height: 54, display: 'grid', placeItems: 'center', flex: '0 0 54px', borderRadius: 8, background: '#eaf6fa', color: '#008fc0' }}>
+            <Store size={26} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h1 style={{ margin: 0, overflow: 'hidden', color: '#132238', fontSize: 20, fontWeight: 900, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile?.nome || session?.nome || 'Ambulante'}</h1>
+            <div style={{ marginTop: 4, color: '#617089', fontSize: 12, fontWeight: 650 }}>{profile?.categoria || 'Categoria da banca não definida'}</div>
+          </div>
+          <span className="status-pill" style={{ color: profile?.verificado ? '#148447' : '#b54708', background: profile?.verificado ? '#eaf8ef' : '#fff4e5' }}>
+            <CheckCircle2 size={13} />
+            {profile?.verificado ? 'Aprovado' : 'Em análise'}
+          </span>
+        </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 20, position: 'relative', zIndex: 1 }}>
-          <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="neon-border" style={{
-            width: 72, height: 72, borderRadius: 20,
-            background: 'rgba(0,0,0,0.05)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 32, boxShadow: '0 0 20px rgba(34,197,94,0.2)'
-          }}>🌴</motion.div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14, paddingTop: 12, borderTop: '1px solid #e7ecf1' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: rating > 0 ? '#9a6700' : '#718096', fontSize: 12, fontWeight: 800 }}>
+            <Star size={15} fill={rating > 0 ? 'currentColor' : 'none'} />
+            {rating > 0 ? rating.toFixed(1).replace('.', ',') : 'Sem nota'}
+            <span style={{ color: '#8793a5', fontWeight: 650 }}>({reviewCount})</span>
+          </div>
+          <div style={{ width: 1, height: 16, background: '#dfe6ed' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, color: '#617089', fontSize: 12, fontWeight: 700 }}>
+            <MapPin size={15} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile?.zona || 'Localização ainda não registrada'}</span>
+          </div>
+        </div>
+      </section>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+        <div className="surface" style={{ padding: 14, boxShadow: 'none' }}>
+          <PackageCheck size={18} color="#008fc0" />
+          <div style={{ marginTop: 9, color: '#132238', fontSize: 22, fontWeight: 900 }}>{stats.completedOrders}</div>
+          <div style={{ color: '#617089', fontSize: 11, lineHeight: 1.3, fontWeight: 700 }}>Entregues no mês</div>
+        </div>
+        <div className="surface" style={{ padding: 14, boxShadow: 'none' }}>
+          <TrendingUp size={18} color="#148447" />
+          <div style={{ marginTop: 9, color: '#132238', fontSize: 18, fontWeight: 900 }}>{money(stats.revenue)}</div>
+          <div style={{ color: '#617089', fontSize: 11, lineHeight: 1.3, fontWeight: 700 }}>Vendas brutas no mês</div>
+        </div>
+      </div>
+
+      <section className="surface" style={{ marginBottom: 14, padding: 15, boxShadow: 'none' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Clock3 size={18} color="#008fc0" />
           <div>
-            <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.1 }} style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', textTransform: 'capitalize', letterSpacing: -0.5 }}>{sessao?.nome || 'Ambulante'}</motion.div>
-            <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.2 }} style={{ fontSize: 13, color: '#64748b', marginTop: 4, fontWeight: 500 }}>{sessao?.email || ''}</motion.div>
-            <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, background: 'rgba(245,158,11,0.1)', padding: '4px 10px', borderRadius: 12, border: '1px solid rgba(245,158,11,0.2)', width: 'fit-content' }}>
-              <Star size={14} color="#fbbf24" fill="#fbbf24" />
-              <span style={{ fontSize: 13, color: '#fbbf24', fontWeight: 900 }}>0,0</span>
-              <span style={{ fontSize: 11, color: 'rgba(251,191,36,0.7)', fontWeight: 600 }}>· 0 avaliações</span>
-            </motion.div>
+            <div style={{ color: '#132238', fontSize: 14, fontWeight: 900 }}>Horário de atendimento</div>
+            <div style={{ marginTop: 2, color: '#617089', fontSize: 11, fontWeight: 600 }}>Fora deste período sua banca aparece fechada.</div>
           </div>
         </div>
-      </div>
 
-      <div style={{ padding: '0 20px', marginTop: -24, position: 'relative', zIndex: 10 }}>
-        {/* Stats rápidos */}
-        <div style={{
-          display: 'grid', gridTemplateColumns: '1fr 1fr 1fr',
-          gap: 12, marginBottom: 24,
-        }}>
-          {[
-            { icon: Package, label: 'Pedidos', value: '0', color: '#38bdf8' },
-            { icon: TrendingUp, label: 'Este mês', value: 'R$ 0', color: '#4ade80' },
-            { icon: MapPin, label: 'Praia', value: 'Grande', color: '#fbbf24' },
-          ].map(({ icon: Icon, label, value, color }, i) => (
-            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 + i * 0.1 }} key={label} className="glass-panel" style={{
-              borderRadius: 20, padding: '16px 10px',
-              textAlign: 'center', border: `1px solid ${color}30`,
-              boxShadow: `0 4px 20px ${color}10`
-            }}>
-              <Icon size={20} color={color} style={{ margin: '0 auto 8px' }} />
-              <div style={{ fontSize: 16, fontWeight: 900, color: '#0f172a' }}>{value}</div>
-              <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600, marginTop: 4 }}>{label}</div>
-            </motion.div>
-          ))}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9, marginTop: 13 }}>
+          <label>
+            <span className="field-label">Abre</span>
+            <input type="time" value={openingTime} onChange={event => setOpeningTime(event.target.value)} style={{ width: '100%', minHeight: 44, marginTop: 6, padding: '0 10px', border: '1px solid #dfe6ed', borderRadius: 8, background: '#f8fafc', color: '#132238', fontWeight: 800 }} />
+          </label>
+          <label>
+            <span className="field-label">Fecha</span>
+            <input type="time" value={closingTime} onChange={event => setClosingTime(event.target.value)} style={{ width: '100%', minHeight: 44, marginTop: 6, padding: '0 10px', border: '1px solid #dfe6ed', borderRadius: 8, background: '#f8fafc', color: '#132238', fontWeight: 800 }} />
+          </label>
         </div>
 
-        {/* Info da banca */}
-        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 }} className="glass-panel" style={{
-          borderRadius: 24, padding: '20px', marginBottom: 20,
-        }}>
-          <div style={{ fontSize: 12, fontWeight: 900, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 16 }}>
-            DADOS DA BANCA
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 14, color: '#64748b', fontWeight: 500 }}>Nome</span>
-              <span style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>{sessao?.nome || 'Não definido'}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 14, color: '#64748b', fontWeight: 500 }}>Categoria</span>
-              <span style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>Não definida</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 14, color: '#64748b', fontWeight: 500 }}>Radar Ativo</span>
-              <span style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>Praia Grande, SP</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 14, color: '#64748b', fontWeight: 500 }}>Status da conexão</span>
-              <span style={{ fontSize: 11, fontWeight: 900, color: '#4ade80', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: 12, padding: '4px 12px', letterSpacing: 1, textTransform: 'uppercase' }}>Conectado</span>
-            </div>
-          </div>
-        </motion.div>
+        {scheduleMessage && <div style={{ marginTop: 9, color: scheduleMessage.error ? '#b42335' : '#148447', fontSize: 11, fontWeight: 750 }}>{scheduleMessage.text}</div>}
+        <button type="button" className="secondary-button" onClick={() => void saveSchedule()} disabled={savingSchedule} style={{ width: '100%', marginTop: 11 }}>
+          {savingSchedule ? <Loader2 size={17} className="animate-spin-slow" /> : <Clock3 size={17} />}
+          Salvar horário
+        </button>
+      </section>
 
-        {/* Horário de funcionamento (o cliente vê "Aberto/Fechado" por isso) */}
-        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.52 }} className="glass-panel" style={{
-          borderRadius: 24, padding: '20px', marginBottom: 20,
-        }}>
-          <div style={{ fontSize: 12, fontWeight: 900, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Clock size={14} color="#0ea5e9" /> HORÁRIO DE FUNCIONAMENTO
-          </div>
-          <p style={{ fontSize: 12.5, color: '#64748b', fontWeight: 500, margin: '0 0 14px' }}>Fora desse horário sua banca aparece como <strong>fechada</strong> pros clientes.</p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-            <div>
-              <label style={{ fontSize: 11, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 6 }}>ABRE ÀS</label>
-              <input type="time" value={horaAbre} onChange={e => setHoraAbre(e.target.value)} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 14, padding: '12px 12px', fontSize: 16, fontWeight: 800, color: '#0f172a', background: '#f8fafc' }} />
-            </div>
-            <div>
-              <label style={{ fontSize: 11, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 6 }}>FECHA ÀS</label>
-              <input type="time" value={horaFecha} onChange={e => setHoraFecha(e.target.value)} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 14, padding: '12px 12px', fontSize: 16, fontWeight: 800, color: '#0f172a', background: '#f8fafc' }} />
-            </div>
-          </div>
-          <button type="button" onClick={salvarHorario} disabled={salvandoHorario} style={{ width: '100%', border: 'none', background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', color: '#fff', borderRadius: 16, padding: 14, fontSize: 14, fontWeight: 900, cursor: salvandoHorario ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-            {salvandoHorario ? <Loader2 size={17} className="animate-spin-slow" /> : <Clock size={17} />}
-            Salvar horário
-          </button>
-          {horarioMsg && <div style={{ marginTop: 10, fontSize: 13, fontWeight: 800, color: horarioMsg.includes('✅') ? '#16a34a' : '#ef4444', textAlign: 'center' }}>{horarioMsg}</div>}
-        </motion.div>
+      <section className="surface" style={{ marginBottom: 14, overflow: 'hidden', boxShadow: 'none' }}>
+        {menuItems.map((item, index) => {
+          const Icon = item.icon
+          return (
+            <button type="button" key={item.title} onClick={item.action} style={{ width: '100%', minHeight: 66, display: 'flex', alignItems: 'center', gap: 12, padding: '10px 13px', border: 0, borderTop: index ? '1px solid #e7ecf1' : 0, background: '#fff', color: '#132238', textAlign: 'left', cursor: 'pointer' }}>
+              <span style={{ width: 38, height: 38, display: 'grid', placeItems: 'center', flex: '0 0 38px', borderRadius: 8, background: '#f2f5f7', color: '#526178' }}><Icon size={19} /></span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 13, fontWeight: 900 }}>{item.title}</span>
+                <span style={{ display: 'block', marginTop: 2, color: '#718096', fontSize: 11, fontWeight: 600 }}>{item.detail}</span>
+              </span>
+              <ChevronRight size={17} color="#8793a5" />
+            </button>
+          )
+        })}
+      </section>
 
-        {/* Menu de opções */}
-        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.55 }} className="glass-panel" style={{
-          borderRadius: 24, padding: '20px', marginBottom: 20,
-        }}>
-          <div style={{ fontSize: 12, fontWeight: 900, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 16 }}>
-            COMO VOCÊ RECEBE
-          </div>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-            <CreditCard size={18} color="#0284c7" style={{ flexShrink: 0, marginTop: 2 }} />
-            <span style={{ fontSize: 13.5, color: '#475569', fontWeight: 600, lineHeight: 1.5 }}>
-              Seus repasses caem na sua <b>chave Pix</b>, 7 dias após o pagamento. Não precisa de conta em gateway nenhum — cadastre ou troque a chave na aba <b>Vendas</b>.
-            </span>
-          </div>
-        </motion.div>
-
-        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.6 }} className="glass-panel" style={{
-          borderRadius: 24, overflow: 'hidden', marginBottom: 20,
-        }}>
-          {menuItems.map(({ icon: Icon, label, desc, to }, i) => (
-            <motion.button whileTap={{ backgroundColor: 'rgba(0,0,0,0.05)' }} key={label} onClick={() => { if (label === 'Suporte') setSuporteAberto(true); else if (to) navigate(to) }} style={{
-              width: '100%', background: 'transparent', border: 'none', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', gap: 16, padding: '16px 20px',
-              borderTop: i > 0 ? '1px solid rgba(0,0,0,0.05)' : 'none',
-              textAlign: 'left', transition: 'background 0.2s'
-            }}>
-              <div style={{
-                width: 44, height: 44, borderRadius: 14, background: 'rgba(0,0,0,0.05)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                border: '1px solid rgba(0,0,0,0.08)'
-              }}>
-                <Icon size={20} color="#cbd5e1" />
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>{label}</div>
-                <div style={{ fontSize: 12, color: '#64748b', marginTop: 2, fontWeight: 500 }}>{desc}</div>
-              </div>
-              <ChevronRight size={18} color="#64748b" />
-            </motion.button>
-          ))}
-        </motion.div>
-
-        {/* Logout */}
-        <motion.button whileTap={{ scale: 0.98 }} initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.7 }} onClick={sair} className="glass-panel" style={{
-          width: '100%', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 24,
-          padding: '16px 20px', cursor: 'pointer', display: 'flex', alignItems: 'center',
-          gap: 16, background: 'rgba(239,68,68,0.05)',
-        }}>
-          <div style={{
-            width: 44, height: 44, borderRadius: 14, background: 'rgba(239,68,68,0.1)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-          }}>
-            <LogOut size={20} color="#f87171" />
-          </div>
-          <span style={{ fontSize: 15, fontWeight: 900, color: '#f87171', textTransform: 'uppercase', letterSpacing: 0.5 }}>Sair da conta</span>
-        </motion.button>
-      </div>
+      <button type="button" className="danger-button" onClick={signOut} style={{ width: '100%' }}>
+        <LogOut size={18} />
+        Sair da conta
+      </button>
 
       <AnimatePresence>
-        {suporteAberto && sessao && (
+        {supportOpen && session && (
           <SuportePanel
-            onClose={() => setSuporteAberto(false)}
-            usuarioId={sessao.id}
-            usuarioNome={sessao.nome || 'Ambulante'}
-            usuarioEmail={sessao.email || ''}
+            onClose={() => setSupportOpen(false)}
+            usuarioId={session.id}
+            usuarioNome={profile?.nome || session.nome || 'Ambulante'}
+            usuarioEmail={session.email || ''}
             plataforma="ambulante"
           />
         )}

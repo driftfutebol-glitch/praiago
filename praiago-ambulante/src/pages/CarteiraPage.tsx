@@ -101,25 +101,25 @@ export default function CarteiraPage() {
     setSacando(false)
     const erro = (data as { error?: string })?.error || (error ? error.message : '')
     if (erro) { alertDialog({ title: 'Não deu pra sacar', message: erro, tone: 'danger' }); return }
-    await alertDialog({ title: 'Saque solicitado! ✅', message: 'Assim que o provedor liquidar, o Pix cai na sua conta.', tone: 'success' })
+    await alertDialog({ title: 'Saque solicitado', message: 'Assim que o provedor liquidar, o valor cai na sua conta.', tone: 'success' })
     carregar()
   }
 
-  const cardBase: React.CSSProperties = { borderRadius: 20, padding: 18, border: '1px solid rgba(0,0,0,0.06)' }
+  const cardBase: React.CSSProperties = { borderRadius: 8, padding: 16, border: '1px solid #dfe6ed', boxShadow: 'none' }
 
   return (
-    <div style={{ minHeight: '100vh', paddingBottom: 100 }}>
-      <div style={{ background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', padding: '24px 20px 44px', borderBottomLeftRadius: 28, borderBottomRightRadius: 28 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button aria-label="Voltar" onClick={() => navigate('/perfil')} style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255,255,255,0.2)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={18} color="#fff" /></button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Wallet size={22} color="#fff" />
-            <h1 style={{ fontSize: 22, fontWeight: 900, color: '#fff', margin: 0 }}>Minha Carteira</h1>
+    <div className="page-shell">
+      <div className="page-heading">
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+          <button type="button" aria-label="Voltar" onClick={() => navigate('/perfil')} className="icon-button"><ArrowLeft size={19} /></button>
+          <div>
+            <h1>Carteira</h1>
+            <p>Saldo, conta bancária, extrato e saques.</p>
           </div>
         </div>
       </div>
 
-      <div style={{ padding: '0 16px', marginTop: -28 }}>
+      <div>
         {/* Saldo disponível + saque */}
         <motion.div initial={{ y: 16, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="glass-panel" style={{ ...cardBase, marginBottom: 14, textAlign: 'center' }}>
           <div style={{ fontSize: 12, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1 }}>Saldo disponível pra saque</div>
@@ -127,7 +127,7 @@ export default function CarteiraPage() {
           <div style={{ fontSize: 12.5, color: '#64748b', fontWeight: 600, marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
             <Clock size={13} /> Pendente (liberando): <strong style={{ color: '#0f172a' }}>{brl(esp?.saldo_pendente ?? 0)}</strong>
           </div>
-          <button onClick={solicitarSaque} disabled={sacando || loading} style={{ width: '100%', border: 'none', borderRadius: 16, padding: 15, fontSize: 15, fontWeight: 900, color: '#fff', background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', cursor: sacando ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <button onClick={solicitarSaque} disabled={sacando || loading} className="primary-button" style={{ width: '100%' }}>
             {sacando ? <Loader2 size={18} className="animate-spin-slow" /> : <ArrowDownToLine size={18} />} Sacar pra minha conta
           </button>
           {!temConta && !loading && (
@@ -140,7 +140,7 @@ export default function CarteiraPage() {
               esperando o prazo. Mostra o desconto antes de o vendedor decidir —
               taxa que so aparece depois de clicar e o que gera reclamacao. */}
           {previa?.ativo && (previa.antecipavel ?? 0) > 0 && (
-            <div style={{ marginTop: 12, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.28)', borderRadius: 16, padding: 14, textAlign: 'left' }}>
+            <div style={{ marginTop: 12, background: '#fffaf2', border: '1px solid #f4d39f', borderRadius: 8, padding: 13, textAlign: 'left' }}>
               <div style={{ fontSize: 12.5, fontWeight: 900, color: '#b45309', display: 'flex', alignItems: 'center', gap: 6 }}>
                 <Zap size={14} /> Receber agora, sem esperar
               </div>
@@ -151,7 +151,7 @@ export default function CarteiraPage() {
               </div>
               <button
                 onClick={() => anteciparSaldo('rapido')} disabled={antecipando}
-                style={{ width: '100%', marginTop: 10, border: 'none', borderRadius: 14, padding: 13, fontSize: 14, fontWeight: 900, color: '#fff', background: 'linear-gradient(135deg, #f59e0b, #f97316)', cursor: antecipando ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                style={{ width: '100%', minHeight: 44, marginTop: 10, border: 'none', borderRadius: 8, padding: 10, fontSize: 13, fontWeight: 900, color: '#fff', background: '#b54708', cursor: antecipando ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
               >
                 {antecipando ? <Loader2 size={16} className="animate-spin-slow" /> : <Zap size={16} />}
                 Antecipar {brl(previa.antecipavel)}
@@ -161,7 +161,7 @@ export default function CarteiraPage() {
 
           {/* Credito tem prazo (e taxa) proprios: o gateway so libera em D+30. */}
           {previa?.credito_ativo && (previa.antecipavel_credito ?? 0) > 0 && (
-            <div style={{ marginTop: 10, background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.28)', borderRadius: 16, padding: 14, textAlign: 'left' }}>
+            <div style={{ marginTop: 10, background: '#f8f6fc', border: '1px solid #d7cbed', borderRadius: 8, padding: 13, textAlign: 'left' }}>
               <div style={{ fontSize: 12.5, fontWeight: 900, color: '#7c3aed', display: 'flex', alignItems: 'center', gap: 6 }}>
                 <Zap size={14} /> Antecipar vendas no cartão de crédito
               </div>
@@ -172,7 +172,7 @@ export default function CarteiraPage() {
               </div>
               <button
                 onClick={() => anteciparSaldo('credito')} disabled={antecipando}
-                style={{ width: '100%', marginTop: 10, border: 'none', borderRadius: 14, padding: 13, fontSize: 14, fontWeight: 900, color: '#fff', background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', cursor: antecipando ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                style={{ width: '100%', minHeight: 44, marginTop: 10, border: 'none', borderRadius: 8, padding: 10, fontSize: 13, fontWeight: 900, color: '#fff', background: '#6d49b8', cursor: antecipando ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
               >
                 {antecipando ? <Loader2 size={16} className="animate-spin-slow" /> : <Zap size={16} />}
                 Antecipar {brl(previa.antecipavel_credito)}

@@ -1,86 +1,74 @@
+import { LayoutDashboard, MapPinned, Package, Store, UserRound } from 'lucide-react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Package, UtensilsCrossed, User, Zap } from 'lucide-react'
-import { motion } from 'framer-motion'
 
 const navItems = [
-  { to: '/',         icon: LayoutDashboard, label: 'Painel'   },
-  { to: '/pedidos',  icon: Package,         label: 'Pedidos'  },
-  { to: '/zonas',    icon: Zap,             label: 'Zonas',   highlight: true },
-  { to: '/cardapio', icon: UtensilsCrossed, label: 'Cardápio' },
-  { to: '/perfil',   icon: User,            label: 'Perfil'   },
+  { to: '/', icon: LayoutDashboard, label: 'Painel' },
+  { to: '/pedidos', icon: Package, label: 'Pedidos' },
+  { to: '/zonas', icon: MapPinned, label: 'Mapa' },
+  { to: '/cardapio', icon: Store, label: 'Produtos' },
+  { to: '/perfil', icon: UserRound, label: 'Perfil' },
 ]
 
 export default function BottomNav() {
   const location = useLocation()
-  return (
-    <nav style={{
-      position: 'fixed', bottom: 16, left: '50%', transform: 'translateX(-50%)',
-      width: 'calc(100% - 32px)', maxWidth: 400,
-      zIndex: 50,
-    }}>
-      <div className="glass-panel" style={{
-        display: 'flex', height: 64, borderRadius: 24,
-        boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
-        border: '1px solid rgba(0,0,0,0.05)',
-        position: 'relative'
-      }}>
-        {navItems.map(({ to, icon: Icon, label, highlight }) => {
-          const active = to === '/' ? location.pathname === '/' : location.pathname.startsWith(to)
-          
-          if (highlight) {
-            return (
-              <NavLink key={to} to={to} style={{
-                flex: 1, display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center', gap: 4,
-                textDecoration: 'none', position: 'relative',
-              }}>
-                <motion.div whileTap={{ scale: 0.9 }} style={{
-                  width: 50, height: 50, borderRadius: '50%',
-                  background: active ? 'linear-gradient(135deg, #0ea5e9, #22c55e)' : '#1e293b',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  marginTop: -24,
-                  boxShadow: active ? '0 8px 25px rgba(34,197,94,0.4)' : '0 4px 15px rgba(0,0,0,0.5)',
-                  border: active ? 'none' : '2px solid rgba(0,0,0,0.08)',
-                  position: 'relative'
-                }}>
-                  {active && (
-                    <motion.div
-                      layoutId="navGlowHighlight"
-                      style={{
-                        position: 'absolute', inset: -4, borderRadius: '50%',
-                        background: 'linear-gradient(135deg, #0ea5e9, #22c55e)',
-                        filter: 'blur(8px)', opacity: 0.6, zIndex: -1
-                      }}
-                    />
-                  )}
-                  <Icon size={24} color={active ? '#fff' : '#4ade80'} />
-                </motion.div>
-                <span style={{ color: active ? '#4ade80' : '#94a3b8', fontWeight: active ? 800 : 600, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</span>
-              </NavLink>
-            )
-          }
 
+  return (
+    <nav
+      aria-label="Navegacao principal"
+      style={{
+        position: 'fixed',
+        left: 12,
+        right: 12,
+        bottom: 'max(10px, env(safe-area-inset-bottom))',
+        zIndex: 80,
+        maxWidth: 470,
+        margin: '0 auto',
+      }}
+    >
+      <div style={{
+        height: 70,
+        display: 'grid',
+        gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+        padding: 6,
+        border: '1px solid rgba(215,224,233,0.96)',
+        borderRadius: 18,
+        background: 'rgba(255,255,255,0.96)',
+        boxShadow: 'var(--shadow-toolbar)',
+        backdropFilter: 'blur(18px)',
+      }}>
+        {navItems.map(({ to, icon: Icon, label }) => {
+          const active = to === '/' ? location.pathname === '/' : location.pathname.startsWith(to)
           return (
-            <NavLink key={to} to={to} style={{
-              flex: 1, display: 'flex', flexDirection: 'column',
-              alignItems: 'center', justifyContent: 'center', gap: 4,
-              color: active ? '#38bdf8' : '#64748b',
-              textDecoration: 'none', position: 'relative'
-            }}>
-              {active && (
-                <motion.div
-                  layoutId="navIndicatorAmb"
-                  style={{
-                    position: 'absolute', top: -1, width: 24, height: 3,
-                    background: '#38bdf8', borderRadius: '0 0 4px 4px',
-                    boxShadow: '0 2px 10px #38bdf8'
-                  }}
-                />
-              )}
-              <motion.div whileTap={{ scale: 0.8 }}>
-                <Icon size={22} color={active ? '#38bdf8' : '#64748b'} />
-              </motion.div>
-              <span style={{ fontSize: 10, fontWeight: active ? 800 : 600 }}>{label}</span>
+            <NavLink
+              key={to}
+              to={to}
+              aria-current={active ? 'page' : undefined}
+              style={{
+                minWidth: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 4,
+                borderRadius: 12,
+                background: active ? '#e9f7f7' : 'transparent',
+                color: active ? '#087f92' : '#6a788e',
+                textDecoration: 'none',
+                transition: 'background 180ms ease, color 180ms ease',
+              }}
+            >
+              <Icon size={21} strokeWidth={active ? 2.4 : 2} />
+              <span style={{
+                maxWidth: '100%',
+                overflow: 'hidden',
+                fontSize: 10,
+                lineHeight: 1,
+                fontWeight: active ? 850 : 700,
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}>
+                {label}
+              </span>
             </NavLink>
           )
         })}

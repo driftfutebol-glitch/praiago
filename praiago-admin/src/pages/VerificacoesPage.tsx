@@ -82,6 +82,69 @@ function checkTone(status?: string) {
   return 'bg-amber-500/10 text-amber-400 border-amber-500/20'
 }
 
+function KycDocumentButton({
+  label,
+  path,
+  onPreview,
+}: {
+  label: string
+  path: string
+  onPreview: (url: string) => void
+}) {
+  const isLegacyUrl = /^(data:image\/|https?:\/\/)/i.test(path)
+  const [url, setUrl] = useState<string | null>(isLegacyUrl ? path : null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    setFailed(false)
+
+    if (isLegacyUrl) {
+      setUrl(path)
+      return () => { active = false }
+    }
+
+    setUrl(null)
+    void supabase.storage
+      .from('kyc-documentos')
+      .createSignedUrl(path, 300)
+      .then(({ data, error }) => {
+        if (!active) return
+        if (error || !data?.signedUrl) {
+          setFailed(true)
+          return
+        }
+        setUrl(data.signedUrl)
+      })
+
+    return () => { active = false }
+  }, [isLegacyUrl, path])
+
+  return (
+    <button
+      type="button"
+      onClick={() => url && onPreview(url)}
+      disabled={!url}
+      title={failed ? `${label}: arquivo indisponível` : label}
+      className="w-16 h-16 rounded-lg bg-slate-800/50 border border-slate-700/50 flex flex-col items-center justify-center hover:border-purple-500/30 transition-all group overflow-hidden relative disabled:cursor-not-allowed"
+    >
+      {url ? (
+        <>
+          <img src={url} alt={label} className="w-full h-full object-cover" />
+          <div className="absolute inset-x-0 bottom-0 bg-slate-950/80 text-[8px] font-bold text-slate-300 text-center py-0.5">{label}</div>
+          <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+            <Eye size={14} className="text-purple-400" />
+          </div>
+        </>
+      ) : failed ? (
+        <FileText size={18} className="text-red-400" />
+      ) : (
+        <Loader2 size={18} className="animate-spin text-slate-500" />
+      )}
+    </button>
+  )
+}
+
 export default function VerificacoesPage() {
   const [verificacoes, setVerificacoes] = useState<Verificacao[]>([])
   const [loading, setLoading] = useState(true)
@@ -386,18 +449,12 @@ export default function VerificacoesPage() {
                         ['Loja', v.foto_loja_url],
                         ['CNH', v.cnh_url],
                       ] as const).filter(([, url]) => !!url).map(([label, url]) => (
-                        <button
+                        <KycDocumentButton
                           key={label}
-                          onClick={() => setPreviewImage(url!)}
-                          title={label}
-                          className="w-16 h-16 rounded-lg bg-slate-800/50 border border-slate-700/50 flex flex-col items-center justify-center hover:border-purple-500/30 transition-all group overflow-hidden relative"
-                        >
-                          <img src={url} alt={label} className="w-full h-full object-cover" />
-                          <div className="absolute inset-x-0 bottom-0 bg-slate-950/80 text-[8px] font-bold text-slate-300 text-center py-0.5">{label}</div>
-                          <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <Eye size={14} className="text-purple-400" />
-                          </div>
-                        </button>
+                          label={label}
+                          path={url!}
+                          onPreview={setPreviewImage}
+                        />
                       ))}
                       {!v.rg_frente_url && !v.rg_verso_url && !v.selfie_url && !v.foto_loja_url && !v.cnh_url && (
                         <div className="text-[10px] text-slate-600 font-mono italic py-2">

@@ -1127,7 +1127,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
       id: pedido.id,
       vendedorId: vendedor.id,
       clienteNome: sessao?.nome ?? 'Cliente PraiaGo',
-      clienteTel: sessao?.telefone ?? '(13) 99999-9999',
+      clienteTel: telefoneCliente || sessao?.telefone || '',
       itens: itensList.map(p => `${carrinho[p.id]}x ${p.nome}`),
       total,
       clienteLat: clientePos[0],
