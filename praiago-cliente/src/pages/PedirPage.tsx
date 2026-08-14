@@ -11,7 +11,7 @@ import { useRoute } from '../hooks/useRoute'
 import { useGPS, type GPSFonte, type GPSStatus } from '../hooks/useGPS'
 import { criarMonitorSentido, type SentidoStatus } from '../lib/trafego'
 import { broadcastOrder } from '../hooks/useOrderBroadcast'
-import { type Vendedor } from '../lib/catalogo'
+import { pertenceACategoria, type Vendedor } from '../lib/catalogo'
 import { criarPix, isPagamentoOnline, pagarComCartao, mensagemRecusaCartao, verificarPagamento, type PixCobranca } from '../lib/pagamento'
 import { obterTaxaCredito } from '../store/useStore'
 import { tokenizarCartao } from '../lib/pagamentosdk'
@@ -1763,6 +1763,7 @@ export default function PedirPage() {
   const [step, setStep] = useState<Step>('menu')
   const [entrega, setEntrega] = useState<Entrega | null>(null)
   const [pedidoId, setPedidoId] = useState<string | null>(null)
+  const [maioridadeConfirmada, setMaioridadeConfirmada] = useState(false)
 
   // Sem loja escolhida → lista de lojas disponíveis (estilo iFood).
   if (!vendedor) {
@@ -1770,8 +1771,24 @@ export default function PedirPage() {
   }
 
   const meuCarrinho = carrinhoVendedor === vendedor.id ? carrinho : {}
+  const vendedorId = vendedor.id
   const totalItens = vendedor.produtos.reduce((a, p) => a + (meuCarrinho[p.id] ?? 0), 0)
   const totalPreco = vendedor.produtos.reduce((a, p) => a + (meuCarrinho[p.id] ?? 0) * p.preco, 0)
+
+  async function alterarQuantidade(produto: Vendedor['produtos'][number], delta: number) {
+    const exigeMaioridade = pertenceACategoria(produto.categoria, 'bebidas_alcoolicas')
+    if (delta > 0 && exigeMaioridade && !maioridadeConfirmada) {
+      const confirmou = await confirmDialog({
+        title: 'Venda permitida apenas para maiores de 18 anos',
+        message: 'Ao continuar, você confirma que tem 18 anos ou mais. A entrega pode exigir documento com foto.',
+        confirmText: 'Tenho 18 anos ou mais',
+        cancelText: 'Cancelar',
+      })
+      if (!confirmou) return
+      setMaioridadeConfirmada(true)
+    }
+    addItem(vendedorId, produto.id, delta)
+  }
 
   return (
     <div style={{ minHeight: '100vh', background: '#ffffff', color: '#0f172a' }}>
@@ -1835,11 +1852,17 @@ export default function PedirPage() {
         <h3 style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 10 }}>Cardápio <span style={{ fontSize: 24 }}>🔥</span></h3>
         {vendedor.produtos.map(p => {
           const qtd = meuCarrinho[p.id] ?? 0
+          const exigeMaioridade = pertenceACategoria(p.categoria, 'bebidas_alcoolicas')
           const precoOriginal = p.precoOriginal && p.precoOriginal > p.preco ? p.precoOriginal : null
           const promocaoLabel = p.promocao?.selo || (precoOriginal ? 'Oferta PraiaGo' : null)
           return (
             <div key={p.id} style={{ display: 'flex', gap: 20, marginBottom: 32, alignItems: 'center' }}>
               <div style={{ flex: 1 }}>
+                {exigeMaioridade && (
+                  <div style={{ display: 'inline-flex', alignItems: 'center', marginBottom: 8, padding: '4px 8px', borderRadius: 999, background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412', fontSize: 10.5, fontWeight: 950 }}>
+                    Venda 18+
+                  </div>
+                )}
                 {promocaoLabel && (
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#fff7ed', color: '#ea580c', border: '1px solid #fed7aa', borderRadius: 999, padding: '4px 9px', fontSize: 10.5, fontWeight: 950, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.35 }}>
                     <TicketPercent size={11} /> {promocaoLabel}
@@ -1858,12 +1881,12 @@ export default function PedirPage() {
                 <div style={{ position: 'absolute', bottom: -14, left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', background: '#0ea5e9', borderRadius: 16, boxShadow: '0 8px 20px rgba(14,165,233,0.4)' }}>
                   {qtd > 0 ? (
                     <>
-                      <motion.button whileTap={{ scale: 0.9 }} onClick={() => addItem(vendedor.id, p.id, -1)} style={{ padding: '6px 12px', border: 'none', background: 'none', cursor: 'pointer', color: '#fff', fontWeight: 900, fontSize: 20, lineHeight: 1 }}>−</motion.button>
+                      <motion.button whileTap={{ scale: 0.9 }} onClick={() => void alterarQuantidade(p, -1)} style={{ padding: '6px 12px', border: 'none', background: 'none', cursor: 'pointer', color: '#fff', fontWeight: 900, fontSize: 20, lineHeight: 1 }}>−</motion.button>
                       <span style={{ fontSize: 15, fontWeight: 900, color: '#fff', minWidth: 24, textAlign: 'center' }}>{qtd}</span>
-                      <motion.button whileTap={{ scale: 0.9 }} onClick={() => addItem(vendedor.id, p.id, 1)} style={{ padding: '6px 12px', border: 'none', background: 'none', cursor: 'pointer', color: '#fff', fontWeight: 900, fontSize: 20, lineHeight: 1 }}>+</motion.button>
+                      <motion.button whileTap={{ scale: 0.9 }} onClick={() => void alterarQuantidade(p, 1)} style={{ padding: '6px 12px', border: 'none', background: 'none', cursor: 'pointer', color: '#fff', fontWeight: 900, fontSize: 20, lineHeight: 1 }}>+</motion.button>
                     </>
                   ) : (
-                    <motion.button whileTap={{ scale: 0.95 }} onClick={() => addItem(vendedor.id, p.id, 1)} style={{ padding: '8px 20px', border: 'none', background: 'none', cursor: 'pointer', color: '#fff', fontWeight: 800, fontSize: 14 }}>Add</motion.button>
+                    <motion.button whileTap={{ scale: 0.95 }} onClick={() => void alterarQuantidade(p, 1)} style={{ padding: '8px 20px', border: 'none', background: 'none', cursor: 'pointer', color: '#fff', fontWeight: 800, fontSize: 14 }}>Add</motion.button>
                   )}
                 </div>
               </div>

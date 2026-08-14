@@ -3,11 +3,14 @@ export type ProductCategory = {
   label: string
   color: string
   sprite: readonly [number, number]
+  image?: string
+  ageRestricted?: boolean
   aliases: readonly string[]
 }
 
 export const PRODUCT_CATEGORIES: readonly ProductCategory[] = [
-  { id: 'bebidas', label: 'Bebidas', color: '#0891b2', sprite: [0, 0], aliases: ['bebida', 'bebidas', 'agua', 'aguas', 'suco', 'sucos', 'refrigerante', 'refrigerantes', 'cerveja', 'cervejas', 'chopp', 'chope'] },
+  { id: 'bebidas', label: 'Bebidas', color: '#0891b2', sprite: [0, 0], aliases: ['bebida', 'bebidas', 'agua', 'aguas', 'suco', 'sucos', 'refrigerante', 'refrigerantes'] },
+  { id: 'bebidas_alcoolicas', label: 'Bebidas alcoólicas', color: '#b45309', sprite: [0, 0], image: '/images/bebidas-alcoolicas-v1.webp', ageRestricted: true, aliases: ['bebida alcoolica', 'bebidas alcoolicas', 'cerveja', 'cervejas', 'chopp', 'chope', 'vinho', 'vinhos', 'drink', 'drinks', 'caipirinha', 'destilado', 'destilados', 'vodka', 'gin', 'whisky'] },
   { id: 'espetos', label: 'Espetos', color: '#ea580c', sprite: [1, 0], aliases: ['espeto', 'espetos', 'espetinho', 'espetinhos', 'churrasco'] },
   { id: 'salgados', label: 'Salgados', color: '#d97706', sprite: [2, 0], aliases: ['salgado', 'salgados', 'coxinha', 'coxinhas'] },
   { id: 'porcoes', label: 'Porções', color: '#16a34a', sprite: [3, 0], aliases: ['porcao', 'porcoes', 'petisco', 'petiscos', 'aperitivo', 'aperitivos'] },
@@ -36,7 +39,9 @@ export const PRODUCT_CATEGORIES: readonly ProductCategory[] = [
   { id: 'outros', label: 'Outros', color: '#475569', sprite: [4, 5], aliases: ['outro', 'outros', 'ambulante', 'diversos', 'geral'] },
 ]
 
-export const FEATURED_PRODUCT_CATEGORIES = PRODUCT_CATEGORIES.slice(0, 8)
+const FEATURED_CATEGORY_IDS = new Set(['bebidas', 'bebidas_alcoolicas', 'espetos', 'salgados', 'porcoes', 'almoco', 'doces_bolos', 'acai'])
+
+export const FEATURED_PRODUCT_CATEGORIES = PRODUCT_CATEGORIES.filter(category => FEATURED_CATEGORY_IDS.has(category.id))
 
 export function normalizeCategory(value: string) {
   return value

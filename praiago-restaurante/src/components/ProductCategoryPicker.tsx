@@ -18,10 +18,10 @@ export function CategoryPhoto({ category, size = 54 }: { category: ProductCatego
         height: size,
         flexShrink: 0,
         display: 'block',
-        backgroundImage: 'url(/images/categorias-comida-v1.webp)',
+        backgroundImage: `url(${category.image || '/images/categorias-comida-v1.webp'})`,
         backgroundRepeat: 'no-repeat',
-        backgroundSize: `${size * 5}px ${size * 6}px`,
-        backgroundPosition: `${-column * size}px ${-row * size}px`,
+        backgroundSize: category.image ? 'contain' : `${size * 5}px ${size * 6}px`,
+        backgroundPosition: category.image ? 'center' : `${-column * size}px ${-row * size}px`,
       }}
     />
   )
@@ -73,7 +73,7 @@ export default function ProductCategoryPicker({ value, onChange }: { value: stri
               style={{ '--category-color': category.color } as React.CSSProperties}
             >
               <CategoryPhoto category={category} size={48} />
-              <span>{category.label}</span>
+              <span>{category.label}{category.ageRestricted ? ' · 18+' : ''}</span>
             </button>
           )
         })}

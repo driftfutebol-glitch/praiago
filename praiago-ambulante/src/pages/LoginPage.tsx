@@ -227,7 +227,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '28px 18px', backgroundImage: 'linear-gradient(180deg, rgba(255,255,255,0.78) 0%, rgba(244,247,250,0.96) 48%, #f4f7fa 100%), url(/images/ambulante-beach-header-v1.webp)', backgroundPosition: 'center top', backgroundSize: 'auto 380px', backgroundRepeat: 'no-repeat' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '28px 18px', backgroundImage: 'linear-gradient(180deg, rgba(255,255,255,0.78) 0%, rgba(244,247,250,0.96) 48%, #f4f7fa 100%), url(/images/ambulante-beach-header-v1.webp)', backgroundPosition: 'center top', backgroundSize: 'cover', backgroundRepeat: 'no-repeat' }}>
       <div style={{ width: '100%', maxWidth: 400 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: 64, marginBottom: 18 }}>
           <div aria-label="PraiaGo" style={{ width: 150, height: 64, overflow: 'hidden', position: 'relative' }}>

@@ -21,7 +21,8 @@ import EmailVerificationBanner from './components/EmailVerificationBanner'
 import AiChatbot from './components/AiChatbot'
 import { DialogHost } from './lib/dialog'
 import PasswordRecoveryHandler from './components/PasswordRecoveryHandler'
-import IntroSplash, { deveMostrarIntro } from './components/IntroSplash'
+import IntroSplash from './components/IntroSplash'
+import { deveMostrarIntro } from './lib/introSession'
 
 function playNotifySound() {
   try {

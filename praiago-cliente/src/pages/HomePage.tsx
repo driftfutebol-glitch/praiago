@@ -47,7 +47,7 @@ type Cupom = {
 
 const cardShadow = '0 16px 40px rgba(15,23,42,0.10)'
 const CATEGORY_SPRITE = '/images/categorias-comida-v1.webp'
-const CATEGORIAS_DESTAQUE: readonly CategoriaId[] = ['bebidas', 'espetos', 'salgados', 'porcoes', 'almoco', 'acai']
+const CATEGORIAS_DESTAQUE: readonly CategoriaId[] = ['bebidas', 'bebidas_alcoolicas', 'espetos', 'salgados', 'porcoes', 'almoco', 'acai']
 
 function NotifPanel({ onClose }: { onClose: () => void }) {
   const notificacoes = useStore(s => s.notificacoes)
@@ -79,6 +79,7 @@ function NotifPanel({ onClose }: { onClose: () => void }) {
 
 function CategoryPhoto({ categoria, className }: { categoria: Categoria; className?: string }) {
   const [coluna, linha] = categoria.sprite
+  const image = 'image' in categoria ? categoria.image : null
   const zoom = 1.25
   const posicaoX = ((coluna * zoom + (zoom - 1) / 2) / (5 * zoom - 1)) * 100
   const posicaoY = ((linha * zoom + (zoom - 1) / 2) / (6 * zoom - 1)) * 100
@@ -88,10 +89,10 @@ function CategoryPhoto({ categoria, className }: { categoria: Categoria; classNa
       className={className}
       style={{
         display: 'block',
-        backgroundImage: `url(${CATEGORY_SPRITE})`,
+        backgroundImage: `url(${image || CATEGORY_SPRITE})`,
         backgroundRepeat: 'no-repeat',
-        backgroundSize: `${5 * zoom * 100}% ${6 * zoom * 100}%`,
-        backgroundPosition: `${posicaoX}% ${posicaoY}%`,
+        backgroundSize: image ? 'contain' : `${5 * zoom * 100}% ${6 * zoom * 100}%`,
+        backgroundPosition: image ? 'center' : `${posicaoX}% ${posicaoY}%`,
       }}
     />
   )
@@ -189,6 +190,7 @@ function CategoriasPanel({
             </div>
           ) : categoriasFiltradas.map(categoria => {
             const selecionadaAgora = selecionada === categoria.id
+            const restrita = 'ageRestricted' in categoria && categoria.ageRestricted
             const count = catalogo.filter(vendedor => vendedor.produtos.some(produto => pertenceACategoria(produto.categoria, categoria.id))).length
             return (
               <button
@@ -204,10 +206,10 @@ function CategoriasPanel({
                     categoria, mas não existe um ícone próprio no catálogo e
                     inventar 20 ícones deixaria metade sem sentido. */}
                 <span style={{ position: 'relative', zIndex: 1, display: 'grid', placeItems: 'center', width: 34, height: 34, borderRadius: 11, marginBottom: 9, background: `${categoria.cor}18`, color: categoria.cor, fontSize: 15, fontWeight: 950 }}>
-                  {categoria.nome.charAt(0)}
+                  {restrita ? '18+' : categoria.nome.charAt(0)}
                 </span>
-                <span style={{ position: 'relative', zIndex: 1, display: 'block', maxWidth: '62%', fontSize: 14.5, fontWeight: 950, color: '#0f172a', lineHeight: 1.15, letterSpacing: 0 }}>{categoria.nome}</span>
-                <span style={{ position: 'absolute', zIndex: 1, left: 13, bottom: 12, padding: '3px 8px', borderRadius: 999, fontSize: 9.5, fontWeight: 900, color: selecionadaAgora ? categoria.cor : '#64748b', background: selecionadaAgora ? `${categoria.cor}18` : '#f1f5f9' }}>
+                <span style={{ position: 'relative', zIndex: 1, display: 'block', maxWidth: restrita ? '50%' : '62%', fontSize: restrita ? 13.5 : 14.5, fontWeight: 950, color: '#0f172a', lineHeight: 1.15, letterSpacing: 0 }}>{categoria.nome}</span>
+                <span style={{ position: 'absolute', zIndex: 1, left: 13, bottom: restrita ? 4 : 12, padding: '3px 8px', borderRadius: 999, fontSize: 9.5, fontWeight: 900, color: selecionadaAgora ? categoria.cor : '#64748b', background: selecionadaAgora ? `${categoria.cor}18` : '#f1f5f9' }}>
                   {count} {count === 1 ? 'loja' : 'lojas'}
                 </span>
                 <CategoryPhoto categoria={categoria} className="prg-category-photo-large" />
@@ -744,6 +746,7 @@ export default function HomePage() {
           <div className="prg-category-strip" style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '2px 1px 8px', scrollbarWidth: 'none', scrollSnapType: 'x proximity' }}>
             {CATEGORIAS.filter(cat => CATEGORIAS_DESTAQUE.includes(cat.id)).map(cat => {
               const sel = catSel === cat.id
+              const restrita = 'ageRestricted' in cat && cat.ageRestricted
               const count = catalogo.filter(v => v.produtos.some(p => pertenceACategoria(p.categoria, cat.id))).length
               return (
                 <button
@@ -767,10 +770,10 @@ export default function HomePage() {
                   boxShadow: sel ? `0 12px 25px ${cat.cor}38` : `0 8px 20px rgba(15,23,42,0.06), 0 3px 10px ${cat.cor}12`,
                   textAlign: 'left',
                   scrollSnapAlign: 'start',
-                }}>
-                  <span style={{ position: 'relative', zIndex: 1, display: 'block', maxWidth: '62%', fontSize: 12, fontWeight: 950, color: '#0f172a', lineHeight: 1.15 }}>{cat.nome}</span>
-                  <span style={{ position: 'absolute', zIndex: 1, left: 12, bottom: 10, display: 'block', fontSize: 10, fontWeight: 850, color: sel ? cat.cor : '#64748b', whiteSpace: 'nowrap' }}>
-                    {count} {count === 1 ? 'loja' : 'lojas'}
+                  }}>
+                  <span style={{ position: 'relative', zIndex: 1, display: 'block', maxWidth: restrita ? '48%' : '62%', fontSize: restrita ? 11.2 : 12, fontWeight: 950, color: '#0f172a', lineHeight: 1.15 }}>{cat.nome}</span>
+                  <span style={{ position: 'absolute', zIndex: 1, left: 12, bottom: restrita ? 4 : 10, display: 'block', fontSize: 10, fontWeight: 850, color: sel ? cat.cor : '#64748b', whiteSpace: 'nowrap' }}>
+                    {count} {count === 1 ? 'loja' : 'lojas'}{restrita ? ' · 18+' : ''}
                   </span>
                   <CategoryPhoto categoria={cat} className="prg-category-photo-small" />
                 </button>

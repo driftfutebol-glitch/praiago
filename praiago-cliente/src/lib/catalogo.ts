@@ -47,7 +47,8 @@ export type Vendedor = {
 }
 
 export const CATEGORIAS = [
-  { id: 'bebidas',       nome: 'Bebidas',        cor: '#0891b2', sprite: [0, 0], aliases: ['bebida', 'bebidas', 'agua', 'aguas', 'suco', 'sucos', 'refrigerante', 'refrigerantes', 'cerveja', 'cervejas', 'chopp', 'chope'] },
+  { id: 'bebidas',       nome: 'Bebidas',        cor: '#0891b2', sprite: [0, 0], aliases: ['bebida', 'bebidas', 'agua', 'aguas', 'suco', 'sucos', 'refrigerante', 'refrigerantes'] },
+  { id: 'bebidas_alcoolicas', nome: 'Bebidas alcoólicas', cor: '#b45309', sprite: [0, 0], image: '/images/bebidas-alcoolicas-v1.webp', ageRestricted: true, aliases: ['bebida alcoolica', 'bebidas alcoolicas', 'cerveja', 'cervejas', 'chopp', 'chope', 'vinho', 'vinhos', 'drink', 'drinks', 'caipirinha', 'destilado', 'destilados', 'vodka', 'gin', 'whisky'] },
   { id: 'espetos',       nome: 'Espetos',        cor: '#ea580c', sprite: [1, 0], aliases: ['espeto', 'espetos', 'espetinho', 'espetinhos', 'churrasco'] },
   { id: 'salgados',      nome: 'Salgados',       cor: '#d97706', sprite: [2, 0], aliases: ['salgado', 'salgados', 'coxinha', 'coxinhas'] },
   { id: 'porcoes',       nome: 'Porções',        cor: '#16a34a', sprite: [3, 0], aliases: ['porcao', 'porcoes', 'petisco', 'petiscos', 'aperitivo', 'aperitivos'] },
