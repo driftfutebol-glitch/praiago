@@ -42,6 +42,10 @@ type ProfileRow = {
   lat: number | null
   lng: number | null
   zona: string | null
+  /** Só vem preenchido para restaurante — ver o gatilho sync_vendedor_publico. */
+  endereco: string | null
+  /** Grade por dia da semana (jsonb). Null = loja ainda no formato antigo. */
+  horarios: unknown
   verificado: boolean | null
   status: string | null
   horario_abre: string | null
@@ -50,7 +54,7 @@ type ProfileRow = {
   foto_capa_path: string | null
 }
 
-import { dentroDoHorario } from '../lib/horario'
+import { estaAbertoAgora, lerHorarios } from '../lib/horario'
 
 function hero(emoji: string): string {
   const svg =
@@ -149,7 +153,9 @@ export const useCatalogo = create<State>((set, get) => ({
         if (tipo === 'ambulante' && !localizacaoConfirmada) continue
         // Aberto de verdade: horário do vendedor manda; ambulante também precisa
         // estar online (radar ligado). Sem horário definido → cai no online.
-        const noHorario = dentroDoHorario(pf?.horario_abre, pf?.horario_fecha)
+        // Usa a grade por dia da semana quando a loja já tiver definido;
+        // sem ela, cai no par único abre/fecha do formato antigo.
+        const noHorario = estaAbertoAgora(pf?.horarios, pf?.horario_abre, pf?.horario_fecha)
         const disponivelAgora = tipo === 'ambulante'
           ? (pf?.online ?? false) && (noHorario ?? true)
           : (noHorario ?? (pf?.online ?? true))
@@ -172,6 +178,8 @@ export const useCatalogo = create<State>((set, get) => ({
             ? [pf.lat as number, pf.lng as number]
             : CENTRO_PRAIA_GRANDE,
           zona: pf?.zona || 'Praia Grande',
+          endereco: pf?.endereco?.trim() || null,
+          horarios: lerHorarios(pf?.horarios),
           produtos: [],
           tipo,
           horarioAbre: pf?.horario_abre ?? null,

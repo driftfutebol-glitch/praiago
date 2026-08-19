@@ -1839,6 +1839,14 @@ export default function PedirPage() {
               <MapPin size={14} /> {vendedor.distancia}
             </div>
           </div>
+          {/* Endereço da loja — é aqui que o cliente decide se vale pedir, então
+              precisa saber ONDE fica, não só "Perto de você". */}
+          {vendedor.endereco && (
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginTop: 10, fontSize: 13, color: '#64748b', fontWeight: 700, lineHeight: 1.4 }}>
+              <MapPin size={14} color="#16a34a" strokeWidth={2.5} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>{vendedor.endereco}</span>
+            </div>
+          )}
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 16, background: 'rgba(14,165,233,0.12)', border: '1px solid rgba(14,165,233,0.24)', borderRadius: 14, padding: '8px 16px' }}>
             <Zap size={14} color="#0ea5e9" className="animate-pulse-neon" style={{ boxShadow: 'none' }} />
             <span style={{ fontSize: 12, fontWeight: 800, color: '#0284c7' }}>Cupom BEMVINDO20 · 1 uso por conta</span>

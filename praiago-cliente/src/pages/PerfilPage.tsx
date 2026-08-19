@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase'
 import { promptDialog } from '../lib/dialog'
 import { logSecurityEvent } from '../lib/securityAudit'
 import SuportePanel from '../components/SuportePanel'
+import FotoPerfilCliente, { AvatarPerfil } from '../components/FotoPerfilCliente'
 import { apenasDigitosCpf, formatarCpf, validarCpf } from '../lib/cpf'
 
 function fmtData(ts: number) {
@@ -20,6 +21,7 @@ type VerificacaoCliente = {
   cpf?: string | null
   cpf_check_status?: string | null
   email_verificado?: boolean | null
+  foto_perfil_path?: string | null
 }
 
 function TelaLogada() {
@@ -32,13 +34,18 @@ function TelaLogada() {
   const [verificacao, setVerificacao] = useState<VerificacaoCliente | null>(null)
   const [emailConfirmado, setEmailConfirmado] = useState(false)
   const [reenviandoEmail, setReenviandoEmail] = useState(false)
+  // Fica em estado separado de `verificacao` porque o fluxo do CPF regrava
+  // aquele objeto com um select menor — se a foto morasse lá, trocar o CPF
+  // apagava o avatar da tela.
+  const [fotoPath, setFotoPath] = useState<string | null>(null)
 
   async function carregarVerificacao() {
     const [{ data: authData }, { data: profile }] = await Promise.all([
       supabase.auth.getUser(),
-      supabase.from('profiles').select('cpf,cpf_check_status,email_verificado').eq('id', sessao.id).maybeSingle(),
+      supabase.from('profiles').select('cpf,cpf_check_status,email_verificado,foto_perfil_path').eq('id', sessao.id).maybeSingle(),
     ])
     setVerificacao(profile as VerificacaoCliente | null)
+    setFotoPath((profile as VerificacaoCliente | null)?.foto_perfil_path ?? null)
     setEmailConfirmado(Boolean(authData.user?.email_confirmed_at || profile?.email_verificado))
   }
 
@@ -104,7 +111,7 @@ function TelaLogada() {
         <div style={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, borderRadius: '50%', background: 'rgba(0,0,0,0.08)', filter: 'blur(30px)' }} />
         
         <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} style={{ display: 'flex', alignItems: 'center', gap: 16, position: 'relative' }}>
-          <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, border: '3px solid rgba(255,255,255,0.6)', boxShadow: '0 8px 32px rgba(0,0,0,0.2)', backdropFilter: 'blur(10px)' }}>👤</div>
+          <AvatarPerfil path={fotoPath} />
           <div>
             <div style={{ fontSize: 24, fontWeight: 900, color: '#fff', textTransform: 'capitalize', letterSpacing: -0.5 }}>{sessao.nome}</div>
             <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', fontWeight: 500 }}>{sessao.email}</div>
@@ -129,6 +136,10 @@ function TelaLogada() {
             </motion.div>
           ))}
         </div>
+
+        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.13 }}>
+          <FotoPerfilCliente userId={sessao.id} path={fotoPath} onChange={setFotoPath} />
+        </motion.div>
 
         <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.16 }} className="glass-panel" style={{ borderRadius: 22, padding: 18, border: '1px solid rgba(0,0,0,0.05)', marginBottom: 20, boxShadow: '0 10px 30px rgba(0,0,0,0.22)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>

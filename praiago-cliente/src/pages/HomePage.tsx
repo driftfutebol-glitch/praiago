@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Bell, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Grid2X2, Heart, Percent, Plus,
-  MapPin, Search, ShoppingBag, SlidersHorizontal, Star, Ticket, Utensils, X,
+  Bell, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Grid2X2, Heart, MapPin, Percent, Plus,
+  Search, ShoppingBag, SlidersHorizontal, Star, Ticket, Utensils, X,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { BannerEventos, CartaoLocal, CARTAO } from '../components/ui'
@@ -336,6 +336,17 @@ function VendorCard({ v, onClick }: { v: Vendedor; onClick: () => void }) {
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: v.localizacaoConfirmada ? '#16a34a' : '#d97706' }}><Clock size={12} />{v.localizacaoConfirmada ? v.tempo : 'Cardapio disponivel'}</span>
           <span>{v.distancia}</span>
         </div>
+        {/* Endereço fixo da loja. Ficava só no banco: o restaurante cadastrava e
+            o cliente nunca via, porque a tabela que o app lê não trazia a
+            coluna. Ambulante não tem — ele é achado pelo GPS ao vivo. */}
+        {v.endereco && (
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 5, marginTop: 7, fontSize: 11.5, color: '#64748b', fontWeight: 700, lineHeight: 1.35 }}>
+            <MapPin size={12} color="#16a34a" strokeWidth={2.6} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+              {v.endereco}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   )

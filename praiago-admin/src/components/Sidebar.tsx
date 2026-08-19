@@ -7,8 +7,12 @@ import {
   Activity, Package, Users, AlertOctagon, LogOut, ShieldAlert,
   ShieldCheck, Headphones, ChevronDown, CalendarDays, LayoutGrid,
   Smartphone, TabletSmartphone, UtensilsCrossed, Umbrella, UserCircle, Ticket, Megaphone, WalletCards, MapPin,
-  Landmark
+  Landmark, Signature
 } from 'lucide-react'
+
+// `solicitacoes_troca_nome` ficou fora da publicacao `supabase_realtime`, entao
+// postgres_changes nunca chega. Ate entrar la, o contador vive de polling.
+const INTERVALO_TROCA_NOME_MS = 45000
 
 const atendimentoSubItems = [
   { to: '/atendimento/todas', icon: LayoutGrid, label: 'Todas (Global)' },
@@ -29,6 +33,7 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
 export default function Sidebar({ onLogout, perfil }: { onLogout: () => void; perfil: PerfilAdmin | null }) {
   const [pendingVerificacoes, setPendingVerificacoes] = useState(0)
   const [pendingLocalizacoes, setPendingLocalizacoes] = useState(0)
+  const [pendingTrocaNome, setPendingTrocaNome] = useState(0)
   const [ticketsAbertos, setTicketsAbertos] = useState(0)
   const [atendimentoOpen, setAtendimentoOpen] = useState(false)
   const location = useLocation()
@@ -78,6 +83,21 @@ export default function Sidebar({ onLogout, perfil }: { onLogout: () => void; pe
   }, [])
 
   useEffect(() => {
+    async function fetchPendingTrocaNome() {
+      const { count } = await supabase
+        .from('solicitacoes_troca_nome')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pendente')
+      setPendingTrocaNome(count || 0)
+    }
+    fetchPendingTrocaNome()
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') fetchPendingTrocaNome()
+    }, INTERVALO_TROCA_NOME_MS)
+    return () => { window.clearInterval(timer) }
+  }, [])
+
+  useEffect(() => {
     if (location.pathname.startsWith('/atendimento')) {
       setAtendimentoOpen(true)
     }
@@ -119,6 +139,8 @@ export default function Sidebar({ onLogout, perfil }: { onLogout: () => void; pe
 
   const verVerificacoes = podeVer('verificacoes')
   const verLocalizacoes = podeVer('usuarios')
+  // Trocar o nome do estabelecimento e edicao de cadastro: mesma permissao de 'usuarios'.
+  const verTrocaNome = podeVer('usuarios')
   const verAtendimento = podeVer('atendimento')
   const verErros = podeVer('erros')
 
@@ -163,6 +185,22 @@ export default function Sidebar({ onLogout, perfil }: { onLogout: () => void; pe
                 className="min-w-[22px] h-[22px] flex items-center justify-center bg-amber-500 text-slate-950 text-[10px] font-black rounded-full"
               >
                 {pendingLocalizacoes}
+              </motion.span>
+            )}
+          </NavLink>
+        )}
+
+        {verTrocaNome && (
+          <NavLink to="/troca-nome" className={linkClass}>
+            <Signature size={18} />
+            <span className="flex-1">Troca de nome</span>
+            {pendingTrocaNome > 0 && (
+              <motion.span
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                className="min-w-[22px] h-[22px] flex items-center justify-center bg-amber-500 text-slate-950 text-[10px] font-black rounded-full"
+              >
+                {pendingTrocaNome}
               </motion.span>
             )}
           </NavLink>

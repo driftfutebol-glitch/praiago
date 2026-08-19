@@ -1,5 +1,6 @@
 ﻿// Catálogo — tipos e categorias do app Cliente.
 // Os vendedores/produtos REAIS vêm do Supabase (store useCatalogo).
+import type { DiaHorario } from './horario'
 
 export type Produto = {
   id: string
@@ -40,6 +41,10 @@ export type Vendedor = {
   avatar?: string | null
   pos: [number, number]
   zona: string
+  /** Endereço fixo da loja. Só restaurante tem; ambulante é achado pelo GPS. */
+  endereco: string | null
+  /** Horário por dia da semana. Null = loja ainda usa o par abre/fecha antigo. */
+  horarios: DiaHorario[] | null
   produtos: Produto[]
   tipo: VendedorTipo
   // Horário de funcionamento (HH:MM) definido pelo próprio vendedor

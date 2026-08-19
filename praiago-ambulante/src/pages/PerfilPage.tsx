@@ -2,12 +2,12 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   CheckCircle2,
   ChevronRight,
-  Clock3,
   HelpCircle,
   Loader2,
   LogOut,
   MapPin,
   PackageCheck,
+  Phone,
   Star,
   Store,
   TrendingUp,
@@ -17,6 +17,8 @@ import { AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import SuportePanel from '../components/SuportePanel'
 import SellerPhotoManager from '../components/SellerPhotoManager'
+import TrocaNomeLoja from '../components/TrocaNomeLoja'
+import EditorHorarios from '../components/EditorHorarios'
 import { logout, useSessao } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import { sellerPhotoUrl } from '../lib/sellerPhotos'
@@ -25,10 +27,13 @@ type Profile = {
   nome: string | null
   categoria: string | null
   zona: string | null
+  telefone_comercial: string | null
   avaliacao_media: number | null
   total_avaliacoes: number | null
   horario_abre: string | null
   horario_fecha: string | null
+  /** Grade por dia da semana. Null = banca ainda no formato antigo. */
+  horarios: unknown
   online: boolean | null
   verificado: boolean | null
   foto_perfil_path: string | null
@@ -45,16 +50,30 @@ const money = (value: number) => value.toLocaleString('pt-BR', {
   currency: 'BRL',
 })
 
+const onlyDigits = (value: string) => String(value ?? '').replace(/\D/g, '')
+
+/** Mascara so pra leitura; no banco vai o telefone em digitos puros. */
+function formatPhone(value: string) {
+  const d = onlyDigits(value).slice(0, 11)
+  if (d.length <= 2) return d
+  if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`
+  if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
+}
+
 export default function PerfilPage() {
   const navigate = useNavigate()
   const session = useSessao()
   const [profile, setProfile] = useState<Profile | null>(null)
   const [stats, setStats] = useState<MonthStats>({ completedOrders: 0, revenue: 0 })
   const [supportOpen, setSupportOpen] = useState(false)
+  // Grade por dia da semana (jsonb). Null = banca ainda no formato antigo.
+  const [horariosPerfil, setHorariosPerfil] = useState<unknown>(null)
   const [openingTime, setOpeningTime] = useState('')
   const [closingTime, setClosingTime] = useState('')
-  const [savingSchedule, setSavingSchedule] = useState(false)
-  const [scheduleMessage, setScheduleMessage] = useState<{ text: string; error: boolean } | null>(null)
+  const [businessPhone, setBusinessPhone] = useState('')
+  const [savingPhone, setSavingPhone] = useState(false)
+  const [phoneMessage, setPhoneMessage] = useState<{ text: string; error: boolean } | null>(null)
 
   const load = useCallback(async () => {
     if (!session?.id) return
@@ -65,7 +84,7 @@ export default function PerfilPage() {
     const [{ data: profileData }, { data: orders }] = await Promise.all([
       supabase
         .from('profiles')
-        .select('nome,categoria,zona,avaliacao_media,total_avaliacoes,horario_abre,horario_fecha,online,verificado,foto_perfil_path,foto_capa_path')
+        .select('nome,categoria,zona,telefone_comercial,avaliacao_media,total_avaliacoes,horario_abre,horario_fecha,horarios,online,verificado,foto_perfil_path,foto_capa_path')
         .eq('id', session.id)
         .maybeSingle(),
       supabase
@@ -80,6 +99,8 @@ export default function PerfilPage() {
     setProfile(nextProfile)
     setOpeningTime(nextProfile?.horario_abre || '')
     setClosingTime(nextProfile?.horario_fecha || '')
+    setHorariosPerfil(nextProfile?.horarios ?? null)
+    setBusinessPhone(formatPhone(nextProfile?.telefone_comercial || ''))
     setStats({
       completedOrders: orders?.length || 0,
       revenue: (orders || []).reduce((sum, order) => sum + (Number(order.total) || 0), 0),
@@ -97,21 +118,28 @@ export default function PerfilPage() {
     return () => { void supabase.removeChannel(channel) }
   }, [load, session?.id])
 
-  async function saveSchedule() {
+  // O antigo `saveSchedule` (um par abre/fecha pra semana toda) saiu junto com
+  // a UI dele: quem grava horário agora é o EditorHorarios, que salva a grade
+  // por dia E mantém os campos antigos preenchidos por compatibilidade.
+
+  // O telefone comercial nunca teve onde ser preenchido: o cadastro nao pede e
+  // o painel so exibia. Sem edicao aqui a coluna ficava nula pra sempre.
+  async function saveBusinessPhone() {
     if (!session?.id) return
-    if ((openingTime && !closingTime) || (!openingTime && closingTime)) {
-      setScheduleMessage({ text: 'Informe abertura e fechamento, ou deixe os dois vazios.', error: true })
+    const digits = onlyDigits(businessPhone)
+    if (digits && (digits.length < 10 || digits.length > 11)) {
+      setPhoneMessage({ text: 'Informe o telefone com DDD (ex: 13 99999-8888).', error: true })
       return
     }
-    setSavingSchedule(true)
+    setSavingPhone(true)
     const { error } = await supabase
       .from('profiles')
-      .update({ horario_abre: openingTime || null, horario_fecha: closingTime || null })
+      .update({ telefone_comercial: digits || null })
       .eq('id', session.id)
-    setSavingSchedule(false)
-    setScheduleMessage(error
-      ? { text: 'Não foi possível salvar o horário.', error: true }
-      : { text: 'Horário atualizado para os clientes.', error: false })
+    setSavingPhone(false)
+    setPhoneMessage(error
+      ? { text: 'Não foi possível salvar o telefone.', error: true }
+      : { text: digits ? 'Telefone salvo.' : 'Telefone removido.', error: false })
     if (!error) void load()
   }
 
@@ -190,32 +218,57 @@ export default function PerfilPage() {
         </div>
       </div>
 
+      {session?.id && (
+        <TrocaNomeLoja
+          vendedorId={session.id}
+          nomeAtual={profile?.nome || session.nome || ''}
+          onNomeAprovado={nomeNovo => setProfile(current => (
+            !current || current.nome === nomeNovo ? current : { ...current, nome: nomeNovo }
+          ))}
+        />
+      )}
+
       <section className="surface" style={{ marginBottom: 14, padding: 15, boxShadow: 'none' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Clock3 size={18} color="#008fc0" />
+          <Phone size={18} color="#008fc0" />
           <div>
-            <div style={{ color: '#132238', fontSize: 14, fontWeight: 900 }}>Horário de atendimento</div>
-            <div style={{ marginTop: 2, color: '#617089', fontSize: 11, fontWeight: 600 }}>Fora deste período sua banca aparece fechada.</div>
+            <div style={{ color: '#132238', fontSize: 14, fontWeight: 900 }}>Telefone comercial</div>
+            <div style={{ marginTop: 2, color: '#617089', fontSize: 11, fontWeight: 600 }}>É por aqui que a equipe PraiaGo fala com você fora do app.</div>
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9, marginTop: 13 }}>
-          <label>
-            <span className="field-label">Abre</span>
-            <input type="time" value={openingTime} onChange={event => setOpeningTime(event.target.value)} style={{ width: '100%', minHeight: 44, marginTop: 6, padding: '0 10px', border: '1px solid #dfe6ed', borderRadius: 8, background: '#f8fafc', color: '#132238', fontWeight: 800 }} />
-          </label>
-          <label>
-            <span className="field-label">Fecha</span>
-            <input type="time" value={closingTime} onChange={event => setClosingTime(event.target.value)} style={{ width: '100%', minHeight: 44, marginTop: 6, padding: '0 10px', border: '1px solid #dfe6ed', borderRadius: 8, background: '#f8fafc', color: '#132238', fontWeight: 800 }} />
-          </label>
-        </div>
+        <label style={{ display: 'block', marginTop: 13 }}>
+          <span className="field-label">Telefone com DDD</span>
+          <input
+            value={businessPhone}
+            onChange={event => { setBusinessPhone(formatPhone(event.target.value)); setPhoneMessage(null) }}
+            inputMode="tel"
+            placeholder="(13) 99999-8888"
+            style={{ width: '100%', boxSizing: 'border-box', minHeight: 44, marginTop: 6, padding: '0 10px', border: '1px solid #dfe6ed', borderRadius: 8, background: '#f8fafc', color: '#132238', fontWeight: 800 }}
+          />
+        </label>
 
-        {scheduleMessage && <div style={{ marginTop: 9, color: scheduleMessage.error ? '#b42335' : '#148447', fontSize: 11, fontWeight: 750 }}>{scheduleMessage.text}</div>}
-        <button type="button" className="secondary-button" onClick={() => void saveSchedule()} disabled={savingSchedule} style={{ width: '100%', marginTop: 11 }}>
-          {savingSchedule ? <Loader2 size={17} className="animate-spin-slow" /> : <Clock3 size={17} />}
-          Salvar horário
+        {phoneMessage && <div style={{ marginTop: 9, color: phoneMessage.error ? '#b42335' : '#148447', fontSize: 11, fontWeight: 750 }}>{phoneMessage.text}</div>}
+        <button type="button" className="secondary-button" onClick={() => void saveBusinessPhone()} disabled={savingPhone} style={{ width: '100%', marginTop: 11 }}>
+          {savingPhone ? <Loader2 size={17} className="animate-spin-slow" /> : <Phone size={17} />}
+          Salvar telefone
         </button>
       </section>
+
+      {/* Horário POR DIA DA SEMANA. Antes era um par abre/fecha só, igual pra
+          semana inteira — não dava pra fechar na segunda, abrir mais cedo no
+          sábado nem marcar 24 horas. O editor grava a grade nova e mantém os
+          campos antigos preenchidos, pra quem não atualizou o app não ver a
+          banca como "sem horário". */}
+      {session?.id && (
+        <EditorHorarios
+          userId={session.id}
+          horariosIniciais={horariosPerfil}
+          abreAntigo={openingTime}
+          fechaAntigo={closingTime}
+          accent="#008fc0"
+        />
+      )}
 
       <section className="surface" style={{ marginBottom: 14, overflow: 'hidden', boxShadow: 'none' }}>
         {menuItems.map((item, index) => {

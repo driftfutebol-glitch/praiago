@@ -15,6 +15,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useGPS } from '../hooks/useGPS'
 import { useNearbyAmbulantes, type AmbulanteLive } from '../hooks/useNearbyAmbulantes'
 import { useCatalogo } from '../store/useCatalogo'
+import type { Vendedor } from '../lib/catalogo'
 import { getZone, BEACH_ZONES } from '../lib/praiagoZones'
 import CamadaPraia from '../components/CamadaPraia'
 import { alertDialog } from '../lib/dialog'
@@ -62,6 +63,46 @@ function clienteIcon() {
         display:flex; align-items:center; justify-content:center;
       ">
         ${customerMarkup}
+      </div>
+    </div>`,
+  })
+}
+
+/**
+ * Loja de ponto FIXO (restaurante/quiosque).
+ *
+ * Desenho de propósito diferente do ambulante: quadrado arredondado com garfo
+ * e faca, contra o círculo com carrinho. No mapa a pessoa precisa distinguir
+ * num relance "isso anda até mim" de "isso fica parado aqui" — se os dois
+ * fossem pinos iguais em cores diferentes, ninguém leria a diferença.
+ */
+function restauranteIcon(aberto: boolean) {
+  const cor = aberto ? '#f97316' : '#94a3b8'
+  return L.divIcon({
+    className: '',
+    iconSize: [42, 52],
+    iconAnchor: [21, 48],
+    html: `<div style="position:relative;width:42px;height:52px;">
+      <div style="
+        position:absolute; left:50%; bottom:4px; margin-left:-5px;
+        width:0; height:0; border-left:5px solid transparent;
+        border-right:5px solid transparent; border-top:9px solid #ffffff;
+        filter: drop-shadow(0 3px 3px rgba(15,23,42,0.28));
+      "></div>
+      <div style="
+        position:absolute; left:50%; top:0; margin-left:-19px;
+        width:38px; height:38px; border-radius:12px;
+        background:${cor}; border:3px solid #ffffff;
+        box-shadow: 0 6px 16px rgba(15,23,42,0.3);
+        display:flex; align-items:center; justify-content:center;
+      ">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none"
+             stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 2v7c0 1.1.9 2 2 2h0a2 2 0 0 0 2-2V2"/>
+          <path d="M5 2v20"/>
+          <path d="M19 15V2a4 4 0 0 0-3 3.87V11a2 2 0 0 0 2 2h1Z"/>
+          <path d="M19 13v9"/>
+        </svg>
       </div>
     </div>`,
   })
@@ -199,6 +240,18 @@ export default function AmbulantesPage() {
   const { ambulantes, total } = useNearbyAmbulantes(pos)
   const vendedores = useCatalogo(s => s.vendedores)
   const [viewMode, setViewMode] = useState<'map' | 'list'>('map')
+
+  // Lojas de ponto fixo pro mapa.
+  //
+  // O Radar sempre desenhou só os ambulantes, que vêm do GPS ao vivo — o
+  // restaurante tinha coordenada no cadastro e nunca era desenhado, então o
+  // cliente não via onde a loja fica. Aqui entram os que têm ponto confirmado;
+  // sem `localizacaoConfirmada` o `pos` cai no centro de Praia Grande (padrão
+  // do catálogo) e o pino apontaria pra um lugar onde não existe loja nenhuma.
+  const restaurantesNoMapa = useMemo(
+    () => vendedores.filter(v => v.tipo === 'restaurante' && v.localizacaoConfirmada),
+    [vendedores],
+  )
 
   // Zona atual do cliente
   const zonaCliente = useMemo(() => getZone(pos[0], pos[1]), [pos])
@@ -401,7 +454,9 @@ export default function AmbulantesPage() {
               <MapView
                 clientePos={pos}
                 ambulantes={ambulantes}
+                restaurantes={restaurantesNoMapa}
                 onPedir={handlePedir}
+                onAbrirVendedor={v => navigate(`/pedir?v=${v.id}`)}
                 onAjustarPos={definirPosicaoManual}
                 totalOnline={total}
                 onTrocarVisao={() => setViewMode('list')}
@@ -447,14 +502,20 @@ export default function AmbulantesPage() {
 function MapView({
   clientePos,
   ambulantes,
+  restaurantes,
   onPedir,
+  onAbrirVendedor,
   onAjustarPos,
   totalOnline,
   onTrocarVisao,
 }: {
   clientePos: [number, number]
   ambulantes: AmbulanteLive[]
+  /** Lojas de ponto FIXO. O ambulante anda e vem por GPS ao vivo; o
+   *  restaurante fica parado, então entra no mapa pela coordenada do cadastro. */
+  restaurantes: Vendedor[]
   onPedir: (a: AmbulanteLive) => void
+  onAbrirVendedor: (v: Vendedor) => void
   onAjustarPos: (lat: number, lng: number) => void
   totalOnline: number
   onTrocarVisao: () => void
@@ -546,6 +607,49 @@ function MapView({
         />
 
         {/* Ambulantes */}
+        {/* Lojas de ponto fixo. Ficam ANTES dos ambulantes pra o ambulante, que
+            é quem se move e quem a pessoa está caçando, desenhar por cima. */}
+        {restaurantes.map((v) => (
+          <Marker
+            key={`fixo-${v.id}`}
+            position={v.pos}
+            icon={restauranteIcon(v.aberto)}
+          >
+            <Popup>
+              <div style={{ minWidth: 190, fontFamily: 'Inter, sans-serif' }}>
+                <div style={{ fontWeight: 900, fontSize: 15, color: '#0f172a' }}>{v.nome}</div>
+                <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600, marginTop: 2 }}>
+                  {v.categoria}
+                </div>
+                {v.endereco && (
+                  <div style={{ fontSize: 11.5, color: '#64748b', fontWeight: 600, marginTop: 6, lineHeight: 1.35 }}>
+                    📍 {v.endereco}
+                  </div>
+                )}
+                <div style={{ marginTop: 8, marginBottom: 10 }}>
+                  <span style={{
+                    padding: '4px 10px', borderRadius: 999, fontSize: 11, fontWeight: 900,
+                    background: v.aberto ? '#dcfce7' : '#f1f5f9',
+                    color: v.aberto ? '#15803d' : '#64748b',
+                  }}>
+                    {v.aberto ? 'Aberto agora' : 'Fechado'}
+                  </span>
+                </div>
+                <button
+                  onClick={() => onAbrirVendedor(v)}
+                  style={{
+                    width: '100%', padding: '10px 0', border: 'none', borderRadius: 12,
+                    background: 'linear-gradient(100deg,#0284c7,#16a34a)', color: '#fff',
+                    fontWeight: 900, fontSize: 13.5, cursor: 'pointer',
+                  }}
+                >
+                  Ver cardápio
+                </button>
+              </div>
+            </Popup>
+          </Marker>
+        ))}
+
         {ambulantes.map((a) => (
           <Marker
             key={a.id}

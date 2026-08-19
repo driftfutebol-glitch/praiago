@@ -13,11 +13,32 @@ type Props = {
   onChanged?: (paths: { profilePath: string | null; coverPath: string | null }) => void
 }
 
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+// Aceita o que celular de verdade produz. O HEIC/HEIF é o formato PADRÃO da
+// câmera do iPhone — sem ele na lista, quem chega com iPhone (boa parte das
+// pessoas) simplesmente não consegue subir a foto da loja. O iOS costuma
+// converter pra JPEG ao escolher pelo seletor de arquivos, mas nem sempre, e
+// quando não converte o upload morria com "use uma imagem JPG, PNG ou WebP".
+const ALLOWED_TYPES = [
+  'image/jpeg', 'image/jpg', 'image/pjpeg',
+  'image/png', 'image/webp', 'image/gif', 'image/avif',
+  'image/heic', 'image/heif',
+]
+// Vai no atributo `accept` do input: define o que o seletor do celular mostra.
+const ACCEPT = ALLOWED_TYPES.join(',') + ',image/*'
 
 function extension(file: File) {
-  if (file.type === 'image/png') return 'png'
-  if (file.type === 'image/webp') return 'webp'
+  const porTipo: Record<string, string> = {
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'image/gif': 'gif',
+    'image/avif': 'avif',
+    'image/heic': 'heic',
+    'image/heif': 'heif',
+  }
+  if (porTipo[file.type]) return porTipo[file.type]
+  // Sem tipo confiável (acontece em WebView antigo), cai pra extensão do nome.
+  const doNome = file.name.split('.').pop()?.toLowerCase()
+  if (doNome && /^(png|webp|gif|avif|heic|heif|jpe?g)$/.test(doNome)) return doNome === 'jpeg' ? 'jpg' : doNome
   return 'jpg'
 }
 
@@ -44,8 +65,11 @@ export default function SellerPhotoManager({ userId, profilePath, coverPath, acc
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      setMessage({ text: 'Use uma imagem JPG, PNG ou WebP.', error: true })
+    // `file.type` vazio acontece em WebView antigo e em alguns gerenciadores de
+    // arquivo. Recusar nesse caso barrava foto legítima, então quando não há
+    // tipo a gente deixa passar e confia na validação do bucket.
+    if (file.type && !ALLOWED_TYPES.includes(file.type.toLowerCase())) {
+      setMessage({ text: 'Esse arquivo não é uma imagem. Escolha uma foto.', error: true })
       return
     }
     if (file.size > 5 * 1024 * 1024) {
@@ -110,12 +134,17 @@ export default function SellerPhotoManager({ userId, profilePath, coverPath, acc
 
   return (
     <section className="glass-panel" style={{ marginBottom: 24, padding: 20, borderRadius: 20 }}>
-      <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={upload} style={{ display: 'none' }} />
+      <input ref={inputRef} type="file" accept={ACCEPT} onChange={upload} style={{ display: 'none' }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
         <Camera size={18} color={accent} />
         <div style={{ color: '#132238', fontSize: 14, fontWeight: 900 }}>Fotos públicas</div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.45fr)', gap: 10 }}>
+      {/* `maxWidth` no bloco todo: as caixas usam proporção fixa (1/1 e 16/9),
+          e sem teto de largura elas crescem junto com a tela — num monitor
+          grande a coluna passava de 600px e a foto do perfil virava um quadrado
+          de 600×600, ocupando meia página. Foto de perfil não precisa ser
+          maior que isso pra ser conferida. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.45fr)', gap: 10, maxWidth: 460 }}>
         {entries.map(entry => {
           const url = entry.path ? supabase.storage.from(SELLER_PHOTO_BUCKET).getPublicUrl(entry.path).data.publicUrl : null
           return (

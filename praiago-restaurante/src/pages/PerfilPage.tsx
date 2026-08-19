@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Bell, CheckCircle2, ChevronRight, Clock, CreditCard, HelpCircle, Loader2, LogOut, MapPin, Navigation, Phone, Search, Send, Shield, Star, Store, TrendingUp, Wallet, XCircle } from 'lucide-react'
+import { Bell, CheckCircle2, ChevronRight, Clock, HelpCircle, Loader2, LogOut, MapPin, Navigation, Phone, Search, Send, Shield, Star, Store, TrendingUp, Wallet, XCircle } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
@@ -8,13 +8,14 @@ import { supabase } from '../lib/supabase'
 import { getSessao, logout } from '../lib/auth'
 import SuportePanel from '../components/SuportePanel'
 import SellerPhotoManager from '../components/SellerPhotoManager'
+import TrocaNomeLoja from '../components/TrocaNomeLoja'
+import EditorHorarios from '../components/EditorHorarios'
 import { sellerPhotoUrl } from '../lib/sellerPhotos'
 
 type PerfilInfo = {
   nome: string
   avaliacao: number
   totalAvaliacoes: number
-  telefone: string | null
   endereco: string | null
   fotoPerfilPath: string | null
   fotoCapaPath: string | null
@@ -173,6 +174,19 @@ function montarEndereco(endereco: EnderecoSelecionado, numero: string) {
   ].filter(Boolean).join(', ')
 }
 
+function apenasDigitos(valor: string) {
+  return String(valor ?? '').replace(/\D/g, '')
+}
+
+/** Mascara so pra leitura; no banco vai o telefone em digitos puros. */
+function formatarTelefone(valor: string) {
+  const d = apenasDigitos(valor).slice(0, 11)
+  if (d.length <= 2) return d
+  if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`
+  if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
+}
+
 function normalizarNumeroEndereco(numero: string) {
   const valor = numero.trim()
   return /^s\s*\/?\s*n$/i.test(valor) ? 'S/N' : valor
@@ -228,7 +242,6 @@ export default function PerfilPage() {
     nome: sessao?.nome || 'Meu Restaurante',
     avaliacao: 0,
     totalAvaliacoes: 0,
-    telefone: null,
     endereco: null,
     fotoPerfilPath: null,
     fotoCapaPath: null,
@@ -237,9 +250,18 @@ export default function PerfilPage() {
   const [faturamentoMes, setFaturamentoMes] = useState(0)
   const [painelAberto, setPainelAberto] = useState<Painel | null>(null)
   const [suporteAberto, setSuporteAberto] = useState(false)
-  const [pixKey, setPixKey] = useState('')
-  const [pixSalvando, setPixSalvando] = useState(false)
-  const [pixMsg, setPixMsg] = useState('')
+  const [telefoneComercial, setTelefoneComercial] = useState('')
+  const [salvandoTelefone, setSalvandoTelefone] = useState(false)
+  const [telefoneMsg, setTelefoneMsg] = useState('')
+  // Endereco escrito da loja. Existe separado do fluxo de correcao porque
+  // PREENCHER um endereco vazio nao e mudar a loja de lugar — a coordenada nao
+  // se mexe. Ver `restaurante_pode_preencher_endereco_vazio` no banco.
+  const [enderecoBase, setEnderecoBase] = useState('')
+  const [salvandoEndereco, setSalvandoEndereco] = useState(false)
+  const [enderecoMsg, setEnderecoMsg] = useState('')
+  // Grade por dia da semana vinda do banco (jsonb). Null = loja ainda no
+  // formato antigo; o editor espalha o par abre/fecha pelos 7 dias.
+  const [horariosPerfil, setHorariosPerfil] = useState<unknown>(null)
   const [horaAbre, setHoraAbre] = useState('')
   const [horaFecha, setHoraFecha] = useState('')
   const [salvandoHorario, setSalvandoHorario] = useState(false)
@@ -360,7 +382,7 @@ export default function PerfilPage() {
 
     supabase
       .from('profiles')
-      .select('nome, razao_social, avaliacao_media, total_avaliacoes, telefone_comercial, endereco, horario_abre, horario_fecha, lat, lng, foto_perfil_path, foto_capa_path')
+      .select('nome, razao_social, avaliacao_media, total_avaliacoes, telefone_comercial, endereco, horario_abre, horario_fecha, horarios, lat, lng, foto_perfil_path, foto_capa_path')
       .eq('id', sessao.id)
       .maybeSingle()
       .then(({ data }) => {
@@ -369,13 +391,14 @@ export default function PerfilPage() {
           nome: data.nome || data.razao_social || sessao.nome || 'Meu Restaurante',
           avaliacao: Number(data.avaliacao_media) || 0,
           totalAvaliacoes: Number(data.total_avaliacoes) || 0,
-          telefone: data.telefone_comercial,
           endereco: data.endereco,
           fotoPerfilPath: data.foto_perfil_path,
           fotoCapaPath: data.foto_capa_path,
         })
         setHoraAbre(data.horario_abre || '')
         setHoraFecha(data.horario_fecha || '')
+        setHorariosPerfil(data.horarios ?? null)
+        setTelefoneComercial(formatarTelefone(data.telefone_comercial || ''))
         setLat(data.lat != null ? Number(data.lat) : null)
         setLng(data.lng != null ? Number(data.lng) : null)
       })
@@ -394,13 +417,6 @@ export default function PerfilPage() {
         setPedidosMes(entregues.length)
         setFaturamentoMes(entregues.reduce((a, p) => a + (Number(p.total) || 0), 0))
       })
-
-    supabase
-      .from('vendor_payment_accounts')
-      .select('pix_key')
-      .eq('vendedor_id', sessao.id)
-      .maybeSingle()
-      .then(({ data }) => setPixKey(data?.pix_key || ''))
   }, [sessao])
 
   useEffect(() => {
@@ -649,18 +665,56 @@ export default function PerfilPage() {
     setTimeout(() => setLocalMsg(''), 6000)
   }
 
-  async function salvarChavePix() {
+  // O telefone comercial ficava so como texto "Adicione no cadastro" — e o
+  // cadastro nunca pediu esse campo. Sem edicao aqui o vendedor nao tinha
+  // NENHUM caminho pra preencher.
+  async function salvarTelefoneComercial() {
     if (!sessao) return
-    const chave = pixKey.trim()
-    if (!chave) { setPixMsg('Digite sua chave Pix pra receber os repasses.'); return }
-    setPixSalvando(true)
-    setPixMsg('')
+    const digitos = apenasDigitos(telefoneComercial)
+    if (digitos && (digitos.length < 10 || digitos.length > 11)) {
+      setTelefoneMsg('Informe o telefone com DDD (ex: 13 99999-8888).')
+      return
+    }
+    setSalvandoTelefone(true)
+    setTelefoneMsg('')
     const { error } = await supabase
-      .from('vendor_payment_accounts')
-      .upsert({ vendedor_id: sessao.id, pix_key: chave }, { onConflict: 'vendedor_id' })
-    setPixSalvando(false)
-    setPixMsg(error ? 'Nao deu pra salvar. Tente de novo.' : 'Chave Pix salva! O repasse cai nela.')
-    setTimeout(() => setPixMsg(''), 4000)
+      .from('profiles')
+      .update({ telefone_comercial: digitos || null })
+      .eq('id', sessao.id)
+    setSalvandoTelefone(false)
+    if (error) {
+      setTelefoneMsg('Nao deu pra salvar. Tente de novo.')
+      return
+    }
+    setTelefoneMsg(digitos ? 'Telefone salvo!' : 'Telefone removido.')
+    setTimeout(() => setTelefoneMsg(''), 3500)
+  }
+
+  /** Grava o endereco escrito UMA vez, sem tocar em lat/lng.
+   *  A loja nasce com coordenada e sem endereco (o cadastro grava as duas em
+   *  momentos diferentes), e antes disso ela ficava sem poder nunca dizer ao
+   *  cliente onde fica. Depois de preenchido, so muda pelo fluxo de correcao. */
+  async function salvarEnderecoBase() {
+    if (!sessao) return
+    const texto = enderecoBase.trim().replace(/\s+/g, ' ')
+    if (texto.length < 8) {
+      setEnderecoMsg('Escreva o endereco completo: rua, numero, bairro e cidade.')
+      return
+    }
+    setSalvandoEndereco(true)
+    setEnderecoMsg('')
+    const { error } = await supabase.from('profiles').update({ endereco: texto }).eq('id', sessao.id)
+    setSalvandoEndereco(false)
+    if (error) {
+      // 42501 = a trava do banco. Acontece se o endereco ja tiver sido gravado
+      // por outro caminho enquanto esta tela estava aberta.
+      setEnderecoMsg(error.code === '42501'
+        ? 'Este endereco ja foi definido. Para trocar, peca a correcao abaixo.'
+        : 'Nao deu pra salvar o endereco. Tente de novo.')
+      return
+    }
+    setPerfil(atual => ({ ...atual, endereco: texto }))
+    setEnderecoMsg('Endereco salvo! Ja aparece pro cliente.')
   }
 
   function sair() {
@@ -748,8 +802,82 @@ export default function PerfilPage() {
         </InfoCard>
 
         <InfoCard title="Informacoes publicas" icon={<MapPin size={16} color="#0ea5e9" />}>
-          <PublicInfo icon={<Phone size={18} color="#64748b" />} label="Telefone comercial" value={perfil.telefone || 'Adicione no cadastro'} />
-          <PublicInfo icon={<MapPin size={18} color="#64748b" />} label="Endereco da base" value={perfil.endereco || 'Adicione no cadastro'} />
+          <div>
+            <label htmlFor="telefone-comercial" style={{ fontSize: 11, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 6, letterSpacing: 0.5 }}>TELEFONE COMERCIAL</label>
+            <input
+              id="telefone-comercial"
+              value={telefoneComercial}
+              onChange={e => { setTelefoneComercial(formatarTelefone(e.target.value)); setTelefoneMsg('') }}
+              inputMode="tel"
+              placeholder="(13) 99999-8888"
+              style={{ width: '100%', boxSizing: 'border-box', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 14, padding: 12, fontSize: 15, fontWeight: 700, color: '#0f172a', background: '#f8fafc' }}
+            />
+            <button
+              type="button"
+              onClick={salvarTelefoneComercial}
+              disabled={salvandoTelefone}
+              style={{ width: '100%', marginTop: 10, border: '1px solid rgba(14,165,233,0.25)', background: '#eff6ff', color: '#0284c7', borderRadius: 14, padding: 13, fontSize: 13.5, fontWeight: 900, cursor: salvandoTelefone ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+            >
+              {salvandoTelefone ? <Loader2 size={17} className="animate-spin-slow" /> : <Phone size={17} />}
+              {salvandoTelefone ? 'Salvando...' : 'Salvar telefone'}
+            </button>
+            {telefoneMsg && <div role="status" style={{ marginTop: 8, fontSize: 12.5, fontWeight: 800, color: telefoneMsg.includes('salvo') || telefoneMsg.includes('removido') ? '#16a34a' : '#ef4444' }}>{telefoneMsg}</div>}
+          </div>
+          {/* Tres estados, porque a loja pode estar em tres situacoes bem
+              diferentes — e antes as tres mostravam a mesma frase inutil:
+              1. tem endereco  -> so exibe;
+              2. tem coordenada e nao tem endereco -> DEIXA PREENCHER aqui
+                 mesmo (nao mexe no ponto, entao nao precisa de autorizacao);
+              3. nao tem nem coordenada -> manda definir o ponto primeiro. */}
+          {perfil.endereco ? (
+            <PublicInfo
+              icon={<MapPin size={18} color="#64748b" />}
+              label="Endereco da base"
+              value={perfil.endereco}
+            />
+          ) : lat != null && lng != null ? (
+            <div style={{ borderTop: '1px solid rgba(0,0,0,0.06)', paddingTop: 14, marginTop: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <MapPin size={18} color="#d97706" />
+                <div style={{ fontSize: 12.5, fontWeight: 900, color: '#0f172a' }}>Endereco da base</div>
+              </div>
+              <p style={{ margin: '0 0 10px', fontSize: 12.5, color: '#b45309', fontWeight: 700, lineHeight: 1.45 }}>
+                Seu ponto ja esta no mapa, mas sem endereco escrito. O cliente ve o pino e nao sabe ler onde e.
+              </p>
+              <input
+                value={enderecoBase}
+                onChange={e => { setEnderecoBase(e.target.value); setEnderecoMsg('') }}
+                placeholder="Rua, numero, bairro, cidade"
+                autoComplete="street-address"
+                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 14, padding: 12, fontSize: 15, fontWeight: 700, color: '#0f172a', background: '#f8fafc' }}
+              />
+              <button
+                type="button"
+                onClick={salvarEnderecoBase}
+                disabled={salvandoEndereco}
+                style={{ width: '100%', marginTop: 10, border: '1px solid rgba(245,158,11,0.3)', background: '#fffbeb', color: '#b45309', borderRadius: 14, padding: 13, fontSize: 13.5, fontWeight: 900, cursor: salvandoEndereco ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              >
+                {salvandoEndereco ? <Loader2 size={17} className="animate-spin-slow" /> : <MapPin size={17} />}
+                {salvandoEndereco ? 'Salvando...' : 'Salvar endereco'}
+              </button>
+              {/* Aviso antes de salvar, nao depois: escrever o endereco e uma
+                  acao de uma vez so — trocar depois exige autorizacao. */}
+              <div style={{ marginTop: 7, fontSize: 11.5, color: '#64748b', fontWeight: 700, lineHeight: 1.4 }}>
+                Confira antes de salvar: depois de gravado, mudar o endereco passa pela autorizacao PraiaGo.
+              </div>
+              {enderecoMsg && (
+                <div role="status" style={{ marginTop: 8, fontSize: 12.5, fontWeight: 800, color: enderecoMsg.startsWith('Endereco salvo') ? '#16a34a' : '#ef4444' }}>
+                  {enderecoMsg}
+                </div>
+              )}
+            </div>
+          ) : (
+            <PublicInfo
+              icon={<MapPin size={18} color="#64748b" />}
+              label="Endereco da base"
+              value='Defina o ponto em "Localizacao da loja" logo abaixo'
+            />
+          )}
         </InfoCard>
       </div>
 
@@ -764,7 +892,7 @@ export default function PerfilPage() {
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 15, fontWeight: 900, color: '#0f172a' }}>Minha Carteira</div>
-          <div style={{ fontSize: 12.5, color: '#64748b', fontWeight: 600 }}>Saldo, repasses e saque via Pix</div>
+          <div style={{ fontSize: 12.5, color: '#64748b', fontWeight: 600 }}>Saldo, repasses e saque pra sua conta bancaria</div>
         </div>
         <ChevronRight size={20} color="#94a3b8" />
       </motion.button>
@@ -952,56 +1080,30 @@ export default function PerfilPage() {
         {localMsg && <div role="status" style={{ color: localMsgSucesso ? '#16a34a' : localMsgProcessando ? '#64748b' : '#ef4444', fontSize: 13, fontWeight: 800 }}>{localMsg}</div>}
       </InfoCard>
 
-      <InfoCard title="Onde voce recebe (chave Pix)" icon={<CreditCard size={16} color="#0284c7" />}>
-        <p style={{ fontSize: 13, color: '#64748b', fontWeight: 500, margin: 0 }}>
-          Seus repasses caem nessa chave. Nao precisa criar conta em gateway nenhum — so informe sua chave Pix.
-        </p>
-        <div>
-          <label style={{ fontSize: 11, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 6, letterSpacing: 0.5 }}>CHAVE PIX</label>
-          <input
-            value={pixKey}
-            onChange={e => setPixKey(e.target.value)}
-            placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatoria"
-            style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 14, padding: '12px', fontSize: 15, fontWeight: 700, color: '#0f172a', background: '#f8fafc' }}
-          />
-        </div>
-        <button
-          type="button"
-          onClick={salvarChavePix}
-          disabled={pixSalvando}
-          style={{ width: '100%', border: '1px solid rgba(2,132,199,0.25)', background: '#eff6ff', color: '#0284c7', borderRadius: 16, padding: 16, fontSize: 14, fontWeight: 900, cursor: pixSalvando ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
-        >
-          {pixSalvando ? <Loader2 size={18} className="animate-spin-slow" /> : <CreditCard size={18} />}
-          {pixSalvando ? 'Salvando...' : 'Salvar chave Pix'}
-        </button>
-        {pixMsg && <div style={{ color: pixMsg.includes('salva') ? '#16a34a' : '#ef4444', fontSize: 13, fontWeight: 800 }}>{pixMsg}</div>}
-      </InfoCard>
+      {/* Onde o dinheiro cai fica na Carteira (conta bancaria no gateway), nao
+          aqui: a chave Pix saiu porque o repasse deixou de usar chave. */}
+      {sessao?.id && (
+        <TrocaNomeLoja
+          vendedorId={sessao.id}
+          nomeAtual={perfil.nome}
+          onNomeAprovado={nomeNovo => setPerfil(atual => (atual.nome === nomeNovo ? atual : { ...atual, nome: nomeNovo }))}
+        />
+      )}
 
-      <InfoCard title="Horario de funcionamento" icon={<Clock size={16} color="#f97316" />}>
-        <p style={{ fontSize: 13, color: '#64748b', fontWeight: 500, margin: 0 }}>
-          Fora desse horario o restaurante aparece como <strong>fechado</strong> pros clientes no app.
-        </p>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-          <div>
-            <label style={{ fontSize: 11, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 6, letterSpacing: 0.5 }}>ABRE AS</label>
-            <input type="time" value={horaAbre} onChange={e => setHoraAbre(e.target.value)} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 14, padding: '12px', fontSize: 16, fontWeight: 800, color: '#0f172a', background: '#f8fafc' }} />
-          </div>
-          <div>
-            <label style={{ fontSize: 11, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 6, letterSpacing: 0.5 }}>FECHA AS</label>
-            <input type="time" value={horaFecha} onChange={e => setHoraFecha(e.target.value)} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 14, padding: '12px', fontSize: 16, fontWeight: 800, color: '#0f172a', background: '#f8fafc' }} />
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={salvarHorario}
-          disabled={salvandoHorario}
-          style={{ width: '100%', border: 'none', background: 'linear-gradient(135deg, #f97316, #ea580c)', color: '#fff', borderRadius: 16, padding: 15, fontSize: 14, fontWeight: 900, cursor: salvandoHorario ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
-        >
-          {salvandoHorario ? <Loader2 size={18} className="animate-spin-slow" /> : <Clock size={18} />}
-          Salvar horario
-        </button>
-        {horarioMsg && <div style={{ fontSize: 13, fontWeight: 800, color: horarioMsg.includes('salvo') ? '#16a34a' : '#ef4444', textAlign: 'center' }}>{horarioMsg}</div>}
-      </InfoCard>
+      {/* Horário POR DIA DA SEMANA. Antes era um par abre/fecha só, valendo
+          igual pra semana inteira — não dava pra fechar na segunda, abrir mais
+          cedo no sábado nem marcar 24 horas, que é como loja de praia funciona.
+          O EditorHorarios grava a grade nova e mantém os campos antigos
+          preenchidos, pra quem ainda não atualizou o app não ver "sem horário". */}
+      {sessao?.id && (
+        <EditorHorarios
+          userId={sessao.id}
+          horariosIniciais={horariosPerfil}
+          abreAntigo={horaAbre}
+          fechaAntigo={horaFecha}
+          accent="#f97316"
+        />
+      )}
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-panel" style={{ borderRadius: 24, overflow: 'hidden', border: '1px solid rgba(0,0,0,0.06)', marginBottom: 24 }}>
         {[

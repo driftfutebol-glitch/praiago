@@ -52,3 +52,8 @@ npm-debug.log*
 .codex/
 .vercel-token
 .vercel-token.txt
+
+# Pacote de envio da Play Store: e so a pasta PraiaGo-PlayStore-Recursos/
+# zipada. Versionar os dois guarda 17MB pra dizer a mesma coisa — a pasta e a
+# fonte, a zip se regera quando for enviar.
+PraiaGo-PlayStore-Recursos.zip
