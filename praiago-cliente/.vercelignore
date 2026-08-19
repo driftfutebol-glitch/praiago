@@ -1,0 +1,10 @@
+# O app cliente e Capacitor: o repo carrega os projetos nativos inteiros
+# (android/ e ios/, dezenas de milhares de arquivos). O deploy web nao usa nada
+# disso — sem este arquivo a Vercel tentava subir 47.176 arquivos e recusava
+# no limite de 15.000.
+node_modules
+android
+ios
+dist
+.vite*
+*.log
