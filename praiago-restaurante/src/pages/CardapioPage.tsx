@@ -17,6 +17,8 @@ type Produto = {
   ativo: boolean
   foto: string | null
   emoji: string
+  // NULO = a loja nao controla estoque desse item (ilimitado). 0 = esgotado.
+  estoque: number | null
 }
 
 type NovoForm = {
@@ -26,6 +28,7 @@ type NovoForm = {
   categoria: string
   emoji: string
   foto: string | null
+  estoque: string
 }
 
 const NOVO_INICIAL: NovoForm = {
@@ -35,6 +38,7 @@ const NOVO_INICIAL: NovoForm = {
   categoria: 'Almoço',
   emoji: '🍽️',
   foto: null,
+  estoque: '',
 }
 
 const FOTO_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp']
@@ -64,6 +68,7 @@ export default function CardapioPage() {
   const [editNome, setEditNome] = useState('')
   const [editPreco, setEditPreco] = useState('')
   const [editCategoria, setEditCategoria] = useState('')
+  const [editEstoque, setEditEstoque] = useState('')
   const [adicionando, setAdicionando] = useState(false)
   const [loading, setLoading] = useState(true)
   const [verificado, setVerificado] = useState<boolean | null>(null)
@@ -234,13 +239,21 @@ export default function CardapioPage() {
     const newPreco = editPreco.trim() !== '' ? precoNum : p.preco
 
     const newCategoria = getProductCategory(editCategoria || p.categoria).label
+    // Campo vazio grava NULO de proposito: "sem numero" quer dizer "nao
+    // controlo estoque", que e diferente de zero (zero e esgotado).
+    const newEstoque = editEstoque.trim() === ''
+      ? null
+      : Math.max(0, Math.floor(Number(editEstoque) || 0))
+
     setProdutos(prev => prev.map(p => p.id === id
-      ? { ...p, nome: newNome, preco: newPreco, categoria: newCategoria }
+      ? { ...p, nome: newNome, preco: newPreco, categoria: newCategoria, estoque: newEstoque }
       : p
     ))
     setEditando(null)
-    
-    await supabase.from('produtos').update({ nome: newNome, preco: newPreco, categoria: newCategoria }).eq('id', id)
+
+    await supabase.from('produtos')
+      .update({ nome: newNome, preco: newPreco, categoria: newCategoria, estoque: newEstoque })
+      .eq('id', id)
   }
 
   async function adicionarProduto() {
@@ -275,6 +288,11 @@ export default function CardapioPage() {
         ativo: true,
         emoji: novo.emoji,
         foto: fotoUrl,
+        // Campo vazio grava NULO de proposito: "sem numero" quer dizer "nao
+        // controlo estoque", que e diferente de zero (zero e esgotado).
+        estoque: novo.estoque.trim() === ''
+          ? null
+          : Math.max(0, Math.floor(Number(novo.estoque) || 0)),
       }).select().single()
       if (error || !data) throw new Error(error?.message || 'Produto nao criado.')
 
@@ -348,7 +366,7 @@ export default function CardapioPage() {
             <motion.div key={p.id} layout initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} transition={{ duration: 0.2 }} style={{ background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(10px)', borderRadius: 24, padding: 20, border: '1px solid rgba(0,0,0,0.05)', position: 'relative', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' }}>
               {/* Badge Ativo */}
               <button onClick={() => toggleAtivo(p.id)} style={{ position: 'absolute', top: 20, right: 20, background: p.ativo ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)', border: `1px solid ${p.ativo ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`, color: p.ativo ? '#4ade80' : '#f87171', padding: '4px 12px', borderRadius: 12, fontSize: 12, fontWeight: 800, cursor: 'pointer', transition: 'all 0.2s' }}>
-                {p.ativo ? 'ATIVO' : 'ESGOTADO'}
+                {p.ativo ? 'ATIVO' : 'PAUSADO'}
               </button>
 
               <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
@@ -380,10 +398,37 @@ export default function CardapioPage() {
                   <div style={{ fontSize: 12, color: '#f97316', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
                     {getProductCategory(p.categoria).label}
                   </div>
+                  {/* So aparece pra quem controla estoque: produto de estoque
+                      nulo nao deve ganhar rotulo nenhum. */}
+                  {p.estoque != null && (
+                    <span style={{
+                      display: 'inline-block', marginBottom: 6, padding: '2px 9px', borderRadius: 999,
+                      fontSize: 10.5, fontWeight: 900, letterSpacing: 0.3,
+                      background: p.estoque === 0 ? '#fee2e2' : p.estoque <= 3 ? '#fef3c7' : '#dcfce7',
+                      color: p.estoque === 0 ? '#b91c1c' : p.estoque <= 3 ? '#92400e' : '#166534',
+                    }}>
+                      {p.estoque === 0 ? 'ESGOTADO' : `${p.estoque} em estoque`}
+                    </span>
+                  )}
                   {editando === p.id ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       <input autoFocus value={editNome} onChange={e => setEditNome(e.target.value)} style={{ width: '100%', background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 8, padding: '7px 9px', color: '#0f172a', fontSize: 16, fontWeight: 700, outline: 'none' }} />
                       <input value={editPreco} onChange={e => setEditPreco(e.target.value)} type="number" step="0.01" style={{ width: '100%', background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 8, padding: '7px 9px', color: '#0f172a', fontSize: 16, fontWeight: 700, outline: 'none' }} />
+                      {/* So digito: teclado de celular deixa passar ponto e
+                          virgula, e "1,5 porcao" nao existe. */}
+                      <input
+                        value={editEstoque}
+                        onChange={e => setEditEstoque(e.target.value.replace(/[^0-9]/g, '').slice(0, 5))}
+                        inputMode="numeric"
+                        placeholder="Estoque (vazio = sem limite)"
+                        title="Quantas unidades voce tem. Vazio = nao controla estoque."
+                        style={{ width: '100%', background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 8, padding: '7px 9px', color: '#0f172a', fontSize: 15, fontWeight: 700, outline: 'none' }}
+                      />
+                      {editEstoque.trim() === '0' && (
+                        <div style={{ fontSize: 11.5, fontWeight: 800, color: '#b45309', lineHeight: 1.35 }}>
+                          Com 0 o produto aparece como esgotado e o cliente nao consegue pedir.
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <>
@@ -417,7 +462,7 @@ export default function CardapioPage() {
                   </>
                 ) : (
                   <>
-                    <button onClick={() => { setEditando(p.id); setEditNome(p.nome); setEditPreco(p.preco.toString()); setEditCategoria(getProductCategory(p.categoria).label) }} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(0,0,0,0.05)', color: '#334155', border: 'none', padding: '8px', borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                    <button onClick={() => { setEditando(p.id); setEditNome(p.nome); setEditPreco(p.preco.toString()); setEditCategoria(getProductCategory(p.categoria).label); setEditEstoque(p.estoque == null ? '' : String(p.estoque)) }} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(0,0,0,0.05)', color: '#334155', border: 'none', padding: '8px', borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
                       <Edit2 size={16} /> Editar
                     </button>
                     <button onClick={() => deletar(p.id)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)', padding: '8px', borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
@@ -454,6 +499,28 @@ export default function CardapioPage() {
                     <label style={{ display: 'block', fontSize: 14, color: '#64748b', fontWeight: 600, marginBottom: 8 }}>Preço (R$)</label>
                     <input value={novo.preco} onChange={e => setNovo({...novo, preco: e.target.value})} type="number" step="0.01" placeholder="0.00" style={{ width: '100%', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 12, padding: '12px 16px', color: '#0f172a', fontSize: 16, outline: 'none' }} />
                   </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 14, color: '#64748b', fontWeight: 600, marginBottom: 4 }}>Estoque</label>
+                  <div style={{ fontSize: 12.5, color: '#94a3b8', fontWeight: 600, marginBottom: 8, lineHeight: 1.4 }}>
+                    Quantas unidades voce tem hoje. <strong>Deixe vazio</strong> se nao quer controlar —
+                    ai o produto nunca esgota sozinho.
+                  </div>
+                  {/* So digito: teclado de celular deixa passar ponto e
+                      virgula, e "1,5 porcao" nao existe. */}
+                  <input
+                    value={novo.estoque}
+                    onChange={e => setNovo({ ...novo, estoque: e.target.value.replace(/[^0-9]/g, '').slice(0, 5) })}
+                    inputMode="numeric"
+                    placeholder="Sem limite"
+                    style={{ width: '100%', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 12, padding: '12px 16px', color: '#0f172a', fontSize: 16, outline: 'none' }}
+                  />
+                  {novo.estoque.trim() === '0' && (
+                    <div style={{ marginTop: 6, fontSize: 12, fontWeight: 800, color: '#b45309' }}>
+                      Com 0 o produto aparece como esgotado e o cliente nao consegue pedir.
+                    </div>
+                  )}
                 </div>
 
                 <ProductCategoryPicker value={novo.categoria} onChange={category => setNovo({ ...novo, categoria: category.label })} />

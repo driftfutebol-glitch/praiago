@@ -69,7 +69,7 @@ function TelaLogada() {
     setReenviandoEmail(false)
     useStore.getState().addNotif({
       titulo: error ? 'Falha no envio' : 'E-mail enviado',
-      texto: error ? 'Nao deu pra reenviar agora. Aguarde um minuto e tente de novo.' : `Confira sua caixa de entrada em ${sessao.email}.`,
+      texto: error ? 'Não deu pra reenviar agora. Aguarde um minuto e tente de novo.' : `Confira sua caixa de entrada em ${sessao.email}.`,
     })
   }
 
@@ -78,14 +78,14 @@ function TelaLogada() {
     const atual = formatarCpf(verificacao?.cpf || '')
     const novo = await promptDialog({
       title: 'Validar CPF',
-      message: 'Digite seu CPF. A validacao e automatica se o numero for valido.',
+      message: 'Digite seu CPF. A validação é automática se o número for válido.',
       placeholder: '000.000.000-00',
       defaultValue: atual,
       confirmText: 'Validar',
     })
     if (!novo) return
     if (!validarCpf(novo)) {
-      useStore.getState().addNotif({ titulo: 'CPF invalido', texto: 'Confira os numeros e tente novamente.' })
+      useStore.getState().addNotif({ titulo: 'CPF inválido', texto: 'Confira os numeros e tente novamente.' })
       return
     }
     const { data, error } = await supabase
@@ -96,7 +96,7 @@ function TelaLogada() {
       .maybeSingle()
     if (error) {
       const dup = (error as { code?: string }).code === '23505'
-      useStore.getState().addNotif({ titulo: dup ? 'CPF já cadastrado' : 'Erro ao validar CPF', texto: dup ? 'Esse CPF já está em outra conta. Cada CPF só pode ter uma conta.' : 'Nao deu pra validar agora. Confira o numero e tente de novo.' })
+      useStore.getState().addNotif({ titulo: dup ? 'CPF já cadastrado' : 'Erro ao validar CPF', texto: dup ? 'Esse CPF já está em outra conta. Cada CPF só pode ter uma conta.' : 'Não deu pra validar agora. Confira o número e tente de novo.' })
       return
     }
     setVerificacao(data as VerificacaoCliente)
@@ -173,7 +173,7 @@ function TelaLogada() {
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 900, color: '#0f172a' }}>CPF</div>
                 <div style={{ fontSize: 11.5, fontWeight: 700, color: cpfOk ? '#15803d' : '#c2410c', marginTop: 2 }}>
-                  {cpfOk ? `${formatarCpf(verificacao?.cpf || '')} validado` : 'Informe um CPF valido para fazer pedido'}
+                  {cpfOk ? `${formatarCpf(verificacao?.cpf || '')} validado` : 'Informe um CPF válido para fazer pedido'}
                 </div>
               </div>
               {!cpfOk && (
@@ -259,36 +259,36 @@ export default function PerfilPage() {
 
   async function enviarResetSenha() {
     const alvo = emailNormalizado()
-    if (!/^\S+@\S+\.\S+$/.test(alvo)) { setErro('Informe seu e-mail valido para redefinir a senha.'); return }
+    if (!/^\S+@\S+\.\S+$/.test(alvo)) { setErro('Informe seu e-mail válido para redefinir a senha.'); return }
     const { error } = await supabase.auth.resetPasswordForEmail(alvo, { redirectTo: `${window.location.origin}/perfil` })
     if (!error) await logSecurityEvent('password_reset_requested', alvo)
-    setErro(error ? 'Nao foi possivel enviar a redefinicao agora. Tente de novo em instantes.' : 'Enviamos o e-mail de redefinicao. Use o link ou o codigo recebido.')
+    setErro(error ? 'Não foi possível enviar a redefinição agora. Tente de novo em instantes.' : 'Enviamos o e-mail de redefinição. Use o link ou o código recebido.')
   }
 
   async function confirmarCodigoSenha() {
     const alvo = emailNormalizado()
-    if (!/^\S+@\S+\.\S+$/.test(alvo)) { setErro('Informe seu e-mail valido para confirmar o codigo.'); return }
+    if (!/^\S+@\S+\.\S+$/.test(alvo)) { setErro('Informe seu e-mail válido para confirmar o código.'); return }
     const codigo = await promptDialog({ title: 'Código do e-mail', message: 'Digite o código que enviamos para o seu e-mail.', placeholder: '000000' })
     if (!codigo?.trim()) return
     const novaSenha = await promptDialog({ title: 'Nova senha', message: 'Use pelo menos 10 caracteres, com letras e numeros.', placeholder: 'Nova senha', secret: true })
     if (!novaSenha || novaSenha.length < 10 || !/[A-Za-z]/.test(novaSenha) || !/\d/.test(novaSenha)) { setErro('Use pelo menos 10 caracteres, com letras e numeros.'); return }
 
     const { error: otpError } = await supabase.auth.verifyOtp({ email: alvo, token: codigo.trim(), type: 'recovery' })
-    if (otpError) { setErro('Codigo invalido ou expirado. Peca um novo codigo.'); return }
+    if (otpError) { setErro('Código inválido ou expirado. Peça um novo código.'); return }
     const { error } = await supabase.auth.updateUser({ password: novaSenha })
-    setErro(error ? 'Nao foi possivel trocar a senha. Peca um novo codigo e tente de novo.' : 'Senha alterada com sucesso. Entre novamente.')
+    setErro(error ? 'Não foi possível trocar a senha. Peça um novo código e tente de novo.' : 'Senha alterada com sucesso. Entre novamente.')
     if (!error) await supabase.auth.signOut()
   }
 
   async function reenviarVerificacao() {
     const alvo = emailNormalizado()
-    if (!/^\S+@\S+\.\S+$/.test(alvo)) { setErro('Informe seu e-mail valido para reenviar a verificacao.'); return }
+    if (!/^\S+@\S+\.\S+$/.test(alvo)) { setErro('Informe seu e-mail válido para reenviar a verificação.'); return }
     const { error } = await supabase.auth.resend({
       type: 'signup',
       email: alvo,
       options: { emailRedirectTo: `${window.location.origin}/perfil` },
     })
-    setErro(error ? 'Nao foi possivel reenviar agora. Aguarde um minuto e tente de novo.' : 'Enviamos um novo e-mail de verificacao.')
+    setErro(error ? 'Não foi possível reenviar agora. Aguarde um minuto e tente de novo.' : 'Enviamos um novo e-mail de verificação.')
   }
 
   if (sessao) return <TelaLogada />
@@ -298,7 +298,7 @@ export default function PerfilPage() {
     if (senha.length < 6) { setErro('A senha precisa ter ao menos 6 caracteres.'); return }
     if (tab === 'cadastro' && (senha.length < 10 || !/[A-Za-z]/.test(senha) || !/\d/.test(senha))) { setErro('Use pelo menos 10 caracteres, com letras e numeros.'); return }
     if (tab === 'cadastro' && !nome.trim()) { setErro('Informe seu nome.'); return }
-    if (tab === 'cadastro' && !validarCpf(cpf)) { setErro('Informe um CPF valido para liberar pedidos e o cupom de boas-vindas.'); return }
+    if (tab === 'cadastro' && !validarCpf(cpf)) { setErro('Informe um CPF válido para liberar pedidos e o cupom de boas-vindas.'); return }
     if (tab === 'cadastro' && !aceitouTermos) { setErro('Você precisa aceitar os Termos de Uso e a Política de Privacidade.'); return }
     setErro('')
     setLoading(true)
@@ -327,7 +327,7 @@ export default function PerfilPage() {
           if (profile?.role !== 'cliente') {
             await supabase.auth.signOut()
             await logSecurityEvent('access_denied', alvo, { reason: 'wrong_app_role', role: profile?.role ?? null })
-            throw new Error('Esta conta nao pertence ao aplicativo de cliente.')
+            throw new Error('Esta conta não pertence ao aplicativo de cliente.')
           }
           if (profile?.status === 'banido') {
             await supabase.auth.signOut()
@@ -384,7 +384,7 @@ export default function PerfilPage() {
         .maybeSingle()
       if (profile?.role !== 'cliente' || profile?.status === 'banido') {
         await supabase.auth.signOut()
-        setErro('Esta conta nao pode acessar o aplicativo de cliente.')
+        setErro('Esta conta não pode acessar o aplicativo de cliente.')
         return
       }
       await logSecurityEvent('login_success', codigoEnvio, { via: 'signup_otp' })
@@ -494,8 +494,8 @@ export default function PerfilPage() {
           {tab === 'entrar' && (
             <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap', marginTop: -2 }}>
               <button type="button" onClick={enviarResetSenha} style={{ background: 'none', border: 0, color: '#0284c7', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Esqueci minha senha</button>
-              <button type="button" onClick={confirmarCodigoSenha} style={{ background: 'none', border: 0, color: '#7c3aed', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Tenho codigo</button>
-              <button type="button" onClick={reenviarVerificacao} style={{ background: 'none', border: 0, color: '#16a34a', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Reenviar verificacao</button>
+              <button type="button" onClick={confirmarCodigoSenha} style={{ background: 'none', border: 0, color: '#7c3aed', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Tenho código</button>
+              <button type="button" onClick={reenviarVerificacao} style={{ background: 'none', border: 0, color: '#16a34a', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Reenviar verificação</button>
             </div>
           )}
         </div>

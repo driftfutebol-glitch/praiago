@@ -284,7 +284,7 @@ function ComprarIngressoModal({ evento, onClose, sessao }: { evento: Evento; onC
                     color: metodo === m ? '#0369a1' : '#64748b',
                   }}
                 >
-                  {m === 'pix' ? 'PIX' : 'Cartao de credito'}
+                  {m === 'pix' ? 'PIX' : 'Cartão de crédito'}
                 </button>
               ))}
             </div>
@@ -296,7 +296,7 @@ function ComprarIngressoModal({ evento, onClose, sessao }: { evento: Evento; onC
               <span>{fmtMoney(total)}</span>
             </div>
             <div style={{ marginTop: 6, fontSize: 11, color: '#94a3b8', lineHeight: 1.35 }}>
-              Entrega do ingresso e conferida por admin apos o pagamento.
+              Entrega do ingresso é conferida por admin após o pagamento.
             </div>
           </div>
 

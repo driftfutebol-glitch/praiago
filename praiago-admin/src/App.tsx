@@ -16,6 +16,7 @@ import PromocoesPage from './pages/PromocoesPage'
 import FinanceiroPage from './pages/FinanceiroPage'
 import TrocaContaPage from './pages/TrocaContaPage'
 import TrocaNomePage from './pages/TrocaNomePage'
+import CadastrosEventoPage from './pages/CadastrosEventoPage'
 import AdminsPage from './pages/AdminsPage'
 import LocalizacoesPage from './pages/LocalizacoesPage'
 import Sidebar from './components/Sidebar'
@@ -282,6 +283,9 @@ export default function App() {
             {/* Troca de nome mexe no cadastro do vendedor, entao mora na mesma
                 permissao de 'usuarios' — nao vale criar secao nova so pra isso. */}
             <Route path="/troca-nome" element={guard('usuarios', <TrocaNomePage />)} />
+            {/* Relatorio do cadastro assistido no evento: e lista de usuario,
+                entao mora na mesma permissao de 'usuarios'. */}
+            <Route path="/cadastros-evento" element={guard('usuarios', <CadastrosEventoPage />)} />
             <Route path="/verificacoes" element={guard('verificacoes', <VerificacoesPage />)} />
             <Route path="/atendimento/:plataforma" element={guard('atendimento', <AtendimentoPage />)} />
             <Route path="/eventos" element={guard('eventos', <EventosPage />)} />

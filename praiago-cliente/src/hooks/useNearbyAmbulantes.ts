@@ -72,6 +72,16 @@ const STALE_TIMEOUT = 2 * 60 * 1000 // 2 min sem update → remove
 const PRUNE_INTERVAL = 10_000        // checa inativos a cada 10s
 const MAX_RADIUS = 5_000             // raio máximo 5km
 
+// O `emoji` do cadastro nem sempre e um emoji: ha vendedor gravado com "??"
+// (emoji que passou por um caminho sem UTF-8 e virou dois pontos de
+// interrogacao). Renderizar isso mostra "??" cru no radar.
+const PADRAO_EMOJI = '🥥'
+function emojiValido(valor?: string | null): string {
+  const limpo = (valor ?? '').trim()
+  if (!limpo) return PADRAO_EMOJI
+  return /\p{Extended_Pictographic}/u.test(limpo) ? limpo : PADRAO_EMOJI
+}
+
 function sellerPhoto(path?: string | null) {
   if (!path) return null
   return supabase.storage.from('perfis-vendedores').getPublicUrl(path).data.publicUrl
@@ -116,7 +126,7 @@ export function useNearbyAmbulantes(clientePos: [number, number]) {
     mapRef.current.set(row.id, {
       id: row.id,
       nome: row.nome ?? 'Ambulante',
-      emoji: row.emoji ?? '🥥',
+      emoji: emojiValido(row.emoji),
       categoria: row.categoria ?? 'Ambulante',
       lat: row.lat,
       lng: row.lng,
@@ -146,7 +156,7 @@ export function useNearbyAmbulantes(clientePos: [number, number]) {
       const entry: AmbulanteLive = {
         id: payload.id,
         nome: payload.nome ?? 'Ambulante',
-        emoji: payload.emoji ?? '🛒',
+        emoji: emojiValido(payload.emoji),
         categoria: payload.categoria ?? '',
         lat: payload.lat,
         lng: payload.lng,

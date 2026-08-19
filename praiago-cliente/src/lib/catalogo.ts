@@ -11,6 +11,8 @@ export type Produto = {
   emoji: string
   foto?: string | null
   categoria: string
+  /** Estoque restante. NULO = a loja nao controla estoque (ilimitado); 0 = esgotado. */
+  estoque: number | null
   promocao?: {
     id: string
     titulo: string
@@ -84,6 +86,17 @@ export const CATEGORIAS = [
 ] as const
 
 export type CategoriaId = typeof CATEGORIAS[number]['id']
+
+// Deixa o texto comparavel: sem acento e em caixa baixa. Serve pras buscas do
+// app, porque quem digita no teclado do celular quase nunca poe acento --
+// 'açaí'.toLowerCase().includes('acai') e false e a busca parece quebrada.
+export function semAcento(valor: string): string {
+  return valor
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .trim()
+}
 
 function normalizarCategoria(valor: string): string {
   return valor

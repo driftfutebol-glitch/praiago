@@ -32,6 +32,8 @@ type Produto = {
   ativo: boolean
   foto: string | null
   emoji: string | null
+  // NULO = a loja nao controla estoque desse item (ilimitado). 0 = esgotado.
+  estoque: number | null
 }
 
 type ProfileInfo = {
@@ -48,6 +50,7 @@ type ProductForm = {
   descricao: string
   categoria: string
   foto: string | null
+  estoque: string
 }
 
 const emptyForm = (): ProductForm => ({
@@ -57,6 +60,7 @@ const emptyForm = (): ProductForm => ({
   descricao: '',
   categoria: FEATURED_PRODUCT_CATEGORIES[0].label,
   foto: null,
+  estoque: '',
 })
 
 const money = (value: number) => value.toLocaleString('pt-BR', {
@@ -96,7 +100,7 @@ export default function CardapioPage() {
       const [{ data: products }, { data: profileData }] = await Promise.all([
         supabase
           .from('produtos')
-          .select('id,nome,preco,descricao,categoria,ativo,foto,emoji')
+          .select('id,nome,preco,descricao,categoria,ativo,foto,emoji,estoque')
           .eq('vendedor_id', sessao.id)
           .order('created_at', { ascending: false }),
         supabase
@@ -146,6 +150,9 @@ export default function CardapioPage() {
       descricao: product.descricao || '',
       categoria: getProductCategory(product.categoria).label,
       foto: product.foto,
+      // null vira '' (campo vazio = ilimitado); 0 tem que virar '0', nao '',
+      // senao editar um item esgotado o transformaria em ilimitado sem querer.
+      estoque: product.estoque == null ? '' : String(product.estoque),
     })
     setModalOpen(true)
   }
@@ -204,6 +211,9 @@ export default function CardapioPage() {
       categoria: category.label,
       foto: form.foto,
       emoji: '',
+      // Campo vazio grava NULO de proposito: "sem numero" quer dizer "nao
+      // controlo estoque", que e diferente de zero (zero e esgotado).
+      estoque: form.estoque.trim() === '' ? null : Math.max(0, Math.floor(Number(form.estoque) || 0)),
     }
 
     setSaving(true)
@@ -321,6 +331,18 @@ export default function CardapioPage() {
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <h2 style={{ margin: 0, color: '#132238', fontSize: 15, lineHeight: 1.25, fontWeight: 900 }}>{product.nome}</h2>
+                        {/* So aparece pra quem controla estoque: produto de
+                            estoque nulo nao deve ganhar rotulo nenhum. */}
+                        {product.estoque != null && (
+                          <span style={{
+                            display: 'inline-block', marginTop: 4, padding: '2px 8px', borderRadius: 999,
+                            fontSize: 10.5, fontWeight: 900,
+                            background: product.estoque === 0 ? '#fee2e2' : product.estoque <= 3 ? '#fef3c7' : '#dcfce7',
+                            color: product.estoque === 0 ? '#b91c1c' : product.estoque <= 3 ? '#92400e' : '#166534',
+                          }}>
+                            {product.estoque === 0 ? 'ESGOTADO' : `${product.estoque} em estoque`}
+                          </span>
+                        )}
                         <div style={{ marginTop: 4, color: '#148447', fontSize: 15, fontWeight: 900 }}>{money(Number(product.preco) || 0)}</div>
                       </div>
                       <button
@@ -402,6 +424,31 @@ export default function CardapioPage() {
                 <div>
                   <label className="field-label" htmlFor="product-price">Preço</label>
                   <input id="product-price" inputMode="decimal" value={form.preco} onChange={event => setForm(current => ({ ...current, preco: event.target.value }))} placeholder="0,00" style={{ ...inputStyle, marginTop: 7 }} />
+                </div>
+
+                <div>
+                  <label className="field-label" htmlFor="product-stock">Estoque</label>
+                  <div className="field-help">
+                    Quantas unidades você tem hoje. <strong>Deixe vazio</strong> se não quer controlar —
+                    aí o produto nunca esgota sozinho.
+                  </div>
+                  <input
+                    id="product-stock"
+                    inputMode="numeric"
+                    value={form.estoque}
+                    onChange={event => setForm(current => ({
+                      // So digito: teclado de celular deixa passar ponto e
+                      // virgula, e "1,5 cerveja" nao existe.
+                      ...current, estoque: event.target.value.replace(/[^0-9]/g, '').slice(0, 5),
+                    }))}
+                    placeholder="Sem limite"
+                    style={{ ...inputStyle, marginTop: 7 }}
+                  />
+                  {form.estoque.trim() === '0' && (
+                    <div style={{ marginTop: 6, fontSize: 12, fontWeight: 800, color: '#b45309' }}>
+                      Com 0 o produto aparece como esgotado e o cliente não consegue pedir.
+                    </div>
+                  )}
                 </div>
 
                 <div>

@@ -9,7 +9,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { useNavigate } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet'
-import L from 'leaflet'
+import L, { type Map as LeafletMap } from 'leaflet'
 import { MapPin, List, Map as MapIcon, Navigation, ChevronRight, ChevronDown, Wifi, Eye, Clock, RefreshCw, ShoppingCart, LocateFixed, UserRound } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useGPS } from '../hooks/useGPS'
@@ -108,9 +108,33 @@ function restauranteIcon(aberto: boolean) {
   })
 }
 
-function ambulanteIcon(_emoji: string, aberto: boolean) {
+/** Escapa texto que vai virar ATRIBUTO dentro de HTML cru.
+ *  O `divIcon` do Leaflet recebe string de HTML, nao JSX — entao nada aqui e
+ *  escapado por voce. A URL da foto sai de `foto_perfil_path`, que o proprio
+ *  vendedor controla: sem isto, um nome de arquivo com aspas fecharia o
+ *  atributo e injetaria marcacao no mapa de todo mundo. */
+function escaparAtributo(valor: string) {
+  return valor
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
+function ambulanteIcon(_emoji: string, aberto: boolean, fotoUrl?: string | null) {
   const cor = aberto ? '#16a34a' : '#94a3b8'
   const corClara = aberto ? '#22c55e' : '#cbd5e1'
+  // A foto da banca vale mais que um icone generico: na praia o cliente
+  // reconhece o carrinho de vista, nao o nome. Sem foto, cai no carrinho.
+  // Fechado fica em cinza pra "fechado" continuar legivel de longe, que era o
+  // que a cor sozinha resolvia antes.
+  const miolo = fotoUrl
+    ? `<img src="${escaparAtributo(fotoUrl)}" alt="" style="
+         width:100%; height:100%; object-fit:cover; border-radius:50%;
+         filter:${aberto ? 'none' : 'grayscale(1) opacity(0.85)'};
+       " />`
+    : cartMarkup
   return L.divIcon({
     className: '',
     iconSize: [46, 58],
@@ -129,8 +153,9 @@ function ambulanteIcon(_emoji: string, aberto: boolean) {
         background:${cor}; border:3px solid #ffffff;
         box-shadow: 0 6px 16px rgba(15,23,42,0.3);
         display:flex; align-items:center; justify-content:center;
+        overflow:hidden;
       ">
-        ${cartMarkup}
+        ${miolo}
       </div>
       <!-- bolinha de "online" -->
       <div style="
@@ -143,16 +168,141 @@ function ambulanteIcon(_emoji: string, aberto: boolean) {
 
 // ── Recenter helper ──────────────────────────────────────────
 
+/** Raio, em graus, dentro do qual uma loja entra no enquadramento inicial.
+ *  ~0,045° ≈ 5 km. Loja mais longe que isso fica de fora de propósito: incluir
+ *  uma banca a 30 km obrigaria o mapa a abrir na Baixada inteira, e aí NADA
+ *  fica legível — nem o cliente, nem a loja. */
+const RAIO_ENQUADRAMENTO = 0.045
+
 // Voa até a posição do cliente quando ela muda de verdade (chegou GPS/IP/ajuste)
-function FlyToCliente({ pos }: { pos: [number, number] }) {
+// e ENQUADRA as lojas perto dela.
+//
+// Só centralizar no cliente não bastava: com o cliente em Santos e a loja em
+// Praia Grande, o app anunciava "1,9 km" no cartão e o mapa não mostrava loja
+// nenhuma — os pinos caíam a ~2000px fora de uma tela de 341px. Um radar que
+// esconde justamente o que ele diz estar perto não serve pra nada.
+function FlyToCliente({ pos, alvos }: { pos: [number, number]; alvos: [number, number][] }) {
   const map = useMap()
-  const last = useRef(pos)
+  // Comeca vazio de proposito: o mapa nasce centrado no CLIENTE_FALLBACK e a
+  // posicao de verdade (GPS/IP) chega depois, entao o primeiro enquadramento
+  // TEM que acontecer.
+  const last = useRef<[number, number] | null>(null)
+  // Quantas lojas já entraram num enquadramento. As lojas chegam DEPOIS da
+  // posição; sem isto o guard de `delta` cortaria o efeito ("o cliente não se
+  // moveu") e o mapa nunca enquadraria as lojas que acabaram de aparecer.
+  const alvosEnquadrados = useRef(-1)
   useEffect(() => {
-    const moveu = Math.abs(last.current[0] - pos[0]) + Math.abs(last.current[1] - pos[1]) > 0.0005
-    if (moveu) map.flyTo(pos, Math.max(map.getZoom(), 14), { duration: 0.8 })
-    last.current = pos
-  }, [map, pos])
+    const anterior = last.current
+    const delta = anterior ? Math.abs(anterior[0] - pos[0]) + Math.abs(anterior[1] - pos[1]) : Infinity
+    const chegaramLojas = alvos.length !== alvosEnquadrados.current
+    if (delta <= 0.0005 && !chegaramLojas) return
+    // `whenReady` porque a posicao por IP costuma chegar antes de o Leaflet
+    // terminar de montar; um flyTo disparado nessa janela era engolido, o
+    // `last` era marcado como aplicado mesmo assim e o mapa ficava preso no
+    // fallback com o pino do cliente FORA da tela (mapa vazio, sem pino nenhum).
+    map.whenReady(() => {
+      // Salto grande (fallback -> cidade real, quilometros) nao rende animacao:
+      // vai direto, senao o usuario ve o mapa deslizando por 1s a toa.
+      // Só entra no enquadramento quem está perto: o resto distorce o zoom.
+      const perto = alvos.filter(([la, ln]) =>
+        Math.abs(la - pos[0]) <= RAIO_ENQUADRAMENTO && Math.abs(ln - pos[1]) <= RAIO_ENQUADRAMENTO)
+
+      if (perto.length) {
+        // maxZoom 16 evita o oposto do bug: com a loja a 20 m, o `fitBounds`
+        // aproximaria tanto que sumiria a rua e o cliente perderia a referência.
+        map.fitBounds([pos, ...perto], { padding: [42, 42], maxZoom: 16, animate: delta <= 0.05 })
+      } else if (delta > 0.05) {
+        // Salto grande (fallback -> cidade real, quilômetros) não rende
+        // animação: vai direto, senão o mapa desliza por 1s à toa.
+        map.setView(pos, Math.max(map.getZoom(), 14))
+      } else {
+        map.flyTo(pos, Math.max(map.getZoom(), 14), { duration: 0.8 })
+      }
+      last.current = pos
+      alvosEnquadrados.current = alvos.length
+    })
+    // `alvos` entra na dependência porque as lojas costumam chegar DEPOIS da
+    // posição: sem isso o enquadramento rodaria com a lista ainda vazia e nunca
+    // mais seria refeito.
+  }, [map, pos, alvos])
   return null
+}
+
+// O cartao do "ambulante mais proximo" aparece e some por cima do layout, e
+// isso muda a ALTURA do container do mapa em tempo de execucao. O Leaflet so
+// escuta resize da JANELA: quando muda so o container ele mantem a origem
+// antiga e o centro escorrega -- o pino do cliente ia parar colado na borda de
+// baixo, meio cortado. `invalidateSize` remede o container preservando o centro.
+function AjustaAoRedimensionar() {
+  const map = useMap()
+  useEffect(() => {
+    // Sem pular a 1a notificacao de proposito: quando este efeito roda, o
+    // cartao do "mais proximo" JA encolheu o container, mas o Leaflet ainda
+    // guarda a altura de antes (medido: cache 411px x container real 208px).
+    // Essa primeira medida e justamente a que corrige o desalinhamento; o
+    // proprio `invalidateSize` nao faz nada quando os tamanhos ja batem.
+    const ro = new ResizeObserver(() => map.invalidateSize({ animate: false }))
+    ro.observe(map.getContainer())
+    return () => ro.disconnect()
+  }, [map])
+  return null
+}
+
+/** Distância em km entre dois pontos. */
+function kmEntre(a: [number, number], b: [number, number]) {
+  const R = 6371, rad = (x: number) => x * Math.PI / 180
+  const dLat = rad(b[0] - a[0]), dLng = rad(b[1] - a[1])
+  const h = Math.sin(dLat / 2) ** 2
+    + Math.cos(rad(a[0])) * Math.cos(rad(b[0])) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(h))
+}
+
+/** Aviso pra quando existem lojas, mas nenhuma perto.
+ *
+ *  Sem isto o mapa fica com o pino do cliente sozinho e mais nada — e "vazio"
+ *  é indistinguível de "quebrado". Medido num caso real: cliente em Santos,
+ *  loja em Praia Grande a 10,2 km; o mapa não mostrava nada e não explicava
+ *  por quê. Aqui a distância aparece escrita, e o botão leva até lá. */
+//  ⚠️ Fica FORA do <MapContainer> de propósito. Dentro, o elemento nasce
+//  dentro do painel do Leaflet, que engole o clique antes de ele subir até o
+//  React — o botão parecia funcionar e não fazia nada (medido: zoom seguia 15
+//  depois do clique). Por isso recebe a instância do mapa por prop, em vez de
+//  pegar com `useMap()`.
+function AvisoLojaLonge({ mapa, pos, alvos }: { mapa: LeafletMap | null; pos: [number, number]; alvos: [number, number][] }) {
+  if (!mapa || !alvos.length) return null
+  const perto = alvos.some(([la, ln]) =>
+    Math.abs(la - pos[0]) <= RAIO_ENQUADRAMENTO && Math.abs(ln - pos[1]) <= RAIO_ENQUADRAMENTO)
+  if (perto) return null
+
+  const maisProxima = alvos.reduce((melhor, atual) =>
+    kmEntre(pos, atual) < kmEntre(pos, melhor) ? atual : melhor)
+  const km = kmEntre(pos, maisProxima)
+
+  return (
+    <div style={{
+      position: 'absolute', left: 10, right: 10, top: 10, zIndex: 1000,
+      display: 'flex', alignItems: 'center', gap: 9,
+      padding: '9px 11px', borderRadius: 14,
+      background: 'rgba(255,255,255,0.97)', border: '1px solid #fde68a',
+      boxShadow: '0 8px 22px -12px rgba(15,23,42,0.45)',
+    }}>
+      <span style={{ flex: 1, fontSize: 12, fontWeight: 800, color: '#92400e', lineHeight: 1.35 }}>
+        Nada aberto pertinho de você. A loja mais próxima está a{' '}
+        {km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`}.
+      </span>
+      <button
+        type="button"
+        onClick={() => mapa.fitBounds([pos, maisProxima], { padding: [42, 42], maxZoom: 16 })}
+        style={{
+          flexShrink: 0, border: 'none', borderRadius: 999, cursor: 'pointer',
+          padding: '7px 12px', background: '#0f172a', color: '#fff',
+          fontSize: 11.5, fontWeight: 900,
+        }}
+      >
+        Mostrar
+      </button>
+    </div>
+  )
 }
 
 function RecenterMap({ pos }: { pos: [number, number] }) {
@@ -320,11 +470,15 @@ export default function AmbulantesPage() {
             <motion.button
               whileTap={{ scale: 0.9 }}
               onClick={() => setViewMode(v => v === 'map' ? 'list' : 'map')}
+              aria-label={viewMode === 'map' ? 'Ver em lista' : 'Ver no mapa'}
+              title={viewMode === 'map' ? 'Ver em lista' : 'Ver no mapa'}
               style={{
                 width: 42, height: 42, borderRadius: 14,
                 background: '#f8fafc', border: '1px solid rgba(0,0,0,0.08)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: 'pointer', color: '#fff',
+                // O icone herda `color`: com #fff em cima do fundo #f8fafc ele
+                // sumia e o botao parecia morto/vazio.
+                cursor: 'pointer', color: '#0f172a',
               }}
             >
               <AnimatePresence mode="wait">
@@ -520,6 +674,24 @@ function MapView({
   totalOnline: number
   onTrocarVisao: () => void
 }) {
+  // Lista única de "quem está perto" pro enquadramento inicial. `useMemo` com
+  // dependência nas COORDENADAS, não nos arrays: o GPS do ambulante republica
+  // de segundo em segundo criando array novo com os mesmos números, e sem isto
+  // o mapa se reenquadraria sozinho o tempo todo, brigando com o usuário.
+  // Instância do Leaflet guardada aqui pra o aviso, que mora fora do mapa,
+  // conseguir mandar o mapa enquadrar.
+  const [mapa, setMapa] = useState<LeafletMap | null>(null)
+  const alvosDoMapa = useMemo<[number, number][]>(
+    () => [
+      ...ambulantes.map(a => [a.lat, a.lng] as [number, number]),
+      ...restaurantes.filter(r => r.pos).map(r => r.pos as [number, number]),
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      ambulantes.map(a => `${a.lat},${a.lng}`).join('|'),
+      restaurantes.map(r => r.pos?.join(',')).join('|'),
+    ],
+  )
   return (
     <div style={{
       position: 'relative', height: '100%',
@@ -535,6 +707,7 @@ function MapView({
         zoom={15}
         style={{ height: '100%', width: '100%' }}
         zoomControl={false}
+        ref={setMapa}
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
@@ -551,7 +724,12 @@ function MapView({
             marcadores pra ficar por baixo deles. */}
         <CamadaPraia />
 
-        <FlyToCliente pos={clientePos} />
+        {/* Enquadra cliente + lojas: ambulante (GPS ao vivo) e restaurante
+            (ponto fixo) entram juntos, porque pro cliente os dois são "quem
+            está perto de mim" — a diferença de como a posição chega é problema
+            nosso, não dele. */}
+        <FlyToCliente pos={clientePos} alvos={alvosDoMapa} />
+        <AjustaAoRedimensionar />
 
         {/* Cliente — pino ARRASTÁVEL: sem GPS, o usuário posiciona onde está */}
         <Marker
@@ -654,7 +832,7 @@ function MapView({
           <Marker
             key={a.id}
             position={[a.lat, a.lng]}
-            icon={ambulanteIcon(a.emoji, a.aberto)}
+            icon={ambulanteIcon(a.emoji, a.aberto, a.fotoPerfil)}
           >
             <Popup>
               <div style={{ minWidth: 180, fontFamily: 'Inter, sans-serif' }}>
@@ -734,6 +912,9 @@ function MapView({
         <RecenterMap pos={clientePos} />
         <EscalaMapa />
       </MapContainer>
+
+      {/* Irmão do mapa, não filho: dentro do MapContainer o Leaflet come o clique. */}
+      <AvisoLojaLonge mapa={mapa} pos={clientePos} alvos={alvosDoMapa} />
 
       {/* ── Chrome sobre o mapa ──────────────────────────────
           zIndex acima de 400 (padrão dos panes do Leaflet), senão os tiles

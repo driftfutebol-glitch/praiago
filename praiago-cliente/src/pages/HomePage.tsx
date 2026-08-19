@@ -8,6 +8,7 @@ import { BannerEventos, CartaoLocal, CARTAO } from '../components/ui'
 import {
   CATEGORIAS,
   pertenceACategoria,
+  semAcento,
   type CategoriaId,
   type Produto,
   type Vendedor,
@@ -113,10 +114,10 @@ function CategoriasPanel({
 
   // Busca sem acento: "acai" tem que achar "Açaí", senão o campo parece quebrado.
   const categoriasFiltradas = useMemo(() => {
-    const termo = buscaCategoria.trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
+    const termo = semAcento(buscaCategoria)
     if (!termo) return CATEGORIAS
     return CATEGORIAS.filter(c =>
-      c.nome.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').includes(termo)
+      semAcento(c.nome).includes(termo)
       || c.aliases.some(a => a.includes(termo)),
     )
   }, [buscaCategoria])
@@ -449,15 +450,18 @@ export default function HomePage() {
   ), [todosProdutos])
 
   const vendedores = useMemo(() => {
-    const termo = busca.trim().toLowerCase()
+    // Busca sem acento dos dois lados: quem digita "acai" no celular (teclado sem
+    // acento) tem que achar "Açaí". So baixar a caixa nao resolve, porque
+    // 'açaí'.includes('acai') e false.
+    const termo = semAcento(busca)
     return catalogo.filter(v => {
       if (soFavoritos && !favoritos.includes(v.id)) return false
       if (catSel && !v.produtos.some(p => pertenceACategoria(p.categoria, catSel))) return false
       if (!termo) return true
       return (
-        v.nome.toLowerCase().includes(termo) ||
-        v.categoria.toLowerCase().includes(termo) ||
-        v.produtos.some(p => p.nome.toLowerCase().includes(termo))
+        semAcento(v.nome).includes(termo) ||
+        semAcento(v.categoria).includes(termo) ||
+        v.produtos.some(p => semAcento(p.nome).includes(termo))
       )
     })
   }, [busca, catSel, soFavoritos, favoritos, catalogo])
@@ -850,8 +854,27 @@ export default function HomePage() {
           ) : vendedores.length === 0 ? (
             <div style={{ borderRadius: 24, border: '1px solid #e2e8f0', background: '#f8fafc', padding: 24, textAlign: 'center', color: '#64748b' }}>
               <Search size={30} color="#cbd5e1" style={{ margin: '0 auto 10px' }} />
-              <div style={{ fontSize: 15, fontWeight: 900, color: '#0f172a' }}>Nenhum vendedor disponível ainda</div>
-              <div style={{ fontSize: 13, fontWeight: 700, marginTop: 5 }}>Quando um restaurante ou ambulante publicar cardápio, ele aparece aqui.</div>
+              {/* Com filtro ativo o catalogo pode ate estar cheio: dizer "nenhum vendedor
+                  ainda" faz o cliente achar que o app esta vazio em vez de limpar a busca. */}
+              <div style={{ fontSize: 15, fontWeight: 900, color: '#0f172a' }}>
+                {catalogo.length === 0
+                  ? 'Nenhum vendedor disponível ainda'
+                  : soFavoritos ? 'Você ainda não favoritou ninguém' : 'Nada encontrado'}
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginTop: 5 }}>
+                {catalogo.length === 0
+                  ? 'Quando um restaurante ou ambulante publicar cardápio, ele aparece aqui.'
+                  : soFavoritos ? 'Toque no coração de uma loja pra ela ficar salva aqui.'
+                  : 'Tente outro termo ou limpe os filtros.'}
+              </div>
+              {catalogo.length > 0 && !soFavoritos && (busca || catSel) && (
+                <button
+                  onClick={() => { setBusca(''); setCatSel(null) }}
+                  style={{ marginTop: 12, border: 'none', borderRadius: 999, padding: '9px 18px', fontSize: 13, fontWeight: 900, color: '#fff', background: theme.color.primary, cursor: 'pointer' }}
+                >
+                  Limpar filtros
+                </button>
+              )}
             </div>
           ) : (
             <div style={{ display: 'flex', gap: 14, overflowX: 'auto', padding: '0 2px 6px', scrollbarWidth: 'none' }}>

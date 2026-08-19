@@ -865,7 +865,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
               : bemVindoBloqueado
                 ? 'Exige primeira compra, CPF e e-mail'
                 : minimoBloqueado
-                  ? `Minimo R$ ${dinheiro(minimo)}`
+                  ? `Mínimo R$ ${dinheiro(minimo)}`
                   : 'Pronto para usar'
       return { ...c, bloqueado, motivo }
     })
@@ -1047,7 +1047,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
     if (cupom.limite_uso != null && Number(cupom.usos || 0) >= Number(cupom.limite_uso)) { setCupomErro('Cupom esgotado.'); return }
     if (cupom.vendedor_id && cupom.vendedor_id !== vendedor.id) { setCupomErro('Esse cupom nao vale para esta loja.'); return }
     if (cupom.vendedor_tipo && cupom.vendedor_tipo !== vendedor.tipo) { setCupomErro('Esse cupom nao vale para este tipo de loja.'); return }
-    if (subtotal < Number(cupom.valor_minimo || 0)) { setCupomErro(`Pedido minimo R$ ${dinheiro(Number(cupom.valor_minimo || 0))}.`); return }
+    if (subtotal < Number(cupom.valor_minimo || 0)) { setCupomErro(`Pedido mínimo R$ ${dinheiro(Number(cupom.valor_minimo || 0))}.`); return }
     const valor = cupom.tipo === 'valor_fixo'
       ? Number(cupom.valor || 0)
       : cupom.tipo === 'percentual'
@@ -1313,7 +1313,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
               </div>
             ) : cuponsParaMostrar.map(c => {
               const selecionado = cupomAplicado?.codigo === c.codigo
-              const valorTexto = c.tipo === 'percentual' ? `${Number(c.valor || 0)}% OFF` : c.tipo === 'valor_fixo' ? `R$ ${dinheiro(Number(c.valor || 0))} OFF` : 'Beneficio'
+              const valorTexto = c.tipo === 'percentual' ? `${Number(c.valor || 0)}% OFF` : c.tipo === 'valor_fixo' ? `R$ ${dinheiro(Number(c.valor || 0))} OFF` : 'Benefício'
               return (
                 <button
                   key={c.codigo}
@@ -1574,7 +1574,7 @@ function LojaCard({ v, index, onOpen }: { v: Vendedor; index: number; onOpen: ()
         </div>
         {(temPromocao || rapido) && (
           <div style={{ position: 'absolute', top: 12, left: 12, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.96)', color: temPromocao ? '#16a34a' : '#0284c7', borderRadius: 999, padding: '6px 11px', fontSize: 11, fontWeight: 900, boxShadow: '0 6px 16px rgba(0,0,0,0.12)' }}>
-            {temPromocao ? <TicketPercent size={12} /> : <Zap size={12} />} {temPromocao ? 'Promo ativa' : 'Rapida'}
+            {temPromocao ? <TicketPercent size={12} /> : <Zap size={12} />} {temPromocao ? 'Promo ativa' : 'Rápida'}
           </div>
         )}
         <div style={{ position: 'absolute', left: 16, bottom: -22, width: 56, height: 56, overflow: 'hidden', borderRadius: 18, background: v.gradiente, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, border: '3px solid #ffffff', boxShadow: '0 8px 20px rgba(14,165,233,0.35)' }}>
@@ -1599,7 +1599,7 @@ function LojaCard({ v, index, onOpen }: { v: Vendedor; index: number; onOpen: ()
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 12 }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#ecfdf5', color: '#15803d', border: '1px solid #bbf7d0', borderRadius: 999, padding: '5px 9px', fontSize: 11, fontWeight: 900 }}>
-            <CreditCard size={11} /> Pix/cartao no app
+            <CreditCard size={11} /> Pix/cartão no app
           </span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#eff6ff', color: '#0284c7', border: '1px solid #bfdbfe', borderRadius: 999, padding: '5px 9px', fontSize: 11, fontWeight: 900 }}>
             <TicketPercent size={11} /> BEMVINDO20
@@ -1644,10 +1644,10 @@ function LojasList({ vendedores, loading, tipoInicial }: { vendedores: Vendedor[
     { key: 'ambulante', label: 'Ambulantes', icon: <Umbrella size={13} /> },
   ]
   const atalhos: Array<{ key: typeof atalho; label: string; icon: React.ReactNode }> = [
-    { key: 'todos', label: 'Relevancia', icon: <SlidersHorizontal size={13} /> },
+    { key: 'todos', label: 'Relevância', icon: <SlidersHorizontal size={13} /> },
     { key: 'abertas', label: 'Aberto agora', icon: <Clock size={13} /> },
     { key: 'cupom', label: 'Com cupom', icon: <TicketPercent size={13} /> },
-    { key: 'rapidas', label: 'Mais rapidas', icon: <Zap size={13} /> },
+    { key: 'rapidas', label: 'Mais rápidas', icon: <Zap size={13} /> },
     { key: 'avaliadas', label: 'Melhor nota', icon: <Star size={13} /> },
   ]
 
@@ -1782,8 +1782,8 @@ export default function PedirPage() {
   async function alterarQuantidade(produto: Vendedor['produtos'][number], delta: number) {
     if (delta > 0 && !localizacaoConfirmada) {
       await alertDialog({
-        title: 'Localizacao da loja em configuracao',
-        message: 'Voce ja pode consultar o cardapio. Os pedidos serao liberados assim que o restaurante confirmar o ponto fixo.',
+        title: 'Localização da loja em configuração',
+        message: 'Você já pode consultar o cardápio. Os pedidos serão liberados assim que o restaurante confirmar o ponto fixo.',
       })
       return
     }
@@ -1797,6 +1797,21 @@ export default function PedirPage() {
       })
       if (!confirmou) return
       setMaioridadeConfirmada(true)
+    }
+    // Defesa de EXPERIENCIA, nao de seguranca: o trigger `validar_preco_pedido`
+    // ja recusa no servidor. Isso aqui evita a pessoa so descobrir que esgotou
+    // na hora de pagar. `estoque` nulo = loja nao controla, entao nem entra.
+    if (delta > 0 && typeof produto.estoque === 'number') {
+      const noCarrinho = meuCarrinho[produto.id] ?? 0
+      if (noCarrinho + delta > produto.estoque) {
+        await alertDialog({
+          title: produto.estoque === 0 ? 'Produto esgotado' : 'Estoque limitado',
+          message: produto.estoque === 0
+            ? `${produto.nome} esgotou. Escolha outro item do cardápio.`
+            : `Restam só ${produto.estoque} de ${produto.nome}.`,
+        })
+        return
+      }
     }
     addItem(vendedorId, produto.id, delta)
   }
@@ -1830,7 +1845,7 @@ export default function PedirPage() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 800 }}>
-              <Star size={16} fill="#fbbf24" color="#fbbf24" style={{ filter: 'drop-shadow(0 0 4px rgba(251,191,36,0.6))' }} /> {vendedor.avaliacao}
+              <Star size={16} fill="#fbbf24" color="#fbbf24" style={{ filter: 'drop-shadow(0 0 4px rgba(251,191,36,0.6))' }} /> {vendedor.avaliacao > 0 ? vendedor.avaliacao.toFixed(1) : 'Novo'}
             </div>
             <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#475569' }} />
             <div style={{ fontSize: 14, color: '#64748b', fontWeight: 600 }}>{vendedor.categoria}</div>
@@ -1860,7 +1875,7 @@ export default function PedirPage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 18 }}>
             {[
               { icon: <Navigation size={16} color="#0ea5e9" />, title: 'Radar PraiaGo', text: 'GPS, reta ou barraca' },
-              { icon: <Shield size={16} color="#16a34a" />, title: 'Pagamento seguro', text: 'Pix e cartao no app' },
+              { icon: <Shield size={16} color="#16a34a" />, title: 'Pagamento seguro', text: 'Pix e cartão no app' },
             ].map(item => (
               <div key={item.title} style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 18, padding: 12, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                 <div style={{ width: 34, height: 34, borderRadius: 12, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{item.icon}</div>
@@ -1881,6 +1896,12 @@ export default function PedirPage() {
           const exigeMaioridade = pertenceACategoria(p.categoria, 'bebidas_alcoolicas')
           const precoOriginal = p.precoOriginal && p.precoOriginal > p.preco ? p.precoOriginal : null
           const promocaoLabel = p.promocao?.selo || (precoOriginal ? 'Oferta PraiaGo' : null)
+          // `estoque` NULO = a loja nao controla: o produto segue exatamente como
+          // sempre foi, sem rotulo nenhum. Só numero entra nessas contas.
+          const controlaEstoque = typeof p.estoque === 'number'
+          const esgotado = p.estoque === 0
+          const ultimas = controlaEstoque && (p.estoque as number) > 0 && (p.estoque as number) <= 3
+          const noLimite = controlaEstoque && qtd >= (p.estoque as number)
           return (
             <div key={p.id} style={{ display: 'flex', gap: 20, marginBottom: 32, alignItems: 'center' }}>
               <div style={{ flex: 1 }}>
@@ -1894,6 +1915,16 @@ export default function PedirPage() {
                     <TicketPercent size={11} /> {promocaoLabel}
                   </div>
                 )}
+                {esgotado && (
+                  <div style={{ display: 'inline-flex', alignItems: 'center', marginBottom: 8, marginLeft: 6, padding: '4px 9px', borderRadius: 999, background: '#f1f5f9', border: '1px solid #e2e8f0', color: '#64748b', fontSize: 10.5, fontWeight: 950, textTransform: 'uppercase', letterSpacing: 0.35 }}>
+                    Esgotado
+                  </div>
+                )}
+                {ultimas && (
+                  <div style={{ display: 'inline-flex', alignItems: 'center', marginBottom: 8, marginLeft: 6, padding: '4px 9px', borderRadius: 999, background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', fontSize: 10.5, fontWeight: 950 }}>
+                    {p.estoque === 1 ? 'Última unidade' : `Últimas ${p.estoque} unidades`}
+                  </div>
+                )}
                 <h4 style={{ fontSize: 17, fontWeight: 800, color: '#0f172a' }}>{p.nome}</h4>
                 <p style={{ fontSize: 14, color: '#64748b', marginTop: 6, lineHeight: 1.5 }}>{p.desc}</p>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 10 }}>
@@ -1904,12 +1935,30 @@ export default function PedirPage() {
               <div style={{ position: 'relative', flexShrink: 0 }}>
                 <div style={{ width: 100, height: 100, borderRadius: 24, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 44, border: '1px solid rgba(0,0,0,0.05)', boxShadow: 'inset 0 4px 20px rgba(0,0,0,0.2)', overflow: 'hidden' }}>{p.foto ? <img src={p.foto} alt={p.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : p.emoji}</div>
                 {promocaoLabel && <div style={{ position: 'absolute', top: -8, right: -8, background: '#ea580c', color: '#fff', borderRadius: 999, padding: '5px 8px', fontSize: 10, fontWeight: 950, boxShadow: '0 8px 18px rgba(234,88,12,0.35)' }}>OFF</div>}
-                <div style={{ position: 'absolute', bottom: -14, left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', background: '#0ea5e9', borderRadius: 16, boxShadow: '0 8px 20px rgba(14,165,233,0.4)' }}>
-                  {qtd > 0 ? (
+                <div style={{ position: 'absolute', bottom: -14, left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', background: esgotado ? '#94a3b8' : '#0ea5e9', borderRadius: 16, boxShadow: esgotado ? 'none' : '0 8px 20px rgba(14,165,233,0.4)' }}>
+                  {esgotado && qtd === 0 ? (
+                    // Sem onClick de proposito: o produto esgotou, o botao vira rotulo.
+                    <span style={{ padding: '8px 16px', color: '#fff', fontWeight: 900, fontSize: 12.5 }}>Esgotado</span>
+                  ) : esgotado ? (
+                    // Esgotou com o item JA no carrinho: o servidor manda "tire do
+                    // carrinho pra fechar o pedido", entao tem que dar pra tirar aqui.
+                    // Fica so o "-", sem o "+".
+                    <>
+                      <motion.button whileTap={{ scale: 0.9 }} onClick={() => void alterarQuantidade(p, -1)} aria-label={`Tirar um ${p.nome} do carrinho`} style={{ padding: '6px 12px', border: 'none', background: 'none', cursor: 'pointer', color: '#fff', fontWeight: 900, fontSize: 20, lineHeight: 1 }}>−</motion.button>
+                      <span style={{ fontSize: 15, fontWeight: 900, color: '#fff', minWidth: 24, textAlign: 'center' }}>{qtd}</span>
+                      <span style={{ padding: '6px 12px', color: '#fff', fontWeight: 900, fontSize: 12 }}>Esgotado</span>
+                    </>
+                  ) : qtd > 0 ? (
                     <>
                       <motion.button whileTap={{ scale: 0.9 }} onClick={() => void alterarQuantidade(p, -1)} style={{ padding: '6px 12px', border: 'none', background: 'none', cursor: 'pointer', color: '#fff', fontWeight: 900, fontSize: 20, lineHeight: 1 }}>−</motion.button>
                       <span style={{ fontSize: 15, fontWeight: 900, color: '#fff', minWidth: 24, textAlign: 'center' }}>{qtd}</span>
-                      <motion.button whileTap={{ scale: 0.9 }} onClick={() => void alterarQuantidade(p, 1)} style={{ padding: '6px 12px', border: 'none', background: 'none', cursor: 'pointer', color: '#fff', fontWeight: 900, fontSize: 20, lineHeight: 1 }}>+</motion.button>
+                      <motion.button
+                        whileTap={{ scale: noLimite ? 1 : 0.9 }}
+                        onClick={() => void alterarQuantidade(p, 1)}
+                        disabled={noLimite}
+                        aria-label={noLimite ? `Sem mais estoque de ${p.nome}` : `Adicionar mais um ${p.nome}`}
+                        style={{ padding: '6px 12px', border: 'none', background: 'none', cursor: noLimite ? 'not-allowed' : 'pointer', color: '#fff', opacity: noLimite ? 0.45 : 1, fontWeight: 900, fontSize: 20, lineHeight: 1 }}
+                      >+</motion.button>
                     </>
                   ) : (
                     <motion.button whileTap={{ scale: 0.95 }} onClick={() => void alterarQuantidade(p, 1)} style={{ padding: '8px 20px', border: 'none', background: 'none', cursor: 'pointer', color: '#fff', fontWeight: 800, fontSize: 14 }}>Add</motion.button>
@@ -1927,9 +1976,9 @@ export default function PedirPage() {
             <motion.button whileTap={{ scale: vendedor.aberto ? 0.98 : 1 }} disabled={!vendedor.aberto} onClick={() => { if (vendedor.aberto) setStep('checkout') }} style={{ width: '100%', background: vendedor.aberto ? 'linear-gradient(135deg, #0ea5e9, #22c55e)' : '#94a3b8', color: '#fff', border: 'none', borderRadius: 28, padding: '22px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: vendedor.aberto ? '0 20px 40px rgba(34,197,94,0.4)' : 'none', cursor: vendedor.aberto ? 'pointer' : 'not-allowed' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: 14, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 900 }}>{totalItens}</div>
-                <span style={{ fontSize: 16, fontWeight: 900 }}>{!vendedor.localizacaoConfirmada ? 'Localizacao em configuracao' : vendedor.aberto ? 'Finalizar Pedido' : 'Loja fechada agora 😴'}</span>
+                <span style={{ fontSize: 16, fontWeight: 900 }}>{!vendedor.localizacaoConfirmada ? 'Localização em configuração' : vendedor.aberto ? 'Finalizar Pedido' : 'Loja fechada agora 😴'}</span>
               </div>
-              <span style={{ fontSize: 20, fontWeight: 900 }}>R$ {totalPreco.toFixed(2)}</span>
+              <span style={{ fontSize: 20, fontWeight: 900 }}>R$ {dinheiro(totalPreco)}</span>
             </motion.button>
           </motion.div>
         )}

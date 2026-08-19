@@ -14,6 +14,10 @@ export default function IpsAutorizados() {
   const [novoIp, setNovoIp] = useState('')
   const [descricao, setDescricao] = useState('')
   const [meuIp, setMeuIp] = useState('')
+  // Guarda o motivo da falha em vez de descartar. Antes um `.catch(() => {})`
+  // deixava o campo vazio sem pista nenhuma — quem olhava a tela concluia que
+  // "nao tem IP", nao que a busca quebrou.
+  const [meuIpErro, setMeuIpErro] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [loading, setLoading] = useState(true)
 
@@ -46,8 +50,27 @@ export default function IpsAutorizados() {
   useEffect(() => { load() }, [])
 
   useEffect(() => {
-    // best-effort: descobre o IP atual do admin pra facilitar autorizar
-    fetch('https://api.ipify.org?format=json').then(r => r.json()).then(d => setMeuIp(d.ip || '')).catch(() => {})
+    // Descobre o IP atual do admin pra dar o botao de autorizar em um clique.
+    //
+    // Passa pela edge function `meu-ip`, nao por um servico externo: o CSP
+    // deste painel so permite `*.supabase.co`, e por isso a versao antiga
+    // (api.ipify.org) era bloqueada e nunca funcionou. Abrir mais um host no
+    // connect-src de um painel de seguranca seria trocar uma porta por uma
+    // conveniencia.
+    let vivo = true
+    ;(async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('meu-ip')
+        if (!vivo) return
+        if (error) throw error
+        const ip = String((data as { ip?: string } | null)?.ip || '')
+        if (ip) setMeuIp(ip)
+        else setMeuIpErro('Nao consegui identificar o IP desta conexao.')
+      } catch {
+        if (vivo) setMeuIpErro('Nao consegui descobrir seu IP agora. Digite abaixo pra autorizar.')
+      }
+    })()
+    return () => { vivo = false }
   }, [])
 
   async function adicionar(ipAlvo?: string) {
@@ -114,6 +137,12 @@ export default function IpsAutorizados() {
       )}
 
       {/* Meu IP */}
+      {/* Erro visivel: sem isto a pessoa fica esperando um IP que nunca vem. */}
+      {!meuIp && meuIpErro && (
+        <div className="flex items-center gap-2 text-sm text-amber-400/90 mb-3">
+          <Globe size={15} /> {meuIpErro}
+        </div>
+      )}
       {meuIp && (
         <div className="flex items-center justify-between gap-3 bg-slate-950/40 border border-slate-800 rounded-xl px-4 py-3 mb-4">
           <div className="flex items-center gap-2 text-sm text-slate-300"><Globe size={15} className="text-sky-400" /> Seu IP agora: <b className="font-mono text-slate-100">{meuIp}</b></div>

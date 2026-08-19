@@ -155,13 +155,18 @@ function mesmosItens(a: unknown, b: ItemDetalhe[]) {
 function mensagemErroPedido(message?: string) {
   const texto = String(message || '')
   if (/cupom ja usado|duplicate key|cupom_usos/i.test(texto)) {
-    return 'Este cupom ja esta reservado em outro pedido pendente. Cancele esse pedido em Meus Pedidos ou conclua o pagamento.'
+    return 'Este cupom já está reservado em outro pedido pendente. Cancele esse pedido em Meus Pedidos ou conclua o pagamento.'
   }
+  // Estoque: o trigger `validar_preco_pedido` ja devolve a frase pronta e util
+  // ("X esgotou. Tire do carrinho pra fechar o pedido." / "Restam so N de X.").
+  // Trocar isso por um erro generico esconde justamente o que a pessoa precisa
+  // fazer pra conseguir fechar o pedido.
+  if (/esgotou|restam s[oó]|estoque/i.test(texto)) return texto
   if (/produto invalido|pedido sem itens|pedido sem valor/i.test(texto)) {
-    return 'Um item do carrinho mudou ou ficou indisponivel. Atualize o carrinho e tente de novo.'
+    return 'Um item do carrinho mudou ou ficou indisponível. Atualize o carrinho e tente de novo.'
   }
   if (/cupom/i.test(texto)) return texto
-  return 'Nao foi possivel criar o pedido agora. Tente novamente.'
+  return 'Não foi possível criar o pedido agora. Tente novamente.'
 }
 
 function mapDbStatusToPedidoStatus(status?: string): Pedido['status'] {

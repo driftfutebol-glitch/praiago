@@ -7,7 +7,7 @@ import {
   Activity, Package, Users, AlertOctagon, LogOut, ShieldAlert,
   ShieldCheck, Headphones, ChevronDown, CalendarDays, LayoutGrid,
   Smartphone, TabletSmartphone, UtensilsCrossed, Umbrella, UserCircle, Ticket, Megaphone, WalletCards, MapPin,
-  Landmark, Signature
+  Landmark, Signature, UserPlus
 } from 'lucide-react'
 
 // `solicitacoes_troca_nome` ficou fora da publicacao `supabase_realtime`, entao
@@ -141,6 +141,7 @@ export default function Sidebar({ onLogout, perfil }: { onLogout: () => void; pe
   const verLocalizacoes = podeVer('usuarios')
   // Trocar o nome do estabelecimento e edicao de cadastro: mesma permissao de 'usuarios'.
   const verTrocaNome = podeVer('usuarios')
+  const verCadastrosEvento = podeVer('usuarios')
   const verAtendimento = podeVer('atendimento')
   const verErros = podeVer('erros')
 
@@ -203,6 +204,13 @@ export default function Sidebar({ onLogout, perfil }: { onLogout: () => void; pe
                 {pendingTrocaNome}
               </motion.span>
             )}
+          </NavLink>
+        )}
+
+        {verCadastrosEvento && (
+          <NavLink to="/cadastros-evento" className={linkClass}>
+            <UserPlus size={18} />
+            <span className="flex-1">Cadastros do evento</span>
           </NavLink>
         )}
 

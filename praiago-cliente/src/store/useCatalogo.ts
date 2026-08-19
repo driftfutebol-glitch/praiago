@@ -14,6 +14,8 @@ type ProdutoRow = {
   emoji: string | null
   categoria: string | null
   ativo: boolean | null
+  /** NULO = vendedor nao controla estoque. 0 = esgotado. */
+  estoque: number | null
 }
 
 type PromocaoRow = {
@@ -167,7 +169,7 @@ export const useCatalogo = create<State>((set, get) => ({
           avaliacao: Number(pf?.avaliacao_media ?? 0) || 0,
           avaliacoes: Number(pf?.total_avaliacoes ?? 0) || 0,
           tempo: '10-20 min',
-          distancia: localizacaoConfirmada ? 'Perto de voce' : 'Localizacao em ajuste',
+          distancia: localizacaoConfirmada ? 'Perto de você' : 'Localização em ajuste',
           emoji: vendedorEmoji,
           gradiente: 'linear-gradient(135deg,#0ea5e9,#22c55e)',
           aberto,
@@ -201,6 +203,9 @@ export const useCatalogo = create<State>((set, get) => ({
         emoji: r.emoji || '🍽️',
         foto: (r as { foto?: string | null }).foto ?? null,
         categoria: r.categoria || 'geral',
+        // Numero de verdade ou null. `?? null` de proposito: 0 e esgotado e
+        // NAO pode virar null (que aqui significa "sem controle de estoque").
+        estoque: typeof r.estoque === 'number' ? r.estoque : null,
         promocao: temPromocao ? {
           id: promocao.id,
           titulo: promocao.titulo,
