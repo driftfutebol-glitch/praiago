@@ -161,7 +161,7 @@ export function BannerEventos({ onClick }: { onClick: () => void }) {
       <span style={{ position: 'relative', flex: 1, minWidth: 0 }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 17, fontWeight: 950, color: '#ffffff', lineHeight: 1.1 }}>
-            Eventos na Praia
+            Eventos na Baixada
           </span>
           <SeloNovo tom="amarelo" />
         </span>

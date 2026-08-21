@@ -84,6 +84,7 @@ workflows:
     environment:
       groups:
         - praiago_public_env
+      node: 22.14.0
       xcode: latest
       vars:
         APP_DIR: praiago-cliente
@@ -104,6 +105,7 @@ workflows:
     environment:
       groups:
         - praiago_public_env
+      node: 22.14.0
       xcode: latest
       vars:
         APP_DIR: praiago-ambulante
@@ -124,6 +126,7 @@ workflows:
     environment:
       groups:
         - praiago_public_env
+      node: 22.14.0
       xcode: latest
       vars:
         APP_DIR: praiago-restaurante
@@ -147,6 +150,7 @@ workflows:
       groups:
         - praiago_public_env
         - praiago_ios_appstore
+      node: 22.14.0
       xcode: latest
       ios_signing:
         distribution_type: app_store
@@ -183,6 +187,7 @@ workflows:
       groups:
         - praiago_public_env
         - praiago_ios_appstore
+      node: 22.14.0
       xcode: latest
       ios_signing:
         distribution_type: app_store
@@ -219,6 +224,7 @@ workflows:
       groups:
         - praiago_public_env
         - praiago_ios_appstore
+      node: 22.14.0
       xcode: latest
       ios_signing:
         distribution_type: app_store
