@@ -84,6 +84,9 @@ Nunca colocar `service_role`, senha do banco, chave secreta Pagar.me ou conteúd
 - Site institucional: `https://www.praiago.com.br`
 - Sistema de cadastro do evento: `https://praiago-cadastro.vercel.app`
 - Ativação de conta: `https://www.praiago.com.br/ativar`
+- Demo Cliente: `https://praiago-demo-cliente.vercel.app`
+- Demo Ambulante: `https://praiago-demo-ambulante.vercel.app`
+- Painel Restaurante: `https://praiago-restaurante.vercel.app`
 
 ## Arquivos que precisam ser transferidos separadamente e com segurança
 
@@ -118,4 +121,3 @@ O build iOS assinado deve ser feito pelo Codemagic em uma máquina macOS, não p
 5. Configurar os grupos de variáveis.
 6. Rodar primeiro `ios-cliente-simulator` e `ios-ambulante-simulator`.
 7. Somente depois rodar os workflows de TestFlight.
-

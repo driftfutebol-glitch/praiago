@@ -42,6 +42,10 @@ git switch feat/supabase-auth-mapas-seguranca
 - Site principal: `https://www.praiago.com.br`
 - Cadastro do evento: `https://praiago-cadastro.vercel.app`
 - Ativação: `https://www.praiago.com.br/ativar`
+- Demo Cliente: `https://praiago-demo-cliente.vercel.app`
+- Demo Ambulante: `https://praiago-demo-ambulante.vercel.app`
+- Painel Restaurante: `https://praiago-restaurante.vercel.app`
+- Deploy padrão do site: `https://praiago-site.vercel.app`
 - Entrar na mesma conta/equipe da Vercel e conferir os projetos vinculados antes de fazer um novo deploy.
 - Não copiar token da Vercel para o GitHub.
 
@@ -105,4 +109,3 @@ Antes de apagar ou formatar o computador antigo, confirmar no novo computador:
 3. O login no Supabase, Vercel, Codemagic, Apple e Google Play funciona.
 4. Os arquivos de assinatura Android e Apple foram transferidos.
 5. O gerenciador de senhas contém todas as contas e códigos de recuperação.
-
