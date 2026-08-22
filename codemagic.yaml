@@ -119,27 +119,6 @@ workflows:
       - praiago-ambulante/ios/App/build/**/*
       - /tmp/xcodebuild_logs/*.log
 
-  ios-restaurante-simulator:
-    name: iOS Restaurante - simulator check
-    max_build_duration: 60
-    instance_type: mac_mini_m2
-    environment:
-      groups:
-        - praiago_public_env
-      node: 22.14.0
-      xcode: latest
-      vars:
-        APP_DIR: praiago-restaurante
-        XCODE_PROJECT: ios/App/App.xcodeproj
-        XCODE_SCHEME: App
-    scripts:
-      - *validate_public_env
-      - *prepare_capacitor_ios
-      - *build_unsigned_simulator
-    artifacts:
-      - praiago-restaurante/ios/App/build/**/*
-      - /tmp/xcodebuild_logs/*.log
-
   ios-cliente-testflight:
     name: iOS Cliente - TestFlight
     max_build_duration: 120
@@ -176,7 +155,6 @@ workflows:
         auth: integration
         submit_to_testflight: true
         expire_build_submitted_for_review: true
-
   ios-ambulante-testflight:
     name: iOS Ambulante - TestFlight
     max_build_duration: 120
@@ -206,43 +184,6 @@ workflows:
       - *build_testflight_ipa
     artifacts:
       - praiago-ambulante/ios/App/build/ios/ipa/*.ipa
-      - /tmp/xcodebuild_logs/*.log
-      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
-    publishing:
-      app_store_connect:
-        auth: integration
-        submit_to_testflight: true
-        expire_build_submitted_for_review: true
-
-  ios-restaurante-testflight:
-    name: iOS Restaurante - TestFlight
-    max_build_duration: 120
-    instance_type: mac_mini_m2
-    integrations:
-      app_store_connect: praiago-apple
-    environment:
-      groups:
-        - praiago_public_env
-        - praiago_ios_appstore
-      node: 22.14.0
-      xcode: latest
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.ferrazcode.praiago.restaurante
-      vars:
-        APP_DIR: praiago-restaurante
-        XCODE_PROJECT: ios/App/App.xcodeproj
-        XCODE_SCHEME: App
-        APP_STORE_APPLE_ID_SOURCE: PRAIAGO_RESTAURANTE_APPLE_ID
-    scripts:
-      - *validate_public_env
-      - *prepare_capacitor_ios
-      - *configure_ios_signing
-      - *resolve_apple_app_id
-      - *increment_ios_build_number
-      - *build_testflight_ipa
-    artifacts:
-      - praiago-restaurante/ios/App/build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
       - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
     publishing:
