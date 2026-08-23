@@ -2,21 +2,21 @@
 // avaliacao sem precisar entrar em componente nenhum.
 
 /* ─────────────────────────────────────────────────────────────
-   LINKS — TROCAR AQUI QUANDO OS APPS SAIREM NA LOJA
-   Enquanto `disponivel` for false, o botao mostra "em breve" em vez
-   de levar pra um link quebrado. Quando publicar, e so por a URL da
-   loja e virar a chave pra true.
+   LINKS DAS LOJAS
+   O botao so fica ativo quando `disponivel` e true E a loja tem URL.
+   Assim o Android pode estar disponivel enquanto a App Store continua
+   mostrando "em breve", sem apontar para um link quebrado.
    ───────────────────────────────────────────────────────────── */
 export const LOJAS = {
   cliente: {
-    play: '' as string,
+    play: 'https://play.google.com/store/apps/details?id=com.ferrazcode.praiago.cliente',
     apple: '' as string,
-    disponivel: false,
+    disponivel: true,
   },
   ambulante: {
-    play: '' as string,
+    play: 'https://play.google.com/store/apps/details?id=com.ferrazcode.praiago.ambulante',
     apple: '' as string,
-    disponivel: false,
+    disponivel: true,
   },
 }
 
