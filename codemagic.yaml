@@ -147,7 +147,7 @@ workflows:
       - *increment_ios_build_number
       - *build_testflight_ipa
     artifacts:
-      - praiago-cliente/ios/App/build/ios/ipa/*.ipa
+      - praiago-cliente/build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
       - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
     publishing:
@@ -183,7 +183,7 @@ workflows:
       - *increment_ios_build_number
       - *build_testflight_ipa
     artifacts:
-      - praiago-ambulante/ios/App/build/ios/ipa/*.ipa
+      - praiago-ambulante/build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
       - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
     publishing:
