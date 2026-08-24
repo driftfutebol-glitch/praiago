@@ -124,7 +124,7 @@ workflows:
     max_build_duration: 120
     instance_type: mac_mini_m2
     integrations:
-      app_store_connect: praiago-apple
+      app_store_connect: "Codemagic PraiaGo"
     environment:
       groups:
         - praiago_public_env
@@ -160,7 +160,7 @@ workflows:
     max_build_duration: 120
     instance_type: mac_mini_m2
     integrations:
-      app_store_connect: praiago-apple
+      app_store_connect: "Codemagic PraiaGo"
     environment:
       groups:
         - praiago_public_env
