@@ -26,6 +26,14 @@ Deno.serve(async (req: Request) => {
     const vendedorId = userData?.user?.id
     if (!vendedorId) return json({ error: 'Sessao invalida.' }, { status: 401 })
 
+    const { data: canWrite, error: accountStateError } = await anon.rpc('account_can_write', {
+      p_subject: vendedorId,
+    })
+    if (accountStateError) return json({ error: 'Nao foi possivel validar a conta.' }, { status: 500 })
+    if (!canWrite) {
+      return json({ error: 'Conta indisponivel para novas movimentacoes.' }, { status: 409 })
+    }
+
     const body = await readJson<{ valor?: number }>(req)
     const valor = Number(body.valor || 0)
     if (!valor || valor <= 0) return json({ error: 'Valor invalido.' }, { status: 400 })
@@ -58,6 +66,21 @@ Deno.serve(async (req: Request) => {
         transferencia: 'manual',
         aviso: 'Seu saque foi registrado e sera processado pela nossa equipe.',
       })
+    }
+
+    // The payout row is already a durable deletion blocker. Recheck at the
+    // last possible moment before the external withdrawal; if deletion opened
+    // after the atomic RPC, leave the payout for manual reconciliation and do
+    // not move money at the provider.
+    const { data: canWithdraw, error: withdrawStateError } = await anon.rpc('account_can_write', {
+      p_subject: vendedorId,
+    })
+    if (withdrawStateError || canWithdraw !== true) {
+      return json({
+        error: 'A conta entrou em processo de exclusao. O saque nao foi enviado e sera revisado pela equipe.',
+        code: 'account_deletion_pending',
+        payout,
+      }, { status: 409 })
     }
 
     try {

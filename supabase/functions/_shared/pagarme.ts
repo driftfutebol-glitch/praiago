@@ -116,6 +116,7 @@ export type Cobranca = {
 }
 
 /** Le a cobranca de dentro da resposta do pedido, sem depender do formato exato. */
+// deno-lint-ignore no-explicit-any
 export function lerCobranca(pedido: Record<string, any>): Cobranca {
   const charge = Array.isArray(pedido?.charges) ? pedido.charges[0] : null
   const tx = charge?.last_transaction ?? {}
@@ -275,19 +276,33 @@ export async function registrarResultado(
   const status = mapearStatus(cobranca.status)
   const agora = new Date().toISOString()
 
+  // The database trigger is the authoritative privacy fence. This read avoids
+  // even attempting to send a gateway payload back for an already-erased
+  // payment; the trigger still closes the race if erasure happens afterwards.
+  const { data: privacyState, error: privacyError } = await admin
+    .from('pagamentos')
+    .select('personal_data_erased_at')
+    .eq('id', pagamentoId)
+    .maybeSingle()
+  if (privacyError || !privacyState) {
+    console.error('Falha ao conferir privacidade do pagamento', { code: privacyError?.code || 'sem_linha' })
+    throw new Error('Nao foi possivel confirmar o pagamento agora.')
+  }
+  const personalDataErased = Boolean(privacyState.personal_data_erased_at)
+
   const { data: pag, error: erroPagamento } = await admin
     .from('pagamentos')
     .update({
       provider_order_id: cobranca.orderId || null,
       provider_charge_id: cobranca.chargeId || null,
       status,
-      status_detalhe: cobranca.statusDetalhe || null,
-      raw: cobranca.raw as Record<string, unknown>,
+      status_detalhe: personalDataErased ? null : cobranca.statusDetalhe || null,
+      raw: personalDataErased ? {} : cobranca.raw as Record<string, unknown>,
       paid_at: status === 'pago' ? agora : null,
       updated_at: agora,
     })
     .eq('id', pagamentoId)
-    .select('pedido_id,ticket_order_id')
+    .select('pedido_id,ticket_order_id,personal_data_erased_at')
     .maybeSingle()
 
   if (erroPagamento || !pag) {

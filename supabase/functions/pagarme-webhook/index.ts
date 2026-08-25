@@ -116,6 +116,7 @@ Deno.serve(async (req: Request) => {
     provider: 'pagarme',
     event_type: tipo,
     external_id: hookId,
+    payment_id: pagamento.id,
     signature_valid: false,
     verification_method: 'order_api',
     processed: false,
@@ -131,7 +132,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: existente, error: erroConsultaEvento } = await admin
       .from('payment_webhook_events')
-      .select('processed')
+      .select('processed,payment_id')
       .eq('provider', 'pagarme')
       .eq('event_type', tipo)
       .eq('external_id', hookId)
@@ -139,6 +140,15 @@ Deno.serve(async (req: Request) => {
 
     if (erroConsultaEvento) return json({ error: 'falha ao consultar evento' }, { status: 500 })
     if (existente?.processed) return json({ ok: true, duplicado: true })
+    if (!existente?.payment_id) {
+      const { error: linkError } = await admin
+        .from('payment_webhook_events')
+        .update({ payment_id: pagamento.id })
+        .eq('provider', 'pagarme')
+        .eq('event_type', tipo)
+        .eq('external_id', hookId)
+      if (linkError) return json({ error: 'falha ao vincular evento' }, { status: 500 })
+    }
   }
 
   try {

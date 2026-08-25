@@ -1,4 +1,4 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts"
+import "jsr:@supabase/functions-js@2.112.3/edge-runtime.d.ts"
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.108.2"
 import { corsHeaders, json, readJson } from "../_shared/cors.ts"
@@ -311,13 +311,15 @@ function lerEscalonamento(reply: string): Escalonamento | null {
 /** Abre a triagem depois que o gateway validou o JWT e o contexto confirmou o usuario. */
 async function abrirTriagem(
   supabaseUrl: string,
+  anonKey: string,
   serviceRoleKey: string,
+  authHeader: string,
   ctx: Contexto,
   esc: Escalonamento,
   plataforma: string,
   ultimaPergunta: string,
 ) {
-  if (!ctx.uid || !serviceRoleKey) return false
+  if (!ctx.uid || !anonKey || !serviceRoleKey || !authHeader.startsWith("Bearer ")) return false
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false },
   })
@@ -330,6 +332,22 @@ async function abrirTriagem(
     conta: "Conta",
     fraude: "Suspeita de fraude",
     outro: "Atendimento",
+  }
+
+  // The LLM request can take seconds. Recheck the authenticated account at the
+  // last possible moment so a deletion opened while the model was answering
+  // cannot be followed by a service-role ticket insert. The database trigger
+  // below the API is still authoritative and closes the remaining race.
+  const userClient = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: authHeader, apikey: anonKey } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
+  const { data: canWrite, error: accountStateError } = await userClient.rpc("account_can_write", {
+    p_subject: ctx.uid,
+  })
+  if (accountStateError || canWrite !== true) {
+    console.error("Triagem ignorada: conta indisponivel para novos chamados")
+    return false
   }
 
   const { error } = await admin.from("tickets").insert({
@@ -444,7 +462,16 @@ Deno.serve(async (req: Request) => {
   if (esc && ctx.uid) {
     const ultima = [...messages].reverse().find((m) => m.role === "user")?.content ?? ""
     try {
-      triagemAberta = await abrirTriagem(supabaseUrl, serviceRoleKey, ctx, esc, plataforma, ultima)
+      triagemAberta = await abrirTriagem(
+        supabaseUrl,
+        anonKey,
+        serviceRoleKey,
+        authHeader,
+        ctx,
+        esc,
+        plataforma,
+        ultima,
+      )
     } catch (erro) {
       console.error("Erro ao abrir triagem", erro instanceof Error ? erro.message : erro)
     }

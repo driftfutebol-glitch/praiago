@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Eye, EyeOff, LogIn, LogOut, User, Package, MapPin, ChevronRight, Bell, HelpCircle, Star, Shield, Mail, CheckCircle2, AlertCircle, Edit3 } from 'lucide-react'
+import { Eye, EyeOff, LogIn, LogOut, User, Package, MapPin, ChevronRight, Bell, HelpCircle, Star, Shield, Mail, CheckCircle2, AlertCircle, Edit3, Loader2, Trash2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useStore } from '../store/useStore'
 import { supabase } from '../lib/supabase'
-import { promptDialog } from '../lib/dialog'
+import { alertDialog, confirmDialog, promptDialog } from '../lib/dialog'
 import { logSecurityEvent } from '../lib/securityAudit'
 import SuportePanel from '../components/SuportePanel'
 import FotoPerfilCliente, { AvatarPerfil } from '../components/FotoPerfilCliente'
@@ -34,6 +34,7 @@ function TelaLogada() {
   const [verificacao, setVerificacao] = useState<VerificacaoCliente | null>(null)
   const [emailConfirmado, setEmailConfirmado] = useState(false)
   const [reenviandoEmail, setReenviandoEmail] = useState(false)
+  const [excluindoConta, setExcluindoConta] = useState(false)
   // Fica em estado separado de `verificacao` porque o fluxo do CPF regrava
   // aquele objeto com um select menor — se a foto morasse lá, trocar o CPF
   // apagava o avatar da tela.
@@ -104,6 +105,83 @@ function TelaLogada() {
   }
 
   const cpfOk = verificacao?.cpf_check_status === 'aprovado'
+
+  async function excluirConta() {
+    if (excluindoConta) return
+    const continuar = await confirmDialog({
+      title: 'Excluir conta permanentemente?',
+      message: 'Seu login, perfil, foto, avaliações e dados pessoais serão apagados. Pedidos e registros financeiros que precisem ser mantidos por obrigação legal ficam restritos e desvinculados do seu perfil.',
+      confirmText: 'Continuar',
+      cancelText: 'Cancelar',
+      tone: 'danger',
+    })
+    if (!continuar) return
+
+    const confirmacao = await promptDialog({
+      title: 'Confirmação final',
+      message: 'Digite EXCLUIR para confirmar. Esta ação não pode ser desfeita.',
+      placeholder: 'EXCLUIR',
+      confirmText: 'Excluir conta agora',
+      cancelText: 'Cancelar',
+      tone: 'danger',
+    })
+    if (confirmacao?.trim().toUpperCase() !== 'EXCLUIR') {
+      if (confirmacao !== null) {
+        await alertDialog({ title: 'Confirmação incorreta', message: 'A conta não foi excluída. Digite exatamente EXCLUIR para confirmar.' })
+      }
+      return
+    }
+
+    setExcluindoConta(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('excluir-conta', {
+        body: { action: 'request' },
+      })
+
+      const resposta = (data || {}) as {
+        completed?: boolean
+        requestId?: string
+        deadlineAt?: string
+        message?: string
+        accessLocked?: boolean
+      }
+      if (error || !resposta.requestId) {
+        await alertDialog({
+          title: 'Não foi possível concluir',
+          message: 'Sua conta não foi marcada como excluída. Tente novamente. Se o erro continuar, fale com o suporte pelo e-mail contato@praiago.com.br.',
+          tone: 'danger',
+        })
+        return
+      }
+
+      await alertDialog({
+        title: resposta.completed ? 'Conta excluída' : 'Solicitação registrada',
+        message: resposta.completed
+          ? `Sua conta foi excluída permanentemente. Protocolo: ${resposta.requestId}.`
+          : resposta.accessLocked
+            ? `Seu acesso foi bloqueado e a exclusão será concluída em até 30 dias. Protocolo: ${resposta.requestId}.`
+            : `Sua solicitação foi registrada para conclusão em até 30 dias, mas não foi possível confirmar o bloqueio de acesso. Encerre a sessão e contate o suporte. Protocolo: ${resposta.requestId}.`,
+        tone: resposta.completed || resposta.accessLocked ? 'success' : 'danger',
+      })
+      try {
+        await supabase.removeAllChannels()
+        const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' })
+        if (signOutError) console.error('Falha ao encerrar a sessao local:', signOutError.message)
+      } finally {
+        logout()
+        navigate('/perfil', { replace: true })
+      }
+    } catch (error) {
+      console.error('Falha inesperada ao solicitar exclusao:', error)
+      await alertDialog({
+        title: 'Não foi possível confirmar',
+        message: 'Não conseguimos confirmar o protocolo agora. Entre novamente para verificar antes de repetir a solicitação.',
+        tone: 'danger',
+      })
+    } finally {
+      setExcluindoConta(false)
+    }
+  }
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ minHeight: '100vh', background: '#ffffff', paddingBottom: 24 }}>
@@ -221,6 +299,14 @@ function TelaLogada() {
           <LogOut size={20} color="#f87171" />
           <span style={{ fontSize: 15, fontWeight: 800, color: '#f87171' }}>Sair da conta</span>
         </motion.button>
+
+        <button type="button" disabled={excluindoConta} onClick={() => void excluirConta()} style={{ width: '100%', marginTop: 12, padding: '14px 18px', border: 0, background: 'transparent', color: '#b91c1c', fontSize: 13, fontWeight: 850, cursor: excluindoConta ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, opacity: excluindoConta ? 0.65 : 1 }}>
+          {excluindoConta ? <Loader2 size={17} className="animate-spin-slow" /> : <Trash2 size={17} />}
+          {excluindoConta ? 'Processando exclusão…' : 'Excluir minha conta'}
+        </button>
+        <div style={{ marginTop: 4, textAlign: 'center', color: '#64748b', fontSize: 11.5, lineHeight: 1.45 }}>
+          Veja quais dados são apagados ou preservados na <a href="https://www.praiago.com.br/excluir-conta.html" target="_blank" rel="noopener noreferrer" style={{ color: '#0284c7', fontWeight: 800 }}>página de exclusão</a>.
+        </div>
       </div>
 
       <AnimatePresence>

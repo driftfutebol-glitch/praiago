@@ -47,30 +47,62 @@ Deno.serve(async (req: Request) => {
     auth: { persistSession: false },
   })
 
+  const { data: { user } } = await comoUsuario.auth.getUser(authHeader.slice(7))
+  if (!user) return json({ error: 'Sessao expirada. Entre de novo.' }, { status: 401 })
+
+  const contaPodeGravar = async () => {
+    const { data, error } = await comoUsuario.rpc('account_can_write', { p_subject: user.id })
+    if (error) console.error('Falha ao validar estado da conta no cartao', { code: error.code })
+    return !error && data === true
+  }
+
+  const pedidoContinuaAguardando = async () => {
+    const { data, error } = await comoUsuario
+      .from('pedidos')
+      .select('id')
+      .eq('id', pedidoId)
+      .eq('cliente_id', user.id)
+      .eq('status', 'aguardando_pagamento')
+      .maybeSingle()
+    if (error) console.error('Falha ao revalidar pedido antes do cartao', { code: error.code })
+    return !error && Boolean(data)
+  }
+
   const { data: pedido } = await comoUsuario
     .from('pedidos')
     .select('id,cliente_id,cliente_nome,total,status,payment_status,cpf_nota,vendedor_id,platform_fee_amount')
     .eq('id', pedidoId)
+    .eq('cliente_id', user.id)
     .maybeSingle()
 
-  if (!pedido) return json({ error: 'Pedido nao encontrado.' }, { status: 404 })
+  if (!pedido || pedido.cliente_id !== user.id) return json({ error: 'Pedido nao encontrado.' }, { status: 404 })
   if (pedido.payment_status === 'aprovado') return json({ error: 'Este pedido ja foi pago.' }, { status: 409 })
   if (pedido.payment_status === 'estornado') return json({ error: 'Este pedido ja foi estornado.' }, { status: 409 })
   if (pedido.status === 'cancelado') return json({ error: 'Este pedido foi cancelado.' }, { status: 409 })
+  if (pedido.status !== 'aguardando_pagamento') {
+    return json({ error: 'Este pedido nao esta aguardando pagamento.' }, { status: 409 })
+  }
+  if (!(await contaPodeGravar())) {
+    return json({ error: 'Esta conta nao pode iniciar um novo pagamento.' }, { status: 409 })
+  }
 
   const valor = Number(pedido.total)
   if (!Number.isFinite(valor) || valor <= 0) return json({ error: 'Valor do pedido invalido.' }, { status: 422 })
 
   const admin = adminClient()
   if (['recusado', 'rejeitado'].includes(String(pedido.payment_status))) {
-    const { error: erroReabrir } = await admin
+    const { data: pedidoReaberto, error: erroReabrir } = await admin
       .from('pedidos')
       .update({ payment_status: 'pendente' })
       .eq('id', pedidoId)
+      .eq('cliente_id', user.id)
       .eq('status', 'aguardando_pagamento')
-    if (erroReabrir) return json({ error: 'Nao foi possivel reabrir o pagamento.' }, { status: 409 })
+      .select('id')
+      .maybeSingle()
+    if (erroReabrir || !pedidoReaberto) {
+      return json({ error: 'Nao foi possivel reabrir o pagamento.' }, { status: 409 })
+    }
   }
-  const { data: { user } } = await comoUsuario.auth.getUser(authHeader.slice(7))
   const { data: perfil } = await admin
     .from('profiles')
     .select('nome,cpf,telefone')
@@ -87,6 +119,16 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'Informe seu telefone com DDD para pagar com cartao.', code: 'telefone_obrigatorio' }, { status: 422 })
   }
 
+  // O pedido pode ter sido cancelado e a exclusao da conta pode ter comecado
+  // durante as validacoes acima. account_can_write fica por ultimo para que a
+  // checagem seja imediatamente anterior ao INSERT privilegiado.
+  if (!(await pedidoContinuaAguardando())) {
+    return json({ error: 'Este pedido nao esta mais aguardando pagamento.' }, { status: 409 })
+  }
+  if (!(await contaPodeGravar())) {
+    return json({ error: 'Esta conta nao pode iniciar um novo pagamento.' }, { status: 409 })
+  }
+
   const { data: pagamento, error: erroInsert } = await admin
     .from('pagamentos')
     .insert({
@@ -100,42 +142,78 @@ Deno.serve(async (req: Request) => {
     .single()
 
   if (erroInsert || !pagamento) {
+    if (!(await contaPodeGravar())) {
+      return json({ error: 'Esta conta nao pode iniciar um novo pagamento.' }, { status: 409 })
+    }
     console.error('Falha ao registrar pagamento', erroInsert?.message)
     return json({ error: 'Nao foi possivel iniciar o pagamento.' }, { status: 500 })
   }
 
   const split = await montarSplit(admin, pedido)
 
+  const meio = tipo === 'debit' ? 'debit_card' : 'credit_card'
+  const dadosCartao: Record<string, unknown> = {
+    card_token: token,
+    statement_descriptor: 'PRAIAGO', // max 13 caracteres na fatura
+  }
+  if (tipo === 'credit') dadosCartao.installments = parcelas
+
+  const payloadGateway = JSON.stringify({
+    code: pedidoId.slice(0, 52),
+    items: [{
+      amount: centavos(valor),
+      description: `Pedido PraiaGo ${pedidoId.slice(0, 8)}`,
+      quantity: 1,
+    }],
+    customer: {
+      name: (perfil?.nome || pedido.cliente_nome || 'Cliente PraiaGo').slice(0, 64),
+      email: user.email || body.email || 'cliente@praiago.com.br',
+      type: 'individual',
+      document: documento,
+      phones: telefone,
+    },
+    // Divide na origem: a parte do vendedor cai direto no saldo dele no
+    // gateway, nunca na conta da PraiaGo. Sem recebedor ainda -> sem split.
+    payments: [{ payment_method: meio, [meio]: dadosCartao, ...(split ? { split } : {}) }],
+  })
+
+  // Se o pedido mudou ou a conta perdeu permissao depois do INSERT local,
+  // encerra somente as linhas ainda pendentes. Nunca regride pedido avancado.
+  const pedidoAindaAguarda = await pedidoContinuaAguardando()
+  const contaAindaPodeGravar = await contaPodeGravar()
+  if (!pedidoAindaAguarda || !contaAindaPodeGravar) {
+    const agora = new Date().toISOString()
+    const [{ error: erroCancelarPagamento }, { error: erroCancelarPedido }] = await Promise.all([
+      admin.from('pagamentos').update({
+        status: 'cancelado',
+        status_detalhe: 'Pagamento cancelado antes do envio ao gateway.',
+        updated_at: agora,
+      }).eq('id', pagamento.id).eq('status', 'pendente'),
+      admin.from('pedidos').update({ status: 'cancelado', payment_status: 'cancelado' })
+        .eq('id', pedidoId)
+        .eq('cliente_id', user.id)
+        .eq('status', 'aguardando_pagamento')
+        .eq('payment_status', 'pendente'),
+    ])
+    if (erroCancelarPagamento || erroCancelarPedido) {
+      console.error('Falha ao cancelar cartao local antes do gateway', {
+        pagamento: erroCancelarPagamento?.code,
+        pedido: erroCancelarPedido?.code,
+      })
+    }
+    return json({
+      error: contaAindaPodeGravar
+        ? 'Este pedido nao esta mais aguardando pagamento.'
+        : 'Esta conta nao pode iniciar um novo pagamento.',
+    }, { status: 409 })
+  }
+
   let gatewayRespondeu = false
   try {
-    const meio = tipo === 'debit' ? 'debit_card' : 'credit_card'
-    const dadosCartao: Record<string, unknown> = {
-      card_token: token,
-      statement_descriptor: 'PRAIAGO', // max 13 caracteres na fatura
-    }
-    if (tipo === 'credit') dadosCartao.installments = parcelas
-
     const resposta = await pagarme<Record<string, unknown>>('/orders', {
       method: 'POST',
       idempotencyKey: `card_${pagamento.id}`,
-      body: JSON.stringify({
-        code: pedidoId.slice(0, 52),
-        items: [{
-          amount: centavos(valor),
-          description: `Pedido PraiaGo ${pedidoId.slice(0, 8)}`,
-          quantity: 1,
-        }],
-        customer: {
-          name: (perfil?.nome || pedido.cliente_nome || 'Cliente PraiaGo').slice(0, 64),
-          email: user?.email || body.email || 'cliente@praiago.com.br',
-          type: 'individual',
-          document: documento,
-          phones: telefone,
-        },
-        // Divide na origem: a parte do vendedor cai direto no saldo dele no
-        // gateway, nunca na conta da PraiaGo. Sem recebedor ainda -> sem split.
-        payments: [{ payment_method: meio, [meio]: dadosCartao, ...(split ? { split } : {}) }],
-      }),
+      body: payloadGateway,
     })
     gatewayRespondeu = true
 

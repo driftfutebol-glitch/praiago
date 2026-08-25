@@ -60,6 +60,16 @@ Deno.serve(async (req: Request) => {
   const { data: { user } } = await comoUsuario.auth.getUser(authHeader.slice(7))
   if (!user) return json({ error: 'Sessao expirada. Entre de novo.' }, { status: 401 })
 
+  const contaPodeGravar = async () => {
+    const { data, error } = await comoUsuario.rpc('account_can_write', { p_subject: user.id })
+    if (error) console.error('Falha ao validar estado da conta no checkout de ingresso', { code: error.code })
+    return !error && data === true
+  }
+
+  if (!(await contaPodeGravar())) {
+    return json({ error: 'Esta conta nao pode iniciar uma nova compra.' }, { status: 409 })
+  }
+
   const admin = adminClient()
 
   // O lote e lido com service role, mas as MESMAS regras que a RLS aplica ao
@@ -93,6 +103,13 @@ Deno.serve(async (req: Request) => {
   const telefone = telefonePagarme(perfil?.telefone || body.cliente_telefone)
   if (!telefone) {
     return json({ error: 'Informe seu telefone com DDD para comprar ingresso.', code: 'telefone_obrigatorio' }, { status: 422 })
+  }
+
+  // Validations above can take long enough for an account deletion to start.
+  // Recheck immediately before the service-role write; the database trigger
+  // serializes this insert with the deletion protocol and is authoritative.
+  if (!(await contaPodeGravar())) {
+    return json({ error: 'Esta conta nao pode iniciar uma nova compra.' }, { status: 409 })
   }
 
   // Cria a compra ANTES de cobrar. O gatilho calcula o total pelo lote e pelo
@@ -155,6 +172,23 @@ Deno.serve(async (req: Request) => {
     type: 'individual',
     document: documento,
     phones: telefone,
+  }
+
+  // Avoid creating an external charge if deletion opened after the local
+  // reservation/payment rows were created. These local rows are canceled and
+  // the stock-restoration trigger returns the reservation.
+  if (!(await contaPodeGravar())) {
+    const agora = new Date().toISOString()
+    await admin.from('pagamentos').update({
+      status: 'cancelado',
+      status_detalhe: 'Conta indisponivel antes do envio ao gateway.',
+      updated_at: agora,
+    }).eq('id', pagamento.id)
+    await admin.from('event_ticket_orders')
+      .update({ status: 'cancelado', payment_status: 'cancelado', canceled_at: agora })
+      .eq('id', compra.id)
+      .eq('status', 'aguardando_pagamento')
+    return json({ error: 'Esta conta nao pode iniciar uma nova compra.' }, { status: 409 })
   }
 
   let gatewayRespondeu = false

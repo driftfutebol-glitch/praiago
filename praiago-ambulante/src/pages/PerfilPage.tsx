@@ -10,6 +10,7 @@ import {
   Phone,
   Star,
   Store,
+  Trash2,
   TrendingUp,
   Wallet,
 } from 'lucide-react'
@@ -20,6 +21,7 @@ import SellerPhotoManager from '../components/SellerPhotoManager'
 import TrocaNomeLoja from '../components/TrocaNomeLoja'
 import EditorHorarios from '../components/EditorHorarios'
 import { logout, useSessao } from '../lib/auth'
+import { alertDialog, confirmDialog, promptDialog } from '../lib/dialog'
 import { supabase } from '../lib/supabase'
 import { sellerPhotoUrl } from '../lib/sellerPhotos'
 
@@ -73,6 +75,7 @@ export default function PerfilPage() {
   const [closingTime, setClosingTime] = useState('')
   const [businessPhone, setBusinessPhone] = useState('')
   const [savingPhone, setSavingPhone] = useState(false)
+  const [deletingAccount, setDeletingAccount] = useState(false)
   const [phoneMessage, setPhoneMessage] = useState<{ text: string; error: boolean } | null>(null)
 
   const load = useCallback(async () => {
@@ -147,6 +150,83 @@ export default function PerfilPage() {
     logout()
     void supabase.auth.signOut()
     navigate('/login', { replace: true })
+  }
+
+  async function deleteAccount() {
+    if (!session?.id || deletingAccount) return
+    const continueDeletion = await confirmDialog({
+      title: 'Excluir conta de ambulante?',
+      message: 'Seu login, perfil, cardápio, fotos da banca e dados de verificação serão apagados. Pedidos, repasses e registros financeiros necessários ficam restritos. Saldo, estorno ou disputa pendente continuarão sendo tratados sem manter sua conta ativa.',
+      confirmText: 'Continuar',
+      cancelText: 'Cancelar',
+      tone: 'danger',
+    })
+    if (!continueDeletion) return
+
+    const confirmation = await promptDialog({
+      title: 'Confirmação final',
+      message: 'Digite EXCLUIR para enviar a solicitação. A equipe verificará saldos, repasses, disputas e a conta de pagamento antes da exclusão definitiva.',
+      placeholder: 'EXCLUIR',
+      confirmText: 'Enviar solicitação',
+      cancelText: 'Cancelar',
+      tone: 'danger',
+    })
+    if (confirmation?.trim().toUpperCase() !== 'EXCLUIR') {
+      if (confirmation !== null) {
+        await alertDialog({ title: 'Confirmação incorreta', message: 'A conta não foi excluída. Digite exatamente EXCLUIR para confirmar.' })
+      }
+      return
+    }
+
+    setDeletingAccount(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('excluir-conta', {
+        body: { action: 'request' },
+      })
+
+      const response = (data || {}) as {
+        completed?: boolean
+        requestId?: string
+        deadlineAt?: string
+        message?: string
+        accessLocked?: boolean
+      }
+      if (error || !response.requestId) {
+        await alertDialog({
+          title: 'Não foi possível concluir',
+          message: 'Sua conta não foi marcada como excluída. Tente novamente. Se o erro continuar, fale com o suporte pelo e-mail contato@praiago.com.br.',
+          tone: 'danger',
+        })
+        return
+      }
+
+      await alertDialog({
+        title: response.completed ? 'Conta excluída' : 'Solicitação registrada',
+        message: response.completed
+          ? `Sua conta foi excluída permanentemente. Protocolo: ${response.requestId}.`
+          : response.accessLocked
+            ? `Seu acesso foi bloqueado e a solicitação seguirá para análise e conclusão em até 30 dias. Protocolo: ${response.requestId}.`
+            : `Sua solicitação foi registrada para análise em até 30 dias, mas não foi possível confirmar o bloqueio de acesso. Encerre a sessão e contate o suporte. Protocolo: ${response.requestId}.`,
+        tone: response.completed || response.accessLocked ? 'success' : 'danger',
+      })
+      try {
+        await supabase.removeAllChannels()
+        const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' })
+        if (signOutError) console.error('Falha ao encerrar a sessao local:', signOutError.message)
+      } finally {
+        logout()
+        navigate('/login', { replace: true })
+      }
+    } catch (error) {
+      console.error('Falha inesperada ao solicitar exclusao:', error)
+      await alertDialog({
+        title: 'Não foi possível confirmar',
+        message: 'Não conseguimos confirmar o protocolo agora. Entre novamente para verificar antes de repetir a solicitação.',
+        tone: 'danger',
+      })
+    } finally {
+      setDeletingAccount(false)
+    }
   }
 
   const rating = Number(profile?.avaliacao_media) || 0
@@ -290,6 +370,14 @@ export default function PerfilPage() {
         <LogOut size={18} />
         Sair da conta
       </button>
+
+      <button type="button" disabled={deletingAccount} onClick={() => void deleteAccount()} style={{ width: '100%', minHeight: 44, marginTop: 10, border: 0, background: 'transparent', color: '#b42335', fontSize: 12.5, fontWeight: 850, cursor: deletingAccount ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: deletingAccount ? 0.65 : 1 }}>
+        {deletingAccount ? <Loader2 size={17} className="animate-spin-slow" /> : <Trash2 size={17} />}
+        {deletingAccount ? 'Processando exclusão…' : 'Excluir minha conta'}
+      </button>
+      <div style={{ marginTop: 2, textAlign: 'center', color: '#718096', fontSize: 11, lineHeight: 1.45 }}>
+        Consulte os dados apagados ou preservados na <a href="https://www.praiago.com.br/excluir-conta.html" target="_blank" rel="noopener noreferrer" style={{ color: '#008fc0', fontWeight: 850 }}>página de exclusão</a>.
+      </div>
 
       <AnimatePresence>
         {supportOpen && session && (
