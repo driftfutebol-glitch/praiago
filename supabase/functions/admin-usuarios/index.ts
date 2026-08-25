@@ -18,6 +18,43 @@ const SECOES_VALIDAS = [
   'eventos', 'cupons', 'promocoes', 'atendimento', 'erros', 'admins',
 ]
 
+// Conta de equipe: sem Storage de KYC, sem carteira e sem historico de repasse.
+// E a unica que ainda sai por deleteUser direto nesta funcao.
+const ADMIN_ROLES = ['admin', 'sysadmin']
+
+// Repassa o pedido para a Edge Function do protocolo em vez de duplicar aqui a
+// varredura de Storage, a anonimizacao e a maquina de estados. O header de
+// Authorization do sysadmin vai junto: excluir-conta rederiva o ator do JWT
+// verificado e revalida sysadmin ativo, entao nao ha ampliacao de privilegio.
+async function encaminharParaProtocolo(
+  supabaseUrl: string,
+  apiKey: string,
+  authHeader: string,
+  subjectId: string,
+) {
+  let resposta: Response
+  try {
+    resposta = await fetch(`${supabaseUrl}/functions/v1/excluir-conta`, {
+      method: 'POST',
+      headers: {
+        Authorization: authHeader,
+        apikey: apiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ action: 'admin-request', subjectId }),
+    })
+  } catch (erro) {
+    console.error('admin-usuarios: falha ao chamar excluir-conta:', erro)
+    return json({ error: 'Nao foi possivel abrir o protocolo de exclusao agora.' }, 502)
+  }
+
+  const payload = await resposta.json().catch(() => ({})) as Record<string, unknown>
+  if (!resposta.ok) {
+    return json({ error: String(payload.error || 'Falha ao abrir o protocolo de exclusao.') }, resposta.status)
+  }
+  return json({ ...payload, id: subjectId, protocolo: true }, resposta.status)
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -79,14 +116,38 @@ Deno.serve(async (req: Request) => {
   }
 
   if (action === 'excluir') {
-    const id = String(body.id || '')
-    if (!id) return json({ error: 'ID do admin faltando.' }, 400)
+    const id = String(body.id || '').trim()
+    if (!id) return json({ error: 'ID do usuario faltando.' }, 400)
     if (id === uid) return json({ error: 'Voce nao pode excluir a si mesmo.' }, 400)
+
+    const { data: alvo, error: alvoErr } = await admin
+      .from('profiles')
+      .select('role')
+      .eq('id', id)
+      .maybeSingle()
+    if (alvoErr) return json({ error: 'Falha ao consultar o perfil alvo: ' + alvoErr.message }, 400)
+
+    // O ator sempre veio do JWT verificado, mas o alvo vinha do corpo sem
+    // nenhuma restricao de papel. O painel de Usuarios usava esta rota contra
+    // conta comum: deleteUser direto, sem varrer o Storage (perfis-vendedores,
+    // kyc-documentos com RG/selfie/CNH, produtos), sem tombstone e sem abrir
+    // protocolo -- entao account_deletion_forbids_subject continuava falso e
+    // todo gatilho e politica da v1 ficava inerte para aquele UUID. Pior: com
+    // payouts_vendedor_id_fkey em SET NULL, payouts.chave_pix (CPF, telefone ou
+    // e-mail do vendedor) ficava orfa e permanente.
+    //
+    // Conta de usuario final agora so sai pelo protocolo de exclusao. Aqui fica
+    // apenas o que esta rota sempre foi: gestao de conta de equipe.
+    // A anon key vai como apikey do gateway; o ator continua sendo o JWT do
+    // sysadmin no header Authorization. A service role nunca sai desta funcao.
+    if (!ADMIN_ROLES.includes(String(alvo?.role || ''))) {
+      return await encaminharParaProtocolo(supabaseUrl, anonKey, authHeader, id)
+    }
 
     const { error: delErr } = await admin.auth.admin.deleteUser(id)
     if (delErr) return json({ error: delErr.message }, 400)
     await admin.from('profiles').delete().eq('id', id)
-    return json({ ok: true, id })
+    return json({ ok: true, id, protocolo: false })
   }
 
   return json({ error: 'Acao desconhecida.' }, 400)

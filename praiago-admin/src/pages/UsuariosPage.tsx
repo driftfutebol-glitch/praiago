@@ -148,27 +148,40 @@ export default function UsuariosPage() {
     setAcaoId(null)
   }
 
-  async function excluirPerfil(u: any) {
+  // A exclusão de conta de usuário final deixou de ser um deleteUser direto e
+  // passou a ser o protocolo da Edge Function excluir-conta: varredura dos três
+  // buckets de Storage, anonimização de pedidos e pagamentos, pseudonimização do
+  // histórico de repasse e tombstone no fim. Por isso esta tela não apaga mais
+  // nada por conta própria — apagar verificacoes/produtos/profiles daqui era
+  // justamente destruir a evidência antes do protocolo poder trabalhar nela.
+  async function excluirConta(u: any) {
     const alvo = u.email || u.nome || u.id
+    const ehVendedor = u.role !== 'cliente'
     if (!await confirmDialog({
-      title: 'Excluir conta?',
-      message: `Excluir DEFINITIVAMENTE a conta de ${alvo}? Remove o perfil e também o login (Auth) — o e-mail fica livre para um novo cadastro. Não dá para desfazer.`,
-      confirmText: 'Excluir tudo',
+      title: 'Abrir exclusão definitiva?',
+      message: ehVendedor
+        ? `A conta de ${alvo} é bloqueada agora e entra no protocolo de exclusão. Conta vendedora não conclui na hora: fica em revisão manual até alguém confirmar o encerramento do recebedor no Pagar.me. Acompanhe pela fila (RUNBOOK-EXCLUSAO-CONTAS).`
+        : `A conta de ${alvo} é bloqueada agora e entra no protocolo de exclusão. Sem pedido, reembolso ou chamado em aberto, a exclusão conclui nesta mesma chamada e não dá para desfazer.`,
+      confirmText: 'Abrir exclusão',
       tone: 'danger',
     })) return
-    setAcaoId(u.id)
-    await supabase.from('verificacoes').delete().eq('user_id', u.id)
-    await supabase.from('produtos').delete().eq('vendedor_id', u.id)
 
-    // Apaga o usuário do Auth (precisa de service role → edge function).
-    // Antes só o profile era removido, então o e-mail continuava "já cadastrado"
-    // e o cadastro novo falhava em silêncio, sem enviar código.
+    setAcaoId(u.id)
     const { data, error } = await supabase.functions.invoke('admin-usuarios', {
       body: { action: 'excluir', id: u.id },
     })
-    const resp = data as { error?: string } | null
-    if (error || resp?.error) {
-      let msg = resp?.error || 'Não foi possível excluir a conta.'
+    const resp = (data || {}) as {
+      error?: string
+      protocolo?: boolean
+      completed?: boolean
+      status?: string
+      requestId?: string
+      blockers?: string[]
+      message?: string
+    }
+
+    if (error || resp.error) {
+      let msg = resp.error || 'Não foi possível excluir a conta.'
       try {
         const p = await (error as { context?: { json?: () => Promise<{ error?: string }> } })?.context?.json?.()
         if (p?.error) msg = p.error
@@ -178,8 +191,21 @@ export default function UsuariosPage() {
       return
     }
 
-    // Garante que o profile saiu mesmo se o Auth já não existia.
-    await supabase.from('profiles').delete().eq('id', u.id)
+    if (resp.completed === false) {
+      const impedimentos = resp.blockers?.length
+        ? `\n\nImpedimentos: ${resp.blockers.join(', ')}.`
+        : ''
+      await alertDialog({
+        title: 'Exclusão na fila',
+        message: `${resp.message || 'Protocolo aberto. A conta já está bloqueada.'}${impedimentos}\n\nProtocolo: ${resp.requestId || '—'}`,
+      })
+      // A conta continua na lista, agora banida: recarrega para mostrar o estado
+      // real em vez de sumir com ela e dar a impressão de exclusão concluída.
+      await carregar()
+      setAcaoId(null)
+      return
+    }
+
     setUsuarios(prev => prev.filter(item => item.id !== u.id))
     setAcaoId(null)
   }
@@ -349,12 +375,13 @@ export default function UsuariosPage() {
                   Resetar
                 </button>
                 <button
-                  onClick={() => excluirPerfil(u)}
+                  onClick={() => excluirConta(u)}
                   disabled={acaoId === u.id}
+                  title="Abre o protocolo de exclusão: bloqueia a conta e entra na fila. Conta vendedora só conclui após revisão."
                   className="px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-wide border bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/15 disabled:opacity-50 flex items-center justify-center gap-1"
                 >
                   <Trash2 size={12} />
-                  Excluir perfil
+                  Solicitar exclusão
                 </button>
               </div>
             </motion.div>

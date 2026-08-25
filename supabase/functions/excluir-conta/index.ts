@@ -6,7 +6,7 @@ import { sendTransactionalEmail } from '../_shared/email.ts'
 // project does not yet ship generated Database types for Edge Functions.
 // deno-lint-ignore no-explicit-any
 type AdminClient = ReturnType<typeof createClient<any>>
-type AccountRole = 'cliente' | 'ambulante'
+type AccountRole = 'cliente' | 'ambulante' | 'restaurante' | 'entregador'
 type RequestStatus =
   | 'requested'
   | 'manual_review'
@@ -44,13 +44,35 @@ type ClaimedDeletionRequest = DeletionRequest & {
 }
 
 type RequestBody = {
-  action?: 'request' | 'list' | 'process' | 'notify' | 'run-queue' | 'resolve-recipient-operation'
+  action?:
+    | 'request'
+    | 'admin-request'
+    | 'list'
+    | 'process'
+    | 'notify'
+    | 'run-queue'
+    | 'resolve-recipient-operation'
   requestId?: string
+  subjectId?: string
   operationId?: string
   externalCleanupConfirmed?: boolean
   page?: number
   pageSize?: number
   batchSize?: number
+}
+
+// Resultado da abertura de um protocolo, compartilhado pelo pedido do titular e
+// pelo pedido aberto por um sysadmin. Cada rota monta a propria resposta HTTP a
+// partir daqui: o contrato que os apps moveis ja consomem nao pode mudar.
+type ProtocolOutcome = {
+  requestId: string
+  deadlineAt: string
+  accessLocked: boolean
+  completed: boolean
+  status: 'completed' | 'manual_review' | 'processing' | 'failed'
+  blockers: string[]
+  completedAt: string | null
+  notified: boolean
 }
 
 class HttpError extends Error {
@@ -68,6 +90,32 @@ class LeaseLostError extends Error {}
 const STORAGE_BUCKETS = ['perfis-vendedores', 'kyc-documentos', 'produtos']
 const MUTATION_BATCH_SIZE = 100
 const LEASE_SECONDS = 900
+
+// Os dois apps moveis sao Cliente e Ambulante; so esses papeis pedem a propria
+// exclusao. Restaurante e entregador entram pelo protocolo apenas quando um
+// sysadmin abre o pedido pela tela de Usuarios do painel.
+const PAPEIS_AUTOATENDIMENTO: AccountRole[] = ['cliente', 'ambulante']
+const PAPEIS_DO_PROTOCOLO: AccountRole[] = ['cliente', 'ambulante', 'restaurante', 'entregador']
+
+function isPapelDoProtocolo(role: string): role is AccountRole {
+  return (PAPEIS_DO_PROTOCOLO as string[]).includes(role)
+}
+
+// Toda conta que nao e cliente vende pela mesma cadeia financeira e cai no ramo
+// de limpeza de vendedor.
+function isVendedor(role: string) {
+  return role !== 'cliente'
+}
+
+// get_account_deletion_blockers conhece dois conjuntos de impedimentos: o de
+// cliente e o de vendedor. Cada teste do conjunto de vendedor e um "existe
+// pendencia com este uuid" (wallets, payouts, financial_ledger, recebedor
+// externo), portanto vale igual para ambulante, restaurante e entregador.
+// Normalizar o papel aqui evita duplicar 150 linhas de SQL so para repetir os
+// mesmos EXISTS com outro nome de papel.
+function papelDoBloqueio(role: AccountRole) {
+  return role === 'cliente' ? 'cliente' : 'ambulante'
+}
 
 type DbError = { message?: string } | null
 type PageResult<T> = { data: T[] | null; error: DbError }
@@ -271,7 +319,7 @@ async function deletionBlockers(
 ) {
   const { data, error } = await admin.rpc('get_account_deletion_blockers', {
     p_subject: userId,
-    p_role: role,
+    p_role: papelDoBloqueio(role),
     p_external_cleanup_confirmed: externalCleanupConfirmed,
   })
   must(error, 'Falha ao verificar impedimentos da exclusao')
@@ -752,6 +800,19 @@ async function anonymizeSeller(
     .delete()
     .eq('vendedor_id', userId)
   must(recipient.error, 'Falha ao remover o recebedor local do vendedor')
+
+  // Nome, telefone e CPF do entregador contratado sao dados de terceiro: quem
+  // os coletou foi o restaurante, e o entregador nao tem conta para pedir a
+  // propria exclusao. A FK de restaurante_id entrou NOT VALID (linhas orfas do
+  // passado ainda existem), entao a limpeza nao pode depender do cascade. Aqui
+  // tambem entram as linhas com verificacao_id nulo, que nenhum cascade de
+  // verificacoes alcancaria.
+  await heartbeat()
+  const couriers = await admin
+    .from('entregadores')
+    .delete()
+    .eq('restaurante_id', userId)
+  must(couriers.error, 'Falha ao remover a equipe de entregadores do vendedor')
 }
 
 async function assertCommonResiduals(
@@ -875,6 +936,10 @@ async function assertSellerResiduals(
   await assertNoRows(
     admin.from('fraude_flags').select('id').eq('vendedor_id', userId).limit(1),
     'Falha ao confirmar ausencia de analise antifraude do vendedor',
+  )
+  await assertNoRows(
+    admin.from('entregadores').select('id').eq('restaurante_id', userId).limit(1),
+    'Falha ao confirmar remocao final da equipe de entregadores',
   )
 }
 
@@ -1012,10 +1077,16 @@ async function completeDeletion(
   }
 }
 
+// userToken e o access token do proprio titular e so existe quando ele mesmo
+// pede a exclusao. Um sysadmin abrindo o protocolo pelo painel nao tem esse
+// token, e a API de admin nao revoga sessao por id de usuario: nesse caminho o
+// corte fica com o ban no Auth (bloqueia login e refresh) somado a
+// account_can_write, que rejeita a escrita de um JWT ainda valido assim que o
+// protocolo abre.
 async function lockPendingAccount(
   admin: AdminClient,
   userId: string,
-  userToken: string,
+  userToken: string | null,
 ) {
   const profileUpdate = await admin
     .from('profiles')
@@ -1033,16 +1104,87 @@ async function lockPendingAccount(
   must(profileUpdate.error, 'Falha ao bloquear a conta durante a exclusao')
   const profileLocked = Boolean(profileUpdate.data)
 
-  const signOut = await admin.auth.admin.signOut(userToken, 'global')
-  if (signOut.error) console.error('Falha ao revogar sessoes da conta em exclusao:', signOut.error.message)
+  let sessionsRevoked = false
+  if (userToken) {
+    const signOut = await admin.auth.admin.signOut(userToken, 'global')
+    if (signOut.error) console.error('Falha ao revogar sessoes da conta em exclusao:', signOut.error.message)
+    sessionsRevoked = !signOut.error
+  }
 
   const ban = await admin.auth.admin.updateUserById(userId, { ban_duration: '876000h' })
   if (ban.error) console.error('Falha ao bloquear novos logins da conta em exclusao:', ban.error.message)
   return {
     profileLocked,
-    sessionsRevoked: !signOut.error,
+    sessionsRevoked,
     authBanned: !ban.error,
-    accessLocked: profileLocked && !signOut.error && !ban.error,
+    accessLocked: profileLocked && !ban.error && (userToken ? sessionsRevoked : true),
+  }
+}
+
+async function openDeletionProtocol(
+  admin: AdminClient,
+  input: {
+    subjectId: string
+    role: AccountRole
+    email: string | null
+    subjectToken: string | null
+    actorId: string | null
+  },
+): Promise<ProtocolOutcome> {
+  const deletion = await createOrReuseRequest(admin, input.subjectId, input.role, input.email)
+  const base = {
+    requestId: deletion.id,
+    deadlineAt: deletion.deadline_at,
+    blockers: [] as string[],
+    completedAt: null as string | null,
+    notified: true,
+  }
+
+  let accessLocked = false
+  try {
+    const lockState = await lockPendingAccount(admin, input.subjectId, input.subjectToken)
+    accessLocked = lockState.accessLocked
+  } catch (lockError) {
+    await updateRequest(admin, deletion.id, { last_error: 'account_lock_failed' })
+    console.error('Falha ao bloquear conta com exclusao pendente:', lockError)
+  }
+
+  let claimed: ClaimedDeletionRequest | null = null
+  try {
+    const claim = await claimRequest(admin, deletion.id, input.actorId)
+    if (claim.status === 'completed') {
+      return { ...base, accessLocked, completed: true, status: 'completed' }
+    }
+    claimed = claim as ClaimedDeletionRequest
+    await renewLease(admin, claimed)
+
+    if (!deletion.subject_id) throw new Error('O protocolo nao possui identificador para continuar.')
+    const blockers = await deletionBlockers(admin, deletion.subject_id, input.role, false)
+
+    // Vendedor sempre espera revisao de um sysadmin, mesmo sem impedimento
+    // aberto: e o unico ponto em que alguem confirma o encerramento da conta no
+    // Pagar.me antes de o historico de repasse perder o vinculo.
+    if (input.role === 'cliente' && blockers.length === 0) {
+      await renewLease(admin, claimed)
+      const result = await completeDeletion(admin, claimed)
+      return {
+        ...base,
+        accessLocked,
+        completed: true,
+        status: 'completed',
+        completedAt: result.completedAt,
+        notified: result.notified,
+      }
+    }
+
+    await releaseClaim(admin, claimed, 'manual_review', blockers)
+    return { ...base, accessLocked, completed: false, status: 'manual_review', blockers }
+  } catch (error) {
+    if (error instanceof LeaseBusyError) {
+      return { ...base, accessLocked, completed: false, status: 'processing' }
+    }
+    if (claimed) await markClaimFailed(admin, claimed, error)
+    return { ...base, accessLocked, completed: false, status: 'failed' }
   }
 }
 
@@ -1080,6 +1222,85 @@ async function resolveRecipientOperation(
   })
 }
 
+// Abre o protocolo em nome do titular quando quem pede e um sysadmin pelo painel
+// (tela de Usuarios). Antes esse caminho chamava deleteUser direto em
+// admin-usuarios: sem varredura de Storage, sem tombstone e sem protocolo, entao
+// account_deletion_forbids_subject continuava falso e nenhum gatilho ou politica
+// da v1 valia para aquele UUID. O ator continua vindo do JWT verificado; do
+// corpo vem apenas o alvo.
+async function requestAsAdmin(
+  admin: AdminClient,
+  actorId: string,
+  body: RequestBody,
+) {
+  await requireSysadmin(admin, actorId)
+  const subjectId = String(body.subjectId || '').trim()
+  if (!subjectId) throw new HttpError(400, 'subjectId obrigatorio.')
+  if (subjectId === actorId) {
+    throw new HttpError(400, 'Um sysadmin nao abre o proprio protocolo por esta rota.')
+  }
+
+  const { data: profile, error: profileError } = await admin
+    .from('profiles')
+    .select('role,email')
+    .eq('id', subjectId)
+    .maybeSingle()
+  must(profileError, 'Falha ao consultar o perfil do titular')
+  if (!profile) throw new HttpError(404, 'Perfil nao encontrado.')
+
+  const role = String(profile.role || '')
+  if (!isPapelDoProtocolo(role)) {
+    throw new HttpError(
+      409,
+      `Perfil com papel "${role || 'indefinido'}" nao usa o protocolo de exclusao. Conta de equipe sai pela tela de Administradores.`,
+    )
+  }
+
+  // O e-mail do aviso vem do Auth, nao de profiles.email: o proprio titular edita
+  // profiles e o valor pode estar desatualizado ou em branco.
+  const authUser = await admin.auth.admin.getUserById(subjectId)
+  const email = authUser.data?.user?.email || (profile.email ? String(profile.email) : null)
+
+  const outcome = await openDeletionProtocol(admin, {
+    subjectId,
+    role,
+    email,
+    subjectToken: null,
+    actorId,
+  })
+
+  if (outcome.completed) {
+    return json({
+      ok: true,
+      completed: true,
+      requestId: outcome.requestId,
+      role,
+      status: 'completed',
+      completedAt: outcome.completedAt,
+      notificationPending: !outcome.notified,
+      message: 'Conta excluida em definitivo. O protocolo concluiu a limpeza.',
+    })
+  }
+
+  const message = outcome.status === 'processing'
+    ? 'Ja existe um protocolo em processamento para esta conta.'
+    : outcome.status === 'failed'
+      ? 'Conta bloqueada e protocolo aberto, mas a conclusao falhou. Ele volta pela fila.'
+      : 'Conta bloqueada e protocolo aberto. A conclusao depende de revisao do sysadmin.'
+
+  return json({
+    ok: true,
+    completed: false,
+    requestId: outcome.requestId,
+    role,
+    status: outcome.status,
+    blockers: outcome.blockers,
+    deadlineAt: outcome.deadlineAt,
+    accessLocked: outcome.accessLocked,
+    message,
+  }, { status: 202 })
+}
+
 async function processAsAdmin(
   admin: AdminClient,
   actorId: string,
@@ -1095,7 +1316,7 @@ async function processAsAdmin(
   }
   if (!request.subject_id) throw new HttpError(409, 'O protocolo concluido nao pode ser reprocessado.')
 
-  if (request.role === 'ambulante' && body.externalCleanupConfirmed) {
+  if (isVendedor(request.role) && body.externalCleanupConfirmed) {
     const pendingRecipient = await admin
       .from('recipient_provisioning_operations')
       .select('id')
@@ -1118,7 +1339,7 @@ async function processAsAdmin(
       return json({ ok: true, completed: true, requestId: request.id })
     }
     claimed = claim as ClaimedDeletionRequest
-    if (request.role === 'ambulante' && body.externalCleanupConfirmed) {
+    if (isVendedor(request.role) && body.externalCleanupConfirmed) {
       const confirmed = await transitionClaim(
         admin,
         claimed,
@@ -1214,10 +1435,12 @@ async function runQueue(
     .limit(batchSize * 10)
   must(error, 'Falha ao carregar a fila de exclusoes')
 
+  // Todo papel de vendedor (ambulante, restaurante, entregador) so entra no lote
+  // depois que alguem confirmou a limpeza da conta externa no Pagar.me.
   const candidates = (data || []).filter((row) => (
     retryReady(row)
     && (
-      row.role !== 'ambulante'
+      !isVendedor(String(row.role))
       || row.status !== 'manual_review'
       || Boolean(row.external_cleanup_confirmed_at)
     )
@@ -1306,6 +1529,10 @@ Deno.serve(async (req: Request) => {
       return await processAsAdmin(admin, userData.user.id, body)
     }
 
+    if (action === 'admin-request') {
+      return await requestAsAdmin(admin, userData.user.id, body)
+    }
+
     if (action === 'resolve-recipient-operation') {
       return await resolveRecipientOperation(admin, userData.user.id, body.operationId)
     }
@@ -1334,85 +1561,47 @@ Deno.serve(async (req: Request) => {
       .eq('id', userData.user.id)
       .maybeSingle()
     must(profileError, 'Falha ao consultar o perfil')
-    if (!profile || !['cliente', 'ambulante'].includes(String(profile.role))) {
+    if (!profile || !(PAPEIS_AUTOATENDIMENTO as string[]).includes(String(profile.role))) {
       throw new HttpError(403, 'Somente contas de cliente ou ambulante podem usar este fluxo.')
     }
 
-    const role = profile.role as AccountRole
-    const deletion = await createOrReuseRequest(
-      admin,
-      userData.user.id,
-      role,
-      userData.user.email || null,
-    )
+    const outcome = await openDeletionProtocol(admin, {
+      subjectId: userData.user.id,
+      role: profile.role as AccountRole,
+      email: userData.user.email || null,
+      subjectToken: token,
+      actorId: null,
+    })
 
-    let accessLocked = false
-    try {
-      const lockState = await lockPendingAccount(admin, userData.user.id, token)
-      accessLocked = lockState.accessLocked
-    } catch (lockError) {
-      await updateRequest(admin, deletion.id, { last_error: 'account_lock_failed' })
-      console.error('Falha ao bloquear conta com exclusao pendente:', lockError)
-    }
-
-    let claimed: ClaimedDeletionRequest | null = null
-    try {
-      const claim = await claimRequest(admin, deletion.id, null)
-      if (claim.status === 'completed') {
-        return json({ ok: true, completed: true, requestId: deletion.id })
-      }
-      claimed = claim as ClaimedDeletionRequest
-      await renewLease(admin, claimed)
-
-      if (!deletion.subject_id) throw new Error('O protocolo nao possui identificador para continuar.')
-      const blockers = await deletionBlockers(admin, deletion.subject_id, role, false)
-
-      if (role === 'cliente' && blockers.length === 0) {
-        await renewLease(admin, claimed)
-        const result = await completeDeletion(admin, claimed)
-        return json({
+    if (outcome.completed) {
+      // O titular concluido pelo caminho rapido nunca recebeu completedAt na
+      // resposta quando o protocolo ja estava fechado; o app so olha completed.
+      return json(outcome.completedAt === null
+        ? { ok: true, completed: true, requestId: outcome.requestId }
+        : {
           ok: true,
           completed: true,
-          requestId: deletion.id,
-          completedAt: result.completedAt,
-          notificationPending: !result.notified,
+          requestId: outcome.requestId,
+          completedAt: outcome.completedAt,
+          notificationPending: !outcome.notified,
         })
-      }
-
-      await releaseClaim(admin, claimed, 'manual_review', blockers)
-      return json({
-        ok: true,
-        completed: false,
-        requestId: deletion.id,
-        status: 'manual_review',
-        deadlineAt: deletion.deadline_at,
-        accessLocked,
-        message: 'Solicitacao registrada. A exclusao sera concluida em ate 30 dias.',
-      }, { status: 202 })
-    } catch (error) {
-      if (error instanceof LeaseBusyError) {
-        return json({
-          ok: true,
-          completed: false,
-          requestId: deletion.id,
-          status: 'processing',
-          deadlineAt: deletion.deadline_at,
-          accessLocked,
-          message: 'A exclusao da conta ja esta em processamento.',
-        }, { status: 202 })
-      }
-
-      if (claimed) await markClaimFailed(admin, claimed, error)
-      return json({
-        ok: true,
-        completed: false,
-        requestId: deletion.id,
-        status: 'failed',
-        deadlineAt: deletion.deadline_at,
-        accessLocked,
-        message: 'Solicitacao registrada e encaminhada para conclusao manual.',
-      }, { status: 202 })
     }
+
+    const message = outcome.status === 'processing'
+      ? 'A exclusao da conta ja esta em processamento.'
+      : outcome.status === 'failed'
+        ? 'Solicitacao registrada e encaminhada para conclusao manual.'
+        : 'Solicitacao registrada. A exclusao sera concluida em ate 30 dias.'
+
+    return json({
+      ok: true,
+      completed: false,
+      requestId: outcome.requestId,
+      status: outcome.status,
+      deadlineAt: outcome.deadlineAt,
+      accessLocked: outcome.accessLocked,
+      message,
+    }, { status: 202 })
   } catch (error) {
     const status = error instanceof HttpError ? error.status : 500
     console.error('excluir-conta:', error)

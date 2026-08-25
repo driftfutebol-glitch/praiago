@@ -7,6 +7,26 @@ derivado de `auth.getUser()` e nunca e aceito no corpo da requisicao.
 Nao use a service-role key no computador do operador. Obtenha uma sessao normal
 de sysadmin e envie apenas o access token dessa sessao no header `Authorization`.
 
+## Abrir um protocolo em nome do titular
+
+O botao "Solicitar exclusao" da tela de Usuarios do painel admin nao apaga mais
+a conta direto. Ele chama `admin-usuarios` com `{"action":"excluir"}`, que
+identifica o papel do alvo e, para qualquer conta de usuario final, encaminha
+para esta funcao:
+
+```json
+{ "action": "admin-request", "subjectId": "UUID_DO_TITULAR" }
+```
+
+O ator continua saindo do JWT verificado; do corpo vem apenas o alvo. A conta e
+bloqueada na hora (perfil `banido` e ban no Auth) e o protocolo abre. Cliente sem
+impedimento conclui na mesma chamada; ambulante, restaurante e entregador caem em
+`manual_review` e seguem o fluxo de `process` descrito abaixo.
+
+Contas de equipe (`admin` e `sysadmin`) nao usam o protocolo: elas nao tem
+Storage de KYC, carteira nem historico de repasse, e continuam sendo removidas
+pela tela de Administradores.
+
 ## Consultar a fila
 
 Envie `POST /functions/v1/excluir-conta` com:
