@@ -70,6 +70,7 @@ export default function Rodape() {
           <span style={{ display: 'flex', gap: 22, flexWrap: 'wrap' }}>
             {/* Essas duas paginas sao exigidas pela Play Store e ja estao no ar
                 nesses caminhos — nao mudar as URLs. */}
+            <a href="/suporte.html" style={{ ...ESTILO_LINK, fontSize: 13.5 }}>Ajuda e suporte</a>
             <a href="/termos.html" style={{ ...ESTILO_LINK, fontSize: 13.5 }}>Termos de uso</a>
             <a href="/privacidade.html" style={{ ...ESTILO_LINK, fontSize: 13.5 }}>Política de privacidade</a>
           </span>
