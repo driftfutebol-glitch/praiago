@@ -1,0 +1,5 @@
+-- Marcador de reconciliacao.
+-- Esta versao JA foi aplicada no banco de producao; o arquivo original
+-- nunca existiu neste repositorio (o schema foi construido pelo SQL editor).
+-- Serve apenas para o supabase CLI parar de recusar o push por falta de
+-- arquivo local. Nao executa nada.
