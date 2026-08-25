@@ -117,60 +117,56 @@ function TelaLogada() {
     })
     if (!continuar) return
 
-    const confirmacao = await promptDialog({
-      title: 'Confirmação final',
-      message: 'Digite EXCLUIR para confirmar. Esta ação não pode ser desfeita.',
-      placeholder: 'EXCLUIR',
-      confirmText: 'Excluir conta agora',
+    // Pede o e-mail em vez de uma palavra fixa: confirma a intencao e ja
+    // entrega a equipe o dado que ela vai usar para localizar a conta.
+    const emailInformado = await promptDialog({
+      title: 'Confirme seu e-mail',
+      message: 'Digite o e-mail da sua conta para registrarmos o pedido de exclusao.',
+      placeholder: sessao.email || 'voce@exemplo.com',
+      confirmText: 'Enviar pedido',
       cancelText: 'Cancelar',
       tone: 'danger',
     })
-    if (confirmacao?.trim().toUpperCase() !== 'EXCLUIR') {
-      if (confirmacao !== null) {
-        await alertDialog({ title: 'Confirmação incorreta', message: 'A conta não foi excluída. Digite exatamente EXCLUIR para confirmar.' })
-      }
-      return
-    }
+    if (!emailInformado || !emailInformado.trim()) return
 
     setExcluindoConta(true)
     try {
-      const { data, error } = await supabase.functions.invoke('excluir-conta', {
-        body: { action: 'request' },
-      })
+      const { data, error } = await supabase
+        .from('solicitacoes_exclusao')
+        .insert({
+          user_id: sessao.id,
+          email_informado: emailInformado.trim(),
+          nome_informado: sessao.nome ?? null,
+          cpf_informado: verificacao?.cpf ?? null,
+          papel_informado: 'cliente',
+        })
+        .select('id')
+        .single()
 
-      const resposta = (data || {}) as {
-        completed?: boolean
-        requestId?: string
-        deadlineAt?: string
-        message?: string
-        accessLocked?: boolean
-      }
-      if (error || !resposta.requestId) {
+      // 23505 = ja existe pedido pendente. Nao e erro do usuario: e a mesma
+      // solicitacao dele, entao confirmamos em vez de assustar.
+      if (error && error.code === '23505') {
         await alertDialog({
-          title: 'Não foi possível concluir',
-          message: 'Sua conta não foi marcada como excluída. Tente novamente. Se o erro continuar, fale com o suporte pelo e-mail contato@praiago.com.br.',
+          title: 'Pedido ja registrado',
+          message: 'Voce ja tem um pedido de exclusao em analise. Nossa equipe vai concluir em ate 30 dias.',
+        })
+        return
+      }
+
+      if (error || !data) {
+        await alertDialog({
+          title: 'Nao foi possivel registrar',
+          message: 'Seu pedido nao foi enviado. Tente novamente. Se o erro continuar, fale com contato@praiago.com.br.',
           tone: 'danger',
         })
         return
       }
 
       await alertDialog({
-        title: resposta.completed ? 'Conta excluída' : 'Solicitação registrada',
-        message: resposta.completed
-          ? `Sua conta foi excluída permanentemente. Protocolo: ${resposta.requestId}.`
-          : resposta.accessLocked
-            ? `Seu acesso foi bloqueado e a exclusão será concluída em até 30 dias. Protocolo: ${resposta.requestId}.`
-            : `Sua solicitação foi registrada para conclusão em até 30 dias, mas não foi possível confirmar o bloqueio de acesso. Encerre a sessão e contate o suporte. Protocolo: ${resposta.requestId}.`,
-        tone: resposta.completed || resposta.accessLocked ? 'success' : 'danger',
+        title: 'Pedido registrado',
+        message: `Recebemos seu pedido de exclusao. Nossa equipe conclui em ate 30 dias e voce recebe um aviso por e-mail. Protocolo: ${data.id}.`,
+        tone: 'success',
       })
-      try {
-        await supabase.removeAllChannels()
-        const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' })
-        if (signOutError) console.error('Falha ao encerrar a sessao local:', signOutError.message)
-      } finally {
-        logout()
-        navigate('/perfil', { replace: true })
-      }
     } catch (error) {
       console.error('Falha inesperada ao solicitar exclusao:', error)
       await alertDialog({

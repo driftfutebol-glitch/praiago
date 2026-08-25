@@ -7,6 +7,7 @@ import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import PedidosPage from './pages/PedidosPage'
 import UsuariosPage from './pages/UsuariosPage'
+import ExclusoesPage from './pages/ExclusoesPage'
 import VerificacoesPage from './pages/VerificacoesPage'
 import AtendimentoPage from './pages/AtendimentoPage'
 import ErrorsPage from './pages/ErrorsPage'
@@ -279,6 +280,7 @@ export default function App() {
             <Route path="/" element={guard('dashboard', <DashboardPage />)} />
             <Route path="/pedidos" element={guard('pedidos', <PedidosPage />)} />
             <Route path="/usuarios" element={guard('usuarios', <UsuariosPage />)} />
+            <Route path="/exclusoes" element={guard('usuarios', <ExclusoesPage />)} />
             <Route path="/localizacoes" element={guard('usuarios', <LocalizacoesPage />)} />
             {/* Troca de nome mexe no cadastro do vendedor, entao mora na mesma
                 permissao de 'usuarios' — nao vale criar secao nova so pra isso. */}

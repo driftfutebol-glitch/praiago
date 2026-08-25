@@ -7,8 +7,7 @@ import {
   Activity, Package, Users, AlertOctagon, LogOut, ShieldAlert,
   ShieldCheck, Headphones, ChevronDown, CalendarDays, LayoutGrid,
   Smartphone, TabletSmartphone, UtensilsCrossed, Umbrella, UserCircle, Ticket, Megaphone, WalletCards, MapPin,
-  Landmark, Signature, UserPlus
-} from 'lucide-react'
+  Landmark, Signature, UserPlus, Trash2 } from 'lucide-react'
 
 // `solicitacoes_troca_nome` ficou fora da publicacao `supabase_realtime`, entao
 // postgres_changes nunca chega. Ate entrar la, o contador vive de polling.
@@ -128,6 +127,7 @@ export default function Sidebar({ onLogout, perfil }: { onLogout: () => void; pe
     { to: '/pedidos', key: 'pedidos', icon: Package, label: 'Pedidos Globais' },
     { to: '/financeiro', key: 'financeiro', icon: WalletCards, label: 'Financeiro' },
     { to: '/troca-conta', key: 'financeiro', icon: Landmark, label: 'Troca de conta' },
+    { to: '/exclusoes', key: 'usuarios', icon: Trash2, label: 'Pedidos de Exclusao' },
     { to: '/usuarios', key: 'usuarios', icon: Users, label: 'Usuários' },
   ].filter(m => podeVer(m.key))
 

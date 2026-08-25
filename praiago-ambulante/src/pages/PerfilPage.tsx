@@ -163,60 +163,57 @@ export default function PerfilPage() {
     })
     if (!continueDeletion) return
 
-    const confirmation = await promptDialog({
-      title: 'Confirmação final',
-      message: 'Digite EXCLUIR para enviar a solicitação. A equipe verificará saldos, repasses, disputas e a conta de pagamento antes da exclusão definitiva.',
-      placeholder: 'EXCLUIR',
-      confirmText: 'Enviar solicitação',
+    // Pede o e-mail em vez de uma palavra fixa: confirma a intencao e ja
+    // entrega a equipe o dado que ela vai usar para localizar a conta.
+    const emailInformado = await promptDialog({
+      title: 'Confirme seu e-mail',
+      message: 'Digite o e-mail da sua conta para registrarmos o pedido de exclusao. A equipe verifica saldo, repasses e disputas antes de concluir.',
+      placeholder: session?.email || 'voce@exemplo.com',
+      confirmText: 'Enviar pedido',
       cancelText: 'Cancelar',
       tone: 'danger',
     })
-    if (confirmation?.trim().toUpperCase() !== 'EXCLUIR') {
-      if (confirmation !== null) {
-        await alertDialog({ title: 'Confirmação incorreta', message: 'A conta não foi excluída. Digite exatamente EXCLUIR para confirmar.' })
-      }
-      return
-    }
+    if (!emailInformado || !emailInformado.trim()) return
 
     setDeletingAccount(true)
     try {
-      const { data, error } = await supabase.functions.invoke('excluir-conta', {
-        body: { action: 'request' },
-      })
+      const { data, error } = await supabase
+        .from('solicitacoes_exclusao')
+        .insert({
+          user_id: session.id,
+          email_informado: emailInformado.trim(),
+          nome_informado: profile?.nome ?? null,
+          // CPF nao e pedido no formulario; a equipe consulta pelo user_id.
+          cpf_informado: null,
+          papel_informado: 'ambulante',
+        })
+        .select('id')
+        .single()
 
-      const response = (data || {}) as {
-        completed?: boolean
-        requestId?: string
-        deadlineAt?: string
-        message?: string
-        accessLocked?: boolean
-      }
-      if (error || !response.requestId) {
+      // 23505 = ja existe pedido pendente. E a mesma solicitacao dele, entao
+      // confirmamos em vez de tratar como falha.
+      if (error && error.code === '23505') {
         await alertDialog({
-          title: 'Não foi possível concluir',
-          message: 'Sua conta não foi marcada como excluída. Tente novamente. Se o erro continuar, fale com o suporte pelo e-mail contato@praiago.com.br.',
+          title: 'Pedido ja registrado',
+          message: 'Voce ja tem um pedido de exclusao em analise. A equipe conclui em ate 30 dias.',
+        })
+        return
+      }
+
+      if (error || !data) {
+        await alertDialog({
+          title: 'Nao foi possivel registrar',
+          message: 'Seu pedido nao foi enviado. Tente novamente. Se o erro continuar, fale com contato@praiago.com.br.',
           tone: 'danger',
         })
         return
       }
 
       await alertDialog({
-        title: response.completed ? 'Conta excluída' : 'Solicitação registrada',
-        message: response.completed
-          ? `Sua conta foi excluída permanentemente. Protocolo: ${response.requestId}.`
-          : response.accessLocked
-            ? `Seu acesso foi bloqueado e a solicitação seguirá para análise e conclusão em até 30 dias. Protocolo: ${response.requestId}.`
-            : `Sua solicitação foi registrada para análise em até 30 dias, mas não foi possível confirmar o bloqueio de acesso. Encerre a sessão e contate o suporte. Protocolo: ${response.requestId}.`,
-        tone: response.completed || response.accessLocked ? 'success' : 'danger',
+        title: 'Pedido registrado',
+        message: `Recebemos seu pedido. A equipe verifica saldo, repasses e disputas e conclui em ate 30 dias. Protocolo: ${data.id}.`,
+        tone: 'success',
       })
-      try {
-        await supabase.removeAllChannels()
-        const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' })
-        if (signOutError) console.error('Falha ao encerrar a sessao local:', signOutError.message)
-      } finally {
-        logout()
-        navigate('/login', { replace: true })
-      }
     } catch (error) {
       console.error('Falha inesperada ao solicitar exclusao:', error)
       await alertDialog({
