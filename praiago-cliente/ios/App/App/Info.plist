@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-        <string>PraiaGo Cliente</string>
+        <string>PraiaGo</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -24,10 +24,14 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSCameraUsageDescription</key>
 	<string>O PraiaGo usa a camera para foto de perfil, comprovantes e suporte.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>O PraiaGo usa sua localizacao para encontrar vendedores proximos e entregar pedidos na praia.</string>
+	<string>O PraiaGo usa sua localização enquanto você usa o app para mostrar vendedores próximos, calcular rotas e informar seu ponto de entrega na praia.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>O PraiaGo usa sua localização enquanto você usa o app para mostrar vendedores próximos, calcular rotas e informar seu ponto de entrega na praia.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>O PraiaGo acessa fotos quando voce escolhe imagens para perfil, comprovantes ou suporte.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

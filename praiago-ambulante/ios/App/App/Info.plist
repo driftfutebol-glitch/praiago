@@ -24,10 +24,14 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSCameraUsageDescription</key>
 	<string>O PraiaGo usa a camera para foto de perfil, verificacao e suporte.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>O PraiaGo usa sua localizacao para mostrar seu ponto de venda e atualizar pedidos proximos.</string>
+	<string>O PraiaGo Ambulante usa sua localização enquanto você usa o app para mostrar seu ponto de venda quando estiver online e calcular rotas até os pedidos.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>O PraiaGo Ambulante usa sua localização enquanto você usa o app para mostrar seu ponto de venda quando estiver online e calcular rotas até os pedidos.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>O PraiaGo acessa fotos quando voce escolhe imagens para perfil, produtos ou suporte.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

@@ -38,15 +38,18 @@ definitions:
       script: |
         cd "$APP_DIR/ios/App"
         if [ -n "$APP_STORE_APPLE_ID" ]; then
-          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || echo "")
+          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-build-number "$APP_STORE_APPLE_ID" --all-versions)
         else
           LATEST_BUILD_NUMBER=""
         fi
 
         if [ -z "$LATEST_BUILD_NUMBER" ]; then
           UPDATED_BUILD_NUMBER=$BUILD_NUMBER
+        elif echo "$LATEST_BUILD_NUMBER" | grep -Eq '^[0-9]+$'; then
+          UPDATED_BUILD_NUMBER=$((LATEST_BUILD_NUMBER + 1))
         else
-          UPDATED_BUILD_NUMBER=$(($LATEST_BUILD_NUMBER + 1))
+          echo "Unexpected build number returned by App Store Connect: $LATEST_BUILD_NUMBER"
+          exit 1
         fi
 
         agvtool new-version -all "$UPDATED_BUILD_NUMBER"
@@ -95,7 +98,7 @@ workflows:
       - *prepare_capacitor_ios
       - *build_unsigned_simulator
     artifacts:
-      - praiago-cliente/ios/App/build/**/*
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
       - /tmp/xcodebuild_logs/*.log
 
   ios-ambulante-simulator:
@@ -116,7 +119,7 @@ workflows:
       - *prepare_capacitor_ios
       - *build_unsigned_simulator
     artifacts:
-      - praiago-ambulante/ios/App/build/**/*
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
       - /tmp/xcodebuild_logs/*.log
 
   ios-cliente-testflight:
@@ -153,8 +156,8 @@ workflows:
     publishing:
       app_store_connect:
         auth: integration
-        submit_to_testflight: true
-        expire_build_submitted_for_review: true
+        # Upload first. External TestFlight beta review is submitted only after
+        # the required test contact/review metadata is completed in App Store Connect.
   ios-ambulante-testflight:
     name: iOS Ambulante - TestFlight
     max_build_duration: 120
@@ -189,5 +192,5 @@ workflows:
     publishing:
       app_store_connect:
         auth: integration
-        submit_to_testflight: true
-        expire_build_submitted_for_review: true
+        # Upload first. External TestFlight beta review is submitted only after
+        # the required test contact/review metadata is completed in App Store Connect.
