@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { supabase } from '../lib/supabase'
-import { Ban, RotateCcw, Trash2, UserCheck, ShieldCheck, ShieldX, Search } from 'lucide-react'
+import { Ban, RotateCcw, Trash2, UserCheck, ShieldCheck, ShieldX, Search, Eye, EyeOff } from 'lucide-react'
 import { format } from 'date-fns'
 import { confirmDialog, alertDialog, promptDialog } from '../lib/dialog'
 
@@ -40,11 +40,50 @@ export default function UsuariosPage() {
       (u.email && u.email.toLowerCase().includes(busca.toLowerCase())) ||
       (u.cnpj && String(u.cnpj).toLowerCase().includes(busca.toLowerCase())) ||
       u.id.toLowerCase().includes(busca.toLowerCase())
-    const matchRole = filtroRole === 'todos' || u.role === filtroRole
+    // 'revisao' nao e um role: e a aba das contas de loja/teste.
+    const matchRole =
+      filtroRole === 'todos' ? true :
+      filtroRole === 'revisao' ? !!u.conta_demo :
+      u.role === filtroRole
     return matchBusca && matchRole
   })
 
-  const roles = ['todos', ...new Set(usuarios.map(u => u.role).filter(Boolean))]
+  const roles = ['todos', ...new Set(usuarios.map(u => u.role).filter(Boolean)), 'revisao']
+  const totalDemo = usuarios.filter(u => u.conta_demo).length
+
+  // Conta de revisao: some de vendedores_publicos, que e a unica fonte do
+  // radar, das listagens e do mapa do app Cliente. O corte e no banco, feito
+  // pelo gatilho sync_vendedor_publico — nao depende de filtro em tela.
+  async function alternarContaDemo(u: any) {
+    const jaDemo = !!u.conta_demo
+    if (!jaDemo) {
+      const ok = await confirmDialog({
+        title: 'Marcar como conta de revisão',
+        message: `${u.nome || u.email || u.id} deixará de aparecer para os clientes: some do radar, das listagens e do mapa. A conta continua funcionando normalmente para quem entrar nela. Use para Apple, Google Play e testes internos.`,
+        confirmText: 'Marcar',
+      })
+      if (!ok) return
+    }
+
+    setAcaoId(u.id)
+    const { error } = await supabase
+      .from('profiles')
+      .update({ conta_demo: !jaDemo })
+      .eq('id', u.id)
+
+    if (error) {
+      alertDialog({
+        title: 'Erro',
+        message: 'Não foi possível alterar esta conta: ' + error.message,
+        tone: 'danger',
+      })
+    } else {
+      setUsuarios(prev => prev.map(item =>
+        item.id === u.id ? { ...item, conta_demo: !jaDemo } : item
+      ))
+    }
+    setAcaoId(null)
+  }
 
   async function alternarBanimento(u: any) {
     const jaBanido = u.status === 'banido'
@@ -175,7 +214,7 @@ export default function UsuariosPage() {
                   : 'text-slate-500 hover:text-slate-300 border border-transparent'
               }`}
             >
-              {role === 'todos' ? 'Todos' : role}
+              {role === 'todos' ? 'Todos' : role === 'revisao' ? `Revisão${totalDemo ? ` (${totalDemo})` : ''}` : role}
             </button>
           ))}
         </div>
@@ -194,10 +233,19 @@ export default function UsuariosPage() {
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.03, duration: 0.3 }}
-              className="glass-panel p-5 rounded-2xl border-slate-800 flex flex-col relative overflow-hidden hover:border-slate-700/50 transition-all duration-300"
+              className={`glass-panel p-5 rounded-2xl flex flex-col relative overflow-hidden transition-all duration-300 ${
+                u.conta_demo
+                  ? 'border-violet-500/40 hover:border-violet-500/60'
+                  : 'border-slate-800 hover:border-slate-700/50'
+              }`}
             >
               {/* Top color bar */}
-              <div className={`absolute top-0 left-0 w-full h-0.5 ${rc.bar}`} />
+              <div className={`absolute top-0 left-0 w-full h-0.5 ${u.conta_demo ? 'bg-violet-500' : rc.bar}`} />
+              {u.conta_demo && (
+                <span className="absolute top-3 right-3 px-2 py-0.5 rounded-md bg-violet-500/15 text-violet-300 border border-violet-500/25 text-[9px] font-black uppercase tracking-wider">
+                  Revisão
+                </span>
+              )}
               
               <div className="flex justify-between items-start mb-3">
                 <div>
@@ -279,6 +327,18 @@ export default function UsuariosPage() {
                   {u.verificado ? 'Tirar verificação' : 'Liberar KYC manual'}
                 </button>
               )}
+              <button
+                onClick={() => alternarContaDemo(u)}
+                disabled={acaoId === u.id}
+                className={`mt-3 w-full px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-wide border transition-colors flex items-center justify-center gap-1 ${
+                  u.conta_demo
+                    ? 'bg-violet-500/10 text-violet-400 border-violet-500/20 hover:bg-violet-500/15'
+                    : 'bg-slate-500/10 text-slate-400 border-slate-500/20 hover:bg-slate-500/15'
+                } disabled:opacity-50`}
+              >
+                {u.conta_demo ? <Eye size={12} /> : <EyeOff size={12} />}
+                {u.conta_demo ? 'Voltar a aparecer' : 'Ocultar dos clientes'}
+              </button>
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <button
                   onClick={() => resetarPerfil(u)}
