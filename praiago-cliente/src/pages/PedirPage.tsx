@@ -12,6 +12,7 @@ import { CLIENTE_FALLBACK, useGPS, type GPSFonte, type GPSStatus } from '../hook
 import { criarMonitorSentido, type SentidoStatus } from '../lib/trafego'
 import { broadcastOrder } from '../hooks/useOrderBroadcast'
 import { pertenceACategoria, type Vendedor } from '../lib/catalogo'
+import { checarPedido, RAIO_PEDIDO_KM } from '../lib/serviceArea'
 import { criarPix, isPagamentoOnline, pagarComCartao, mensagemRecusaCartao, verificarPagamento, type PixCobranca } from '../lib/pagamento'
 import { obterTaxaCredito } from '../store/useStore'
 import { tokenizarCartao } from '../lib/pagamentosdk'
@@ -1082,6 +1083,18 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
     if (modo === 'fixa' && !reta.trim() && !barraca.trim()) { setErro('Informe a reta ou barraca para te acharmos.'); return }
     if (modo === 'tempo_real' && !radarReal) { setErro('Ative a localizacao do celular para usar o Radar GPS real.'); return }
     if (querCpfNota && !validarCpf(cpfNota)) { setErro('CPF da nota invalido. Confira os numeros ou desmarque a opcao.'); return }
+
+    // Ver o catalogo e livre em qualquer lugar do mundo. Fechar pedido exige
+    // estar perto do vendedor: entrega na praia nao acontece a 20 km.
+    const checagem = checarPedido(clientePos[0], clientePos[1], vendedor.pos[0], vendedor.pos[1])
+    if (!checagem.permitido) {
+      setErro(
+        checagem.motivo === 'longe'
+          ? `Voce esta a ${checagem.distanciaKm!.toFixed(1)} km desta loja. Pedidos sao aceitos ate ${RAIO_PEDIDO_KM} km. Voce continua podendo explorar o catalogo de qualquer lugar.`
+          : 'Nao conseguimos confirmar sua localizacao. Ative o GPS ou ajuste o pino no mapa para fechar o pedido.',
+      )
+      return
+    }
     if (usaPagamentoOnline && !telefoneValido(telefoneCliente)) {
       setErro('Informe o telefone com DDD antes de iniciar o pagamento.')
       return
@@ -1696,11 +1709,11 @@ function LojasList({ vendedores, loading, tipoInicial, foraDaArea, modoRevisao, 
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
             <MapPin size={18} style={{ flexShrink: 0, marginTop: 1 }} />
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 900 }}>{modoRevisao ? 'Cenário de revisão ativo' : 'Ainda não atendemos sua localização'}</div>
+              <div style={{ fontSize: 13, fontWeight: 900 }}>{modoRevisao ? 'Cenário de revisão ativo' : 'Você está fora da área de entrega'}</div>
               <div style={{ marginTop: 4, fontSize: 12, lineHeight: 1.45, fontWeight: 650 }}>
                 {modoRevisao
                   ? 'Como este aparelho está distante, a conta de revisão está explorando Praia Grande. Essa conta nunca aparece para usuários reais.'
-                  : `A operação atual cobre ${TEXTO_AREA_ATENDIDA}. Você pode explorar Praia Grande sem ficar preso em um mapa vazio.`}
+                  : `Você pode ver todos os ambulantes e restaurantes de qualquer lugar. Para fechar pedido, é preciso estar a até ${RAIO_PEDIDO_KM} km da loja — hoje entregamos em ${TEXTO_AREA_ATENDIDA}.`}
               </div>
             </div>
           </div>

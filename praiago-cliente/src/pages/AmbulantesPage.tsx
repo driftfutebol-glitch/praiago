@@ -19,7 +19,7 @@ import type { Vendedor } from '../lib/catalogo'
 import { getZone, BEACH_ZONES } from '../lib/praiagoZones'
 import CamadaPraia from '../components/CamadaPraia'
 import { alertDialog } from '../lib/dialog'
-import { TEXTO_AREA_ATENDIDA } from '../lib/serviceArea'
+import { TEXTO_AREA_ATENDIDA, RAIO_PEDIDO_KM } from '../lib/serviceArea'
 
 import 'leaflet/dist/leaflet.css'
 
@@ -551,7 +551,7 @@ export default function AmbulantesPage() {
             <span style={{ flex: 1, minWidth: 190 }}>
               {modoRevisao
                 ? 'Cenário de revisão ativo em Praia Grande. Esta conta não aparece para usuários reais.'
-                : `Você está fora da área atendida (${TEXTO_AREA_ATENDIDA}). É possível explorar o radar, mas pedidos permanecem bloqueados.`}
+                : `Você vê todos os vendedores de qualquer lugar. Para fechar pedido, é preciso estar a até ${RAIO_PEDIDO_KM} km da loja — hoje entregamos em ${TEXTO_AREA_ATENDIDA}.`}
             </span>
             {foraDaArea && fonte !== 'manual' && (
               <button

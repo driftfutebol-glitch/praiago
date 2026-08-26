@@ -50,3 +50,48 @@ export function estaNaAreaAtendida(lat: number, lng: number) {
 }
 
 export const TEXTO_AREA_ATENDIDA = CIDADES_ATENDIDAS.join(', ').replace(', Praia Grande', ' e Praia Grande')
+
+// ---------------------------------------------------------------------------
+// Raio de pedido
+//
+// Ver o catálogo é livre: qualquer pessoa, em qualquer lugar do mundo, enxerga
+// todos os ambulantes e restaurantes. O que exige proximidade é FAZER o pedido.
+//
+// 15 km cobre a orla inteira de uma cidade — Praia Grande tem 22 km de praia,
+// então quem está numa ponta pede de um vendedor na outra. Já Santos–Praia
+// Grande passa de 20 km, uma entrega que ninguém faz a pé na areia.
+export const RAIO_PEDIDO_KM = 15
+
+export function distanciaKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371
+  const rad = (g: number) => (g * Math.PI) / 180
+  const dLat = rad(lat2 - lat1)
+  const dLng = rad(lng2 - lng1)
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)))
+}
+
+export type ChecagemPedido = {
+  permitido: boolean
+  distanciaKm: number | null
+  motivo: 'ok' | 'sem-posicao' | 'vendedor-sem-posicao' | 'longe'
+}
+
+// Regra única de "pode pedir". Fica aqui, e não espalhada nas telas, para não
+// haver uma tela que esqueça de checar.
+export function checarPedido(
+  clienteLat: number | null | undefined,
+  clienteLng: number | null | undefined,
+  vendedorLat: number | null | undefined,
+  vendedorLng: number | null | undefined,
+): ChecagemPedido {
+  if (!Number.isFinite(clienteLat as number) || !Number.isFinite(clienteLng as number)) {
+    return { permitido: false, distanciaKm: null, motivo: 'sem-posicao' }
+  }
+  if (!Number.isFinite(vendedorLat as number) || !Number.isFinite(vendedorLng as number)) {
+    return { permitido: false, distanciaKm: null, motivo: 'vendedor-sem-posicao' }
+  }
+  const d = distanciaKm(clienteLat as number, clienteLng as number, vendedorLat as number, vendedorLng as number)
+  return { permitido: d <= RAIO_PEDIDO_KM, distanciaKm: d, motivo: d <= RAIO_PEDIDO_KM ? 'ok' : 'longe' }
+}
