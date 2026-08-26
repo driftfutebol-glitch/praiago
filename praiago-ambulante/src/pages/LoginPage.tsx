@@ -140,7 +140,7 @@ export default function LoginPage() {
         if (data.user) {
           const { data: profile } = await supabase
             .from('profiles')
-            .select('status,ban_motivo,nome,role')
+            .select('status,ban_motivo,nome,role,conta_demo')
             .eq('id', data.user.id)
             .maybeSingle()
 
@@ -156,7 +156,7 @@ export default function LoginPage() {
           }
 
           await logSecurityEvent('login_success', target, { user_id: data.user.id })
-          login(data.user.id, target, profile?.nome || undefined)
+          login(data.user.id, target, profile?.nome || undefined, profile?.conta_demo === true)
           navigate('/')
         }
       } else {
@@ -209,13 +209,13 @@ export default function LoginPage() {
       return
     }
     if (data.user) {
-      const { data: profile } = await supabase.from('profiles').select('role,status').eq('id', data.user.id).maybeSingle()
+      const { data: profile } = await supabase.from('profiles').select('role,status,conta_demo').eq('id', data.user.id).maybeSingle()
       if (profile?.role !== 'ambulante' || profile?.status === 'banido') {
         await supabase.auth.signOut()
         setMessage('Esta conta não pode acessar o aplicativo de ambulante.')
         return
       }
-      login(data.user.id, verificationEmail, name || undefined)
+      login(data.user.id, verificationEmail, name || undefined, profile?.conta_demo === true)
       navigate('/')
     }
   }

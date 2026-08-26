@@ -8,7 +8,7 @@ import 'leaflet/dist/leaflet.css'
 import { motion, AnimatePresence } from 'framer-motion'
 import QRCode from 'qrcode'
 import { useRoute } from '../hooks/useRoute'
-import { useGPS, type GPSFonte, type GPSStatus } from '../hooks/useGPS'
+import { CLIENTE_FALLBACK, useGPS, type GPSFonte, type GPSStatus } from '../hooks/useGPS'
 import { criarMonitorSentido, type SentidoStatus } from '../lib/trafego'
 import { broadcastOrder } from '../hooks/useOrderBroadcast'
 import { pertenceACategoria, type Vendedor } from '../lib/catalogo'
@@ -21,6 +21,7 @@ import { useStore, type Entrega } from '../store/useStore'
 import { confirmDialog, alertDialog } from '../lib/dialog'
 import { supabase } from '../lib/supabase'
 import { apenasDigitosCpf, formatarCpf as formatarCpfCliente, validarCpf } from '../lib/cpf'
+import { TEXTO_AREA_ATENDIDA } from '../lib/serviceArea'
 
 delete (L.Icon.Default.prototype as { _getIconUrl?: unknown })._getIconUrl
 L.Icon.Default.mergeOptions({
@@ -837,7 +838,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
     ? Math.round(base * taxaCreditoPercent) / 100
     : 0
   const total = Math.round((base + acrescimoCredito) * 100) / 100
-  const radarReal = gpsFonte === 'gps' || gpsFonte === 'manual' || gpsFonte === 'memoria'
+  const radarReal = gpsFonte === 'gps' || gpsFonte === 'manual' || gpsFonte === 'memoria' || gpsFonte === 'revisao'
   const cpfOk = perfilCliente?.cpf_check_status === 'aprovado'
   const telefoneSalvo = telefoneValido(telefoneCliente)
     && telefoneCliente.replace(/\D/g, '') === String(perfilCliente?.telefone || '').replace(/\D/g, '')
@@ -1615,7 +1616,14 @@ function LojaCard({ v, index, onOpen }: { v: Vendedor; index: number; onOpen: ()
   )
 }
 
-function LojasList({ vendedores, loading, tipoInicial }: { vendedores: Vendedor[]; loading: boolean; tipoInicial: string | null }) {
+function LojasList({ vendedores, loading, tipoInicial, foraDaArea, modoRevisao, onExplorarArea }: {
+  vendedores: Vendedor[]
+  loading: boolean
+  tipoInicial: string | null
+  foraDaArea: boolean
+  modoRevisao: boolean
+  onExplorarArea: () => void
+}) {
   const navigate = useNavigate()
   const [filtro, setFiltro] = useState<'todos' | 'restaurante' | 'ambulante'>(
     tipoInicial === 'restaurante' || tipoInicial === 'ambulante' ? tipoInicial : 'todos'
@@ -1683,6 +1691,27 @@ function LojasList({ vendedores, loading, tipoInicial }: { vendedores: Vendedor[
         </div>
       </div>
 
+      {(foraDaArea || modoRevisao) && (
+        <div role="status" style={{ margin: '14px 20px 0', padding: 14, borderRadius: 18, border: `1px solid ${modoRevisao ? '#c4b5fd' : '#fde68a'}`, background: modoRevisao ? '#f5f3ff' : '#fffbeb', color: modoRevisao ? '#6d28d9' : '#92400e' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+            <MapPin size={18} style={{ flexShrink: 0, marginTop: 1 }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 900 }}>{modoRevisao ? 'Cenário de revisão ativo' : 'Ainda não atendemos sua localização'}</div>
+              <div style={{ marginTop: 4, fontSize: 12, lineHeight: 1.45, fontWeight: 650 }}>
+                {modoRevisao
+                  ? 'Como este aparelho está distante, a conta de revisão está explorando Praia Grande. Essa conta nunca aparece para usuários reais.'
+                  : `A operação atual cobre ${TEXTO_AREA_ATENDIDA}. Você pode explorar Praia Grande sem ficar preso em um mapa vazio.`}
+              </div>
+            </div>
+          </div>
+          {foraDaArea && (
+            <button type="button" onClick={onExplorarArea} style={{ marginTop: 10, width: '100%', border: 0, borderRadius: 13, padding: '10px 12px', background: '#0ea5e9', color: '#fff', fontSize: 12, fontWeight: 900, cursor: 'pointer' }}>
+              Explorar Praia Grande
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Beneficio PraiaGo */}
       <div style={{ padding: '14px 20px 0' }}>
         <motion.button
@@ -1746,7 +1775,14 @@ function LojasList({ vendedores, loading, tipoInicial }: { vendedores: Vendedor[
 export default function PedirPage() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
-  const { pos: clientePos, status: gpsStatus, fonte: gpsFonte } = useGPS()
+  const {
+    pos: clientePos,
+    status: gpsStatus,
+    fonte: gpsFonte,
+    foraDaArea,
+    modoRevisao,
+    definirPosicaoManual,
+  } = useGPS()
 
   const vendedores = useCatalogo(s => s.vendedores)
   const catalogoLoading = useCatalogo(s => s.loading)
@@ -1770,7 +1806,16 @@ export default function PedirPage() {
 
   // Sem loja escolhida → lista de lojas disponíveis (estilo iFood).
   if (!vendedor) {
-    return <LojasList vendedores={vendedores} loading={catalogoLoading} tipoInicial={params.get('tipo')} />
+    return (
+      <LojasList
+        vendedores={vendedores}
+        loading={catalogoLoading}
+        tipoInicial={params.get('tipo')}
+        foraDaArea={foraDaArea}
+        modoRevisao={modoRevisao}
+        onExplorarArea={() => definirPosicaoManual(CLIENTE_FALLBACK[0], CLIENTE_FALLBACK[1])}
+      />
+    )
   }
 
   const meuCarrinho = carrinhoVendedor === vendedor.id ? carrinho : {}
@@ -1780,6 +1825,13 @@ export default function PedirPage() {
   const totalPreco = vendedor.produtos.reduce((a, p) => a + (meuCarrinho[p.id] ?? 0) * p.preco, 0)
 
   async function alterarQuantidade(produto: Vendedor['produtos'][number], delta: number) {
+    if (delta > 0 && foraDaArea) {
+      await alertDialog({
+        title: 'Pedido fora da área atendida',
+        message: `No momento, pedidos funcionam em ${TEXTO_AREA_ATENDIDA}. Você pode explorar o catálogo, mas precisa estar fisicamente em uma dessas cidades para concluir o pedido.`,
+      })
+      return
+    }
     if (delta > 0 && !localizacaoConfirmada) {
       await alertDialog({
         title: 'Localização da loja em configuração',
@@ -1973,10 +2025,10 @@ export default function PedirPage() {
       <AnimatePresence>
         {totalItens > 0 && (
           <motion.div initial={{ y: 100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 100, opacity: 0 }} style={{ position: 'fixed', bottom: 100, left: 24, right: 24, maxWidth: 400, margin: '0 auto', zIndex: 100 }}>
-            <motion.button whileTap={{ scale: vendedor.aberto ? 0.98 : 1 }} disabled={!vendedor.aberto} onClick={() => { if (vendedor.aberto) setStep('checkout') }} style={{ width: '100%', background: vendedor.aberto ? 'linear-gradient(135deg, #0ea5e9, #22c55e)' : '#94a3b8', color: '#fff', border: 'none', borderRadius: 28, padding: '22px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: vendedor.aberto ? '0 20px 40px rgba(34,197,94,0.4)' : 'none', cursor: vendedor.aberto ? 'pointer' : 'not-allowed' }}>
+            <motion.button whileTap={{ scale: vendedor.aberto && !foraDaArea ? 0.98 : 1 }} disabled={!vendedor.aberto || foraDaArea} onClick={() => { if (vendedor.aberto && !foraDaArea) setStep('checkout') }} style={{ width: '100%', background: vendedor.aberto && !foraDaArea ? 'linear-gradient(135deg, #0ea5e9, #22c55e)' : '#94a3b8', color: '#fff', border: 'none', borderRadius: 28, padding: '22px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: vendedor.aberto && !foraDaArea ? '0 20px 40px rgba(34,197,94,0.4)' : 'none', cursor: vendedor.aberto && !foraDaArea ? 'pointer' : 'not-allowed' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: 14, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 900 }}>{totalItens}</div>
-                <span style={{ fontSize: 16, fontWeight: 900 }}>{!vendedor.localizacaoConfirmada ? 'Localização em configuração' : vendedor.aberto ? 'Finalizar Pedido' : 'Loja fechada agora 😴'}</span>
+                <span style={{ fontSize: 16, fontWeight: 900 }}>{foraDaArea ? 'Fora da área atendida' : !vendedor.localizacaoConfirmada ? 'Localização em configuração' : vendedor.aberto ? 'Finalizar Pedido' : 'Loja fechada agora 😴'}</span>
               </div>
               <span style={{ fontSize: 20, fontWeight: 900 }}>R$ {dinheiro(totalPreco)}</span>
             </motion.button>

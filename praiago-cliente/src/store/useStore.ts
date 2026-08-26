@@ -19,6 +19,7 @@ export type Sessao = {
   email: string
   nome: string
   telefone?: string
+  contaDemo: boolean
 } | null
 
 export type PedidoItem = { nome: string; qtd: number; preco: number }
@@ -64,7 +65,8 @@ type State = {
   notificacoes: Notificacao[]
 
   // sessão
-  login: (id: string, email: string, nome?: string, telefone?: string) => void
+  login: (id: string, email: string, nome?: string, telefone?: string, contaDemo?: boolean) => void
+  setContaDemo: (contaDemo: boolean) => void
   logout: () => void
 
   // favoritos
@@ -192,13 +194,16 @@ export const useStore = create<State>()(
       // Ao logar: se for OUTRA conta (ou não havia sessão), zera TUDO que é por
       // usuário — senão a conta nova herdaria pedidos/carrinho/notificações da
       // conta anterior no mesmo aparelho (vazamento). Mesma conta (restart) preserva.
-      login: (id, email, nome = '', telefone = '') => set(s => {
+      login: (id, email, nome = '', telefone = '', contaDemo = false) => set(s => {
         const outraConta = !s.sessao || s.sessao.id !== id
         return {
-          sessao: { id, email, nome, telefone },
+          sessao: { id, email, nome, telefone, contaDemo },
           ...(outraConta ? { pedidos: [], carrinho: {}, carrinhoVendedor: null, notificacoes: [], favoritos: [] } : {}),
         }
       }),
+      setContaDemo: (contaDemo) => set(s => ({
+        sessao: s.sessao ? { ...s.sessao, contaDemo } : null,
+      })),
       // Ao sair: limpa TUDO que é por usuário (não deixa rastro pra próxima conta).
       logout: () => set({ sessao: null, pedidos: [], carrinho: {}, carrinhoVendedor: null, notificacoes: [], favoritos: [] }),
 

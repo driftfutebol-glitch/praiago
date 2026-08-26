@@ -593,7 +593,7 @@ export default function HomePage() {
       </header>
 
       <div style={{ padding: '4px 18px 0', display: 'grid', gap: 12 }}>
-        <CartaoLocal cidade="Praia Grande" descricao="Restaurantes, ambulantes e eventos próximos" />
+        <CartaoLocal cidade="Baixada Santista" descricao="Santos, São Vicente e Praia Grande" />
 
         <div style={{ display: 'flex', gap: 10 }}>
           <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>

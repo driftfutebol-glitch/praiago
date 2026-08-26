@@ -15,6 +15,7 @@ import { useNavigate } from 'react-router-dom'
 import { ONLINE_EVENT, ONLINE_STORAGE, useGPS } from '../hooks/useGPS'
 import { getSessao } from '../lib/auth'
 import { getZone } from '../lib/praiagoZones'
+import { TEXTO_AREA_ATENDIDA } from '../lib/serviceArea'
 import { supabase } from '../lib/supabase'
 
 type DashboardStats = {
@@ -45,7 +46,7 @@ function getGreeting() {
 
 export default function DashboardPage() {
   const navigate = useNavigate()
-  const { data, status } = useGPS()
+  const { data, status, cidadeAtendida, foraDaArea, modoRevisao } = useGPS()
   const session = getSessao()
   const latitude = data?.lat
   const longitude = data?.lng
@@ -57,9 +58,15 @@ export default function DashboardPage() {
   const [loadingStats, setLoadingStats] = useState(true)
 
   const zoneName = useMemo(() => {
-    if (!data) return 'Praia Grande'
-    return getZone(data.lat, data.lng)?.nome || 'Praia Grande'
-  }, [data])
+    if (!data) return 'Aguardando localização'
+    return getZone(data.lat, data.lng)?.nome || cidadeAtendida || 'Fora da área atendida'
+  }, [cidadeAtendida, data])
+
+  const podeAtender = verified === true
+    && status === 'active'
+    && typeof session?.contaDemo === 'boolean'
+    && !foraDaArea
+  const atendendo = online && podeAtender
 
   useEffect(() => {
     if (!session?.id) return
@@ -115,29 +122,33 @@ export default function DashboardPage() {
   }, [session?.id])
 
   useEffect(() => {
-    if (verified === false && online) setOnline(false)
-  }, [online, verified])
+    if (!podeAtender && online) setOnline(false)
+  }, [online, podeAtender])
 
   useEffect(() => {
     try {
-      localStorage.setItem(ONLINE_STORAGE, online ? 'true' : 'false')
+      localStorage.setItem(ONLINE_STORAGE, atendendo ? 'true' : 'false')
       window.dispatchEvent(new Event(ONLINE_EVENT))
     } catch {
       // The database update below is still the source of truth.
     }
 
     if (!session?.id) return
-    const patch: Record<string, unknown> = { online }
-    if (online && latitude !== undefined && longitude !== undefined) {
+    const patch: Record<string, unknown> = { online: atendendo }
+    if (atendendo && latitude !== undefined && longitude !== undefined) {
       patch.lat = latitude
       patch.lng = longitude
       patch.zona = zoneName
     }
     void supabase.from('profiles').update(patch).eq('id', session.id)
-  }, [latitude, longitude, online, session?.id, zoneName])
+  }, [atendendo, latitude, longitude, session?.id, zoneName])
 
-  const locationStatus = status === 'active'
-    ? { label: `Localizacao ativa em ${zoneName}`, color: '#148447', bg: '#eaf8ef', icon: CheckCircle2 }
+  const locationStatus = modoRevisao
+    ? { label: 'Cenario de revisao em Praia Grande', color: '#6d28d9', bg: '#f5f3ff', icon: CheckCircle2 }
+    : foraDaArea
+      ? { label: 'Fora da area atendida', color: '#b54708', bg: '#fff4e5', icon: CircleAlert }
+      : status === 'active'
+        ? { label: `Localizacao ativa em ${zoneName}`, color: '#148447', bg: '#eaf8ef', icon: CheckCircle2 }
     : status === 'denied' || status === 'error'
       ? { label: 'Localizacao precisa de atencao', color: '#b54708', bg: '#fff4e5', icon: CircleAlert }
       : { label: 'Buscando sua localizacao', color: '#526178', bg: '#edf1f5', icon: Navigation }
@@ -184,6 +195,19 @@ export default function DashboardPage() {
         </div>
       </motion.section>
 
+      {(foraDaArea || modoRevisao) && (
+        <section role="status" className="surface" style={{ marginBottom: 14, padding: 14, borderColor: modoRevisao ? '#c4b5fd' : '#f4d39f', background: modoRevisao ? '#f5f3ff' : '#fffaf0', boxShadow: 'none' }}>
+          <div style={{ color: modoRevisao ? '#6d28d9' : '#92400e', fontSize: 13, fontWeight: 900 }}>
+            {modoRevisao ? 'Conta oficial de revisão' : 'Atendimento indisponível nesta localização'}
+          </div>
+          <div style={{ marginTop: 4, color: modoRevisao ? '#6d28d9' : '#92400e', fontSize: 12, lineHeight: 1.45, fontWeight: 650 }}>
+            {modoRevisao
+              ? 'O aparelho está distante e usa um cenário demonstrativo em Praia Grande. Esta conta não aparece no radar dos clientes reais.'
+              : `Para ficar online, esteja fisicamente em ${TEXTO_AREA_ATENDIDA}. Perfil, suporte e demais dados continuam acessíveis.`}
+          </div>
+        </section>
+      )}
+
       <motion.section
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -199,19 +223,21 @@ export default function DashboardPage() {
             placeItems: 'center',
             flex: '0 0 45px',
             borderRadius: 12,
-            background: online ? '#e9f8ef' : '#edf1f5',
-            color: online ? '#148447' : '#6a788e',
+            background: atendendo ? '#e9f8ef' : '#edf1f5',
+            color: atendendo ? '#148447' : '#6a788e',
           }}>
             <Power size={22} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ color: '#132238', fontSize: 15, fontWeight: 850 }}>
-              {online ? 'Voce esta atendendo' : 'Voce esta fora do radar'}
+              {atendendo ? 'Voce esta atendendo' : 'Voce esta fora do radar'}
             </div>
             <div style={{ marginTop: 3, color: verified === false ? '#b54708' : '#617089', fontSize: 12, lineHeight: 1.35, fontWeight: 600 }}>
-              {verified === false
+              {foraDaArea
+                ? `O radar funciona em ${TEXTO_AREA_ATENDIDA}.`
+                : verified === false
                 ? 'A verificacao precisa estar aprovada para ativar.'
-                : online
+                : atendendo
                   ? 'Clientes proximos podem encontrar seus produtos.'
                   : 'Ative quando estiver pronto para receber pedidos.'}
             </div>
@@ -219,9 +245,9 @@ export default function DashboardPage() {
           <button
             type="button"
             role="switch"
-            aria-checked={online}
-            aria-label={online ? 'Desativar atendimento' : 'Ativar atendimento'}
-            disabled={!verified}
+            aria-checked={atendendo}
+            aria-label={atendendo ? 'Desativar atendimento' : 'Ativar atendimento'}
+            disabled={!podeAtender}
             onClick={() => setOnline(current => !current)}
             style={{
               width: 54,
@@ -231,8 +257,8 @@ export default function DashboardPage() {
               padding: 0,
               border: 0,
               borderRadius: 999,
-              background: online ? '#18a957' : '#cbd4df',
-              cursor: verified ? 'pointer' : 'not-allowed',
+              background: atendendo ? '#18a957' : '#cbd4df',
+              cursor: podeAtender ? 'pointer' : 'not-allowed',
             }}
           >
             <span style={{
@@ -240,7 +266,7 @@ export default function DashboardPage() {
               height: 24,
               position: 'absolute',
               top: 4,
-              left: online ? 26 : 4,
+              left: atendendo ? 26 : 4,
               borderRadius: '50%',
               background: '#fff',
               boxShadow: '0 2px 7px rgba(23,45,74,0.22)',

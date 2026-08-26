@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { channel, TOPICS } from '../lib/realtime'
+import { encontrarCidadeAtendida, LOCAL_REVISAO } from '../lib/serviceArea'
+import { useStore } from '../store/useStore'
 
 export type GPSData = {
   lat: number
@@ -16,10 +18,11 @@ export type GPSStatus = 'idle' | 'requesting' | 'active' | 'error' | 'denied'
 //  memoria → último fix real salvo neste aparelho
 //  ip      → aproximada pela internet (nível de cidade)
 //  padrao  → fallback fixo (Boqueirão) quando nada mais existe
-export type GPSFonte = 'gps' | 'manual' | 'memoria' | 'ip' | 'padrao'
+//  revisao → conta de loja em aparelho distante, posicionada no cenário demo
+export type GPSFonte = 'gps' | 'manual' | 'memoria' | 'ip' | 'padrao' | 'revisao'
 
 // Fallback (Praia Grande · Boqueirão) — usado enquanto o GPS real não responde
-export const CLIENTE_FALLBACK: [number, number] = [-24.0020, -46.4085]
+export const CLIENTE_FALLBACK: [number, number] = LOCAL_REVISAO
 
 const POS_STORAGE = 'praiago:cliente:pos'
 const MANUAL_STORAGE = 'praiago:cliente:posmanual'
@@ -46,6 +49,7 @@ function lerSalvo(chave: string): PontoSalvo | null {
 //     reusa o último fix salvo e deixa o usuário AJUSTAR NO MAPA (pino arrastável);
 //  4) `pos` SEMPRE é válido e `fonte` diz de onde ele veio.
 export function useGPS() {
+  const contaDemo = useStore(state => state.sessao?.contaDemo === true)
   const [data, setData] = useState<GPSData | null>(null)
   const [status, setStatus] = useState<GPSStatus>('idle')
   const [error, setError] = useState<string | null>(null)
@@ -145,7 +149,8 @@ export function useGPS() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // O usuário arrastou o pino: essa posição vale até um GPS PRECISO aparecer.
+  // O usuário arrastou o pino: a posição muda o mapa até ele escolher voltar
+  // ao GPS. A liberação operacional continua usando a posição objetiva.
   function definirPosicaoManual(lat: number, lng: number) {
     const p: PontoSalvo = { lat, lng, ts: Date.now() }
     setManual(p)
@@ -157,14 +162,17 @@ export function useGPS() {
     try { localStorage.removeItem(MANUAL_STORAGE) } catch { /* ok */ }
   }
 
-  // GPS preciso (≤300 m) vence o ajuste manual; GPS impreciso (aproximação por
-  // torre/IP do navegador, às vezes a quilômetros) NÃO sobrescreve o pino do usuário.
-  const gpsPreciso = data ? data.accuracy <= 300 : false
   const memoriaFresca = memoria && Date.now() - memoria.ts < MEMORIA_FRESCA_MS ? memoria : null
+  const cidadeDoGps = data ? encontrarCidadeAtendida(data.lat, data.lng) : null
 
   let pos: [number, number]
   let fonte: GPSFonte
-  if (manual && !gpsPreciso) {
+  if (contaDemo && data && !cidadeDoGps) {
+    // A Apple e o testador podem estar em qualquer lugar do país. A conta de
+    // revisão recebe um cenário fixo e declarado em Praia Grande, sem jamais
+    // aparecer para clientes reais (o banco a exclui de vendedores_publicos).
+    pos = CLIENTE_FALLBACK; fonte = 'revisao'
+  } else if (manual) {
     pos = [manual.lat, manual.lng]; fonte = 'manual'
   } else if (data) {
     pos = [data.lat, data.lng]; fonte = 'gps'
@@ -178,8 +186,26 @@ export function useGPS() {
     pos = CLIENTE_FALLBACK; fonte = 'padrao'
   }
 
+  const cidadeAtendida = encontrarCidadeAtendida(pos[0], pos[1])
+  // A posição manual muda apenas o ponto explorado no mapa. Quando existe uma
+  // leitura objetiva do aparelho (GPS, memória recente ou IP), ela continua
+  // decidindo se a operação está liberada. Isso impede que alguém fora da
+  // Baixada escolha um pino em Praia Grande e faça um pedido real.
+  const posicaoObjetiva = data
+    ? [data.lat, data.lng] as const
+    : memoriaFresca
+      ? [memoriaFresca.lat, memoriaFresca.lng] as const
+      : ipPos
+        ? [ipPos.lat, ipPos.lng] as const
+        : null
+  const foraDaArea = !contaDemo && posicaoObjetiva !== null
+    ? !encontrarCidadeAtendida(posicaoObjetiva[0], posicaoObjetiva[1])
+    : !contaDemo && fonte === 'manual' && !cidadeAtendida
+  const modoRevisao = contaDemo && fonte === 'revisao'
+
   return {
     data, status, error, pos, fonte,
+    cidadeAtendida, foraDaArea, modoRevisao,
     cidadeAproximada: ipPos?.cidade,
     definirPosicaoManual, limparPosicaoManual,
   }

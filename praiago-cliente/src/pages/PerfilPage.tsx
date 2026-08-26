@@ -191,7 +191,7 @@ function TelaLogada() {
             <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', fontWeight: 500 }}>{sessao.email}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
               <MapPin size={14} color="rgba(255,255,255,0.9)" />
-              <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.9)', fontWeight: 600 }}>Praia Grande, SP</span>
+              <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.9)', fontWeight: 600 }}>Santos, São Vicente e Praia Grande</span>
             </div>
           </div>
         </motion.div>
@@ -401,7 +401,7 @@ export default function PerfilPage() {
         
         const { data: profile } = await supabase
           .from('profiles')
-          .select('nome,status,ban_motivo,role')
+          .select('nome,status,ban_motivo,role,conta_demo')
           .eq('id', data.user?.id || '')
           .maybeSingle()
 
@@ -417,7 +417,7 @@ export default function PerfilPage() {
             throw new Error(`Conta bloqueada pelo suporte.${profile.ban_motivo ? ` Motivo: ${profile.ban_motivo}` : ''}`)
           }
           await logSecurityEvent('login_success', alvo, { user_id: data.user.id })
-          useStore.getState().login(data.user.id, alvo, profile?.nome || 'Cliente PraiaGo')
+          useStore.getState().login(data.user.id, alvo, profile?.nome || 'Cliente PraiaGo', undefined, profile?.conta_demo === true)
         }
       } else {
         // Cadastro passa pela edge function 'cadastro' (regra de 1 conta por IP).
@@ -461,7 +461,7 @@ export default function PerfilPage() {
     if (data.user) {
       const { data: profile } = await supabase
         .from('profiles')
-        .select('role,status')
+        .select('role,status,conta_demo')
         .eq('id', data.user.id)
         .maybeSingle()
       if (profile?.role !== 'cliente' || profile?.status === 'banido') {
@@ -470,7 +470,7 @@ export default function PerfilPage() {
         return
       }
       await logSecurityEvent('login_success', codigoEnvio, { via: 'signup_otp' })
-      useStore.getState().login(data.user.id, codigoEnvio, nome || (data.user.user_metadata?.nome as string) || '')
+      useStore.getState().login(data.user.id, codigoEnvio, nome || (data.user.user_metadata?.nome as string) || '', undefined, profile?.conta_demo === true)
       setCodigoEnvio(null); setErro('')
     }
   }

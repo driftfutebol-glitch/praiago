@@ -12,13 +12,14 @@ import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-le
 import L, { type Map as LeafletMap } from 'leaflet'
 import { MapPin, List, Map as MapIcon, Navigation, ChevronRight, ChevronDown, Wifi, Eye, Clock, RefreshCw, ShoppingCart, LocateFixed, UserRound } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useGPS } from '../hooks/useGPS'
+import { CLIENTE_FALLBACK, useGPS } from '../hooks/useGPS'
 import { useNearbyAmbulantes, type AmbulanteLive } from '../hooks/useNearbyAmbulantes'
 import { useCatalogo } from '../store/useCatalogo'
 import type { Vendedor } from '../lib/catalogo'
 import { getZone, BEACH_ZONES } from '../lib/praiagoZones'
 import CamadaPraia from '../components/CamadaPraia'
 import { alertDialog } from '../lib/dialog'
+import { TEXTO_AREA_ATENDIDA } from '../lib/serviceArea'
 
 import 'leaflet/dist/leaflet.css'
 
@@ -386,7 +387,16 @@ function formatDist(m: number): string {
 
 export default function AmbulantesPage() {
   const navigate = useNavigate()
-  const { pos, status: gpsStatus, fonte, cidadeAproximada, definirPosicaoManual, limparPosicaoManual } = useGPS()
+  const {
+    pos,
+    status: gpsStatus,
+    fonte,
+    cidadeAproximada,
+    foraDaArea,
+    modoRevisao,
+    definirPosicaoManual,
+    limparPosicaoManual,
+  } = useGPS()
   const { ambulantes, total } = useNearbyAmbulantes(pos)
   const vendedores = useCatalogo(s => s.vendedores)
   const [viewMode, setViewMode] = useState<'map' | 'list'>('map')
@@ -520,6 +530,38 @@ export default function AmbulantesPage() {
                 : fonte === 'memoria'
                   ? 'Sem GPS — usando sua última posição conhecida. Arraste o pino azul para ajustar.'
                   : 'GPS indisponível — arraste o pino azul no mapa até onde você está.'}
+          </motion.div>
+        )}
+
+        {(foraDaArea || modoRevisao) && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            role="status"
+            style={{
+              marginTop: 10, padding: '9px 12px', borderRadius: 12,
+              background: modoRevisao ? '#f5f3ff' : '#fffbeb',
+              border: `1px solid ${modoRevisao ? '#c4b5fd' : '#fde68a'}`,
+              color: modoRevisao ? '#6d28d9' : '#92400e',
+              fontSize: 12, fontWeight: 650, lineHeight: 1.4,
+              display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+            }}
+          >
+            <LocateFixed size={15} style={{ flexShrink: 0 }} />
+            <span style={{ flex: 1, minWidth: 190 }}>
+              {modoRevisao
+                ? 'Cenário de revisão ativo em Praia Grande. Esta conta não aparece para usuários reais.'
+                : `Você está fora da área atendida (${TEXTO_AREA_ATENDIDA}). É possível explorar o radar, mas pedidos permanecem bloqueados.`}
+            </span>
+            {foraDaArea && fonte !== 'manual' && (
+              <button
+                type="button"
+                onClick={() => definirPosicaoManual(CLIENTE_FALLBACK[0], CLIENTE_FALLBACK[1])}
+                style={{ border: 0, borderRadius: 10, padding: '6px 10px', background: '#0ea5e9', color: '#fff', fontSize: 11, fontWeight: 850, cursor: 'pointer' }}
+              >
+                Explorar Praia Grande
+              </button>
+            )}
           </motion.div>
         )}
       </div>

@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { comprarIngressoPix, type IngressoPix } from '../lib/eventTickets'
 import { useStore, type Sessao } from '../store/useStore'
 import { alertDialog } from '../lib/dialog'
+import { CIDADES_ATENDIDAS, estaNaAreaAtendida } from '../lib/serviceArea'
 
 type Periodo = 'manha' | 'tarde' | 'noite' | 'madrugada'
 
@@ -40,8 +41,21 @@ type TicketLot = {
   fonte_url: string | null
 }
 
-/** Cidades atendidas hoje. Só rótulo de cabeçalho — não filtra nada. */
-const CIDADES = ['Santos', 'São Vicente', 'Praia Grande', 'Guarujá', 'Cubatão']
+const CIDADES = [...CIDADES_ATENDIDAS]
+
+function normalizarLocal(valor: string) {
+  return valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+}
+
+function eventoNaAreaAtendida(evento: Evento) {
+  if (evento.lat != null && evento.lng != null) return estaNaAreaAtendida(evento.lat, evento.lng)
+  const local = normalizarLocal(`${evento.titulo} ${evento.local_nome ?? ''} ${evento.endereco ?? ''}`)
+  return local.includes('santos')
+    || local.includes('sao vicente')
+    || local.includes('praia grande')
+    || local.includes('rocket sea club')
+    || local.includes('rocket beach club')
+}
 
 const PERIODOS: { id: Periodo | 'todos'; label: string; emoji: string }[] = [
   { id: 'todos',     label: 'Todos',     emoji: '✨' },
@@ -76,7 +90,7 @@ function menorPrecoIngresso(ev: Evento) {
 function abrirNoMapa(ev: Evento) {
   const q = ev.lat != null && ev.lng != null
     ? `${ev.lat},${ev.lng}`
-    : encodeURIComponent(`${ev.local_nome ?? ''} ${ev.endereco ?? ''} Praia Grande SP`)
+    : encodeURIComponent(`${ev.local_nome ?? ''} ${ev.endereco ?? ''} SP`)
   window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, '_blank')
 }
 
@@ -348,7 +362,7 @@ export default function EventosPage() {
       .select('*, event_ticket_lots(id,nome,preco_origem,preco_venda,preco_venda_credito,estoque_disponivel,status,fonte_url)')
       .eq('status', 'ativo')
       .order('data', { ascending: true, nullsFirst: false })
-    setEventos((data as Evento[]) ?? [])
+    setEventos(((data as Evento[]) ?? []).filter(eventoNaAreaAtendida))
     setLoading(false)
   }, [])
 

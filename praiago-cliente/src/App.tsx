@@ -150,7 +150,7 @@ export default function App() {
     let ativo = true
     const validarAcesso = (
       userId?: string,
-      perfil?: { status?: string; role?: string } | null,
+      perfil?: { status?: string; role?: string; conta_demo?: boolean | null } | null,
     ) => {
       if (!ativo) return
       if (
@@ -161,7 +161,9 @@ export default function App() {
         useStore.getState().logout()
         supabase.auth.signOut()
         navigate('/perfil', { replace: true })
+        return
       }
+      useStore.getState().setContaDemo(perfil?.conta_demo === true)
     }
 
     const checarStatus = async () => {
@@ -172,7 +174,7 @@ export default function App() {
       }
       const { data } = await supabase
         .from('profiles')
-        .select('status,role')
+        .select('status,role,conta_demo')
         .eq('id', sessao.id)
         .maybeSingle()
       validarAcesso(authData.user.id, data)

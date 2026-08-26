@@ -16,6 +16,7 @@ import {
   type ZoneHeat,
 } from '../lib/praiagoZones'
 import { supabase } from '../lib/supabase'
+import { TEXTO_AREA_ATENDIDA } from '../lib/serviceArea'
 
 const PALM_POINTS: [number, number][] = [
   [-24.0164, -46.4078],
@@ -79,7 +80,7 @@ function FlyTo({ position }: { position: [number, number] }) {
 }
 
 export default function ZonasPage() {
-  const { data: gpsData, status: gpsStatus } = useGPS()
+  const { data: gpsData, status: gpsStatus, cidadeAtendida, foraDaArea, modoRevisao } = useGPS()
   const { orders } = useOrderNotifications()
   const [heatData, setHeatData] = useState<ZoneHeat[]>([])
   const [lastUpdate, setLastUpdate] = useState(new Date())
@@ -87,7 +88,7 @@ export default function ZonasPage() {
   const currentPosition: [number, number] = gpsData
     ? [gpsData.lat, gpsData.lng]
     : PRAIA_GRANDE_CENTER
-  const currentZone = gpsData ? getZone(gpsData.lat, gpsData.lng)?.nome : null
+  const currentZone = gpsData ? getZone(gpsData.lat, gpsData.lng)?.nome || cidadeAtendida : null
   const beachIds = useMemo(() => new Set(BEACH_ZONES.map(zone => zone.id)), [])
   const rankedHeat = useMemo(() => (
     [...heatData]
@@ -110,8 +111,12 @@ export default function ZonasPage() {
     }
   }, [beachIds])
 
-  const locationState = gpsStatus === 'active'
-    ? { label: currentZone || 'Praia Grande', detail: 'Sua posição está ativa', color: '#148447', background: '#eaf8ef' }
+  const locationState = modoRevisao
+    ? { label: 'Praia Grande', detail: 'Cenário de revisão ativo; conta invisível aos clientes', color: '#6d28d9', background: '#f5f3ff' }
+    : foraDaArea
+      ? { label: 'Fora da área atendida', detail: `O radar opera em ${TEXTO_AREA_ATENDIDA}`, color: '#b54708', background: '#fff4e5' }
+      : gpsStatus === 'active'
+        ? { label: currentZone || 'Área atendida', detail: 'Sua posição está ativa', color: '#148447', background: '#eaf8ef' }
     : gpsStatus === 'denied' || gpsStatus === 'error'
       ? { label: 'Localização indisponível', detail: 'Ative a permissão para aparecer no radar', color: '#b54708', background: '#fff4e5' }
       : { label: 'Localizando', detail: 'Aguardando sinal do dispositivo', color: '#617089', background: '#edf1f5' }

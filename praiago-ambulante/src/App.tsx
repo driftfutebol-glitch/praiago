@@ -2,7 +2,7 @@ import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-
 import { motion, AnimatePresence } from 'framer-motion'
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { LoaderCircle, LocateFixed } from 'lucide-react'
-import { logout, useSessao } from './lib/auth'
+import { logout, setContaDemo, useSessao } from './lib/auth'
 import { supabase } from './lib/supabase'
 import BottomNav from './components/BottomNav'
 import VerificationBar from './components/VerificationBar'
@@ -33,10 +33,21 @@ function RouteLoading() {
 }
 
 // Logo do PraiaGo Ambulante
-function LogoBar({ gpsStatus }: { gpsStatus: string }) {
-  const isActive = gpsStatus === 'active'
+function LogoBar({ gpsStatus, foraDaArea, modoRevisao }: { gpsStatus: string; foraDaArea: boolean; modoRevisao: boolean }) {
+  const isActive = gpsStatus === 'active' && !foraDaArea
   const isError = gpsStatus === 'error' || gpsStatus === 'denied'
-  const statusLabel = isActive ? 'Localizacao ativa' : isError ? 'Sem localizacao' : 'Localizando'
+  const statusLabel = modoRevisao
+    ? 'Cenario de revisao'
+    : foraDaArea
+      ? 'Fora da area'
+      : isActive
+        ? 'Localizacao ativa'
+        : isError
+          ? 'Sem localizacao'
+          : 'Localizando'
+  const statusColor = modoRevisao ? '#6d28d9' : isActive ? '#148447' : foraDaArea || isError ? '#b54708' : '#617089'
+  const statusBackground = modoRevisao ? '#f5f3ff' : isActive ? '#eef9f2' : foraDaArea || isError ? '#fff4e5' : '#edf1f5'
+  const statusBorder = modoRevisao ? '#c4b5fd' : isActive ? '#cce9d8' : foraDaArea || isError ? '#f4d39f' : '#dce3ea'
   return (
     <header style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -73,10 +84,10 @@ function LogoBar({ gpsStatus }: { gpsStatus: string }) {
       <motion.div animate={isActive ? { opacity: [0.7, 1, 0.7] } : {}} transition={{ repeat: Infinity, duration: 2 }} style={{
         display: 'flex', alignItems: 'center', gap: 6,
         maxWidth: 146,
-        background: isActive ? '#eef9f2' : isError ? '#fff4e5' : '#edf1f5',
-        border: `1px solid ${isActive ? '#cce9d8' : isError ? '#f4d39f' : '#dce3ea'}`,
+        background: statusBackground,
+        border: `1px solid ${statusBorder}`,
         borderRadius: 999, padding: '7px 9px',
-        color: isActive ? '#148447' : isError ? '#b54708' : '#617089',
+        color: statusColor,
       }}>
         <LocateFixed size={14} aria-hidden="true" />
         <span style={{
@@ -245,23 +256,26 @@ export default function App() {
   const [kycLocked, setKycLocked] = useState(false)
 
   // GPS ativo em todo o app — transmite posição em tempo real
-  const { status: gpsStatus } = useGPS()
+  const { status: gpsStatus, foraDaArea, modoRevisao } = useGPS()
 
   useEffect(() => {
     if (!sessao?.id || isPublic) return
 
     let ativo = true
-    const bloquearAcessoInvalido = (perfil?: { status?: string; role?: string; verificado?: boolean | null } | null, userId?: string) => {
-      if (!ativo) return
-      if (perfil?.status !== 'banido' && perfil?.role === 'ambulante' && userId === sessao.id) return
+    type PerfilGate = { status?: string; role?: string; verificado?: boolean | null; conta_demo?: boolean | null }
+    const bloquearAcessoInvalido = (perfil?: PerfilGate | null, userId?: string) => {
+      if (!ativo) return false
+      if (perfil?.status !== 'banido' && perfil?.role === 'ambulante' && userId === sessao.id) return true
       logout()
       supabase.auth.signOut()
       navigate('/login', { replace: true })
+      return false
     }
-    const atualizarGate = (perfil?: { status?: string; role?: string; verificado?: boolean | null } | null, userId = sessao.id) => {
+    const atualizarGate = (perfil?: PerfilGate | null, userId = sessao.id) => {
       if (!ativo) return
-      bloquearAcessoInvalido(perfil, userId)
-      setKycLocked(perfil?.status !== 'banido' && perfil?.verificado !== true)
+      if (!bloquearAcessoInvalido(perfil, userId)) return
+      setContaDemo(perfil?.conta_demo === true)
+      setKycLocked(perfil?.verificado !== true)
     }
 
     const checarStatus = async () => {
@@ -272,14 +286,14 @@ export default function App() {
       }
       const { data } = await supabase
         .from('profiles')
-        .select('status,role,verificado')
+        .select('status,role,verificado,conta_demo')
         .eq('id', sessao.id)
         .maybeSingle()
       atualizarGate(data, authData.user.id)
     }
     checarStatus()
     const channel = supabase.channel(`ambulante_kyc_gate_${sessao.id}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${sessao.id}` }, payload => atualizarGate(payload.new as { status?: string; role?: string; verificado?: boolean | null }))
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${sessao.id}` }, payload => atualizarGate(payload.new as PerfilGate))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'verificacoes', filter: `user_id=eq.${sessao.id}` }, () => checarStatus())
       .subscribe()
     const timer = window.setInterval(checarStatus, 10000)
@@ -297,7 +311,7 @@ export default function App() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#f4f7fa' }}>
       <PasswordRecoveryHandler />
-      {!isPublic && <LogoBar gpsStatus={gpsStatus} />}
+      {!isPublic && <LogoBar gpsStatus={gpsStatus} foraDaArea={foraDaArea} modoRevisao={modoRevisao} />}
       {!isPublic && <VerificationBar />}
       <main style={{ flex: 1, overflowY: 'auto', paddingBottom: isPublic ? 0 : '82px', position: 'relative' }}>
         {!isPublic && kycLocked ? (

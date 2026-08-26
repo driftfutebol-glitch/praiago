@@ -7,6 +7,9 @@ export type Sessao = {
   id: string
   email: string
   nome: string
+  // null significa sessão antiga ainda não reconciliada com o perfil remoto.
+  // Enquanto estiver desconhecido, o GPS não publica o vendedor no radar.
+  contaDemo: boolean | null
 } | null
 
 const KEY = 'praiago:ambulante:sessao'
@@ -15,17 +18,32 @@ const listeners = new Set<() => void>()
 // Snapshot em cache: useSyncExternalStore exige referência estável.
 let cache: Sessao = read()
 function read(): Sessao {
-  try { return JSON.parse(localStorage.getItem(KEY) || 'null') } catch { return null }
+  try {
+    const value = JSON.parse(localStorage.getItem(KEY) || 'null') as Record<string, unknown> | null
+    if (!value || typeof value.id !== 'string' || typeof value.email !== 'string') return null
+    return {
+      id: value.id,
+      email: value.email,
+      nome: typeof value.nome === 'string' ? value.nome : value.email.split('@')[0] || 'Ambulante',
+      contaDemo: typeof value.contaDemo === 'boolean' ? value.contaDemo : null,
+    }
+  } catch { return null }
 }
 function refresh() { cache = read(); listeners.forEach(l => l()) }
 
 export function getSessao(): Sessao { return cache }
 
-export function login(id: string, email: string, nome?: string): Sessao {
-  const s: Sessao = { id, email: email.trim(), nome: nome?.trim() || email.split('@')[0] || 'Ambulante' }
+export function login(id: string, email: string, nome?: string, contaDemo = false): Sessao {
+  const s: Sessao = { id, email: email.trim(), nome: nome?.trim() || email.split('@')[0] || 'Ambulante', contaDemo }
   localStorage.setItem(KEY, JSON.stringify(s))
   refresh()
   return cache
+}
+
+export function setContaDemo(contaDemo: boolean) {
+  if (!cache) return
+  localStorage.setItem(KEY, JSON.stringify({ ...cache, contaDemo }))
+  refresh()
 }
 
 export function logout() {
