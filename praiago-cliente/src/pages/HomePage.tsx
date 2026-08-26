@@ -443,17 +443,6 @@ export default function HomePage() {
   const catalogo = useCatalogo(s => s.vendedores)
   const loading = useCatalogo(s => s.loading)
 
-  const restaurantes = useMemo(() => catalogo.filter(v => v.tipo === 'restaurante'), [catalogo])
-  const ambulantes = useMemo(() => catalogo.filter(v => v.tipo === 'ambulante'), [catalogo])
-  const todosProdutos = useMemo<ProdutoDestaque[]>(() => (
-    catalogo.flatMap(v => v.produtos.map(p => ({ ...p, vendedorId: v.id, vendedorNome: v.nome })))
-  ), [catalogo])
-  const produtos = useMemo<ProdutoDestaque[]>(() => (
-    todosProdutos
-      .sort((a, b) => a.preco - b.preco)
-      .slice(0, 4)
-  ), [todosProdutos])
-
   // A regiao escolhida no seletor manda na lista. Nao mostramos vendedor de
   // outra cidade fingindo estar perto: lista vazia com aviso honesto e melhor
   // do que resultado que nunca vai entregar.
@@ -464,6 +453,18 @@ export default function HomePage() {
   ), [catalogo, cidadeAtendida])
 
   const regiaoSemVendedor = Boolean(cidadeAtendida) && catalogoDaRegiao.length === 0 && catalogo.length > 0
+
+
+  const restaurantes = useMemo(() => catalogoDaRegiao.filter(v => v.tipo === 'restaurante'), [catalogoDaRegiao])
+  const ambulantes = useMemo(() => catalogoDaRegiao.filter(v => v.tipo === 'ambulante'), [catalogoDaRegiao])
+  const todosProdutos = useMemo<ProdutoDestaque[]>(() => (
+    catalogoDaRegiao.flatMap(v => v.produtos.map(p => ({ ...p, vendedorId: v.id, vendedorNome: v.nome })))
+  ), [catalogoDaRegiao])
+  const produtos = useMemo<ProdutoDestaque[]>(() => (
+    todosProdutos
+      .sort((a, b) => a.preco - b.preco)
+      .slice(0, 4)
+  ), [todosProdutos])
 
   const vendedores = useMemo(() => {
     // Busca sem acento dos dois lados: quem digita "acai" no celular (teclado sem
