@@ -20,6 +20,7 @@ import { TEXTO_AREA_ATENDIDA, CENTROS_CIDADES, type CidadeAtendida } from '../li
 import { useStore } from '../store/useStore'
 import { theme } from '../lib/theme'
 import { supabase } from '../lib/supabase'
+import { useCatalogoRegiao } from '../hooks/useCatalogoRegiao'
 
 type ProdutoDestaque = Produto & { vendedorId: string; vendedorNome: string }
 /** Só o que a faixa "em destaque" da Home precisa do evento. */
@@ -446,10 +447,11 @@ export default function HomePage() {
   // A regiao escolhida no seletor manda na lista. Nao mostramos vendedor de
   // outra cidade fingindo estar perto: lista vazia com aviso honesto e melhor
   // do que resultado que nunca vai entregar.
-  // Vendedor nunca some da Home: a regiao controla o pedido, nao a vitrine.
-  const catalogoDaRegiao = catalogo
+  // Regra por tipo: ver useCatalogoRegiao. Restaurante alcanca 15 km,
+  // ambulante so a propria cidade.
+  const { vendedores: catalogoDaRegiao, regiaoSemVendedor: semVendedor } = useCatalogoRegiao()
 
-  const regiaoSemVendedor = false
+  const regiaoSemVendedor = semVendedor
 
 
   const restaurantes = useMemo(() => catalogoDaRegiao.filter(v => v.tipo === 'restaurante'), [catalogoDaRegiao])
