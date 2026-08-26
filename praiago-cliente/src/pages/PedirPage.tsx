@@ -23,6 +23,7 @@ import { confirmDialog, alertDialog } from '../lib/dialog'
 import { supabase } from '../lib/supabase'
 import { apenasDigitosCpf, formatarCpf as formatarCpfCliente, validarCpf } from '../lib/cpf'
 import { TEXTO_AREA_ATENDIDA } from '../lib/serviceArea'
+import { useCatalogoRegiao } from '../hooks/useCatalogoRegiao'
 
 delete (L.Icon.Default.prototype as { _getIconUrl?: unknown })._getIconUrl
 L.Icon.Default.mergeOptions({
@@ -1643,11 +1644,13 @@ function LojaCard({ v, index, onOpen }: { v: Vendedor; index: number; onOpen: ()
   )
 }
 
-function LojasList({ vendedores, loading, tipoInicial, foraDaArea, modoRevisao, onExplorarArea }: {
+function LojasList({ vendedores, loading, tipoInicial, foraDaArea, modoRevisao, onExplorarArea, regiaoSemVendedor, cidade }: {
   vendedores: Vendedor[]
   loading: boolean
   tipoInicial: string | null
   foraDaArea: boolean
+  regiaoSemVendedor?: boolean
+  cidade?: string | null
   modoRevisao: boolean
   onExplorarArea: () => void
 }) {
@@ -1718,6 +1721,17 @@ function LojasList({ vendedores, loading, tipoInicial, foraDaArea, modoRevisao, 
         </div>
       </div>
 
+      {regiaoSemVendedor && (
+        <div role="status" style={{ margin: '14px 20px 0', padding: 14, borderRadius: 18, border: '1px solid #bae6fd', background: '#f0f9ff', color: '#075985' }}>
+          <div style={{ fontSize: 13, fontWeight: 900 }}>Ainda não atendemos {cidade}</div>
+          <div style={{ marginTop: 4, fontSize: 12, lineHeight: 1.45, fontWeight: 650 }}>
+            Estamos começando pela Baixada Santista. Praia Grande já tem vendedores ativos agora.
+          </div>
+          <button type="button" onClick={onExplorarArea} style={{ marginTop: 10, width: '100%', border: 0, borderRadius: 13, padding: '10px 12px', background: '#0ea5e9', color: '#fff', fontSize: 12, fontWeight: 900, cursor: 'pointer' }}>
+            Ver Praia Grande
+          </button>
+        </div>
+      )}
       {(foraDaArea || modoRevisao) && (
         <div role="status" style={{ margin: '14px 20px 0', padding: 14, borderRadius: 18, border: `1px solid ${modoRevisao ? '#c4b5fd' : '#fde68a'}`, background: modoRevisao ? '#f5f3ff' : '#fffbeb', color: modoRevisao ? '#6d28d9' : '#92400e' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
@@ -1811,7 +1825,8 @@ export default function PedirPage() {
     definirPosicaoManual,
   } = useGPS()
 
-  const vendedores = useCatalogo(s => s.vendedores)
+  // Fonte unica: ver useCatalogoRegiao. Nao voltar a ler o catalogo cru aqui.
+  const { vendedores, regiaoSemVendedor, cidade } = useCatalogoRegiao()
   const catalogoLoading = useCatalogo(s => s.loading)
   // Loja específica SÓ quando escolhida (?v=id). Sem isso, mostra a LISTA de
   // lojas disponíveis (antes caía direto na primeira loja — feio e confuso).
@@ -1840,6 +1855,8 @@ export default function PedirPage() {
         tipoInicial={params.get('tipo')}
         foraDaArea={foraDaArea}
         modoRevisao={modoRevisao}
+        regiaoSemVendedor={regiaoSemVendedor}
+        cidade={cidade}
         onExplorarArea={() => definirPosicaoManual(CLIENTE_FALLBACK[0], CLIENTE_FALLBACK[1])}
       />
     )

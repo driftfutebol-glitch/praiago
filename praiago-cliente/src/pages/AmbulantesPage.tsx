@@ -14,7 +14,6 @@ import { MapPin, List, Map as MapIcon, Navigation, ChevronRight, ChevronDown, Wi
 import { motion, AnimatePresence } from 'framer-motion'
 import { CLIENTE_FALLBACK, useGPS } from '../hooks/useGPS'
 import { useNearbyAmbulantes, type AmbulanteLive } from '../hooks/useNearbyAmbulantes'
-import { useCatalogo } from '../store/useCatalogo'
 import type { Vendedor } from '../lib/catalogo'
 import { getZone, BEACH_ZONES } from '../lib/praiagoZones'
 import CamadaPraia from '../components/CamadaPraia'
@@ -22,6 +21,7 @@ import { alertDialog } from '../lib/dialog'
 import { TEXTO_AREA_ATENDIDA, RAIO_PEDIDO_KM } from '../lib/serviceArea'
 
 import 'leaflet/dist/leaflet.css'
+import { useCatalogoRegiao } from '../hooks/useCatalogoRegiao'
 
 // ── Fix Leaflet default icons in Vite ────────────────────────
 // @ts-expect-error leaflet icon fix
@@ -398,7 +398,8 @@ export default function AmbulantesPage() {
     limparPosicaoManual,
   } = useGPS()
   const { ambulantes, total } = useNearbyAmbulantes(pos)
-  const vendedores = useCatalogo(s => s.vendedores)
+  // Fonte unica: ver useCatalogoRegiao. Nao voltar a ler o catalogo cru aqui.
+  const { vendedores } = useCatalogoRegiao()
   const [viewMode, setViewMode] = useState<'map' | 'list'>('map')
 
   // Lojas de ponto fixo pro mapa.
