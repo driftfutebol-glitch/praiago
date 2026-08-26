@@ -409,6 +409,20 @@ async function copiarTexto(texto: string): Promise<boolean> {
   }
 }
 
+/**
+ * Quanto ainda vale a pena esperar por um PIX, em ms.
+ *
+ * Um minuto de folga depois do vencimento, porque o webhook do gateway pode
+ * chegar logo depois do QR expirar. Data invalida devolve `undefined` para
+ * cair no padrao de `aguardarPagamento` — melhor uma espera padrao do que uma
+ * espera sem fim por causa de um NaN.
+ */
+function sobraDoPix(expiraEm: string): number | undefined {
+  const fim = new Date(expiraEm).getTime()
+  if (!Number.isFinite(fim)) return undefined
+  return Math.max(60_000, fim - Date.now() + 60_000)
+}
+
 function PixPagamentoModal({ cobranca, pedidoId, total, onPago, onClose }: {
   cobranca: PixCobranca
   pedidoId: string
@@ -448,7 +462,9 @@ function PixPagamentoModal({ cobranca, pedidoId, total, onPago, onClose }: {
   useEffect(() => {
     const parar = aguardarPagamento(pedidoId, {
       // O QR do PIX vence; esperar muito além disso é queimar chamada à toa.
-      orcamentoMs: Math.max(60_000, new Date(cobranca.expires_at).getTime() - Date.now() + 60_000),
+      // Data inválida vinda do gateway não pode virar espera infinita: cai
+      // para o padrão de 15 min do próprio aguardarPagamento.
+      orcamentoMs: sobraDoPix(cobranca.expires_at),
       aoTerminar: fim => {
         if (fim !== 'aprovado' || pagoRef.current) return
         pagoRef.current = true
