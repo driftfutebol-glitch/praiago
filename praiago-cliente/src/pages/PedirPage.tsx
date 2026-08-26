@@ -791,6 +791,10 @@ function dinheiro(v: number) {
 }
 
 function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gpsFonte }: { vendedor: Vendedor; onConfirm: (e: Entrega, pedidoId: string) => void; onClose: () => void; clientePos: [number, number]; gpsStatus: GPSStatus; gpsFonte: GPSFonte }) {
+  // Avisa assim que o modal abre, nao so quando a pessoa ja preencheu tudo.
+  const checagemAntecipada = checarPedido(clientePos[0], clientePos[1], vendedor.pos[0], vendedor.pos[1])
+  const longeDaLoja = checagemAntecipada.motivo === 'longe'
+
   const navigate = useNavigate()
   const [confirming, setConfirming] = useState(false)
   const [reta, setReta] = useState('')
@@ -1543,7 +1547,17 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
 
         {erro && <div style={{ fontSize: 13, color: '#ef4444', fontWeight: 800, marginBottom: 16, textAlign: 'center', background: 'rgba(239,68,68,0.1)', padding: 12, borderRadius: 12 }}>{erro}</div>}
 
-        <motion.button whileTap={{ scale: 0.96 }} onClick={handleConfirm} disabled={confirming} style={{ width: '100%', background: confirming ? '#22c55e' : 'linear-gradient(135deg, #0ea5e9, #22c55e)', border: 'none', borderRadius: 20, padding: '20px', color: '#fff', fontSize: 18, fontWeight: 900, cursor: confirming ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, boxShadow: confirming ? '0 0 20px rgba(34,197,94,0.6)' : '0 10px 30px rgba(14,165,233,0.4)', transition: 'all 0.3s' }}>
+        {longeDaLoja && (
+          <div role="status" style={{ marginBottom: 12, padding: 14, borderRadius: 16, border: '1px solid #fca5a5', background: '#fef2f2', color: '#991b1b' }}>
+            <div style={{ fontSize: 13, fontWeight: 900 }}>Muito longe para pedir aqui</div>
+            <div style={{ marginTop: 4, fontSize: 12, lineHeight: 1.45, fontWeight: 650 }}>
+              Você está a {checagemAntecipada.distanciaKm!.toFixed(1)} km desta loja.
+              Pedidos são aceitos até {RAIO_PEDIDO_KM} km. Você pode continuar
+              vendo o cardápio normalmente.
+            </div>
+          </div>
+        )}
+        <motion.button whileTap={{ scale: 0.96 }} onClick={handleConfirm} disabled={confirming || longeDaLoja} style={{ width: '100%', background: confirming ? '#22c55e' : 'linear-gradient(135deg, #0ea5e9, #22c55e)', border: 'none', borderRadius: 20, padding: '20px', color: '#fff', fontSize: 18, fontWeight: 900, cursor: confirming ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, boxShadow: confirming ? '0 0 20px rgba(34,197,94,0.6)' : '0 10px 30px rgba(14,165,233,0.4)', transition: 'all 0.3s' }}>
           {confirming ? <><Check size={24} /> {isPagamentoOnline(pagamento) ? 'Preparando pagamento...' : 'Pedido Enviado!'}</> : <><Send size={20} /> Fechar Pedido · R$ {dinheiro(total)}</>}
         </motion.button>
       </motion.div>

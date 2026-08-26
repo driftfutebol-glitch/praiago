@@ -16,7 +16,7 @@ import {
 import { useCatalogo } from '../store/useCatalogo'
 import SeletorRegiao from '../components/SeletorRegiao'
 import { useGPS } from '../hooks/useGPS'
-import { TEXTO_AREA_ATENDIDA, encontrarCidadeAtendida, type CidadeAtendida } from '../lib/serviceArea'
+import { TEXTO_AREA_ATENDIDA, encontrarCidadeAtendida, CENTROS_CIDADES, type CidadeAtendida } from '../lib/serviceArea'
 import { useStore } from '../store/useStore'
 import { theme } from '../lib/theme'
 import { supabase } from '../lib/supabase'
@@ -884,11 +884,22 @@ export default function HomePage() {
                     : soFavoritos ? 'Você ainda não favoritou ninguém' : 'Nada encontrado'}
               </div>
               <div style={{ fontSize: 13, fontWeight: 700, marginTop: 5 }}>
-                {catalogo.length === 0
+                {regiaoSemVendedor
+                  ? 'Estamos começando pela Baixada Santista. Praia Grande já tem vendedores ativos agora.'
+                  : catalogo.length === 0
                   ? 'Quando um restaurante ou ambulante publicar cardápio, ele aparece aqui.'
                   : soFavoritos ? 'Toque no coração de uma loja pra ela ficar salva aqui.'
                   : 'Tente outro termo ou limpe os filtros.'}
               </div>
+              {regiaoSemVendedor && (
+                <button
+                  type="button"
+                  onClick={() => definirPosicaoManual(CENTROS_CIDADES['Praia Grande'][0], CENTROS_CIDADES['Praia Grande'][1])}
+                  style={{ marginTop: 12, border: 0, borderRadius: 999, padding: '10px 20px', fontSize: 13, fontWeight: 900, color: '#fff', background: theme.color.primary, cursor: 'pointer' }}
+                >
+                  Ver Praia Grande
+                </button>
+              )}
               {catalogo.length > 0 && !soFavoritos && (busca || catSel) && (
                 <button
                   onClick={() => { setBusca(''); setCatSel(null) }}
