@@ -16,7 +16,7 @@ import {
 import { useCatalogo } from '../store/useCatalogo'
 import SeletorRegiao from '../components/SeletorRegiao'
 import { useGPS } from '../hooks/useGPS'
-import { TEXTO_AREA_ATENDIDA, encontrarCidadeAtendida, CENTROS_CIDADES, type CidadeAtendida } from '../lib/serviceArea'
+import { TEXTO_AREA_ATENDIDA, CENTROS_CIDADES, type CidadeAtendida } from '../lib/serviceArea'
 import { useStore } from '../store/useStore'
 import { theme } from '../lib/theme'
 import { supabase } from '../lib/supabase'
@@ -446,13 +446,10 @@ export default function HomePage() {
   // A regiao escolhida no seletor manda na lista. Nao mostramos vendedor de
   // outra cidade fingindo estar perto: lista vazia com aviso honesto e melhor
   // do que resultado que nunca vai entregar.
-  const catalogoDaRegiao = useMemo(() => (
-    cidadeAtendida
-      ? catalogo.filter(v => v.pos && encontrarCidadeAtendida(v.pos[0], v.pos[1]) === cidadeAtendida)
-      : catalogo
-  ), [catalogo, cidadeAtendida])
+  // Vendedor nunca some da Home: a regiao controla o pedido, nao a vitrine.
+  const catalogoDaRegiao = catalogo
 
-  const regiaoSemVendedor = Boolean(cidadeAtendida) && catalogoDaRegiao.length === 0 && catalogo.length > 0
+  const regiaoSemVendedor = false
 
 
   const restaurantes = useMemo(() => catalogoDaRegiao.filter(v => v.tipo === 'restaurante'), [catalogoDaRegiao])
