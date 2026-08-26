@@ -1,7 +1,5 @@
-import { useMemo } from 'react'
 import { useCatalogo } from '../store/useCatalogo'
 import { useGPS } from './useGPS'
-import { encontrarCidadeAtendida } from '../lib/serviceArea'
 import type { Vendedor } from '../lib/catalogo'
 
 // Fonte unica de vendedores visiveis.
@@ -32,17 +30,17 @@ export function useCatalogoRegiao(): CatalogoRegiao {
   const loading = useCatalogo(s => s.loading)
   const { cidadeAtendida } = useGPS()
 
-  const vendedores = useMemo(() => (
-    cidadeAtendida
-      ? todos.filter(v => v.pos && encontrarCidadeAtendida(v.pos[0], v.pos[1]) === cidadeAtendida)
-      : todos
-  ), [todos, cidadeAtendida])
+  // Vendedor NUNCA some da lista. Quem esta em Santos ve as lojas de Praia
+  // Grande, abre o cardapio e o mapa. O que a regiao controla e o PEDIDO, nao
+  // a visibilidade — mesmo modelo do iFood.
+  const vendedores = todos
 
   return {
     vendedores,
     todos,
     loading,
     cidade: cidadeAtendida ?? null,
-    regiaoSemVendedor: Boolean(cidadeAtendida) && vendedores.length === 0 && todos.length > 0,
+    // Mantido para as telas que avisam sobre area de entrega; nunca esconde.
+    regiaoSemVendedor: false,
   }
 }
