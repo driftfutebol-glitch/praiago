@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react'
 import { CheckCircle2, ChevronRight, Zap, ChefHat, Bike,
-         Search, MapPin, Truck, Package, QrCode, CreditCard, Banknote } from 'lucide-react'
+         Search, MapPin, Truck, Package, QrCode, CreditCard, Banknote, Navigation } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useOrders, type Status } from '../store/useOrders'
+import { useOrders, type Status, type Pedido } from '../store/useOrders'
 import { alertDialog, promptDialog, confirmDialog } from '../lib/dialog'
+import { supabase } from '../lib/supabase'
+import { getSessao } from '../lib/auth'
+import LocalizacaoClienteModal from '../components/LocalizacaoClienteModal'
 
 const STATUS_CFG: Record<Status, { label: string; bg: string; cor: string; icon: any; glow: string }> = {
   novo:       { label: 'Novo',       bg: 'rgba(239,68,68,0.15)',   cor: '#f87171', icon: Zap,         glow: 'rgba(239,68,68,0.3)'   },
@@ -40,9 +43,27 @@ export default function PedidosPage() {
   const markSeen = useOrders(s => s.markSeen)
   const [tab,    setTab]     = useState<Status | 'todos'>('todos')
   const [busca,  setBusca]   = useState('')
+  const [pedidoNoMapa, setPedidoNoMapa] = useState<Pedido | null>(null)
+  const [posicaoLoja, setPosicaoLoja] = useState<[number, number] | null>(null)
 
   // Ao abrir a tela, zera o contador de "novos" da sidebar
   useEffect(() => { markSeen() }, [markSeen])
+
+  // A posição da loja serve só para enquadrar o mapa e desenhar o trajeto.
+  // Uma leitura por visita à tela: não muda no meio do expediente.
+  useEffect(() => {
+    const sessao = getSessao()
+    if (!sessao?.id) return
+    let vivo = true
+    supabase.from('profiles').select('lat,lng').eq('id', sessao.id).maybeSingle()
+      .then(({ data }) => {
+        if (!vivo || !data) return
+        const lat = Number(data.lat)
+        const lng = Number(data.lng)
+        if (Number.isFinite(lat) && Number.isFinite(lng)) setPosicaoLoja([lat, lng])
+      })
+    return () => { vivo = false }
+  }, [])
 
   const filtrados = pedidos.filter(p => {
     const matchTab   = tab === 'todos' || p.status === tab
@@ -217,6 +238,24 @@ export default function PedidosPage() {
                   </div>
                 )}
 
+                {/* Onde levar. Abre o mapa com a posição ao vivo do cliente
+                    quando ele está compartilhando, e com o ponto do pedido
+                    quando não está — dizendo qual das duas é. */}
+                {p.status !== 'entregue' && (
+                  <button
+                    type="button"
+                    onClick={() => setPedidoNoMapa(p)}
+                    style={{
+                      width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                      marginBottom: 18, padding: '11px 0', borderRadius: 14, cursor: 'pointer',
+                      border: '1px solid rgba(14,165,233,0.3)', background: 'rgba(14,165,233,0.08)',
+                      color: '#0284c7', fontSize: 13, fontWeight: 800, position: 'relative', zIndex: 1,
+                    }}
+                  >
+                    <Navigation size={16} /> Localização do cliente
+                  </button>
+                )}
+
                 {/* Botões de ação */}
                 <div style={{ position: 'relative', zIndex: 1 }}>
                   {p.status === 'novo' && (
@@ -274,6 +313,17 @@ export default function PedidosPage() {
           })}
         </AnimatePresence>
       </motion.div>
+
+      <AnimatePresence>
+        {pedidoNoMapa && (
+          <LocalizacaoClienteModal
+            key={pedidoNoMapa.id}
+            pedido={pedidoNoMapa}
+            posicaoLoja={posicaoLoja}
+            onClose={() => setPedidoNoMapa(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

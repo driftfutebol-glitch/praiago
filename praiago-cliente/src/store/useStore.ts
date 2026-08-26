@@ -5,6 +5,10 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { supabase } from '../lib/supabase'
 import { useCatalogo } from './useCatalogo'
+import { dentroDoPrazo, JANELA_REEMBOLSO_HORAS } from '../lib/reembolso'
+
+/** O que a tela precisa saber depois de pedir ajuda ou reembolso. */
+export type ResultadoAjuda = { ok: boolean; erro?: string }
 
 // Lookups usam o catálogo REAL (banco) via useCatalogo, não mais o estático.
 function getVendedor(id: string | null | undefined) {
@@ -46,6 +50,14 @@ export type Pedido = {
   data: number
   status: 'aguardando_pagamento' | 'enviado' | 'preparando' | 'a_caminho' | 'entregue' | 'cancelado'
   entrega?: Entrega
+  // Marcos de tempo que decidem a janela de reembolso (4h). Vêm do servidor;
+  // o cálculo em si mora em lib/reembolso.ts e, de verdade, no banco.
+  pagoEm?: number | null
+  entregueEm?: number | null
+  /** Estado do pagamento no gateway: só reembolsa o que foi pago online. */
+  pagamentoStatus?: string
+  /** nenhum | solicitado | aprovado | rejeitado | concluido */
+  reembolsoStatus?: string
 }
 
 export type Notificacao = {
@@ -84,8 +96,7 @@ type State = {
   criarPedido: (entrega?: Entrega, options?: { limparCarrinho?: boolean; desconto?: { codigo: string; valor: number; motivo?: string } }) => Promise<Pedido | null>
   sincronizarPedidos: () => Promise<void>
   cancelarPedido: (pedidoId: string) => Promise<boolean>
-  removerPedido: (pedidoId: string) => void
-  solicitarAjudaPedido: (pedidoId: string, tipo: 'ajuda' | 'reembolso') => Promise<boolean>
+  solicitarAjudaPedido: (pedidoId: string, tipo: 'ajuda' | 'reembolso') => Promise<ResultadoAjuda>
 
   // notificações
   addNotif: (n: Omit<Notificacao, 'id' | 'ts' | 'lida'>) => void
@@ -380,7 +391,7 @@ export const useStore = create<State>()(
 
         const { data, error } = await supabase
           .from('pedidos')
-          .select('id,status,total,subtotal_amount,discount_amount,discount_code,vendedor_id,vendedor_nome,itens,reta,barraca,pagamento,created_at')
+          .select('id,status,total,subtotal_amount,discount_amount,discount_code,vendedor_id,vendedor_nome,itens,reta,barraca,pagamento,created_at,paid_at,entrega_confirmada_em,payment_status,reembolso_status')
           .eq('cliente_id', sessao.id)
           .order('created_at', { ascending: false })
           .limit(40)
@@ -411,6 +422,10 @@ export const useStore = create<State>()(
             cupom: row.discount_code ?? null,
             data: new Date(String(row.created_at)).getTime(),
             status: mapDbStatusToPedidoStatus(String(row.status ?? 'novo')),
+            pagoEm: row.paid_at ? new Date(String(row.paid_at)).getTime() : null,
+            entregueEm: row.entrega_confirmada_em ? new Date(String(row.entrega_confirmada_em)).getTime() : null,
+            pagamentoStatus: String(row.payment_status ?? ''),
+            reembolsoStatus: String(row.reembolso_status ?? 'nenhum'),
             entrega: {
               reta: String(row.reta ?? ''),
               barraca: String(row.barraca ?? ''),
@@ -485,13 +500,20 @@ export const useStore = create<State>()(
         return true
       },
 
-      removerPedido: (pedidoId) => set(s => ({
-        pedidos: s.pedidos.filter(p => p.id !== pedidoId),
-      })),
-
       solicitarAjudaPedido: async (pedidoId, tipo) => {
         const pedido = get().pedidos.find(p => p.id === pedidoId)
-        if (!pedido) return false
+        if (!pedido) return { ok: false, erro: 'Pedido não encontrado.' }
+
+        // Reembolso tem prazo (4h) e regra de banco. Conferir aqui evita abrir
+        // um ticket que o servidor vai recusar logo em seguida — o cliente
+        // ficaria com a impressão de que pediu, e ninguém pediu nada.
+        if (tipo === 'reembolso' && !dentroDoPrazo(pedido)) {
+          return {
+            ok: false,
+            erro: `O prazo de ${JANELA_REEMBOLSO_HORAS} horas para pedir reembolso deste pedido já passou. Fale com a gente pelo botão Ajuda.`,
+          }
+        }
+
         const assunto = tipo === 'reembolso' ? `Solicitacao de reembolso ${pedidoId}` : `Ajuda com pedido ${pedidoId}`
         const mensagem = tipo === 'reembolso'
           ? `Cliente solicitou analise de reembolso do pedido ${pedidoId} de ${pedido.vendedorNome}. Total: R$ ${pedido.total.toFixed(2)}. Status atual: ${pedido.status}.`
@@ -510,16 +532,24 @@ export const useStore = create<State>()(
 
         if (error) {
           console.error('Erro ao abrir atendimento do pedido', error)
-          return false
+          return { ok: false, erro: 'Não foi possível abrir o atendimento agora. Tente de novo.' }
         }
 
-        // marca o pedido como reembolso SOLICITADO (o admin aprova/nega no painel)
+        // Marca o pedido como reembolso SOLICITADO (o admin aprova/nega no
+        // painel). O gatilho do banco confere de novo o prazo e o pagamento —
+        // se recusar, a tela precisa dizer o motivo real, não um "pronto!".
         if (tipo === 'reembolso') {
-          await supabase.from('pedidos').update({
+          const { error: erroReembolso } = await supabase.from('pedidos').update({
             reembolso_status: 'solicitado',
             reembolso_motivo: `Solicitado pelo cliente. Total R$ ${pedido.total.toFixed(2)}.`,
-            reembolso_solicitado_em: new Date().toISOString(),
           }).eq('id', pedidoId)
+
+          if (erroReembolso) {
+            console.error('Erro ao marcar reembolso', { code: erroReembolso.code })
+            return { ok: false, erro: erroReembolso.message || 'Não foi possível registrar o reembolso.' }
+          }
+
+          set(s => ({ pedidos: s.pedidos.map(p => p.id === pedidoId ? { ...p, reembolsoStatus: 'solicitado' } : p) }))
         }
 
         set(s => ({
@@ -531,7 +561,7 @@ export const useStore = create<State>()(
             lida: false,
           }, ...s.notificacoes],
         }))
-        return true
+        return { ok: true }
       },
 
       addNotif: (n) => set(s => ({

@@ -13,6 +13,7 @@ import {
   PackageCheck,
   Phone,
   QrCode,
+  Radio,
   RouteOff,
   ShoppingBag,
   ShoppingCart,
@@ -20,12 +21,13 @@ import {
   UserRound,
   X,
 } from 'lucide-react'
-import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from 'react-leaflet'
+import { Circle, MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from 'react-leaflet'
 import { AnimatePresence, motion } from 'framer-motion'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useRoute } from '../hooks/useRoute'
 import { useOrderNotifications, type IncomingOrder } from '../hooks/useOrderNotifications'
+import { useLocalizacaoCliente } from '../hooks/useLocalizacaoCliente'
 import { criarMonitorSentido, type SentidoStatus } from '../lib/trafego'
 import { getSessao } from '../lib/auth'
 import { alertDialog, promptDialog } from '../lib/dialog'
@@ -176,9 +178,21 @@ function LocationModal({ order, onClose }: { order: Pedido; onClose: () => void 
   const watchId = useRef<number | null>(null)
   const directionMonitor = useRef(criarMonitorSentido())
   const [direction, setDirection] = useState<SentidoStatus>('indefinido')
-  const customerPosition = order.clienteLat !== null && order.clienteLng !== null
+
+  // Onde o cliente estava quando pediu. Na praia isso envelhece rapido.
+  const pontoDoPedido = order.clienteLat !== null && order.clienteLng !== null
     ? [order.clienteLat, order.clienteLng] as [number, number]
     : null
+
+  // Onde o cliente esta AGORA, se ele ligou o compartilhamento no app dele.
+  // Quando existe, manda: e a diferenca entre achar a pessoa e procurar por
+  // toda a faixa de areia.
+  const { posicao: clienteAoVivo, ativo: clienteAoVivoAtivo } = useLocalizacaoCliente(order.id)
+
+  const customerPosition: [number, number] | null = clienteAoVivo
+    ? [clienteAoVivo.lat, clienteAoVivo.lng]
+    : pontoDoPedido
+
   const route = useRoute(myPosition, customerPosition)
 
   useEffect(() => {
@@ -217,7 +231,14 @@ function LocationModal({ order, onClose }: { order: Pedido; onClose: () => void 
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', flexDirection: 'column', background: '#f4f7fa' }}>
       <header style={{ minHeight: 68, display: 'flex', alignItems: 'center', gap: 12, padding: '10px 15px', borderBottom: '1px solid #dfe6ed', background: '#fff' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ color: '#132238', fontSize: 15, fontWeight: 900 }}>{shortOrderId(order.id)}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ color: '#132238', fontSize: 15, fontWeight: 900 }}>{shortOrderId(order.id)}</span>
+            {clienteAoVivoAtivo && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 999, background: '#eaf8ef', border: '1px solid #a7dfbd', color: '#148447', fontSize: 10, fontWeight: 900, letterSpacing: 0.4 }}>
+                <Radio size={11} /> AO VIVO
+              </span>
+            )}
+          </div>
           <div style={{ marginTop: 3, overflow: 'hidden', color: '#617089', fontSize: 12, fontWeight: 650, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{meetingPoint(order)}</div>
         </div>
         <button type="button" className="icon-button" onClick={onClose} aria-label="Fechar mapa"><X size={19} /></button>
@@ -233,7 +254,21 @@ function LocationModal({ order, onClose }: { order: Pedido; onClose: () => void 
             />
             {myPosition && customerPosition && <FitBounds from={myPosition} to={customerPosition} />}
             {myPosition && <Marker position={myPosition} icon={sellerIcon}><Popup>Sua posição</Popup></Marker>}
-            {customerPosition && <Marker position={customerPosition} icon={customerIcon}><Popup>Ponto indicado pelo cliente</Popup></Marker>}
+            {customerPosition && (
+              <Marker position={customerPosition} icon={customerIcon}>
+                <Popup>{clienteAoVivoAtivo ? 'Cliente agora (ao vivo)' : 'Ponto indicado pelo cliente'}</Popup>
+              </Marker>
+            )}
+            {/* Circulo do erro de GPS do cliente: mostra que o ponto e uma
+                area, nao um alfinete. Evita o ambulante jurar que o cliente
+                nao esta ali quando ele esta 20 m ao lado. */}
+            {clienteAoVivo && clienteAoVivo.precisao > 0 && (
+              <Circle
+                center={[clienteAoVivo.lat, clienteAoVivo.lng]}
+                radius={Math.min(clienteAoVivo.precisao, 120)}
+                pathOptions={{ color: '#148447', fillColor: '#148447', fillOpacity: 0.12, weight: 1 }}
+              />
+            )}
             {myPosition && customerPosition && (
               <Polyline
                 positions={route?.coords?.length ? route.coords : [myPosition, customerPosition]}
@@ -274,6 +309,11 @@ function LocationModal({ order, onClose }: { order: Pedido; onClose: () => void 
 
       <footer style={{ padding: 14, borderTop: '1px solid #dfe6ed', background: '#fff' }}>
         {gpsUnavailable && canNavigate && <div style={{ marginBottom: 9, color: '#b54708', fontSize: 11, fontWeight: 700 }}>Seu GPS não está disponível; a localização do cliente continua visível.</div>}
+        {canNavigate && (
+          clienteAoVivoAtivo
+            ? <div style={{ marginBottom: 9, color: '#148447', fontSize: 11, fontWeight: 750 }}>Posição do cliente ao vivo, atualizada agora (±{clienteAoVivo?.precisao} m).</div>
+            : <div style={{ marginBottom: 9, color: '#617089', fontSize: 11, fontWeight: 700 }}>Ponto do momento do pedido. Peça ao cliente para ligar a localização em tempo real no app dele.</div>
+        )}
         <div style={{ display: 'flex', gap: 8 }}>
           {order.clienteTelefone && (
             <a href={`tel:${order.clienteTelefone.replace(/\D/g, '')}`} className="secondary-button" style={{ flex: 1, color: '#132238', textDecoration: 'none' }}>

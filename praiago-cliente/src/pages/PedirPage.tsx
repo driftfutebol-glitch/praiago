@@ -13,7 +13,8 @@ import { criarMonitorSentido, type SentidoStatus } from '../lib/trafego'
 import { broadcastOrder } from '../hooks/useOrderBroadcast'
 import { pertenceACategoria, type Vendedor } from '../lib/catalogo'
 import { checarPedido, RAIO_PEDIDO_KM } from '../lib/serviceArea'
-import { criarPix, isPagamentoOnline, pagarComCartao, mensagemRecusaCartao, verificarPagamento, type PixCobranca } from '../lib/pagamento'
+import { criarPix, isPagamentoOnline, pagarComCartao, mensagemRecusaCartao, type PixCobranca } from '../lib/pagamento'
+import { aguardarPagamento } from '../lib/aguardarPagamento'
 import { obterTaxaCredito } from '../store/useStore'
 import { tokenizarCartao } from '../lib/pagamentosdk'
 import { labelHorario } from '../lib/horario'
@@ -439,44 +440,24 @@ function PixPagamentoModal({ cobranca, pedidoId, total, onPago, onClose }: {
     return () => { vivo = false }
   }, [cobranca.qr_code])
 
-  // Confirmação ao vivo: realtime na linha do pedido + poll de segurança.
-  // Quando o webhook aprovar o pagamento, o app comemora e segue sozinho.
+  // Confirmação ao vivo do PIX. O realtime é o sinal principal; a pergunta ao
+  // gateway existe porque o webhook pode atrasar (ou nem estar configurado) e
+  // aí o cliente já pagou com a tela girando à toa. Tudo isso mora em
+  // `aguardarPagamento`, que também sabe parar: aba escondida não pergunta,
+  // o intervalo cresce, e pedido que sumiu encerra na hora.
   useEffect(() => {
-    function confirmar(novo: { payment_status?: string | null }) {
-      if (pagoRef.current) return
-      if (novo?.payment_status === 'aprovado') {
+    const parar = aguardarPagamento(pedidoId, {
+      // O QR do PIX vence; esperar muito além disso é queimar chamada à toa.
+      orcamentoMs: Math.max(60_000, new Date(cobranca.expires_at).getTime() - Date.now() + 60_000),
+      aoTerminar: fim => {
+        if (fim !== 'aprovado' || pagoRef.current) return
         pagoRef.current = true
         setPago(true)
         setTimeout(onPago, 2000)
-      }
-    }
-
-    const ch = supabase
-      .channel(`pix_${pedidoId}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pedidos', filter: `id=eq.${pedidoId}` }, payload => {
-        confirmar(payload.new as { payment_status?: string | null })
-      })
-      .subscribe()
-
-    // Pergunta pro GATEWAY, nao so pra nossa tabela. Ler o banco so funciona se
-    // o webhook do gateway tiver chegado — se ele atrasar (ou nao estiver
-    // configurado), o cliente ja pagou e a tela ficava girando pra sempre.
-    // Esta consulta confirma na fonte e grava o resultado.
-    const poll = setInterval(async () => {
-      if (pagoRef.current) return
-      try {
-        const r = await verificarPagamento(pedidoId)
-        confirmar({ payment_status: r.payment_status })
-      } catch {
-        // Rede instavel: cai pro que o banco sabe e tenta o gateway de novo
-        // na proxima volta. Nunca deixa o cliente presoo sem saida.
-        const { data } = await supabase.from('pedidos').select('payment_status').eq('id', pedidoId).maybeSingle()
-        if (data) confirmar(data)
-      }
-    }, 5000)
-
-    return () => { supabase.removeChannel(ch); clearInterval(poll) }
-  }, [pedidoId, onPago])
+      },
+    })
+    return parar
+  }, [pedidoId, onPago, cobranca.expires_at])
 
   // Contagem regressiva até o PIX expirar
   useEffect(() => {
@@ -606,35 +587,24 @@ function CartaoPagamentoModal({ tipo, pedidoId, total, emailCliente, onPago, onC
   const [emAnalise, setEmAnalise] = useState(false)
   const aprovadoRef = useRef(false)
 
-  // Segurança extra: se cair em "em análise", o realtime avisa quando aprovar.
-  // O realtime sozinho nao basta — ele so dispara se o webhook do gateway
-  // tiver chegado. Por isso tambem perguntamos direto ao gateway em intervalo.
+  // Segurança extra: se cair em "em análise", espera a aprovação chegar. Mesma
+  // mecânica do PIX — realtime na frente, pergunta ao gateway como rede de
+  // segurança, com intervalo que cresce e parada garantida.
   useEffect(() => {
     if (!emAnalise) return
 
-    function confirmar(status?: string | null) {
-      if (status !== 'aprovado' || aprovadoRef.current) return
-      aprovadoRef.current = true
-      setAprovado(true)
-      setTimeout(onPago, 2000)
-    }
-
-    const ch = supabase
-      .channel(`card_${pedidoId}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pedidos', filter: `id=eq.${pedidoId}` }, payload => {
-        confirmar((payload.new as { payment_status?: string | null })?.payment_status)
-      })
-      .subscribe()
-
-    const poll = setInterval(async () => {
-      if (aprovadoRef.current) return
-      try {
-        const r = await verificarPagamento(pedidoId)
-        confirmar(r.payment_status)
-      } catch { /* rede instavel: tenta de novo na proxima volta */ }
-    }, 5000)
-
-    return () => { supabase.removeChannel(ch); clearInterval(poll) }
+    const parar = aguardarPagamento(pedidoId, {
+      // Análise de cartão resolve em minutos. Passou disso, o cliente
+      // acompanha por Meus Pedidos em vez de ficar preso nesta tela.
+      orcamentoMs: 5 * 60_000,
+      aoTerminar: fim => {
+        if (fim !== 'aprovado' || aprovadoRef.current) return
+        aprovadoRef.current = true
+        setAprovado(true)
+        setTimeout(onPago, 2000)
+      },
+    })
+    return parar
   }, [emAnalise, pedidoId, onPago])
 
   async function pagar() {
@@ -1540,7 +1510,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
           {modo === 'tempo_real' && (
             <div style={{ marginTop: 10, fontSize: 12, lineHeight: 1.45, color: radarReal ? '#15803d' : '#b45309', background: radarReal ? '#ecfdf5' : '#fffbeb', border: `1px solid ${radarReal ? '#bbf7d0' : '#fde68a'}`, borderRadius: 14, padding: '10px 12px', fontWeight: 700 }}>
               {radarReal
-                ? `Radar pronto: vamos enviar sua posicao ${gpsFonte === 'gps' ? 'GPS' : 'salva'} para o vendedor.`
+                ? `Radar pronto: sua posicao ${gpsFonte === 'gps' ? 'GPS' : 'salva'} vai para o vendedor e continua atualizando em Meus Pedidos ate a entrega. Voce pode desligar quando quiser.`
                 : `Buscando permissao de localizacao (${gpsStatus}). Ative o GPS do celular para fechar pelo Radar.`}
             </div>
           )}

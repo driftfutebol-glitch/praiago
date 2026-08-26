@@ -19,6 +19,19 @@ export type Pedido = {
   entregador?: string
   pagamento: string
   ts: number
+  // Onde entregar. `lat`/`lng` e o ponto do momento do pedido; durante a
+  // entrega o cliente pode transmitir a posicao ao vivo (useLocalizacaoCliente),
+  // e ai ela vale mais do que isto aqui.
+  lat: number | null
+  lng: number | null
+  reta: string
+  barraca: string
+  clienteTelefone: string
+}
+
+function coordenada(valor: unknown, limite: number): number | null {
+  const n = Number(valor)
+  return Number.isFinite(n) && Math.abs(n) <= limite ? n : null
 }
 
 const NEXT: Record<Status, Status | null> = {
@@ -59,7 +72,12 @@ export const useOrders = create<State>((set, get) => ({
       status: row.status as Status,
       hora: 'agora',
       pagamento: row.pagamento,
-      ts: new Date(row.created_at).getTime()
+      ts: new Date(row.created_at).getTime(),
+      lat: coordenada(row.lat, 90),
+      lng: coordenada(row.lng, 180),
+      reta: String(row.reta ?? ''),
+      barraca: String(row.barraca ?? ''),
+      clienteTelefone: String(row.cliente_telefone ?? ''),
     }))
     set({ pedidos: formatados })
   },

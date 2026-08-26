@@ -92,3 +92,32 @@ export function mensagemRecusaCartao(detail: string): string {
 export async function verificarPagamento(pedidoId: string): Promise<PagamentoCheck> {
   return chamar<PagamentoCheck>('pagarme-check-payment', { pedido_id: pedidoId }, 'Nao foi possivel verificar o pagamento.')
 }
+
+export type ChecagemSegura =
+  | { estado: 'ok'; paymentStatus: string; pedidoStatus: string }
+  | { estado: 'sumiu' }    // 404: o pedido nao existe mais (expirou e foi arquivado)
+  | { estado: 'falhou' }   // rede/gateway fora do ar — vale tentar de novo depois
+
+/**
+ * Mesma consulta de `verificarPagamento`, mas separando "o pedido nao existe"
+ * de "nao consegui perguntar agora". Quem repete a pergunta precisa saber a
+ * diferenca: no primeiro caso insistir e desperdicio puro, porque a resposta
+ * nunca vai mudar.
+ */
+export async function verificarPagamentoSeguro(pedidoId: string): Promise<ChecagemSegura> {
+  const { data, error } = await supabase.functions.invoke<PagamentoCheck>('pagarme-check-payment', {
+    body: { pedido_id: pedidoId },
+  })
+
+  if (error) {
+    if (error instanceof FunctionsHttpError && error.context?.status === 404) return { estado: 'sumiu' }
+    return { estado: 'falhou' }
+  }
+  if (!data) return { estado: 'falhou' }
+
+  return {
+    estado: 'ok',
+    paymentStatus: String(data.payment_status ?? ''),
+    pedidoStatus: String(data.pedido_status ?? ''),
+  }
+}
