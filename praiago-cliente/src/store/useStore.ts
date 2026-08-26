@@ -514,6 +514,25 @@ export const useStore = create<State>()(
           }
         }
 
+        // Marca o pedido como reembolso SOLICITADO (o admin aprova/nega no
+        // painel). Isto vem ANTES do ticket de proposito: o gatilho do banco
+        // confere de novo o prazo e o pagamento, e se ele recusar nao pode
+        // sobrar um chamado no atendimento dizendo que houve pedido de
+        // reembolso — o suporte iria atras de algo que nunca aconteceu.
+        if (tipo === 'reembolso') {
+          const { error: erroReembolso } = await supabase.from('pedidos').update({
+            reembolso_status: 'solicitado',
+            reembolso_motivo: `Solicitado pelo cliente. Total R$ ${pedido.total.toFixed(2)}.`,
+          }).eq('id', pedidoId)
+
+          if (erroReembolso) {
+            console.error('Erro ao marcar reembolso', { code: erroReembolso.code })
+            return { ok: false, erro: erroReembolso.message || 'Não foi possível registrar o reembolso.' }
+          }
+
+          set(s => ({ pedidos: s.pedidos.map(p => p.id === pedidoId ? { ...p, reembolsoStatus: 'solicitado' } : p) }))
+        }
+
         const assunto = tipo === 'reembolso' ? `Solicitacao de reembolso ${pedidoId}` : `Ajuda com pedido ${pedidoId}`
         const mensagem = tipo === 'reembolso'
           ? `Cliente solicitou analise de reembolso do pedido ${pedidoId} de ${pedido.vendedorNome}. Total: R$ ${pedido.total.toFixed(2)}. Status atual: ${pedido.status}.`
@@ -532,24 +551,12 @@ export const useStore = create<State>()(
 
         if (error) {
           console.error('Erro ao abrir atendimento do pedido', error)
-          return { ok: false, erro: 'Não foi possível abrir o atendimento agora. Tente de novo.' }
-        }
-
-        // Marca o pedido como reembolso SOLICITADO (o admin aprova/nega no
-        // painel). O gatilho do banco confere de novo o prazo e o pagamento —
-        // se recusar, a tela precisa dizer o motivo real, não um "pronto!".
-        if (tipo === 'reembolso') {
-          const { error: erroReembolso } = await supabase.from('pedidos').update({
-            reembolso_status: 'solicitado',
-            reembolso_motivo: `Solicitado pelo cliente. Total R$ ${pedido.total.toFixed(2)}.`,
-          }).eq('id', pedidoId)
-
-          if (erroReembolso) {
-            console.error('Erro ao marcar reembolso', { code: erroReembolso.code })
-            return { ok: false, erro: erroReembolso.message || 'Não foi possível registrar o reembolso.' }
-          }
-
-          set(s => ({ pedidos: s.pedidos.map(p => p.id === pedidoId ? { ...p, reembolsoStatus: 'solicitado' } : p) }))
+          // O reembolso ja esta registrado no pedido e o admin ve isso no
+          // painel; o que falhou foi so o chamado. Nao vale desfazer nem
+          // mandar o cliente pedir de novo.
+          return tipo === 'reembolso'
+            ? { ok: true }
+            : { ok: false, erro: 'Não foi possível abrir o atendimento agora. Tente de novo.' }
         }
 
         set(s => ({
