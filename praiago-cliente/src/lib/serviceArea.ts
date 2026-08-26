@@ -19,6 +19,13 @@ const AREAS: AreaCidade[] = [
   { nome: 'Praia Grande', centro: [-24.0226, -46.4628], norte: -23.965, sul: -24.085, leste: -46.35, oeste: -46.62 },
 ]
 
+// Centro de cada cidade, para o seletor de regiao da Home.
+export const CENTROS_CIDADES: Record<CidadeAtendida, [number, number]> = {
+  Santos: [-23.9608, -46.3336],
+  'São Vicente': [-23.9631, -46.3919],
+  'Praia Grande': [-24.0226, -46.4628],
+}
+
 export const LOCAL_REVISAO: [number, number] = [-24.0020, -46.4085]
 
 function distanciaQuadrada(lat: number, lng: number, centro: [number, number]) {

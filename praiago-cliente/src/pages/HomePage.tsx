@@ -14,6 +14,9 @@ import {
   type Vendedor,
 } from '../lib/catalogo'
 import { useCatalogo } from '../store/useCatalogo'
+import SeletorRegiao from '../components/SeletorRegiao'
+import { useGPS } from '../hooks/useGPS'
+import { TEXTO_AREA_ATENDIDA, encontrarCidadeAtendida, type CidadeAtendida } from '../lib/serviceArea'
 import { useStore } from '../store/useStore'
 import { theme } from '../lib/theme'
 import { supabase } from '../lib/supabase'
@@ -435,6 +438,8 @@ export default function HomePage() {
   const naoLidas = useStore(s => s.notificacoes.filter(n => !n.lida).length)
   const marcarTodasLidas = useStore(s => s.marcarTodasLidas)
   const addItem = useStore(s => s.addItem)
+  const [regiaoAberta, setRegiaoAberta] = useState(false)
+  const { cidadeAtendida, definirPosicaoManual } = useGPS()
   const catalogo = useCatalogo(s => s.vendedores)
   const loading = useCatalogo(s => s.loading)
 
@@ -449,12 +454,23 @@ export default function HomePage() {
       .slice(0, 4)
   ), [todosProdutos])
 
+  // A regiao escolhida no seletor manda na lista. Nao mostramos vendedor de
+  // outra cidade fingindo estar perto: lista vazia com aviso honesto e melhor
+  // do que resultado que nunca vai entregar.
+  const catalogoDaRegiao = useMemo(() => (
+    cidadeAtendida
+      ? catalogo.filter(v => v.pos && encontrarCidadeAtendida(v.pos[0], v.pos[1]) === cidadeAtendida)
+      : catalogo
+  ), [catalogo, cidadeAtendida])
+
+  const regiaoSemVendedor = Boolean(cidadeAtendida) && catalogoDaRegiao.length === 0 && catalogo.length > 0
+
   const vendedores = useMemo(() => {
     // Busca sem acento dos dois lados: quem digita "acai" no celular (teclado sem
     // acento) tem que achar "Açaí". So baixar a caixa nao resolve, porque
     // 'açaí'.includes('acai') e false.
     const termo = semAcento(busca)
-    return catalogo.filter(v => {
+    return catalogoDaRegiao.filter(v => {
       if (soFavoritos && !favoritos.includes(v.id)) return false
       if (catSel && !v.produtos.some(p => pertenceACategoria(p.categoria, catSel))) return false
       if (!termo) return true
@@ -593,7 +609,11 @@ export default function HomePage() {
       </header>
 
       <div style={{ padding: '4px 18px 0', display: 'grid', gap: 12 }}>
-        <CartaoLocal cidade="Baixada Santista" descricao="Santos, São Vicente e Praia Grande" />
+        <CartaoLocal
+          cidade={cidadeAtendida ?? 'Baixada Santista'}
+          descricao={cidadeAtendida ? 'Toque para trocar de região' : TEXTO_AREA_ATENDIDA}
+          onClick={() => setRegiaoAberta(true)}
+        />
 
         <div style={{ display: 'flex', gap: 10 }}>
           <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
@@ -857,9 +877,11 @@ export default function HomePage() {
               {/* Com filtro ativo o catalogo pode ate estar cheio: dizer "nenhum vendedor
                   ainda" faz o cliente achar que o app esta vazio em vez de limpar a busca. */}
               <div style={{ fontSize: 15, fontWeight: 900, color: '#0f172a' }}>
-                {catalogo.length === 0
-                  ? 'Nenhum vendedor disponível ainda'
-                  : soFavoritos ? 'Você ainda não favoritou ninguém' : 'Nada encontrado'}
+                {regiaoSemVendedor
+                  ? `Ainda não atendemos ${cidadeAtendida}`
+                  : catalogo.length === 0
+                    ? 'Nenhum vendedor disponível ainda'
+                    : soFavoritos ? 'Você ainda não favoritou ninguém' : 'Nada encontrado'}
               </div>
               <div style={{ fontSize: 13, fontWeight: 700, marginTop: 5 }}>
                 {catalogo.length === 0
@@ -912,6 +934,13 @@ export default function HomePage() {
           </section>
         )}
       </main>
+      <SeletorRegiao
+        aberto={regiaoAberta}
+        vendedores={catalogo}
+        cidadeAtual={cidadeAtendida as CidadeAtendida | null}
+        onEscolher={(_cidade, centro) => definirPosicaoManual(centro[0], centro[1])}
+        onFechar={() => setRegiaoAberta(false)}
+      />
     </div>
   )
 }

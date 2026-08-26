@@ -24,6 +24,7 @@ import { logout, useSessao } from '../lib/auth'
 import { alertDialog, confirmDialog, promptDialog } from '../lib/dialog'
 import { supabase } from '../lib/supabase'
 import { sellerPhotoUrl } from '../lib/sellerPhotos'
+import { TEXTO_AREA_ATENDIDA } from '../lib/serviceArea'
 
 type Profile = {
   nome: string | null
@@ -367,6 +368,17 @@ export default function PerfilPage() {
         <LogOut size={18} />
         Sair da conta
       </button>
+
+      {/* AREA_ATENDIDA_INFO — a Apple pede que a cobertura fique clara no app */}
+      <div style={{ marginTop: 12, padding: '12px 14px', borderRadius: 14, background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+        <div style={{ fontSize: 12.5, fontWeight: 900, color: '#166534', marginBottom: 4 }}>
+          Onde o PraiaGo opera
+        </div>
+        <div style={{ fontSize: 12, lineHeight: 1.5, fontWeight: 600, color: '#14532d' }}>
+          Clientes de qualquer lugar veem sua banca. Para receber pedidos é
+          preciso estar atendendo dentro da área: {TEXTO_AREA_ATENDIDA} — SP, Brasil.
+        </div>
+      </div>
 
       <button type="button" disabled={deletingAccount} onClick={() => void deleteAccount()} style={{ width: '100%', minHeight: 44, marginTop: 10, border: 0, background: 'transparent', color: '#b42335', fontSize: 12.5, fontWeight: 850, cursor: deletingAccount ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: deletingAccount ? 0.65 : 1 }}>
         {deletingAccount ? <Loader2 size={17} className="animate-spin-slow" /> : <Trash2 size={17} />}

@@ -9,6 +9,7 @@ import { logSecurityEvent } from '../lib/securityAudit'
 import SuportePanel from '../components/SuportePanel'
 import FotoPerfilCliente, { AvatarPerfil } from '../components/FotoPerfilCliente'
 import { apenasDigitosCpf, formatarCpf, validarCpf } from '../lib/cpf'
+import { TEXTO_AREA_ATENDIDA, RAIO_PEDIDO_KM } from '../lib/serviceArea'
 
 function fmtData(ts: number) {
   const diff = Date.now() - ts
@@ -295,6 +296,18 @@ function TelaLogada() {
           <LogOut size={20} color="#f87171" />
           <span style={{ fontSize: 15, fontWeight: 800, color: '#f87171' }}>Sair da conta</span>
         </motion.button>
+
+          {/* AREA_ATENDIDA_INFO — a Apple pede que a cobertura fique clara no app */}
+          <div style={{ marginTop: 14, padding: '12px 14px', borderRadius: 14, background: '#f0f9ff', border: '1px solid #bae6fd' }}>
+            <div style={{ fontSize: 12.5, fontWeight: 900, color: '#075985', marginBottom: 4 }}>
+              Onde o PraiaGo entrega
+            </div>
+            <div style={{ fontSize: 12, lineHeight: 1.5, fontWeight: 600, color: '#0c4a6e' }}>
+              Você vê todos os ambulantes e restaurantes de qualquer lugar do mundo.
+              Para fechar um pedido é preciso estar a até {RAIO_PEDIDO_KM} km da loja.
+              Hoje entregamos em {TEXTO_AREA_ATENDIDA} — SP, Brasil.
+            </div>
+          </div>
 
         <button type="button" disabled={excluindoConta} onClick={() => void excluirConta()} style={{ width: '100%', marginTop: 12, padding: '14px 18px', border: 0, background: 'transparent', color: '#b91c1c', fontSize: 13, fontWeight: 850, cursor: excluindoConta ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, opacity: excluindoConta ? 0.65 : 1 }}>
           {excluindoConta ? <Loader2 size={17} className="animate-spin-slow" /> : <Trash2 size={17} />}
