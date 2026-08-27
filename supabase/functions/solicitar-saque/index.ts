@@ -124,9 +124,18 @@ Deno.serve(async (req: Request) => {
       // com venda no credito ainda nao liquidada (D+30). Nos dois casos
       // "tente de novo" e mentira: repetir nunca vai funcionar.
       if (e.status === 412) {
+        // Se o vendedor tinha acabado de pagar 5% para "antecipar", essa taxa
+        // foi cobrada por um saque que nao aconteceu. Devolve antes de
+        // responder — cobrar por servico nao prestado nao e uma opcao.
+        const { data: devolvido } = await admin.rpc('devolver_taxa_antecipacao', { p_vendedor: vendedorId })
+        const taxaDevolvida = Number(devolvido || 0)
+
         return json({
-          error: 'Esse saldo ainda nao esta liberado pelo nosso processador de pagamentos. Seu dinheiro continua na carteira — nossa equipe ja foi avisada e vai concluir manualmente.',
+          error: taxaDevolvida > 0
+            ? `Esse saldo ainda nao esta liberado pelo nosso processador de pagamentos. Seu dinheiro continua na carteira e a taxa de antecipacao de R$ ${taxaDevolvida.toFixed(2).replace('.', ',')} foi devolvida. Nossa equipe ja foi avisada.`
+            : 'Esse saldo ainda nao esta liberado pelo nosso processador de pagamentos. Seu dinheiro continua na carteira — nossa equipe ja foi avisada e vai concluir manualmente.',
           code: 'saldo_nao_liquidado',
+          taxa_devolvida: taxaDevolvida,
         }, { status: 409 })
       }
 
