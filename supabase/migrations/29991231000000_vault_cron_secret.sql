@@ -1,0 +1,23 @@
+-- Marcador. O conteudo real desta migration NAO pode viver no git.
+--
+-- Ela gravou no Vault o segredo que o pg_cron usa para chamar as edge
+-- functions agendadas (`cron_secret`). O comando era um
+-- `vault.create_secret('<valor>', 'cron_secret', ...)` — com o valor literal
+-- dentro. Commitar aquilo seria publicar o segredo.
+--
+-- Este arquivo existe so para o historico local bater com o do banco: sem
+-- ele, `supabase migration list` mostra uma migration remota sem arquivo, e a
+-- proxima pessoa gasta um tempo tentando entender o que sumiu.
+--
+-- Para recriar o segredo (perda, rotacao):
+--
+--   1. gere um valor novo:  node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+--   2. supabase secrets set CRON_SECRET=<valor>
+--   3. rode, FORA do git:
+--        select vault.create_secret('<valor>', 'cron_secret', 'Segredo do cron');
+--      (se ja existir, use vault.update_secret)
+--
+-- Os dois lados precisam do MESMO valor: a edge function compara o header
+-- `x-cron-secret` com o env, e o pg_cron le do Vault.
+
+select 1;
