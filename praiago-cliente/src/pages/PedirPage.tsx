@@ -1781,7 +1781,7 @@ function LojasList({ vendedores, loading, tipoInicial, foraDaArea, modoRevisao, 
   ]
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f8fafc', paddingBottom: 120 }}>
+    <div style={{ minHeight: '100dvh', background: '#f8fafc', paddingBottom: 120 }}>
       {/* Header */}
       <div style={{ background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', padding: '26px 20px 56px', borderBottomLeftRadius: 34, borderBottomRightRadius: 34, position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', top: -60, right: -40, width: 190, height: 190, borderRadius: '50%', background: 'rgba(255,255,255,0.14)', filter: 'blur(2px)' }} />
@@ -2004,7 +2004,7 @@ export default function PedirPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#ffffff', color: '#0f172a' }}>
+    <div style={{ minHeight: '100dvh', background: '#ffffff', color: '#0f172a' }}>
       <AnimatePresence>
         {step === 'checkout' && <CheckoutModal vendedor={vendedor} clientePos={clientePos} gpsStatus={gpsStatus} gpsFonte={gpsFonte} onConfirm={(e, pid) => { setEntrega(e); setPedidoId(pid); setStep('rastreando') }} onClose={() => setStep('menu')} />}
         {step === 'rastreando' && <RastreamentoModal vendedor={vendedor} clientePos={clientePos} entrega={entrega} pedidoId={pedidoId} onClose={() => { setStep('menu'); navigate('/') }} />}

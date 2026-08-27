@@ -553,7 +553,7 @@ export default function HomePage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#fff', color: '#0f172a', paddingBottom: 98 }}>
+    <div style={{ minHeight: '100dvh', background: '#fff', color: '#0f172a', paddingBottom: 98 }}>
       {notifOpen && <NotifPanel onClose={() => setNotifOpen(false)} />}
       {categoriasOpen && (
         <CategoriasPanel

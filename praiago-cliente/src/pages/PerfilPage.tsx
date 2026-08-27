@@ -181,7 +181,7 @@ function TelaLogada() {
   }
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ minHeight: '100vh', background: '#ffffff', paddingBottom: 'calc(112px + env(safe-area-inset-bottom))' }}>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ minHeight: '100dvh', background: '#ffffff', paddingBottom: 'calc(112px + env(safe-area-inset-bottom))' }}>
       <div style={{ background: 'linear-gradient(135deg, #0ea5e9 0%, #22c55e 100%)', padding: '32px 20px 48px', position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, borderRadius: '50%', background: 'rgba(0,0,0,0.08)', filter: 'blur(30px)' }} />
         
@@ -496,7 +496,7 @@ export default function PerfilPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#ffffff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 24px' }}>
+    <div style={{ minHeight: '100dvh', background: '#ffffff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 24px' }}>
       <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 40 }}>
         <div className="neon-border" style={{ width: 64, height: 64, borderRadius: 20, background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, boxShadow: '0 10px 25px rgba(34,197,94,0.4)' }}>🌴</div>
         <div>

@@ -188,7 +188,7 @@ export default function MeusPedidosPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: theme.color.bg, paddingBottom: 90 }}>
+    <div style={{ minHeight: '100dvh', background: theme.color.bg, paddingBottom: 90 }}>
       <header style={{ padding: '20px 20px 8px' }}>
         <h1 style={{ fontSize: 24, fontWeight: 900, color: theme.color.text }}>Meus Pedidos</h1>
         <p style={{ fontSize: 13, color: theme.color.textMuted, marginTop: 2 }}>

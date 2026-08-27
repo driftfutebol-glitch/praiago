@@ -379,7 +379,7 @@ export default function EventosPage() {
   const outros = lista.filter(e => !e.destaque)
 
   return (
-    <div style={{ minHeight: '100vh', background: '#ffffff', paddingBottom: 100 }}>
+    <div style={{ minHeight: '100dvh', background: '#ffffff', paddingBottom: 100 }}>
       <AnimatePresence>
         {comprando && <ComprarIngressoModal evento={comprando} sessao={sessao} onClose={() => setComprando(null)} />}
       </AnimatePresence>

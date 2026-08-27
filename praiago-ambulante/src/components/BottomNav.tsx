@@ -15,6 +15,11 @@ export default function BottomNav() {
   return (
     <nav
       aria-label="Navegacao principal"
+      // `translateZ(0)` + `willChange` prendem a barra na propria camada de
+      // composicao. Sem isso ela some no iPhone ao rolar tela longa com muitas
+      // imagens: o WKWebView para de repintar a camada fixa e ela fica em
+      // branco. Aconteceu no app do cliente, na tela de Eventos, e aqui o
+      // padrao era o mesmo.
       style={{
         position: 'fixed',
         left: 12,
@@ -23,6 +28,8 @@ export default function BottomNav() {
         zIndex: 80,
         maxWidth: 470,
         margin: '0 auto',
+        transform: 'translateZ(0)',
+        willChange: 'transform',
       }}
     >
       <div style={{
@@ -32,9 +39,10 @@ export default function BottomNav() {
         padding: 6,
         border: '1px solid rgba(215,224,233,0.96)',
         borderRadius: 18,
+        // Sem `backdrop-filter`: e a metade fragil do bug acima, e a 96% de
+        // opacidade ninguem via o blur.
         background: 'rgba(255,255,255,0.96)',
         boxShadow: 'var(--shadow-toolbar)',
-        backdropFilter: 'blur(18px)',
       }}>
         {navItems.map(({ to, icon: Icon, label }) => {
           const active = to === '/' ? location.pathname === '/' : location.pathname.startsWith(to)

@@ -300,9 +300,16 @@ export default function App() {
       </AnimatePresence>
       <DialogHost />
 
-      {/* Barra inferior com cinco destinos e rótulos sempre visíveis. */}
+      {/* Barra inferior com cinco destinos e rótulos sempre visíveis.
+          `translateZ(0)` + `willChange` prendem a barra na própria camada de
+          composição. Sem isso ela sumia no iPhone ao rolar telas longas com
+          muitas imagens (Eventos era a pior): o WKWebView parava de repintar a
+          camada fixa e ela ficava em branco. */}
       <div style={{
-        position: 'fixed', bottom: 14, left: '50%', transform: 'translateX(-50%)',
+        position: 'fixed',
+        bottom: 'calc(14px + env(safe-area-inset-bottom))',
+        left: '50%', transform: 'translateX(-50%) translateZ(0)',
+        willChange: 'transform',
         width: 'calc(100% - 24px)', maxWidth: 440, zIndex: 100,
       }}>
         <nav style={{
@@ -312,9 +319,10 @@ export default function App() {
           padding: '0 4px',
           alignItems: 'center',
           justifyContent: 'space-between',
-          background: 'rgba(255,255,255,0.94)',
-          backdropFilter: 'blur(18px) saturate(1.5)',
-          WebkitBackdropFilter: 'blur(18px) saturate(1.5)',
+          // Sem `backdrop-filter` de proposito. Ele e a metade fragil do bug
+          // acima, e com o fundo a 96% de opacidade nao se via diferenca —
+          // pagavamos o risco por um efeito que ninguem enxergava.
+          background: 'rgba(255,255,255,0.96)',
           border: '1px solid #eef2f7',
           boxShadow: '0 2px 6px rgba(15,23,42,0.05), 0 16px 36px -14px rgba(15,23,42,0.28)',
         }}>
