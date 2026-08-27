@@ -24,15 +24,6 @@ import 'leaflet/dist/leaflet.css'
 import { useCatalogoRegiao } from '../hooks/useCatalogoRegiao'
 import { MAPA_TILES, MAPA_ATRIBUICAO, MAPA_ZOOM_MAX } from '../lib/mapa'
 
-// ── Fix Leaflet default icons in Vite ────────────────────────
-// @ts-expect-error leaflet icon fix
-delete L.Icon.Default.prototype._getIconUrl
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl:       'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl:     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-})
-
 // ── Custom Marker Icons ──────────────────────────────────────
 
 // Os marcadores antigos eram bolas com borda preta (#0f172a) e brilho neon —

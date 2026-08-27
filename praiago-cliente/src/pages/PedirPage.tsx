@@ -30,13 +30,6 @@ import { TEXTO_AREA_ATENDIDA } from '../lib/serviceArea'
 import { useCatalogoRegiao } from '../hooks/useCatalogoRegiao'
 import { MAPA_TILES, MAPA_ATRIBUICAO, MAPA_ZOOM_MAX } from '../lib/mapa'
 
-delete (L.Icon.Default.prototype as { _getIconUrl?: unknown })._getIconUrl
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-})
-
 function makeIcon(html: string) {
   return L.divIcon({ className: '', html, iconSize: [44, 44], iconAnchor: [22, 22] })
 }
