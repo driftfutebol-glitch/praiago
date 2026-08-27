@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase'
 import { useSessao } from '../lib/auth'
 import { confirmDialog, alertDialog } from '../lib/dialog'
 import ContaRecebimento from '../components/ContaRecebimento'
+import { chamarEdge } from '../lib/edge'
 
 type Espelho = {
   vendas_brutas: number; comissao_praiago: number; taxa_provedor: number; valor_liquido: number
@@ -97,11 +98,31 @@ export default function CarteiraPage() {
     const ok = await confirmDialog({ title: 'Sacar pra sua conta?', message: `Vamos transferir ${brl(disponivel)} para a sua conta bancária. O prazo depende do banco.`, confirmText: 'Sacar' })
     if (!ok) return
     setSacando(true)
-    const { data, error } = await supabase.functions.invoke('solicitar-saque', { body: { valor: disponivel } })
+    const r = await chamarEdge('solicitar-saque', { valor: disponivel }, 'Não foi possível solicitar o saque agora. Tente de novo em instantes.')
     setSacando(false)
-    const erro = (data as { error?: string })?.error || (error ? error.message : '')
-    if (erro) { alertDialog({ title: 'Não deu pra sacar', message: erro, tone: 'danger' }); return }
-    await alertDialog({ title: 'Saque solicitado! ✅', message: 'Assim que o provedor liquidar, o Pix cai na sua conta.', tone: 'success' })
+
+    if (!r.ok) {
+      // O saldo existe mas o processador ainda não liberou (venda no crédito
+      // esperando liquidação, por exemplo). Repetir nunca vai funcionar, e o
+      // dinheiro não sumiu — dizer isso evita o vendedor achar que perdeu.
+      const saldoPreso = r.codigo === 'saldo_nao_liquidado'
+      alertDialog({
+        title: saldoPreso ? 'Saldo ainda não liberado' : 'Não deu pra sacar',
+        message: r.erro,
+        tone: saldoPreso ? 'default' : 'danger',
+      })
+      carregar()
+      return
+    }
+
+    // Sem recebedor no gateway o saque fica registrado e a equipe conclui à
+    // mão. Prometer "o Pix cai na sua conta" nesse caso seria mentira.
+    const aviso = (r.data as { aviso?: string } | null)?.aviso
+    await alertDialog({
+      title: 'Saque solicitado! ✅',
+      message: aviso || 'Assim que o provedor liquidar, o Pix cai na sua conta.',
+      tone: 'success',
+    })
     carregar()
   }
 
