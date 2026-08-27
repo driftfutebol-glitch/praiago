@@ -16,6 +16,8 @@ import { checarPedido, RAIO_PEDIDO_KM } from '../lib/serviceArea'
 import { criarPix, isPagamentoOnline, pagarComCartao, mensagemRecusaCartao, type PixCobranca } from '../lib/pagamento'
 import { aguardarPagamento } from '../lib/aguardarPagamento'
 import { useChatPedido } from '../hooks/useChatPedido'
+import { copiarTexto } from '../lib/clipboard'
+import { CUPOM_GUARDADO } from '../components/CuponsPanel'
 import { obterTaxaCredito } from '../store/useStore'
 import { tokenizarCartao } from '../lib/pagamentosdk'
 import { labelHorario } from '../lib/horario'
@@ -492,27 +494,6 @@ function RastreamentoModal({ vendedor, clientePos, pedidoId, onClose }: { vended
 }
 
 /* ─── PIX DENTRO DO APP ─────────────────────────────────── */
-async function copiarTexto(texto: string): Promise<boolean> {
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(texto)
-      return true
-    }
-  } catch { /* tenta fallback abaixo */ }
-  try {
-    const el = document.createElement('textarea')
-    el.value = texto
-    el.style.position = 'fixed'
-    el.style.opacity = '0'
-    document.body.appendChild(el)
-    el.select()
-    const ok = document.execCommand('copy')
-    document.body.removeChild(el)
-    return ok
-  } catch {
-    return false
-  }
-}
 
 /**
  * Quanto ainda vale a pena esperar por um PIX, em ms.
@@ -904,7 +885,15 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
   const [emailConfirmado, setEmailConfirmado] = useState(false)
   const [primeiraCompra, setPrimeiraCompra] = useState(false)
   const [carregandoBeneficio, setCarregandoBeneficio] = useState(false)
-  const [cupomTexto, setCupomTexto] = useState('')
+  // Codigo resgatado no painel de Cupons da Home ja vem preenchido: o cliente
+  // digitou uma vez, nao precisa lembrar de novo aqui. Continua sendo validado
+  // pelo botao — isto so poupa a digitacao.
+  const [cupomTexto, setCupomTexto] = useState(() => {
+    try {
+      const bruto = localStorage.getItem(CUPOM_GUARDADO)
+      return bruto ? String((JSON.parse(bruto) as { codigo?: string }).codigo || '') : ''
+    } catch { return '' }
+  })
   const [mostrarCodigoManual, setMostrarCodigoManual] = useState(false)
   const [cuponsDisponiveis, setCuponsDisponiveis] = useState<CupomCheckout[]>([])
   const [cuponsUsados, setCuponsUsados] = useState<Set<string>>(new Set())
@@ -1129,20 +1118,33 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
       return
     }
 
-    const { data, error } = await supabase
-      .from('cupons')
-      .select('codigo,titulo,tipo,valor,valor_minimo,vendedor_id,vendedor_tipo,ativo,publico,data_inicio,validade,limite_uso,usos')
-      .eq('codigo', codigo)
-      .maybeSingle()
+    // Quem valida e o banco, por `consultar_cupom`. Antes a tela lia a tabela
+    // direto — e o RLS so devolve cupom `publico = true`, entao cupom privado
+    // nunca era encontrado por mais certo que o cliente digitasse o codigo.
+    // A funcao confere existencia, prazo, limite e uso anterior desta conta;
+    // loja e valor minimo continuam aqui, que e quem conhece o carrinho.
+    const { data, error } = await supabase.rpc('consultar_cupom', { p_codigo: codigo })
     if (error || !data) {
       setCupomErro('Cupom nao encontrado ou expirado.')
       return
     }
-    const cupom = data as { codigo: string; titulo?: string | null; tipo: string; valor: number; valor_minimo?: number | null; vendedor_id?: string | null; vendedor_tipo?: string | null; ativo?: boolean | null; publico?: boolean | null; data_inicio?: string | null; validade?: string | null; limite_uso?: number | null; usos?: number | null }
-    if (!cupom.ativo || cupom.publico === false) { setCupomErro('Cupom indisponivel.'); return }
-    if (cupom.data_inicio && new Date(cupom.data_inicio).getTime() > Date.now()) { setCupomErro('Cupom ainda nao liberado.'); return }
-    if (cupom.validade && new Date(cupom.validade).getTime() < Date.now()) { setCupomErro('Cupom expirado.'); return }
-    if (cupom.limite_uso != null && Number(cupom.usos || 0) >= Number(cupom.limite_uso)) { setCupomErro('Cupom esgotado.'); return }
+    const cupom = data as {
+      ok?: boolean; motivo?: string
+      codigo: string; titulo?: string | null; tipo: string; valor: number
+      valor_minimo?: number | null; vendedor_id?: string | null; vendedor_tipo?: string | null
+    }
+    if (!cupom.ok) {
+      const motivos: Record<string, string> = {
+        entre_na_conta: 'Entre na sua conta para usar cupom.',
+        nao_encontrado: 'Cupom nao encontrado ou expirado.',
+        nao_liberado: 'Cupom ainda nao liberado.',
+        expirado: 'Cupom expirado.',
+        esgotado: 'Cupom esgotado.',
+        ja_usado: 'Esse cupom ja foi usado nessa conta.',
+      }
+      setCupomErro(motivos[cupom.motivo ?? ''] || 'Cupom indisponivel.')
+      return
+    }
     if (cupom.vendedor_id && cupom.vendedor_id !== vendedor.id) { setCupomErro('Esse cupom nao vale para esta loja.'); return }
     if (cupom.vendedor_tipo && cupom.vendedor_tipo !== vendedor.tipo) { setCupomErro('Esse cupom nao vale para este tipo de loja.'); return }
     if (subtotal < Number(cupom.valor_minimo || 0)) { setCupomErro(`Pedido mínimo R$ ${dinheiro(Number(cupom.valor_minimo || 0))}.`); return }

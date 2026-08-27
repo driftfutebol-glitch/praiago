@@ -20,6 +20,7 @@ import { TEXTO_AREA_ATENDIDA, CENTROS_CIDADES, type CidadeAtendida } from '../li
 import { useStore } from '../store/useStore'
 import { theme } from '../lib/theme'
 import { supabase } from '../lib/supabase'
+import CuponsPanel from '../components/CuponsPanel'
 import { useCatalogoRegiao } from '../hooks/useCatalogoRegiao'
 
 type ProdutoDestaque = Produto & { vendedorId: string; vendedorNome: string }
@@ -433,6 +434,7 @@ export default function HomePage() {
   const [notifOpen, setNotifOpen] = useState(false)
   const [addedId, setAddedId] = useState<string | null>(null)
   const [cupons, setCupons] = useState<Cupom[]>([])
+  const [cuponsAberto, setCuponsAberto] = useState(false)
   const [eventoDestaque, setEventoDestaque] = useState<EventoDestaque | null>(null)
 
   const favoritos = useStore(s => s.favoritos)
@@ -684,7 +686,7 @@ export default function HomePage() {
           <QuickAction title="Restaurantes" subtitle="Perto de você" count={restaurantesLabel} color="#f97316" icon={<Utensils size={22} />} onClick={() => navigate('/pedir?tipo=restaurante')} />
           <QuickAction title="Ambulantes" subtitle="Perto da praia" count={ambulantesLabel} color="#16a34a" icon={<ShoppingBag size={22} />} onClick={() => navigate('/pedir?tipo=ambulante')} />
           <QuickAction title="Radar ao vivo" subtitle="Ache quem está na praia" count={ambulantesLabel} color="#0284c7" icon={<MapPin size={22} />} onClick={() => navigate('/ambulantes')} />
-          <QuickAction title="Cupons" subtitle="Descontos exclusivos" count={cupons.length > 0 ? `${cupons.length} ativo${cupons.length === 1 ? '' : 's'}` : undefined} color="#7c3aed" icon={<Ticket size={22} />} onClick={() => document.getElementById('cupons')?.scrollIntoView({ behavior: 'smooth', block: 'center' })} />
+          <QuickAction title="Cupons" subtitle="Descontos exclusivos" count={cupons.length > 0 ? `${cupons.length} ativo${cupons.length === 1 ? '' : 's'}` : undefined} color="#7c3aed" icon={<Ticket size={22} />} onClick={() => setCuponsAberto(true)} />
         </section>
 
         {/* Evento em destaque — só aparece se existir um marcado no banco.
@@ -951,6 +953,11 @@ export default function HomePage() {
         cidadeAtual={cidadeAtendida as CidadeAtendida | null}
         onEscolher={(_cidade, centro) => definirPosicaoManual(centro[0], centro[1])}
         onFechar={() => setRegiaoAberta(false)}
+      />
+      <CuponsPanel
+        aberto={cuponsAberto}
+        cupons={cupons}
+        onFechar={() => setCuponsAberto(false)}
       />
     </div>
   )
