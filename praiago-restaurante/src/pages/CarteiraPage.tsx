@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase'
 import { useSessao } from '../lib/auth'
 import { confirmDialog, alertDialog } from '../lib/dialog'
 import ContaRecebimento from '../components/ContaRecebimento'
+import VerificacaoRecebedor from '../components/VerificacaoRecebedor'
 import { chamarEdge } from '../lib/edge'
 
 type Espelho = {
@@ -204,6 +205,9 @@ export default function CarteiraPage() {
 
         {/* Conta bancaria: e ela que abre o saldo do vendedor no gateway. */}
         <ContaRecebimento onMudou={carregar} />
+        {/* Logo abaixo da conta: cadastrar nao basta, ainda falta liberar a
+            movimentacao do saldo. O bloco some sozinho quando aprova. */}
+        <VerificacaoRecebedor />
 
         {/* Resumo espelho */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>

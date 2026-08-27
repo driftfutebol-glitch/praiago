@@ -2,7 +2,7 @@ import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-
 import { motion, AnimatePresence } from 'framer-motion'
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { LoaderCircle, LocateFixed } from 'lucide-react'
-import { logout, setContaDemo, useSessao } from './lib/auth'
+import { getSessao, logout, setContaDemo, useSessao } from './lib/auth'
 import { supabase } from './lib/supabase'
 import BottomNav from './components/BottomNav'
 import VerificationBar from './components/VerificationBar'
@@ -186,18 +186,46 @@ function GlobalAvisoToast() {
   const [aviso, setAviso] = useState<{ id?: string; titulo?: string; mensagem?: string; cupom_codigo?: string | null } | null>(null)
 
   useEffect(() => {
+    const sessao = getSessao()
+
+    const mostrar = (row: { id?: string; titulo?: string; mensagem?: string; cupom_codigo?: string | null }) => {
+      setAviso(row)
+      playAvisoSound()
+      window.setTimeout(() => setAviso(current => current?.id === row.id ? null : current), 8000)
+    }
+
     const channel = supabase
       .channel('avisos_ambulante')
+      // Broadcast da equipe: promocao, comunicado.
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'avisos' }, payload => {
         const row = payload.new as { id?: string; titulo?: string; mensagem?: string; publico?: string; cupom_codigo?: string | null }
         if (row.publico && row.publico !== 'ambulantes' && row.publico !== 'todos') return
-        setAviso(row)
-        playAvisoSound()
-        window.setTimeout(() => setAviso(current => current?.id === row.id ? null : current), 8000)
+        mostrar(row)
       })
       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
+    // Aviso dirigido a ESTE vendedor — hoje e o KYC aprovado ou recusado. E
+    // um canal separado porque leva filtro por vendedor_id; junto no de cima,
+    // o filtro valeria para os dois e o broadcast pararia de chegar.
+    let pessoal: ReturnType<typeof supabase.channel> | null = null
+    if (sessao?.id) {
+      pessoal = supabase
+        .channel(`notif_vendedor_${sessao.id}`)
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'notificacoes_vendedor', filter: `vendedor_id=eq.${sessao.id}` },
+          payload => {
+            const row = payload.new as { id?: string; titulo?: string; mensagem?: string }
+            mostrar(row)
+          },
+        )
+        .subscribe()
+    }
+
+    return () => {
+      supabase.removeChannel(channel)
+      if (pessoal) supabase.removeChannel(pessoal)
+    }
   }, [])
 
   if (!aviso) return null
