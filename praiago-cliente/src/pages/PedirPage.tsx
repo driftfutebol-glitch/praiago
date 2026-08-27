@@ -15,6 +15,7 @@ import { pertenceACategoria, type Vendedor } from '../lib/catalogo'
 import { checarPedido, RAIO_PEDIDO_KM } from '../lib/serviceArea'
 import { criarPix, isPagamentoOnline, pagarComCartao, mensagemRecusaCartao, type PixCobranca } from '../lib/pagamento'
 import { aguardarPagamento } from '../lib/aguardarPagamento'
+import { useChatPedido } from '../hooks/useChatPedido'
 import { obterTaxaCredito } from '../store/useStore'
 import { tokenizarCartao } from '../lib/pagamentosdk'
 import { labelHorario } from '../lib/horario'
@@ -25,6 +26,7 @@ import { supabase } from '../lib/supabase'
 import { apenasDigitosCpf, formatarCpf as formatarCpfCliente, validarCpf } from '../lib/cpf'
 import { TEXTO_AREA_ATENDIDA } from '../lib/serviceArea'
 import { useCatalogoRegiao } from '../hooks/useCatalogoRegiao'
+import { MAPA_TILES, MAPA_ATRIBUICAO, MAPA_ZOOM_MAX } from '../lib/mapa'
 
 delete (L.Icon.Default.prototype as { _getIconUrl?: unknown })._getIconUrl
 L.Icon.Default.mergeOptions({
@@ -60,44 +62,136 @@ function RecenterMap({ a, b }: { a: [number, number]; b: [number, number] }) {
   return null
 }
 
-/* ─── CHAT ──────────────────────────────────────────────── */
-function ChatModal({ vendedor, onClose }: { vendedor: Vendedor; onClose: () => void }) {
-  const [msgs, setMsgs] = useState([
-    { de: 'vendedor', texto: `Oi! Aqui é o ${vendedor.nome} 🌊 Já estou preparando seu pedido!` },
-  ])
+/* ─── CHAT COM O VENDEDOR ───────────────────────────────── */
+// Conversa de verdade, gravada em `mensagens_pedido` e entregue pelo realtime.
+//
+// A versao anterior era encenação: respondia sozinha "Combinado! To chegando"
+// 900 ms depois, assinado com o nome da loja, e nada saia do aparelho. O
+// cliente achava que tinha falado com o vendedor; o vendedor nunca soube.
+//
+// Precisa de pedido: sem pedido nao ha conversa (nem com quem, nem sobre o
+// que). Quando nao existe, a tela diz isso em vez de fingir um chat.
+function ChatModal({ vendedor, pedidoId, onClose }: { vendedor: Vendedor; pedidoId: string | null; onClose: () => void }) {
   const [texto, setTexto] = useState('')
-  function enviar() {
+  const fim = useRef<HTMLDivElement | null>(null)
+  const { mensagens, carregando, enviando, erro, enviar } = useChatPedido(pedidoId, true)
+
+  useEffect(() => {
+    fim.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [mensagens.length])
+
+  async function mandar() {
     const t = texto.trim()
-    if (!t) return
-    setMsgs(m => [...m, { de: 'cliente', texto: t }])
-    setTexto('')
-    setTimeout(() => setMsgs(m => [...m, { de: 'vendedor', texto: 'Combinado! Tô chegando 👍' }]), 900)
+    if (!t || enviando) return
+    // Só limpa o campo depois que o servidor aceitou: se falhar, o cliente não
+    // perde o que escreveu.
+    const ok = await enviar(t)
+    if (ok) setTexto('')
   }
+
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 11000, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-end' }}>
-      <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }} style={{ width: '100%', background: '#ffffff', borderTopLeftRadius: 32, borderTopRightRadius: 32, height: '75vh', display: 'flex', flexDirection: 'column', border: '1px solid rgba(0,0,0,0.08)' }}>
+      <motion.div
+        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+        style={{
+          width: '100%', background: '#ffffff',
+          borderTopLeftRadius: 32, borderTopRightRadius: 32,
+          // dvh acompanha o teclado do iOS; vh não, e o campo de escrever
+          // ficava embaixo do teclado.
+          height: 'min(75dvh, 640px)',
+          display: 'flex', flexDirection: 'column', border: '1px solid rgba(0,0,0,0.08)',
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '20px', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
           <div style={{ width: 44, height: 44, overflow: 'hidden', borderRadius: 16, background: vendedor.gradiente, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
             {vendedor.avatar ? <img src={vendedor.avatar} alt={vendedor.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : vendedor.emoji}
           </div>
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>{vendedor.nome}</div>
-            <div style={{ fontSize: 12, color: '#22c55e', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 8px #22c55e' }} /> Online agora
+            <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>
+              {pedidoId ? 'Mensagens sobre o seu pedido' : 'Faça um pedido para conversar'}
             </div>
           </div>
           <button aria-label="Fechar chat" onClick={onClose} style={{ background: '#f8fafc', border: 'none', borderRadius: 14, padding: 10, cursor: 'pointer' }}><X size={20} color="#94a3b8" /></button>
         </div>
+
         <div style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {msgs.map((m, i) => (
-            <motion.div initial={{ opacity: 0, scale: 0.9, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} key={i} style={{ alignSelf: m.de === 'cliente' ? 'flex-end' : 'flex-start', maxWidth: '75%', background: m.de === 'cliente' ? 'linear-gradient(135deg,#0ea5e9,#22c55e)' : '#1e293b', color: '#fff', padding: '12px 16px', borderRadius: 20, borderBottomRightRadius: m.de === 'cliente' ? 4 : 20, borderBottomLeftRadius: m.de === 'vendedor' ? 4 : 20, fontSize: 14, lineHeight: 1.4, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-              {m.texto}
-            </motion.div>
-          ))}
+          {!pedidoId && (
+            <div style={{ margin: 'auto', textAlign: 'center', color: '#64748b', fontSize: 13.5, fontWeight: 600, lineHeight: 1.5, maxWidth: 280 }}>
+              A conversa abre junto com o pedido. Faça o pedido e você fala
+              direto com {vendedor.nome} aqui.
+            </div>
+          )}
+          {pedidoId && carregando && (
+            <div style={{ margin: 'auto', color: '#94a3b8', fontSize: 13, fontWeight: 700 }}>Abrindo conversa…</div>
+          )}
+          {pedidoId && !carregando && mensagens.length === 0 && (
+            <div style={{ margin: 'auto', textAlign: 'center', color: '#64748b', fontSize: 13.5, fontWeight: 600, lineHeight: 1.5, maxWidth: 280 }}>
+              Nenhuma mensagem ainda. Escreva algo — vai chegar no aparelho
+              de {vendedor.nome}.
+            </div>
+          )}
+
+          {mensagens.map(m => {
+            const meu = m.papel === 'cliente'
+            return (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} key={m.id}
+                style={{
+                  alignSelf: meu ? 'flex-end' : 'flex-start', maxWidth: '78%',
+                  background: meu ? 'linear-gradient(135deg,#0ea5e9,#22c55e)' : '#f1f5f9',
+                  color: meu ? '#fff' : '#0f172a',
+                  padding: '11px 15px', borderRadius: 20,
+                  borderBottomRightRadius: meu ? 4 : 20, borderBottomLeftRadius: meu ? 20 : 4,
+                  fontSize: 14, lineHeight: 1.45, wordBreak: 'break-word',
+                }}
+              >
+                {m.texto}
+                <div style={{ marginTop: 4, fontSize: 10.5, fontWeight: 700, opacity: 0.7, textAlign: 'right' }}>
+                  {new Date(m.criadaEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </motion.div>
+            )
+          })}
+          <div ref={fim} />
         </div>
-        <div style={{ display: 'flex', gap: 10, padding: '16px 20px', borderTop: '1px solid rgba(0,0,0,0.05)', background: '#ffffff' }}>
-          <input value={texto} onChange={e => setTexto(e.target.value)} onKeyDown={e => e.key === 'Enter' && enviar()} placeholder="Escreva uma mensagem…" aria-label="Mensagem" style={{ flex: 1, background: '#f8fafc', color: '#fff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 16, padding: '14px 18px', fontSize: 15, outline: 'none' }} />
-          <button aria-label="Enviar" onClick={enviar} style={{ width: 50, background: 'linear-gradient(135deg,#0ea5e9,#22c55e)', border: 'none', borderRadius: 16, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 15px rgba(34,197,94,0.3)' }}><Send size={20} /></button>
+
+        {erro && (
+          <div style={{ padding: '0 20px 8px', fontSize: 12, fontWeight: 700, color: '#dc2626' }}>{erro}</div>
+        )}
+
+        <div style={{ display: 'flex', gap: 10, padding: '16px 20px calc(16px + env(safe-area-inset-bottom))', borderTop: '1px solid rgba(0,0,0,0.05)', background: '#ffffff' }}>
+          <input
+            value={texto}
+            onChange={e => setTexto(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') void mandar() }}
+            placeholder={pedidoId ? 'Escreva uma mensagem…' : 'Disponível durante o pedido'}
+            aria-label="Mensagem"
+            disabled={!pedidoId}
+            maxLength={1000}
+            style={{
+              flex: 1, minWidth: 0, background: '#f8fafc',
+              // Era #fff sobre #f8fafc: o cliente digitava e não via o texto.
+              color: '#0f172a',
+              border: '1px solid rgba(0,0,0,0.08)', borderRadius: 16,
+              padding: '14px 18px', fontSize: 16, outline: 'none',
+            }}
+          />
+          <button
+            aria-label="Enviar"
+            onClick={() => void mandar()}
+            disabled={!pedidoId || !texto.trim() || enviando}
+            style={{
+              width: 50, flexShrink: 0,
+              background: (!pedidoId || !texto.trim() || enviando) ? '#e2e8f0' : 'linear-gradient(135deg,#0ea5e9,#22c55e)',
+              border: 'none', borderRadius: 16, color: '#fff',
+              cursor: (!pedidoId || !texto.trim() || enviando) ? 'default' : 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <Send size={20} color={(!pedidoId || !texto.trim() || enviando) ? '#94a3b8' : '#fff'} />
+          </button>
         </div>
       </motion.div>
     </div>
@@ -227,10 +321,14 @@ function RastreamentoModal({ vendedor, clientePos, pedidoId, onClose }: { vended
 
   return (
     <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 20 }} style={{ position: 'fixed', inset: 0, zIndex: 10000, background: '#ffffff', display: 'flex', flexDirection: 'column' }}>
-      <AnimatePresence>{chatOpen && <ChatModal vendedor={vendedor} onClose={() => setChatOpen(false)} />}</AnimatePresence>
+      <AnimatePresence>{chatOpen && <ChatModal vendedor={vendedor} pedidoId={pedidoId} onClose={() => setChatOpen(false)} />}</AnimatePresence>
       
-      <div style={{ position: 'absolute', top: 20, left: 20, right: 20, zIndex: 1000, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <button aria-label="Voltar" onClick={onClose} style={{ width: 46, height: 46, background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(10px)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff' }}>
+      {/* Barra flutuante: fica FORA do fluxo, por cima do mapa. Por isso o
+          primeiro bloco do fluxo abaixo (o codigo de entrega) precisa de um
+          respiro no topo — sem ele o codigo nascia debaixo do botao de fechar
+          e do selo de status, os dois brigando pelo mesmo lugar. */}
+      <div style={{ position: 'absolute', top: 'calc(20px + env(safe-area-inset-top))', left: 20, right: 20, zIndex: 1000, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, pointerEvents: 'none' }}>
+        <button aria-label="Voltar" onClick={onClose} style={{ pointerEvents: 'auto', flexShrink: 0, width: 46, height: 46, background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(10px)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#0f172a' }}>
           <X size={22} />
         </button>
         {atrasado && (
@@ -254,14 +352,21 @@ function RastreamentoModal({ vendedor, clientePos, pedidoId, onClose }: { vended
         </div>
       </div>
 
+      {/* Espaco reservado para a barra flutuante (46px de botao + 20 de margem
+          + folga). Fica aqui, e nao como padding do bloco seguinte, porque o
+          que vem depois muda: as vezes e o codigo de entrega, as vezes e o
+          botao de denuncia. Preso a um deles, o outro voltaria a nascer
+          debaixo do botao de fechar. */}
+      <div style={{ height: 'calc(78px + env(safe-area-inset-top))', flexShrink: 0 }} />
+
       {/* Código de entrega + denúncia (anti-má-fé) */}
       {codigoEntrega && status !== 'chegou' && (
         <div style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 12, background: 'linear-gradient(135deg,rgba(14,165,233,0.08),rgba(34,197,94,0.06))', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 11, fontWeight: 800, color: '#0284c7', textTransform: 'uppercase', letterSpacing: 0.6 }}>Código de entrega</div>
-            <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Passe pro vendedor só na hora que receber. Pague sempre pelo app.</div>
+            <div style={{ fontSize: 11.5, color: '#64748b', fontWeight: 600, lineHeight: 1.35 }}>Passe pro vendedor só na hora que receber. Pague sempre pelo app.</div>
           </div>
-          <div style={{ fontSize: 26, fontWeight: 950, letterSpacing: 4, color: '#0f172a', background: '#fff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 12, padding: '6px 14px' }}>{codigoEntrega}</div>
+          <div style={{ flexShrink: 0, fontSize: 24, fontWeight: 950, letterSpacing: 3, color: '#0f172a', background: '#fff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 12, padding: '6px 12px' }}>{codigoEntrega}</div>
         </div>
       )}
       {!denunciado ? (
@@ -279,7 +384,7 @@ function RastreamentoModal({ vendedor, clientePos, pedidoId, onClose }: { vended
         {atrasado ? (
           <MapContainer center={pos} zoom={16} style={{ height: '100%', width: '100%' }} zoomControl={false}>
             {/* Mapa estilo Dark/Tático */}
-            <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>' url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" subdomains="abcd" />
+            <TileLayer attribution={MAPA_ATRIBUICAO} url={MAPA_TILES} maxZoom={MAPA_ZOOM_MAX} />
             <RecenterMap a={pos} b={clientePos} />
             <Marker position={pos} icon={vendedor.tipo === 'restaurante' ? restauranteIcon : ambulanteIcon} />
             <Marker position={clientePos} icon={clienteIcon} />

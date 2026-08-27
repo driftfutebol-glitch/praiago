@@ -10,6 +10,20 @@ export function formatarCpf(valor: string) {
   return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`
 }
 
+/**
+ * CPF para MOSTRAR na tela: `***.224.548-**`.
+ *
+ * A tela de perfil imprimia o CPF inteiro depois de validado. Nao havia motivo:
+ * quem esta olhando ja sabe o proprio numero, e o que a tela precisa dizer e
+ * "esta validado". Documento completo aparecendo em tela e algo que so ajuda
+ * quem esta ao lado, ou quem pegou o aparelho.
+ */
+export function cpfMascarado(valor: string) {
+  const d = apenasDigitosCpf(valor)
+  if (d.length !== 11) return ''
+  return `***.${d.slice(3, 6)}.${d.slice(6, 9)}-**`
+}
+
 export function validarCpf(valor: string) {
   const d = apenasDigitosCpf(valor)
   if (d.length !== 11 || d === d[0].repeat(11)) return false

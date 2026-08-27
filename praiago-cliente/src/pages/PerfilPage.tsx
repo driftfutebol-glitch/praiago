@@ -8,7 +8,7 @@ import { alertDialog, confirmDialog, promptDialog } from '../lib/dialog'
 import { logSecurityEvent } from '../lib/securityAudit'
 import SuportePanel from '../components/SuportePanel'
 import FotoPerfilCliente, { AvatarPerfil } from '../components/FotoPerfilCliente'
-import { apenasDigitosCpf, formatarCpf, validarCpf } from '../lib/cpf'
+import { apenasDigitosCpf, cpfMascarado, formatarCpf, validarCpf } from '../lib/cpf'
 import { TEXTO_AREA_ATENDIDA, RAIO_PEDIDO_KM } from '../lib/serviceArea'
 
 function fmtData(ts: number) {
@@ -185,14 +185,16 @@ function TelaLogada() {
       <div style={{ background: 'linear-gradient(135deg, #0ea5e9 0%, #22c55e 100%)', padding: '32px 20px 48px', position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, borderRadius: '50%', background: 'rgba(0,0,0,0.08)', filter: 'blur(30px)' }} />
         
-        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} style={{ display: 'flex', alignItems: 'center', gap: 16, position: 'relative' }}>
+        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} style={{ display: 'flex', alignItems: 'center', gap: 14, position: 'relative' }}>
           <AvatarPerfil path={fotoPath} />
-          <div>
-            <div style={{ fontSize: 24, fontWeight: 900, color: '#fff', textTransform: 'capitalize', letterSpacing: -0.5 }}>{sessao.nome}</div>
-            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', fontWeight: 500 }}>{sessao.email}</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
-              <MapPin size={14} color="rgba(255,255,255,0.9)" />
-              <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.9)', fontWeight: 600 }}>Santos, São Vicente e Praia Grande</span>
+          {/* minWidth 0 + ellipsis: e-mail longo empurrava o bloco para fora da
+              tela em vez de cortar. */}
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 19, fontWeight: 900, color: '#fff', textTransform: 'capitalize', letterSpacing: -0.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sessao.nome}</div>
+            <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.82)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sessao.email}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 7 }}>
+              <MapPin size={13} color="rgba(255,255,255,0.9)" style={{ flexShrink: 0 }} />
+              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.9)', fontWeight: 600 }}>Santos, São Vicente e Praia Grande</span>
             </div>
           </div>
         </motion.div>
@@ -204,10 +206,10 @@ function TelaLogada() {
             { icon: Package, label: 'Pedidos', value: String(pedidos.length), color: '#0ea5e9' },
             { icon: Star, label: 'Favoritos', value: String(favoritos.length), color: '#fbbf24' },
           ].map(({ icon: Icon, label, value, color }, i) => (
-            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: i * 0.1 }} key={label} className="glass-panel" style={{ borderRadius: 20, padding: 20, textAlign: 'center', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}>
-              <Icon size={24} color={color} style={{ margin: '0 auto 12px' }} />
-              <div style={{ fontSize: 26, fontWeight: 900, color: '#0f172a' }}>{value}</div>
-              <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
+            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: i * 0.1 }} key={label} className="glass-panel" style={{ borderRadius: 20, padding: '15px 14px', textAlign: 'center', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}>
+              <Icon size={20} color={color} style={{ margin: '0 auto 8px' }} />
+              <div style={{ fontSize: 21, fontWeight: 900, color: '#0f172a', lineHeight: 1.1 }}>{value}</div>
+              <div style={{ fontSize: 10.5, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 3 }}>{label}</div>
             </motion.div>
           ))}
         </div>
@@ -222,8 +224,8 @@ function TelaLogada() {
               <Shield size={19} color="#fff" />
             </div>
             <div>
-              <div style={{ fontSize: 15, fontWeight: 900, color: '#0f172a' }}>Verificacao para pedidos</div>
-              <div style={{ fontSize: 12, fontWeight: 650, color: '#64748b', marginTop: 2 }}>E-mail confirmado + CPF valido libera checkout e cupons.</div>
+              <div style={{ fontSize: 14.5, fontWeight: 900, color: '#0f172a' }}>Verificação para pedidos</div>
+              <div style={{ fontSize: 11.5, fontWeight: 650, color: '#64748b', marginTop: 2, lineHeight: 1.35 }}>E-mail confirmado + CPF válido libera checkout e cupons.</div>
             </div>
           </div>
 
@@ -248,7 +250,7 @@ function TelaLogada() {
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 900, color: '#0f172a' }}>CPF</div>
                 <div style={{ fontSize: 11.5, fontWeight: 700, color: cpfOk ? '#15803d' : '#c2410c', marginTop: 2 }}>
-                  {cpfOk ? `${formatarCpf(verificacao?.cpf || '')} validado` : 'Informe um CPF válido para fazer pedido'}
+                  {cpfOk ? `${cpfMascarado(verificacao?.cpf || '')} validado` : 'Informe um CPF válido para fazer pedido'}
                 </div>
               </div>
               {!cpfOk && (

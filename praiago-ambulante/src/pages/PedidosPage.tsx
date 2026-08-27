@@ -9,6 +9,7 @@ import {
   Clock3,
   CreditCard,
   MapPin,
+  MessageCircle,
   Navigation,
   PackageCheck,
   Phone,
@@ -28,12 +29,14 @@ import 'leaflet/dist/leaflet.css'
 import { useRoute } from '../hooks/useRoute'
 import { useOrderNotifications, type IncomingOrder } from '../hooks/useOrderNotifications'
 import { useLocalizacaoCliente } from '../hooks/useLocalizacaoCliente'
+import ChatPedidoModal from '../components/ChatPedidoModal'
 import { criarMonitorSentido, type SentidoStatus } from '../lib/trafego'
 import { getSessao } from '../lib/auth'
 import { alertDialog, promptDialog } from '../lib/dialog'
 import { PRAIA_GRANDE_CENTER } from '../lib/praiagoZones'
 import { supabase } from '../lib/supabase'
 import { clampNumber, parseCoordinate, sanitizePhone, sanitizeText } from '../lib/validation'
+import { MAPA_TILES, MAPA_ATRIBUICAO, MAPA_ZOOM_MAX } from '../lib/mapa'
 
 type Status = 'novo' | 'preparando' | 'saiu_entrega' | 'entregue'
 
@@ -248,10 +251,7 @@ function LocationModal({ order, onClose }: { order: Pedido; onClose: () => void 
         {canNavigate ? (
           <MapContainer center={mapCenter} zoom={15} style={{ height: '100%', width: '100%' }} zoomControl={false}>
             <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-              url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-              subdomains="abcd"
-            />
+              attribution={MAPA_ATRIBUICAO} url={MAPA_TILES} maxZoom={MAPA_ZOOM_MAX} />
             {myPosition && customerPosition && <FitBounds from={myPosition} to={customerPosition} />}
             {myPosition && <Marker position={myPosition} icon={sellerIcon}><Popup>Sua posição</Popup></Marker>}
             {customerPosition && (
@@ -337,6 +337,7 @@ export default function PedidosPage() {
   const [orders, setOrders] = useState<Pedido[]>([])
   const [loading, setLoading] = useState(true)
   const [locationOrder, setLocationOrder] = useState<Pedido | null>(null)
+  const [chatOrder, setChatOrder] = useState<Pedido | null>(null)
   const { orders: liveOrders, latestOrder, dismissLatest } = useOrderNotifications()
 
   useEffect(() => {
@@ -431,6 +432,14 @@ export default function PedidosPage() {
     <div className="page-shell">
       <AnimatePresence>
         {locationOrder && <LocationModal order={locationOrder} onClose={() => setLocationOrder(null)} />}
+        {chatOrder && (
+          <ChatPedidoModal
+            key={chatOrder.id}
+            pedidoId={chatOrder.id}
+            clienteNome={chatOrder.cliente}
+            onClose={() => setChatOrder(null)}
+          />
+        )}
       </AnimatePresence>
 
       <div className="page-heading">
@@ -530,6 +539,14 @@ export default function PedidosPage() {
                   <button type="button" className="secondary-button" disabled={!hasLocation} onClick={() => setLocationOrder(order)} style={{ minHeight: 40, width: 46, padding: 0 }} aria-label={hasLocation ? 'Abrir localização do pedido' : 'Pedido sem coordenadas'}>
                     <MapPin size={17} />
                   </button>
+                  {/* Conversa com o cliente. Pedido ao vivo (broadcast) ainda
+                      nao esta no banco, e sem linha em `pedidos` a conversa nao
+                      tem onde existir — por isso so depois que ele chega. */}
+                  {!order.isLive && (
+                    <button type="button" className="secondary-button" onClick={() => setChatOrder(order)} style={{ minHeight: 40, width: 46, padding: 0 }} aria-label={`Conversar com ${order.cliente}`}>
+                      <MessageCircle size={17} />
+                    </button>
+                  )}
                   {order.status !== 'entregue' && (
                     <button type="button" className="primary-button" onClick={() => void advance(order)} style={{ minHeight: 40, flex: 1 }}>
                       {nextLabel}

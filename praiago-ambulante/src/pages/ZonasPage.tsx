@@ -17,6 +17,7 @@ import {
 } from '../lib/praiagoZones'
 import { supabase } from '../lib/supabase'
 import { TEXTO_AREA_ATENDIDA } from '../lib/serviceArea'
+import { MAPA_TILES, MAPA_ATRIBUICAO, MAPA_ZOOM_MAX } from '../lib/mapa'
 
 const PALM_POINTS: [number, number][] = [
   [-24.0164, -46.4078],
@@ -153,10 +154,7 @@ export default function ZonasPage() {
       >
         <MapContainer center={currentPosition} zoom={13} style={{ height: '100%', width: '100%' }} zoomControl={false}>
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-            subdomains="abcd"
-          />
+            attribution={MAPA_ATRIBUICAO} url={MAPA_TILES} maxZoom={MAPA_ZOOM_MAX} />
 
           {gpsStatus === 'active' && <FlyTo position={currentPosition} />}
 

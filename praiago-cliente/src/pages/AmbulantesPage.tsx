@@ -10,7 +10,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { useNavigate } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet'
 import L, { type Map as LeafletMap } from 'leaflet'
-import { MapPin, List, Map as MapIcon, Navigation, ChevronRight, ChevronDown, Wifi, Eye, Clock, RefreshCw, ShoppingCart, LocateFixed, UserRound } from 'lucide-react'
+import { ArrowLeft, MapPin, List, Map as MapIcon, Navigation, ChevronRight, ChevronDown, Wifi, Eye, Clock, RefreshCw, ShoppingCart, LocateFixed, UserRound } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CLIENTE_FALLBACK, useGPS } from '../hooks/useGPS'
 import { useNearbyAmbulantes, type AmbulanteLive } from '../hooks/useNearbyAmbulantes'
@@ -22,6 +22,7 @@ import { TEXTO_AREA_ATENDIDA, RAIO_PEDIDO_KM } from '../lib/serviceArea'
 
 import 'leaflet/dist/leaflet.css'
 import { useCatalogoRegiao } from '../hooks/useCatalogoRegiao'
+import { MAPA_TILES, MAPA_ATRIBUICAO, MAPA_ZOOM_MAX } from '../lib/mapa'
 
 // ── Fix Leaflet default icons in Vite ────────────────────────
 // @ts-expect-error leaflet icon fix
@@ -387,6 +388,15 @@ function formatDist(m: number): string {
 
 export default function AmbulantesPage() {
   const navigate = useNavigate()
+
+  // Volta pra tela anterior quando existe uma; senao vai pro inicio. Sem essa
+  // checagem, quem abriu o Radar direto por link sairia do app no primeiro
+  // toque, que e pior do que nao ter botao.
+  function voltar() {
+    const idx = (window.history.state as { idx?: number } | null)?.idx
+    if (typeof idx === 'number' && idx > 0) navigate(-1)
+    else navigate('/')
+  }
   const {
     pos,
     status: gpsStatus,
@@ -444,14 +454,36 @@ export default function AmbulantesPage() {
         borderBottom: '1px solid rgba(0,0,0,0.05)',
         position: 'sticky', top: 0, zIndex: 50
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+          {/* Voltar. O Radar ocupa a tela inteira e engole o gesto de arrastar
+              da borda (o mapa captura o toque), entao sem este botao a unica
+              saida era a barra de baixo — e quem entrou por um link nem isso
+              tinha. */}
+          <button
+            type="button"
+            aria-label="Voltar"
+            onClick={voltar}
+            style={{
+              flexShrink: 0, width: 40, height: 40, borderRadius: 14,
+              background: '#f8fafc', border: '1px solid rgba(0,0,0,0.08)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', color: '#0f172a',
+            }}
+          >
+            <ArrowLeft size={20} />
+          </button>
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {/* So "Radar": com o botao de voltar de um lado e o contador de
+                online do outro, "Radar PraiaGo" ou quebrava em duas linhas ou
+                saia cortado no meio da palavra. A marca ja esta na barra do
+                topo do app — repetir aqui custava a legibilidade do resto. */}
             <h1 style={{
-              margin: 0, fontSize: 24, fontWeight: 900,
-              display: 'flex', alignItems: 'center', gap: 8,
+              margin: 0, fontSize: 20, fontWeight: 900,
+              display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
             }} className="beach-gradient-text">
-              <MapPin size={24} style={{ color: '#22c55e' }} />
-              Radar PraiaGo
+              <MapPin size={19} style={{ color: '#22c55e', flexShrink: 0 }} />
+              Radar
             </h1>
             <p style={{ margin: '4px 0 0', fontSize: 12, color: '#64748b', fontWeight: 600 }}>
               Ambulantes ao vivo perto de você
@@ -753,10 +785,7 @@ function MapView({
         ref={setMapa}
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-          subdomains="abcd"
-          // O Voyager já traz areia bege e parque verde (mesmos dados do OSM).
+          attribution={MAPA_ATRIBUICAO} url={MAPA_TILES} maxZoom={MAPA_ZOOM_MAX} // O Voyager já traz areia bege e parque verde (mesmos dados do OSM).
           // Este filtro só aquece e satura um pouco pra faixa de praia puxar
           // mais pro amarelo do visual novo, sem trocar de provedor nem
           // depender de chave de API.

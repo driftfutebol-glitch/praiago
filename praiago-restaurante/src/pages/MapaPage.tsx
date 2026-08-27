@@ -11,6 +11,7 @@ import {
 } from '../lib/praiagoZones'
 import { supabase } from '../lib/supabase'
 import { useSessao } from '../lib/auth'
+import { MAPA_TILES, MAPA_ATRIBUICAO, MAPA_ZOOM_MAX } from '../lib/mapa'
 
 // ── Fix ícones Leaflet ───────────────────────────────────────
 delete (L.Icon.Default.prototype as any)._getIconUrl
@@ -387,10 +388,7 @@ export default function MapaPage() {
             <FlyTo center={mapCenter} zoom={mapZoom} />
 
             <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-              url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-              subdomains="abcd"
-            />
+              attribution={MAPA_ATRIBUICAO} url={MAPA_TILES} maxZoom={MAPA_ZOOM_MAX} />
 
             {/* ── Polígonos de zonas ──────────────────────── */}
             {camadas.zonas && zonasFiltradas.map(zone => {

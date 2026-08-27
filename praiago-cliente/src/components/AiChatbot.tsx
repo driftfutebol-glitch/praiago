@@ -186,11 +186,16 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
             exit={{ y: 20, opacity: 0, scale: 0.95 }}
             style={{
               position: 'fixed',
-              bottom: 80,
-              right: 24,
-              width: 350,
-              height: 500,
-              maxHeight: '80vh',
+              // No iPhone o teclado NAO encolhe o viewport de layout: com
+              // `bottom` fixo e altura em vh, o painel ficava do mesmo tamanho
+              // e o teclado subia por cima do campo de escrever. `dvh` encolhe
+              // junto com o teclado, entao o campo continua visivel.
+              bottom: 'calc(80px + env(safe-area-inset-bottom))',
+              right: 12,
+              // 350px + 24 de margem nao cabia em tela de 375px: o painel
+              // encostava nas duas bordas e parecia cortado.
+              width: 'min(350px, calc(100vw - 24px))',
+              height: 'min(500px, 70dvh)',
               borderRadius: 24,
               background: 'rgba(255,255,255,0.92)',
               backdropFilter: 'blur(20px)',
@@ -291,9 +296,11 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
                 placeholder={mode === 'ticket' ? "Escreva sua mensagem..." : "Escreva sua dúvida..."}
                 disabled={loading}
                 style={{
-                  flex: 1, padding: '12px 16px', borderRadius: 16,
+                  flex: 1, minWidth: 0, padding: '12px 16px', borderRadius: 16,
                   background: '#f1f5f9', border: '1px solid rgba(0,0,0,0.08)',
-                  color: '#0f172a', fontSize: 14, outline: 'none'
+                  // 16px e o minimo: abaixo disso o Safari do iPhone da zoom
+                  // sozinho ao focar o campo, e a tela inteira "pula".
+                  color: '#0f172a', fontSize: 16, outline: 'none'
                 }}
               />
               <button

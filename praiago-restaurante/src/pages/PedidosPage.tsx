@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import { CheckCircle2, ChevronRight, Zap, ChefHat, Bike,
-         Search, MapPin, Truck, Package, QrCode, CreditCard, Banknote, Navigation } from 'lucide-react'
+         Search, MapPin, Truck, Package, QrCode, CreditCard, Banknote, Navigation, MessageCircle } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useOrders, type Status, type Pedido } from '../store/useOrders'
 import { alertDialog, promptDialog, confirmDialog } from '../lib/dialog'
 import { supabase } from '../lib/supabase'
 import { getSessao } from '../lib/auth'
 import LocalizacaoClienteModal from '../components/LocalizacaoClienteModal'
+import ChatPedidoModal from '../components/ChatPedidoModal'
 
 const STATUS_CFG: Record<Status, { label: string; bg: string; cor: string; icon: any; glow: string }> = {
   novo:       { label: 'Novo',       bg: 'rgba(239,68,68,0.15)',   cor: '#f87171', icon: Zap,         glow: 'rgba(239,68,68,0.3)'   },
@@ -44,6 +45,7 @@ export default function PedidosPage() {
   const [tab,    setTab]     = useState<Status | 'todos'>('todos')
   const [busca,  setBusca]   = useState('')
   const [pedidoNoMapa, setPedidoNoMapa] = useState<Pedido | null>(null)
+  const [pedidoNoChat, setPedidoNoChat] = useState<Pedido | null>(null)
   const [posicaoLoja, setPosicaoLoja] = useState<[number, number] | null>(null)
 
   // Ao abrir a tela, zera o contador de "novos" da sidebar
@@ -242,18 +244,34 @@ export default function PedidosPage() {
                     quando ele está compartilhando, e com o ponto do pedido
                     quando não está — dizendo qual das duas é. */}
                 {p.status !== 'entregue' && (
-                  <button
-                    type="button"
-                    onClick={() => setPedidoNoMapa(p)}
-                    style={{
-                      width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                      marginBottom: 18, padding: '11px 0', borderRadius: 14, cursor: 'pointer',
-                      border: '1px solid rgba(14,165,233,0.3)', background: 'rgba(14,165,233,0.08)',
-                      color: '#0284c7', fontSize: 13, fontWeight: 800, position: 'relative', zIndex: 1,
-                    }}
-                  >
-                    <Navigation size={16} /> Localização do cliente
-                  </button>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 18, position: 'relative', zIndex: 1 }}>
+                    <button
+                      type="button"
+                      onClick={() => setPedidoNoMapa(p)}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                        padding: '11px 0', borderRadius: 14, cursor: 'pointer',
+                        border: '1px solid rgba(14,165,233,0.3)', background: 'rgba(14,165,233,0.08)',
+                        color: '#0284c7', fontSize: 13, fontWeight: 800,
+                      }}
+                    >
+                      <Navigation size={16} /> Localização
+                    </button>
+                    {/* O cliente fala com a loja pelo app dele; sem este botão
+                        a mensagem chegava no banco e morria sem ninguém ler. */}
+                    <button
+                      type="button"
+                      onClick={() => setPedidoNoChat(p)}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                        padding: '11px 0', borderRadius: 14, cursor: 'pointer',
+                        border: '1px solid rgba(34,197,94,0.3)', background: 'rgba(34,197,94,0.08)',
+                        color: '#15803d', fontSize: 13, fontWeight: 800,
+                      }}
+                    >
+                      <MessageCircle size={16} /> Conversar
+                    </button>
+                  </div>
                 )}
 
                 {/* Botões de ação */}
@@ -321,6 +339,14 @@ export default function PedidosPage() {
             pedido={pedidoNoMapa}
             posicaoLoja={posicaoLoja}
             onClose={() => setPedidoNoMapa(null)}
+          />
+        )}
+        {pedidoNoChat && (
+          <ChatPedidoModal
+            key={`chat-${pedidoNoChat.id}`}
+            pedidoId={pedidoNoChat.id}
+            clienteNome={pedidoNoChat.cliente}
+            onClose={() => setPedidoNoChat(null)}
           />
         )}
       </AnimatePresence>

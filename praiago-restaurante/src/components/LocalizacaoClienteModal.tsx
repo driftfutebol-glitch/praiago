@@ -8,6 +8,7 @@ import { MapPin, Navigation, Phone, Radio, Store, UserRound, X } from 'lucide-re
 import { PRAIA_GRANDE_CENTER } from '../lib/praiagoZones'
 import { useLocalizacaoCliente } from '../hooks/useLocalizacaoCliente'
 import type { Pedido } from '../store/useOrders'
+import { MAPA_TILES, MAPA_ATRIBUICAO, MAPA_ZOOM_MAX } from '../lib/mapa'
 
 // Onde o cliente esta, para quem vai levar o pedido.
 //
@@ -119,10 +120,7 @@ export default function LocalizacaoClienteModal({
           {posicaoCliente ? (
             <MapContainer center={centro} zoom={15} style={{ height: '100%', width: '100%', minHeight: 320 }} zoomControl={false}>
               <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-                url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-                subdomains="abcd"
-              />
+                attribution={MAPA_ATRIBUICAO} url={MAPA_TILES} maxZoom={MAPA_ZOOM_MAX} />
               <Enquadrar pontos={pontos} />
               <Marker position={posicaoCliente} icon={ICONE_CLIENTE}>
                 <Popup>{ativo ? `Cliente agora (${agoraTexto})` : 'Ponto do momento do pedido'}</Popup>
