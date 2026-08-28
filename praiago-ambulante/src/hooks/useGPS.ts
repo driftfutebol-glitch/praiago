@@ -179,8 +179,25 @@ export function useGPS() {
       const sessao = getSessao()
       if (g) {
         publishPosition(g)
-      } else if (sessao?.id) {
-        // Sem posição validada nunca se ativa o perfil às cegas.
+        return
+      }
+      if (!sessao?.id) return
+
+      // Sem posição validada nunca se ativa o perfil às cegas — isso
+      // continua valendo.
+      //
+      // O que mudou: também não se DESATIVA quem escolheu ficar online só
+      // porque o GPS ainda não respondeu. Ao voltar do segundo plano o
+      // watchPosition recomeça do zero e leva alguns segundos; a versão
+      // anterior escrevia `online: false` nesse intervalo, e o ponto do
+      // vendedor apagava sozinho — ele parava de receber pedido sem saber
+      // por quê.
+      //
+      // Se ele realmente desligou a chave, a escolha está no armazenamento
+      // e o desligamento acontece. Se ele quer ficar online, esperamos a
+      // posição chegar; o cliente já expira o "AO VIVO" por conta própria
+      // quando a posição envelhece.
+      if (!isOnline()) {
         supabase.from('profiles').update({ online: false }).eq('id', sessao.id)
       }
     }

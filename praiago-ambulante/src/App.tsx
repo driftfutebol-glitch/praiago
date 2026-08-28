@@ -317,17 +317,31 @@ export default function App() {
       setKycLocked(perfil?.verificado !== true)
     }
 
+    // Só derruba a sessão quando o servidor RESPONDE que ela não vale.
+    //
+    // A versão anterior tratava "não consegui falar com o servidor" como
+    // "esse vendedor não vale": qualquer falha de rede caía no mesmo
+    // `bloquearAcessoInvalido` que a resposta de conta banida. E isso rodava
+    // a cada 10 SEGUNDOS — bastava o telefone perder a rede um instante, sair
+    // do app, trocar de Wi-Fi para 4G, e o vendedor era deslogado no meio do
+    // atendimento.
+    //
+    // Agora erro de rede não conclui nada: a sessão fica como está e a
+    // próxima passagem tenta de novo. O bloqueio continua funcionando,
+    // porque para bloquear o servidor precisa responder.
     const checarStatus = async () => {
-      const { data: authData } = await supabase.auth.getUser()
+      const { data: authData, error: erroAuth } = await supabase.auth.getUser()
+      if (erroAuth) return
       if (!authData.user) {
         bloquearAcessoInvalido(null, undefined)
         return
       }
-      const { data } = await supabase
+      const { data, error: erroPerfil } = await supabase
         .from('profiles')
         .select('status,role,verificado,conta_demo')
         .eq('id', sessao.id)
         .maybeSingle()
+      if (erroPerfil || !data) return
       atualizarGate(data, authData.user.id)
     }
     checarStatus()
@@ -335,7 +349,13 @@ export default function App() {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${sessao.id}` }, payload => atualizarGate(payload.new as PerfilGate))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'verificacoes', filter: `user_id=eq.${sessao.id}` }, () => checarStatus())
       .subscribe()
-    const timer = window.setInterval(checarStatus, 10000)
+    // 10s era herança de quando isso derrubava a sessão e queria pegar o
+    // bloqueio rápido. O realtime logo acima já avisa da mudança no perfil no
+    // instante em que ela acontece, então esta ronda é só rede de segurança —
+    // e a cada 10 segundos ela acordava o telefone o dia inteiro.
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') checarStatus()
+    }, 300000)
 
     return () => {
       ativo = false

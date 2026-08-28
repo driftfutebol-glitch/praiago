@@ -215,17 +215,27 @@ export default function App() {
       setKycLocked(perfil?.status !== 'banido' && perfil?.verificado !== true)
     }
 
+    // Só derruba a sessão quando o servidor RESPONDE que ela não vale.
+    //
+    // Antes, "não consegui falar com o servidor" caía no mesmo
+    // `bloquearAcessoInvalido` que a resposta de conta banida — e uma queda
+    // de rede de um segundo deslogava o restaurante no meio do expediente.
+    //
+    // Erro de rede agora não conclui nada. O bloqueio continua funcionando,
+    // porque para bloquear o servidor precisa responder.
     const checarStatus = async () => {
-      const { data: authData } = await supabase.auth.getUser()
+      const { data: authData, error: erroAuth } = await supabase.auth.getUser()
+      if (erroAuth) return
       if (!authData.user) {
         bloquearAcessoInvalido(null, undefined)
         return
       }
-      const { data } = await supabase
+      const { data, error: erroPerfil } = await supabase
         .from('profiles')
         .select('status,role,ban_motivo,verificado')
         .eq('id', sessao.id)
         .maybeSingle()
+      if (erroPerfil || !data) return
       atualizarGate(data, authData.user.id)
     }
     checarStatus()
@@ -233,7 +243,13 @@ export default function App() {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${sessao.id}` }, payload => atualizarGate(payload.new as { status?: string; role?: string; ban_motivo?: string | null; verificado?: boolean | null }))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'verificacoes', filter: `user_id=eq.${sessao.id}` }, () => checarStatus())
       .subscribe()
-    const timer = window.setInterval(checarStatus, 10000)
+    // 10s era herança de quando isso derrubava a sessão. O realtime logo
+    // acima já avisa da mudança no perfil no instante em que ela acontece;
+    // esta ronda é rede de segurança, não precisa acordar o aparelho o dia
+    // inteiro.
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') checarStatus()
+    }, 300000)
 
     return () => {
       ativo = false

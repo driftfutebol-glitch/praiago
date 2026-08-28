@@ -170,21 +170,41 @@ export default function App() {
       useStore.getState().setContaDemo(perfil?.conta_demo === true)
     }
 
+    // Só derruba a sessão quando o servidor RESPONDE que ela não vale.
+    //
+    // A versão anterior tratava "não consegui falar com o servidor" como
+    // "esse usuário não vale": qualquer falha de rede caía no mesmo
+    // `validarAcesso(undefined, null)` que a resposta de conta banida. Como
+    // isso rodava a cada 30 segundos, bastava o telefone perder a rede um
+    // instante — sair do app, entrar no elevador, o Wi-Fi trocar para o 4G —
+    // para o usuário ser deslogado sem ter feito nada.
+    //
+    // Agora, erro de rede não conclui nada: a sessão fica como está e a
+    // próxima passagem tenta de novo. O bloqueio de conta banida continua
+    // funcionando, porque para isso o servidor precisa responder — e quando
+    // responde, a decisão é tomada.
     const checarStatus = async () => {
-      const { data: authData } = await supabase.auth.getUser()
+      const { data: authData, error: erroAuth } = await supabase.auth.getUser()
+      if (erroAuth) return
       if (!authData.user) {
         validarAcesso(undefined, null)
         return
       }
-      const { data } = await supabase
+      const { data, error: erroPerfil } = await supabase
         .from('profiles')
         .select('status,role,conta_demo')
         .eq('id', sessao.id)
         .maybeSingle()
+      if (erroPerfil || !data) return
       validarAcesso(authData.user.id, data)
     }
     checarStatus()
-    const timer = window.setInterval(checarStatus, 30000)
+    // 30s era herança de quando isso derrubava a sessão e queria pegar o
+    // banimento rápido. Agora que só age com resposta, 5 minutos bastam, e
+    // deixa de acordar o telefone o tempo todo.
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') checarStatus()
+    }, 300000)
 
     return () => {
       ativo = false
