@@ -7,11 +7,25 @@
     <meta name="referrer" content="strict-origin-when-cross-origin" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preload" as="image" href="/praiago-logo-intro-v1.webp" type="image/webp" />
-    <!-- viewport-fit=cover e obrigatorio para env(safe-area-inset-*) valer
-         alguma coisa. Sem ele o iOS devolve ZERO, e a barra de baixo, que se
-         posiciona com `calc(14px + env(safe-area-inset-bottom))`, encosta no
-         indicador de home do iPhone. Era metade do "sai do encaixe". -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- Duas coisas nesta linha, e as duas doeram.
+
+         viewport-fit=cover: sem ele o iOS devolve ZERO em
+         env(safe-area-inset-*), e a barra de baixo, que se posiciona somando
+         essa folga, encosta no indicador de home. Tambem e o que faz o
+         cabecalho cobrir a barra de status em vez de ficar embaixo dela.
+
+         maximum-scale=1 + user-scalable=no: o Safari amplia a pagina quando
+         um campo recebe foco, e NAO desamplia ao sair dele. Bastava um campo
+         em qualquer tela para o app inteiro ficar gigante ate a pessoa
+         fechar e abrir. A regra de 16px nos campos (index.css) evita o zoom
+         nascer; isto aqui garante que ele nao consiga acontecer de jeito
+         nenhum, inclusive por toque duplo ou por campo que alguem esqueca de
+         dimensionar amanha.
+
+         Vale a pena saber: o Safari comum IGNORA user-scalable=no desde o
+         iOS 10, por acessibilidade. O WKWebView de app respeita — e por isso
+         funciona aqui e nao funcionaria num site. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>PraiaGo · Cliente</title>
   </head>
   <body translate="no" class="notranslate">
