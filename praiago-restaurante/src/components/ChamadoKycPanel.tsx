@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { LifeBuoy, ChevronDown, ExternalLink, CheckCircle2, Clock } from 'lucide-react'
+import { ChevronDown, ExternalLink, CheckCircle2, Clock, AlertTriangle } from 'lucide-react'
 import { useChamadoKyc } from '../hooks/useChamadoKyc'
 
 // Painel do chamado de verificacao. Copiado identico no ambulante e no
@@ -29,7 +29,19 @@ export default function ChamadoKycPanel() {
   const { chamado, mensagens, aberto, resolvido, linkVerificacao, recarregar } = useChamadoKyc()
   const [minimizado, setMinimizado] = useState(leMinimizado)
   const [dispensado, setDispensado] = useState(false)
+  const [assistenteAberto, setAssistenteAberto] = useState(false)
   const fim = useRef<HTMLDivElement | null>(null)
+
+  // O assistente e este painel dividem o canto inferior direito. Enquanto a
+  // janela dele esta aberta, esta some — na primeira versao ficava por cima
+  // dos botoes de resposta rapida do chat.
+  useEffect(() => {
+    const aoMudar = (e: Event) => {
+      setAssistenteAberto(!!(e as CustomEvent<{ aberto?: boolean }>).detail?.aberto)
+    }
+    window.addEventListener('praiago:assistente', aoMudar)
+    return () => window.removeEventListener('praiago:assistente', aoMudar)
+  }, [])
 
   useEffect(() => {
     try { localStorage.setItem(CHAVE_MIN, minimizado ? '1' : '0') } catch { /* modo privado */ }
@@ -51,35 +63,52 @@ export default function ChamadoKycPanel() {
 
   if (!chamado || dispensado) return null
   if (!aberto && !resolvido) return null
+  if (assistenteAberto) return null
 
   const naoLidas = mensagens.filter(m => m.autor === 'admin').length
 
   if (minimizado) {
+    // Fica ACIMA do botao do assistente, que mora em `bottom: 80, right: 24`
+    // com zIndex 9999. Na primeira versao este aqui usava bottom 88 e zIndex
+    // 1400: caia em cima do outro e ainda por baixo — sumia da tela.
+    //
+    // E vermelho de proposito. A bolinha verde do assistente e convite; esta
+    // e pendencia: enquanto ela estiver ali, o vendedor nao consegue sacar.
     return (
       <button
         type="button"
         onClick={() => { setMinimizado(false); void recarregar() }}
         aria-label="Abrir o chamado de verificação"
         style={{
-          position: 'fixed', right: 14,
-          bottom: 'calc(88px + env(safe-area-inset-bottom))',
-          zIndex: 1400, border: 'none', cursor: 'pointer',
-          width: 52, height: 52, borderRadius: 26,
-          background: resolvido ? '#148447' : '#b54708', color: '#fff',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: '0 8px 24px rgba(15,23,42,.28)',
+          position: 'fixed', right: 20,
+          bottom: 'calc(150px + env(safe-area-inset-bottom))',
+          zIndex: 10000, border: 'none', cursor: 'pointer',
+          padding: '10px 14px', borderRadius: 26,
+          background: resolvido ? '#148447' : '#c81e3a', color: '#fff',
+          display: 'flex', alignItems: 'center', gap: 8,
+          fontSize: 12.5, fontWeight: 900,
+          boxShadow: resolvido
+            ? '0 8px 24px rgba(15,23,42,.28)'
+            : '0 8px 26px rgba(200,30,58,.45)',
+          animation: resolvido ? undefined : 'pulsarChamado 2.2s ease-in-out infinite',
         }}
       >
-        {resolvido ? <CheckCircle2 size={22} /> : <LifeBuoy size={22} />}
+        {resolvido ? <CheckCircle2 size={19} /> : <AlertTriangle size={19} />}
+        {resolvido ? 'Conta liberada' : naoLidas > 0 ? 'Seu link chegou' : 'Verificação pendente'}
         {!resolvido && naoLidas > 0 && (
           <span style={{
-            position: 'absolute', top: -2, right: -2, minWidth: 20, height: 20,
-            borderRadius: 10, background: '#e11d48', color: '#fff',
+            minWidth: 20, height: 20, borderRadius: 10,
+            background: '#fff', color: '#c81e3a',
             fontSize: 11, fontWeight: 900, display: 'flex',
             alignItems: 'center', justifyContent: 'center', padding: '0 5px',
-            border: '2px solid #fff',
           }}>{naoLidas}</span>
         )}
+        <style>{`
+          @keyframes pulsarChamado {
+            0%, 100% { box-shadow: 0 8px 26px rgba(200,30,58,.45); }
+            50%      { box-shadow: 0 8px 26px rgba(200,30,58,.80); }
+          }
+        `}</style>
       </button>
     )
   }
@@ -95,20 +124,25 @@ export default function ChamadoKycPanel() {
         overflow: 'hidden',
       }}
     >
+      {/* Vermelho enquanto pende, verde quando resolve. Nao e enfeite: essa
+          e a unica pendencia do app que impede o vendedor de receber o
+          proprio dinheiro. Em amarelo, ela se confundia com aviso comum. */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 9, padding: '12px 14px',
-        background: resolvido ? '#eaf8ef' : '#fff4e5',
-        borderBottom: `1px solid ${resolvido ? '#a7dfbd' : '#f4d39f'}`,
+        background: resolvido ? '#eaf8ef' : '#fff0f2',
+        borderBottom: `1px solid ${resolvido ? '#a7dfbd' : '#f0b6bd'}`,
       }}>
-        <div style={{ color: resolvido ? '#148447' : '#b54708', display: 'flex' }}>
-          {resolvido ? <CheckCircle2 size={18} /> : <LifeBuoy size={18} />}
+        <div style={{ color: resolvido ? '#148447' : '#c81e3a', display: 'flex' }}>
+          {resolvido ? <CheckCircle2 size={18} /> : <AlertTriangle size={18} />}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13.5, fontWeight: 900, color: resolvido ? '#148447' : '#b54708' }}>
-            {resolvido ? 'Verificação concluída' : 'Chamado aberto'}
+          <div style={{ fontSize: 13.5, fontWeight: 900, color: resolvido ? '#148447' : '#c81e3a' }}>
+            {resolvido ? 'Verificação concluída' : 'Importante · saque bloqueado'}
           </div>
-          <div style={{ fontSize: 11.5, fontWeight: 650, color: resolvido ? '#148447' : '#b54708', opacity: .85 }}>
-            {resolvido ? 'Sua conta está liberada' : 'Estamos preparando o seu link'}
+          <div style={{ fontSize: 11.5, fontWeight: 650, color: resolvido ? '#148447' : '#c81e3a', opacity: .88 }}>
+            {resolvido
+              ? 'Sua conta está liberada'
+              : linkVerificacao ? 'Seu link chegou — faça agora' : 'Chamado aberto, preparando o seu link'}
           </div>
         </div>
         <button
@@ -117,7 +151,7 @@ export default function ChamadoKycPanel() {
           aria-label="Minimizar"
           style={{
             border: 'none', background: 'transparent', cursor: 'pointer',
-            color: resolvido ? '#148447' : '#b54708', padding: 4, display: 'flex',
+            color: resolvido ? '#148447' : '#c81e3a', padding: 4, display: 'flex',
           }}
         >
           <ChevronDown size={19} />
