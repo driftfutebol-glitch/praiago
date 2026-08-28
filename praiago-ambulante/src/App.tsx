@@ -54,6 +54,16 @@ function LogoBar({ gpsStatus, foraDaArea, modoRevisao }: { gpsStatus: string; fo
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       minHeight: 66,
       padding: '8px 16px',
+      // A folga do entalhe entra como padding DAQUI, e nao como espaco vazio
+      // acima. Assim o fundo branco do cabecalho passa por baixo da barra de
+      // status: relogio, bateria e sinal ficam legiveis em cima dele, em vez
+      // de cair por cima do logo.
+      //
+      // Com `viewport-fit=cover` a pagina vai ate a borda de cima da tela, e
+      // sem isto o iPhone desenha a barra de status por cima do conteudo. O
+      // valor muda por aparelho — no iPhone com entalhe da ~47px, no SE da 20,
+      // e no Android da 0 — entao nao da para chutar um numero fixo.
+      paddingTop: 'calc(8px + env(safe-area-inset-top))',
       borderBottom: '1px solid #e7ecf1',
       background: 'rgba(255,255,255,0.96)',
       backdropFilter: 'blur(14px)',
@@ -338,11 +348,30 @@ export default function App() {
   if (!sessao && !isPublic) return <Navigate to="/login" replace />
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#f4f7fa' }}>
+    <div style={{
+      display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#f4f7fa',
+      // Telas publicas (login, recuperar senha) nao tem o cabecalho que
+      // absorve a folga do entalhe, entao a folga entra aqui. Nas outras
+      // fica zero, senao a folga contaria duas vezes.
+      paddingTop: isPublic ? 'env(safe-area-inset-top)' : 0,
+    }}>
       <PasswordRecoveryHandler />
       {!isPublic && <LogoBar gpsStatus={gpsStatus} foraDaArea={foraDaArea} modoRevisao={modoRevisao} />}
       {!isPublic && <VerificationBar />}
-      <main style={{ flex: 1, overflowY: 'auto', paddingBottom: isPublic ? 0 : '82px', position: 'relative' }}>
+      {/* O espaco reservado aqui embaixo repete a conta da propria barra, em
+          vez de um numero solto: ela tem 70px de altura e flutua a
+          `max(10px, env(safe-area-inset-bottom))` do fim da tela (veja
+          BottomNav.tsx). Os 16px finais sao a folga para o ultimo item nao
+          encostar nela.
+
+          O numero fixo de antes (82px) dava 2px de sobra no Android — perto
+          demais de esconder conteudo se a barra mudasse de altura. */}
+      <main style={{
+        flex: 1, overflowY: 'auto', position: 'relative',
+        paddingBottom: isPublic
+          ? 0
+          : 'calc(70px + max(10px, env(safe-area-inset-bottom)) + 16px)',
+      }}>
         {!isPublic && kycLocked ? (
           <KycLockedPanel />
         ) : (

@@ -300,3 +300,18 @@ select {
   align-items: center;
   justify-content: center;
 }
+
+/* ── A barra de baixo nao pode balancar ──────────────────────────────────
+ *
+ * No iPhone, rolar alem do fim faz a pagina "puxar" de volta (o efeito
+ * elastico). Durante esse puxao o WebKit arrasta junto tudo que e
+ * position: fixed — a barra de Pedidos/Mapa sobe e desce com o dedo, e
+ * parece que ela esta solta.
+ *
+ * overscroll-behavior: none desliga o efeito. A barra fica presa no lugar
+ * e a rolagem termina onde o conteudo termina.
+ *
+ * Nao precisa de plugin nativo, entao entra por OTA. */
+html, body {
+  overscroll-behavior: none;
+}
