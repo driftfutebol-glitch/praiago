@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, ExternalLink, CheckCircle2, Clock, AlertTriangle } from 'lucide-react'
+import { ChevronDown, ExternalLink, CheckCircle2, Clock, AlertTriangle, RefreshCw } from 'lucide-react'
 import { useChamadoKyc } from '../hooks/useChamadoKyc'
 
 // Painel do chamado de verificacao. Copiado identico no ambulante e no
@@ -25,10 +25,21 @@ function horaCurta(ms: number) {
   return new Date(ms).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 }
 
+/** Segundos restantes como m:ss. Zero vira "0:00", nunca negativo. */
+function relogio(ms: number) {
+  const s = Math.max(0, Math.floor(ms / 1000))
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}
+
 export default function ChamadoKycPanel() {
-  const { chamado, mensagens, aberto, resolvido, linkVerificacao, recarregar } = useChamadoKyc()
+  const {
+    chamado, mensagens, aberto, resolvido,
+    linkVerificacao, linkVencido, restaMs, pedirOutroLink, recarregar,
+  } = useChamadoKyc()
   const [minimizado, setMinimizado] = useState(leMinimizado)
   const [dispensado, setDispensado] = useState(false)
+  const [pedindo, setPedindo] = useState(false)
+  const [falhou, setFalhou] = useState(false)
   const [assistenteAberto, setAssistenteAberto] = useState(false)
   const fim = useRef<HTMLDivElement | null>(null)
 
@@ -94,7 +105,10 @@ export default function ChamadoKycPanel() {
         }}
       >
         {resolvido ? <CheckCircle2 size={19} /> : <AlertTriangle size={19} />}
-        {resolvido ? 'Conta liberada' : naoLidas > 0 ? 'Seu link chegou' : 'Verificação pendente'}
+        {resolvido ? 'Conta liberada'
+          : linkVerificacao ? 'Faça a verificação · ' + relogio(restaMs)
+          : linkVencido ? 'O link venceu'
+          : 'Verificação pendente'}
         {!resolvido && naoLidas > 0 && (
           <span style={{
             minWidth: 20, height: 20, borderRadius: 10,
@@ -212,15 +226,43 @@ export default function ChamadoKycPanel() {
               onClick={() => window.open(linkVerificacao, '_blank', 'noopener,noreferrer')}
               style={{
                 width: '100%', padding: '12px 0', borderRadius: 12, border: 'none',
-                background: '#b54708', color: '#fff', fontSize: 13.5, fontWeight: 900,
+                background: '#c81e3a', color: '#fff', fontSize: 13.5, fontWeight: 900,
                 cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
               }}
             >
-              <ExternalLink size={16} /> Fazer a verificação agora
+              <ExternalLink size={16} /> Fazer a verificação · {relogio(restaMs)}
             </button>
-            <div style={{ marginTop: 7, fontSize: 11, fontWeight: 650, color: '#b54708', lineHeight: 1.45 }}>
-              O link vale poucos minutos e quem preenche é o titular da conta, com documento em mãos.
-              Se vencer, é só avisar aqui que a gente manda outro.
+            <div style={{ marginTop: 7, fontSize: 11, fontWeight: 650, color: '#c81e3a', lineHeight: 1.45 }}>
+              O link vence em {relogio(restaMs)}. Quem preenche é o titular da conta, com documento
+              em mãos — se não der tempo, peça outro aqui mesmo.
+            </div>
+          </>
+        ) : linkVencido ? (
+          <>
+            {/* Botao morto e pior do que botao ausente: o vendedor tocava,
+                caia numa pagina vencida e nao tinha como avisar ninguem. */}
+            <button
+              type="button"
+              disabled={pedindo}
+              onClick={async () => {
+                setPedindo(true)
+                const ok = await pedirOutroLink()
+                setPedindo(false)
+                if (!ok) setFalhou(true)
+              }}
+              style={{
+                width: '100%', padding: '12px 0', borderRadius: 12, border: 'none',
+                background: '#0f172a', color: '#fff', fontSize: 13.5, fontWeight: 900,
+                cursor: pedindo ? 'wait' : 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+              }}
+            >
+              <RefreshCw size={15} /> {pedindo ? 'Pedindo…' : 'Pedir outro link'}
+            </button>
+            <div style={{ marginTop: 7, fontSize: 11, fontWeight: 650, color: '#64748b', lineHeight: 1.45 }}>
+              {falhou
+                ? 'Não deu pra avisar agora. Tente de novo em instantes.'
+                : 'O link anterior venceu — eles duram 5 minutos. Toque acima que a gente gera outro e ele chega aqui.'}
             </div>
           </>
         ) : (

@@ -9,6 +9,7 @@ import PedidosPage from './pages/PedidosPage'
 import UsuariosPage from './pages/UsuariosPage'
 import ExclusoesPage from './pages/ExclusoesPage'
 import VerificacoesPage from './pages/VerificacoesPage'
+import LiberacaoSaquePage from './pages/LiberacaoSaquePage'
 import AtendimentoPage from './pages/AtendimentoPage'
 import ErrorsPage from './pages/ErrorsPage'
 import EventosPage from './pages/EventosPage'
@@ -289,6 +290,7 @@ export default function App() {
                 entao mora na mesma permissao de 'usuarios'. */}
             <Route path="/cadastros-evento" element={guard('usuarios', <CadastrosEventoPage />)} />
             <Route path="/verificacoes" element={guard('verificacoes', <VerificacoesPage />)} />
+            <Route path="/liberacao-saque" element={guard('atendimento', <LiberacaoSaquePage />)} />
             <Route path="/atendimento/:plataforma" element={guard('atendimento', <AtendimentoPage />)} />
             <Route path="/eventos" element={guard('eventos', <EventosPage />)} />
             <Route path="/cupons" element={guard('cupons', <CuponsPage />)} />

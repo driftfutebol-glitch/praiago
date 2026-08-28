@@ -35,6 +35,15 @@ type LinhaMensagem = { id: string; autor: string; mensagem: string; created_at: 
 
 const ABERTOS = ['aberto', 'em_andamento']
 
+/**
+ * Quanto tempo o link de verificacao continua valendo.
+ *
+ * A Pagar.me escreve "vale por 20 minutos" no painel, mas o contador que ela
+ * mesma mostra comeca em 5. Ficamos com os 5: oferecer um botao que ja
+ * morreu e pior do que dizer que venceu e mandar pedir outro.
+ */
+export const VALIDADE_LINK_MS = 5 * 60_000
+
 /** Primeiro endereco http(s) da mensagem. E assim que o link chega. */
 export function extrairLink(texto: string): string | null {
   const m = texto.match(/https?:\/\/[^\s<>"')]+/)
@@ -130,16 +139,49 @@ export function useChamadoKyc() {
     return () => { void supabase.removeChannel(canal) }
   }, [chamado?.id])
 
+  // Pedir outro link e so escrever no chamado: o gatilho do banco devolve o
+  // chamado para a fila do admin e marca como nao lido. Nao ha botao magico
+  // do outro lado — quem gera o link continua sendo gente.
+  const pedirOutroLink = useCallback(async () => {
+    if (!chamado?.id) return false
+    const { error } = await supabase
+      .from('ticket_mensagens')
+      .insert({ ticket_id: chamado.id, autor: 'usuario', mensagem: 'O link de verificação venceu. Pode me mandar outro?' })
+    if (!error) void carregar()
+    return !error
+  }, [chamado?.id, carregar])
+
   const aberto = !!chamado && ABERTOS.includes(chamado.status)
   const resolvido = chamado?.status === 'resolvido'
 
   // O link mais recente que o atendimento mandou. So conta mensagem de
   // gente do suporte: link que o proprio vendedor colar nao vira botao.
-  const linkVerificacao = [...mensagens]
+  const ultimoComLink = [...mensagens]
     .reverse()
-    .filter(m => m.autor === 'admin')
-    .map(m => extrairLink(m.mensagem))
-    .find(Boolean) ?? null
+    .find(m => m.autor === 'admin' && extrairLink(m.mensagem))
 
-  return { chamado, mensagens, carregando, aberto, resolvido, linkVerificacao, recarregar: carregar }
+  // O relogio precisa andar sozinho: sem isto o botao continuaria na tela
+  // depois de vencido, porque nada re-renderiza o componente quando o unico
+  // que mudou foi a hora.
+  const [agora, setAgora] = useState(() => Date.now())
+  useEffect(() => {
+    if (!ultimoComLink) return
+    const t = setInterval(() => setAgora(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [ultimoComLink?.id])
+
+  const nasceEm = ultimoComLink?.criadaEm ?? 0
+  const restaMs = ultimoComLink ? Math.max(0, nasceEm + VALIDADE_LINK_MS - agora) : 0
+  const linkValido = !!ultimoComLink && restaMs > 0
+  const linkVencido = !!ultimoComLink && restaMs === 0 && !resolvido
+
+  return {
+    chamado, mensagens, carregando, aberto, resolvido,
+    /** So devolve o endereco enquanto ele ainda vale. */
+    linkVerificacao: linkValido ? extrairLink(ultimoComLink.mensagem) : null,
+    linkVencido,
+    restaMs,
+    pedirOutroLink,
+    recarregar: carregar,
+  }
 }

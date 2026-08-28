@@ -34,6 +34,7 @@ export default function Sidebar({ onLogout, perfil }: { onLogout: () => void; pe
   const [pendingLocalizacoes, setPendingLocalizacoes] = useState(0)
   const [pendingTrocaNome, setPendingTrocaNome] = useState(0)
   const [ticketsAbertos, setTicketsAbertos] = useState(0)
+  const [saquesEsperando, setSaquesEsperando] = useState(0)
   const [atendimentoOpen, setAtendimentoOpen] = useState(false)
   const location = useLocation()
 
@@ -53,6 +54,17 @@ export default function Sidebar({ onLogout, perfil }: { onLogout: () => void; pe
         .select('*', { count: 'exact', head: true })
         .eq('status', 'aberto')
       setTicketsAbertos(count || 0)
+
+      // Contador proprio da liberacao de saque. Conta 'em_andamento' junto:
+      // o chamado sai de 'aberto' assim que alguem responde, mas so termina
+      // quando a conta e aprovada — some da fila cedo demais seria esquecer
+      // vendedor no meio do caminho.
+      const { count: kyc } = await supabase
+        .from('tickets')
+        .select('*', { count: 'exact', head: true })
+        .eq('origem', 'kyc')
+        .in('status', ['aberto', 'em_andamento'])
+      setSaquesEsperando(kyc || 0)
     }
     fetchTickets()
     const ch = supabase.channel('sidebar_tickets')
@@ -247,6 +259,23 @@ export default function Sidebar({ onLogout, perfil }: { onLogout: () => void; pe
             <div className="px-3 pt-4 pb-2 text-[10px] font-bold text-slate-600 uppercase tracking-[0.2em] font-mono">
               Suporte
             </div>
+
+            {/* Antes de Atendimento de proposito: aqui o atraso custa o
+                dinheiro do vendedor, e o link que se gera dura 5 minutos.
+                Misturado na lista de duvidas, este chamado se perde. */}
+            <NavLink to="/liberacao-saque" className={linkClass}>
+              <ShieldAlert size={18} />
+              <span className="flex-1">Liberação de saque</span>
+              {saquesEsperando > 0 && (
+                <motion.span
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  className="min-w-[22px] h-[22px] flex items-center justify-center bg-amber-500 text-slate-950 text-[10px] font-bold rounded-full"
+                >
+                  {saquesEsperando}
+                </motion.span>
+              )}
+            </NavLink>
 
             <button
               onClick={() => setAtendimentoOpen(!atendimentoOpen)}
