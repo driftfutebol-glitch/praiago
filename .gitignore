@@ -57,3 +57,4 @@ npm-debug.log*
 # zipada. Versionar os dois guarda 17MB pra dizer a mesma coisa — a pasta e a
 # fonte, a zip se regera quando for enviar.
 PraiaGo-PlayStore-Recursos.zip
+mobile/ota-builds/
