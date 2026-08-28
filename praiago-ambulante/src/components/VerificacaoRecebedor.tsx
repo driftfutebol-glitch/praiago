@@ -85,23 +85,50 @@ export default function VerificacaoRecebedor() {
     return () => { void supabase.removeChannel(canal) }
   }, [sessao?.id, carregar])
 
+  // Tres respostas possiveis, e nenhuma delas e erro:
+  //
+  //   link      -> ha o que fazer, abre agora
+  //   aguardar  -> a Pagar.me esta conferindo sozinha, nao ha o que fazer
+  //   resolvido -> ja liberou, ou recusou de vez
+  //
+  // Ate 27/08/2026 isto so sabia abrir link, e qualquer outra coisa virava
+  // "Nao deu pra abrir / Pagamento indisponivel no momento" — o que fazia o
+  // vendedor achar que o app quebrou quando, na verdade, so faltava esperar.
+  type Resposta = {
+    situacao?: 'link' | 'aguardar' | 'resolvido' | 'travado'
+    url?: string
+    titulo?: string
+    mensagem?: string
+  }
+
   async function abrirVerificacao() {
     if (gerando) return
     setGerando(true)
-    const r = await chamarEdge<{ url?: string }>(
+    const r = await chamarEdge<Resposta>(
       'recebedor-kyc-link', {},
-      'Não foi possível abrir a verificação agora. Tente de novo em instantes.',
+      'Não foi possível consultar a verificação agora. Tente de novo em instantes.',
     )
     setGerando(false)
 
-    if (!r.ok || !r.data?.url) {
-      await alertDialog({ title: 'Não deu pra abrir', message: r.erro, tone: 'danger' })
+    if (!r.ok) {
+      await alertDialog({ title: 'Não deu pra consultar', message: r.erro, tone: 'danger' })
       return
     }
 
-    // O link vale poucos minutos, entao abre agora — nao guarda, nao copia
-    // "para depois". Guardar um link desses e guardar algo ja vencendo.
-    window.open(r.data.url, '_blank', 'noopener,noreferrer')
+    if (r.data?.situacao === 'link' && r.data.url) {
+      // O link vale poucos minutos, entao abre agora — nao guarda, nao copia
+      // "para depois". Guardar um link desses e guardar algo ja vencendo.
+      window.open(r.data.url, '_blank', 'noopener,noreferrer')
+      return
+    }
+
+    await alertDialog({
+      title: r.data?.titulo || 'Verificação em andamento',
+      message: r.data?.mensagem || 'O provedor está conferindo os seus dados.',
+      tone: 'default',
+    })
+    // O gateway pode ter avancado sem a varredura ter passado ainda.
+    void carregar()
   }
 
   // Sem conta cadastrada ainda: quem fala e o bloco de conta bancaria, logo
@@ -158,9 +185,13 @@ export default function VerificacaoRecebedor() {
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
           }}
         >
+          {/* "Ver o que falta" e nao "Fazer a verificacao": nem sempre ha o
+              que fazer. As vezes a resposta e "esta em analise, espera" — e
+              um botao que promete acao para depois dizer "aguarde" parece
+              defeito. */}
           {gerando
-            ? <><LoaderCircle size={15} style={{ animation: 'spin 1s linear infinite' }} /> Abrindo…</>
-            : <><ExternalLink size={15} /> Fazer a verificação</>}
+            ? <><LoaderCircle size={15} style={{ animation: 'spin 1s linear infinite' }} /> Consultando…</>
+            : <><ExternalLink size={15} /> Ver o que falta</>}
         </button>
       )}
 

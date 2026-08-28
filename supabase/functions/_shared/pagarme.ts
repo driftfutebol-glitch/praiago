@@ -22,7 +22,7 @@ export function gatewayConfigurado() {
 
 export async function pagarme<T = Record<string, unknown>>(
   caminho: string,
-  init: RequestInit & { idempotencyKey?: string } = {},
+  init: RequestInit & { idempotencyKey?: string; contexto?: string } = {},
 ): Promise<T> {
   const headers: Record<string, string> = {
     Authorization: authHeader(),
@@ -45,20 +45,32 @@ export async function pagarme<T = Record<string, unknown>>(
       caminho,
       requestId: res.headers.get('x-request-id') || undefined,
     })
-    throw Object.assign(new Error(mensagemAmigavel(res.status, corpo)), { status: res.status, corpo })
+    throw Object.assign(new Error(mensagemAmigavel(res.status, corpo, init.contexto)), { status: res.status, corpo })
   }
 
   return corpo as T
 }
 
-/** Traduz o erro do gateway pra algo que o cliente possa ler. */
-function mensagemAmigavel(status: number, corpo: unknown): string {
+/**
+ * Traduz o erro do gateway pra algo que o cliente possa ler.
+ *
+ * `contexto` diz de que operacao se trata, escrito para caber na frase:
+ * 'a verificacao da conta', 'o saque'. Sem ele a mensagem fala em pagamento,
+ * que era o unico caso quando este arquivo nasceu.
+ *
+ * Por que isso importa: em 27/08/2026 o botao de verificacao da conta
+ * respondia "Pagamento indisponivel no momento". A operacao nao tem nada a
+ * ver com pagamento, e a mensagem mandava procurar o problema no lugar
+ * errado. Mensagem de erro que mente custa horas.
+ */
+function mensagemAmigavel(status: number, corpo: unknown, contexto?: string): string {
   const c = corpo as { message?: string; errors?: Record<string, string[]> } | null
   const primeiro = c?.errors ? Object.values(c.errors)[0]?.[0] : undefined
-  if (status === 401 || status === 403) return 'Pagamento indisponivel no momento.'
+  const oQue = contexto || 'o pagamento'
+  if (status === 401 || status === 403) return `O provedor nao autorizou ${oQue} agora.`
   if (status === 422 && primeiro) return primeiro
-  if (status >= 500) return 'O provedor de pagamento esta instavel. Tente de novo em instantes.'
-  return c?.message || 'Nao foi possivel processar o pagamento.'
+  if (status >= 500) return 'O provedor esta instavel. Tente de novo em instantes.'
+  return c?.message || `Nao foi possivel concluir ${oQue}.`
 }
 
 /** Reais -> centavos (a API trabalha sempre em centavos, inteiro). */
