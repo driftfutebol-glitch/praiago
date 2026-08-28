@@ -116,19 +116,53 @@ export default function VerificacaoRecebedor() {
     }
 
     if (r.data?.situacao === 'link' && r.data.url) {
+      // Caminho automatico. Hoje ele nao dispara (a Pagar.me bloqueia o
+      // endpoint), mas continua aqui: no dia em que liberarem, o vendedor
+      // deixa de depender de gente e nada precisa mudar.
+      //
       // O link vale poucos minutos, entao abre agora — nao guarda, nao copia
       // "para depois". Guardar um link desses e guardar algo ja vencendo.
       window.open(r.data.url, '_blank', 'noopener,noreferrer')
       return
     }
 
+    if (r.data?.situacao === 'resolvido') {
+      await alertDialog({
+        title: r.data.titulo || 'Tudo certo',
+        message: r.data.mensagem || 'Nada pendente por aqui.',
+        tone: 'default',
+      })
+      void carregar()
+      return
+    }
+
+    // Nao veio link: abre (ou reencontra) o chamado, e o painel de conversa
+    // assume daqui. Sem isto, a resposta era um alerta que o vendedor lia,
+    // fechava, e ficava sem saber o que acontece em seguida.
+    setGerando(true)
+    const c = await chamarEdge<{ criado_agora?: boolean }>(
+      'chamado-kyc', {},
+      'Não foi possível abrir o chamado agora. Tente de novo em instantes.',
+    )
+    setGerando(false)
+
+    if (!c.ok) {
+      await alertDialog({ title: 'Não deu pra abrir o chamado', message: c.erro, tone: 'danger' })
+      return
+    }
+
     await alertDialog({
-      title: r.data?.titulo || 'Verificação em andamento',
-      message: r.data?.mensagem || 'O provedor está conferindo os seus dados.',
+      title: c.data?.criado_agora ? 'Chamado criado' : 'Chamado já está aberto',
+      message: c.data?.criado_agora
+        ? 'Avisamos a nossa equipe agora. O seu link de verificação chega na conversa aqui embaixo, '
+          + 'e você recebe um aviso no aparelho. Pode continuar trabalhando: o chamado não se perde.'
+        : 'Você já tem um chamado em andamento. Assim que o link sair, ele aparece na conversa aqui embaixo.',
       tone: 'default',
     })
-    // O gateway pode ter avancado sem a varredura ter passado ainda.
+
+    // O painel global le do banco; recarregar aqui so atualiza o cartao.
     void carregar()
+    window.dispatchEvent(new CustomEvent('praiago:chamado-kyc'))
   }
 
   // Sem conta cadastrada ainda: quem fala e o bloco de conta bancaria, logo

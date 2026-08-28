@@ -5,6 +5,7 @@ import { LoaderCircle, LocateFixed } from 'lucide-react'
 import { getSessao, logout, setContaDemo, useSessao } from './lib/auth'
 import { supabase } from './lib/supabase'
 import BottomNav from './components/BottomNav'
+import ChamadoKycPanel from './components/ChamadoKycPanel'
 import VerificationBar from './components/VerificationBar'
 import { DialogHost } from './lib/dialog'
 import AiChatbot from './components/AiChatbot'
@@ -370,6 +371,10 @@ export default function App() {
           <GlobalAvisoToast />
         </AnimatePresence>
       )}
+      {/* Fora da trava do kycLocked de proposito: o chamado de verificacao e
+          exatamente o que tira o vendedor dessa trava. Esconde-lo ali seria
+          trancar a porta e guardar a chave do lado de dentro. */}
+      {!isPublic && <ChamadoKycPanel />}
       <DialogHost />
     </div>
   )

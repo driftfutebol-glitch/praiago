@@ -7,7 +7,7 @@ import { ptBR } from 'date-fns/locale'
 import {
   Headphones, ChevronDown, ChevronUp, Send, Clock,
   CheckCircle2, AlertCircle, Loader2, MessageSquare,
-  XCircle, CircleDot, Star, Bot
+  XCircle, CircleDot, Star, Bot, ShieldAlert
 } from 'lucide-react'
 
 interface Ticket {
@@ -35,6 +35,11 @@ interface Ticket {
   ia_observacao_admin?: string | null
   pedido_ref?: string | null
 }
+
+// Identificam a loja e a conta na URL do painel da Pagar.me. Nao sao segredo:
+// aparecem na barra de endereco de quem abre o dashboard.
+const PAGARME_MERCHANT = 'merch_Nv59PdnHDlc591xW'
+const PAGARME_ACCOUNT = 'acc_e60kz6Jirfxgz48B'
 
 const iaCategoriaLabel: Record<string, string> = {
   reembolso: 'Reembolso',
@@ -397,6 +402,40 @@ export default function AtendimentoPage() {
                             className="overflow-hidden"
                           >
                             <div className="p-6 bg-slate-900/40 border-t border-slate-800/30 space-y-4">
+                              {/* Verificação de recebedor: o atendente precisa
+                                  sair daqui, gerar o link na Pagar.me e voltar
+                                  para colar. Sem o atalho, ele procura o
+                                  recebedor na mão numa lista de ids iguais. */}
+                              {ticket.origem === 'kyc' && (
+                                <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4" onClick={e => e.stopPropagation()}>
+                                  <div className="flex items-center gap-2 flex-wrap mb-2">
+                                    <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-amber-300 uppercase tracking-wider font-mono">
+                                      <ShieldAlert size={12} /> Liberar movimentação do saldo
+                                    </span>
+                                  </div>
+                                  <p className="text-slate-300 text-sm leading-relaxed mb-3">
+                                    Abra o recebedor na Pagar.me, clique em <strong>Criar link</strong> e cole o
+                                    endereço na resposta abaixo. O vendedor recebe aviso na hora e o link
+                                    aparece como botão no app dele. <strong>Vale poucos minutos</strong> — só gere
+                                    quando ele estiver com o documento em mãos.
+                                  </p>
+                                  {(() => {
+                                    const rec = ticket.mensagem.match(/re_[a-z0-9]+/i)?.[0]
+                                    if (!rec) return null
+                                    return (
+                                      <a
+                                        href={`https://dash.pagar.me/${PAGARME_MERCHANT}/${PAGARME_ACCOUNT}/${rec}/recipient-details`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs font-bold hover:bg-amber-500/20 transition-colors font-mono"
+                                      >
+                                        Abrir {rec} na Pagar.me
+                                      </a>
+                                    )
+                                  })()}
+                                </div>
+                              )}
+
                               {/* Triagem da IA: resumo + decisão do admin */}
                               {ticket.origem === 'ia' && (
                                 <div className="bg-cyan-500/5 border border-cyan-500/20 rounded-xl p-4" onClick={e => e.stopPropagation()}>

@@ -19,6 +19,7 @@ import PerfilPage       from './pages/PerfilPage'
 import CarteiraPage     from './pages/CarteiraPage'
 import VerificationBar  from './components/VerificationBar'
 import AiChatbot        from './components/AiChatbot'
+import ChamadoKycPanel  from './components/ChamadoKycPanel'
 import PasswordRecoveryHandler from './components/PasswordRecoveryHandler'
 import { DialogHost } from './lib/dialog'
 
@@ -510,6 +511,10 @@ export default function App() {
           </AnimatePresence>
         )}
       </main>
+      {/* Fora da trava do kycLocked de proposito: o chamado de verificacao e
+          exatamente o que tira o vendedor dessa trava. Esconde-lo ali seria
+          trancar a porta e guardar a chave do lado de dentro. */}
+      {!isPublic && <ChamadoKycPanel />}
       <DialogHost />
     </div>
   )
