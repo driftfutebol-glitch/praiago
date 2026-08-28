@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, lazy, Suspense } from 'react'
 import { Routes, Route, NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { Bell, Home, ClipboardList, ShoppingBag, MapPin, User, Calendar, X } from 'lucide-react'
+import { Bell, Home, ClipboardList, ShoppingBag, MapPin, User, X } from 'lucide-react'
 import { iniciarCatalogo } from './store/useCatalogo'
 import { useStore } from './store/useStore'
 import { supabase } from './lib/supabase'
@@ -123,17 +123,21 @@ function TelaCarregando() {
 export default function App() {
   const location = useLocation()
   const navigate = useNavigate()
-  // Cinco destinos cabem com rótulo legível em celulares de 320 px. A quarta
-  // aba acompanha a área especial aberta: Eventos no restante do app e Radar
-  // quando o usuário está rastreando ambulantes.
+  // Cinco destinos cabem com rótulo legível em celulares de 320 px.
+  //
+  // A quarta aba já foi camaleão: mostrava "Radar" quando o usuário estava no
+  // radar e "Eventos" no resto do app. Na prática isso trancava a porta por
+  // dentro — o mapa ao vivo só aparecia na barra para quem já estava nele, e
+  // não havia por onde chegar.
+  //
+  // Agora é fixa no mapa. Eventos não ficou órfão: a tela inicial leva para
+  // lá pelo banner e pelo atalho de eventos da região.
   const navItems = [
-    { to: '/',          icon: Home,          label: 'Início' },
-    { to: '/pedidos',   icon: ClipboardList, label: 'Pedidos' },
-    { to: '/pedir',     icon: ShoppingBag,   label: 'Explorar' },
-    location.pathname.startsWith('/ambulantes')
-      ? { to: '/ambulantes', icon: MapPin,   label: 'Radar',   novo: true }
-      : { to: '/eventos',    icon: Calendar, label: 'Eventos', novo: true },
-    { to: '/perfil',    icon: User,          label: 'Perfil' },
+    { to: '/',            icon: Home,          label: 'Início' },
+    { to: '/pedidos',     icon: ClipboardList, label: 'Pedidos' },
+    { to: '/pedir',       icon: ShoppingBag,   label: 'Explorar' },
+    { to: '/ambulantes',  icon: MapPin,        label: 'Mapa', novo: true },
+    { to: '/perfil',      icon: User,          label: 'Perfil' },
   ]
   const sessao = useStore(s => s.sessao)
   const limparNotificacoesTeste = useStore(s => s.limparNotificacoesTeste)
