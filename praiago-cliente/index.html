@@ -7,7 +7,11 @@
     <meta name="referrer" content="strict-origin-when-cross-origin" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preload" as="image" href="/praiago-logo-intro-v1.webp" type="image/webp" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover e obrigatorio para env(safe-area-inset-*) valer
+         alguma coisa. Sem ele o iOS devolve ZERO, e a barra de baixo, que se
+         posiciona com `calc(14px + env(safe-area-inset-bottom))`, encosta no
+         indicador de home do iPhone. Era metade do "sai do encaixe". -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>PraiaGo · Cliente</title>
   </head>
   <body translate="no" class="notranslate">

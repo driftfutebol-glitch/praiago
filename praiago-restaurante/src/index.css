@@ -378,3 +378,41 @@ input:focus, select:focus, textarea:focus {
   border-radius: 6px 0 0 0 !important;
 }
 .leaflet-control-attribution a { color: #0284c7 !important; text-decoration: none !important; }
+
+/* ── Campos de texto nunca abaixo de 16px no iOS ─────────────────────────
+ *
+ * O Safari/WKWebView AMPLIA a pagina inteira quando um campo com fonte
+ * menor que 16px recebe foco. E o zoom nao volta sozinho ao sair do campo.
+ *
+ * O estrago nao fica no campo: a pagina inteira passa a ser desenhada maior,
+ * a barra de baixo (que e `position: fixed`) sai do encaixe, e o toque
+ * seguinte cai alguns pixels fora de onde a pessoa mirou. Foi assim que a
+ * tela de avaliacao "votava sozinha" — o dedo ia no comentario, a pagina
+ * pulava, e o toque acertava uma estrela.
+ *
+ * Um `!important` aqui vence os `style={{ fontSize: 14 }}` espalhados pelas
+ * telas. E de proposito: e uma regra da plataforma, nao uma preferencia de
+ * design, e nao pode depender de alguem lembrar dela na proxima tela nova.
+ *
+ * A regra vale em TODO aparelho, e nao so no iOS atras de um @supports. Dois
+ * motivos: assim ela e testavel no navegador do computador, em vez de so
+ * aparecer no celular de alguem; e 16px num campo de texto e melhor no
+ * Android tambem, onde o dedo erra pelas mesmas razoes. */
+input:not([type='checkbox']):not([type='radio']):not([type='range']),
+textarea,
+select {
+  font-size: 16px !important;
+}
+
+/* ── Alvo de toque minimo ────────────────────────────────────────────────
+ *
+ * A Apple pede 44x44pt. As estrelas da avaliacao tinham 30px de icone com
+ * 2px de folga: 34px, e coladas uma na outra. Errar a estrela era o caminho
+ * normal, nao a excecao. */
+.alvo-toque {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}

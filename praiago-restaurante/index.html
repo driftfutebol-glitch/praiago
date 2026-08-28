@@ -6,7 +6,10 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; img-src 'self' data: blob: https://*.supabase.co https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://unpkg.com https://images.unsplash.com; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self' data:; connect-src 'self' https://ipwho.is https://router.project-osrm.org https://nominatim.openstreetmap.org https://photon.komoot.io https://*.supabase.co wss://*.supabase.co; form-action 'self'" />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover e obrigatorio para env(safe-area-inset-*) valer
+         alguma coisa. Sem ele o iOS devolve ZERO, e a barra de baixo, que se
+         posiciona somando essa folga, encosta no indicador de home. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>PraiaGo · Restaurante</title>
   </head>
   <body translate="no" class="notranslate">
