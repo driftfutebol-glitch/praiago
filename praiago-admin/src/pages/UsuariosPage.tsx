@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { supabase } from '../lib/supabase'
-import { Ban, RotateCcw, Trash2, UserCheck, ShieldCheck, ShieldX, Search } from 'lucide-react'
+import { Ban, RotateCcw, Trash2, UserCheck, ShieldCheck, ShieldX, Search, Eye, EyeOff } from 'lucide-react'
 import { format } from 'date-fns'
 import { confirmDialog, alertDialog, promptDialog } from '../lib/dialog'
 
@@ -11,22 +11,21 @@ export default function UsuariosPage() {
   const [filtroRole, setFiltroRole] = useState('todos')
   const [acaoId, setAcaoId] = useState<string | null>(null)
 
-  useEffect(() => {
-    async function load() {
-      // Puxa da tabela public.profiles
-      const { data } = await supabase.from('profiles').select('*').order('created_at', { ascending: false })
-      if (data) setUsuarios(data)
-    }
-    load()
-
-    const channel = supabase.channel('admin_usuarios')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
-        load()
-      })
-      .subscribe()
-
-    return () => { supabase.removeChannel(channel) }
+  const carregar = useCallback(async () => {
+    // Puxa da tabela public.profiles (admin le todos via RLS is_admin).
+    const { data } = await supabase.from('profiles').select('*').order('created_at', { ascending: false })
+    if (data) setUsuarios(data)
   }, [])
+
+  useEffect(() => {
+    carregar()
+    // Atualiza em tempo real: cadastro novo, verificacao, banimento etc.
+    const ch = supabase
+      .channel('admin_usuarios')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => carregar())
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [carregar])
 
   const roleConfig: Record<string, { color: string; bg: string; border: string; bar: string }> = {
     restaurante: { color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20', bar: 'bg-orange-500' },
@@ -41,11 +40,50 @@ export default function UsuariosPage() {
       (u.email && u.email.toLowerCase().includes(busca.toLowerCase())) ||
       (u.cnpj && String(u.cnpj).toLowerCase().includes(busca.toLowerCase())) ||
       u.id.toLowerCase().includes(busca.toLowerCase())
-    const matchRole = filtroRole === 'todos' || u.role === filtroRole
+    // 'revisao' nao e um role: e a aba das contas de loja/teste.
+    const matchRole =
+      filtroRole === 'todos' ? true :
+      filtroRole === 'revisao' ? !!u.conta_demo :
+      u.role === filtroRole
     return matchBusca && matchRole
   })
 
-  const roles = ['todos', ...new Set(usuarios.map(u => u.role).filter(Boolean))]
+  const roles = ['todos', ...new Set(usuarios.map(u => u.role).filter(Boolean)), 'revisao']
+  const totalDemo = usuarios.filter(u => u.conta_demo).length
+
+  // Conta de revisao: some de vendedores_publicos, que e a unica fonte do
+  // radar, das listagens e do mapa do app Cliente. O corte e no banco, feito
+  // pelo gatilho sync_vendedor_publico — nao depende de filtro em tela.
+  async function alternarContaDemo(u: any) {
+    const jaDemo = !!u.conta_demo
+    if (!jaDemo) {
+      const ok = await confirmDialog({
+        title: 'Marcar como conta de revisão',
+        message: `${u.nome || u.email || u.id} deixará de aparecer para os clientes: some do radar, das listagens e do mapa. A conta continua funcionando normalmente para quem entrar nela. Use para Apple, Google Play e testes internos.`,
+        confirmText: 'Marcar',
+      })
+      if (!ok) return
+    }
+
+    setAcaoId(u.id)
+    const { error } = await supabase
+      .from('profiles')
+      .update({ conta_demo: !jaDemo })
+      .eq('id', u.id)
+
+    if (error) {
+      alertDialog({
+        title: 'Erro',
+        message: 'Não foi possível alterar esta conta: ' + error.message,
+        tone: 'danger',
+      })
+    } else {
+      setUsuarios(prev => prev.map(item =>
+        item.id === u.id ? { ...item, conta_demo: !jaDemo } : item
+      ))
+    }
+    setAcaoId(null)
+  }
 
   async function alternarBanimento(u: any) {
     const jaBanido = u.status === 'banido'
@@ -65,6 +103,22 @@ export default function UsuariosPage() {
       setUsuarios(prev => prev.map(item => item.id === u.id ? { ...item, ...atualizacao } : item))
     } else {
       alertDialog({ title: 'Erro', message: 'Não foi possível atualizar este usuário: ' + error.message, tone: 'danger' })
+    }
+    setAcaoId(null)
+  }
+
+  async function alternarVerificado(u: any) {
+    const liberar = !u.verificado
+    const ok = liberar
+      ? await confirmDialog({ title: 'Liberar KYC manualmente?', message: `Marcar ${u.nome || u.email} como VERIFICADO? Ele passa a aparecer no mapa e pode vender.`, confirmText: 'Liberar' })
+      : await confirmDialog({ title: 'Remover verificação?', message: `Tirar a verificação de ${u.nome || u.email}? Ele volta a ficar travado até novo KYC.`, tone: 'danger', confirmText: 'Remover' })
+    if (!ok) return
+    setAcaoId(u.id)
+    const { error } = await supabase.rpc('admin_set_verificado', { p_user_id: u.id, p_verificado: liberar })
+    if (!error) {
+      setUsuarios(prev => prev.map(item => item.id === u.id ? { ...item, verificado: liberar } : item))
+    } else {
+      alertDialog({ title: 'Erro', message: 'Não foi possível atualizar a verificação: ' + error.message, tone: 'danger' })
     }
     setAcaoId(null)
   }
@@ -94,18 +148,65 @@ export default function UsuariosPage() {
     setAcaoId(null)
   }
 
-  async function excluirPerfil(u: any) {
+  // A exclusão de conta de usuário final deixou de ser um deleteUser direto e
+  // passou a ser o protocolo da Edge Function excluir-conta: varredura dos três
+  // buckets de Storage, anonimização de pedidos e pagamentos, pseudonimização do
+  // histórico de repasse e tombstone no fim. Por isso esta tela não apaga mais
+  // nada por conta própria — apagar verificacoes/produtos/profiles daqui era
+  // justamente destruir a evidência antes do protocolo poder trabalhar nela.
+  async function excluirConta(u: any) {
     const alvo = u.email || u.nome || u.id
-    if (!await confirmDialog({ title: 'Excluir perfil?', message: `Excluir o perfil de ${alvo}? Isso remove os dados públicos, mas não apaga o usuário do login (Auth).`, confirmText: 'Excluir', tone: 'danger' })) return
+    const ehVendedor = u.role !== 'cliente'
+    if (!await confirmDialog({
+      title: 'Abrir exclusão definitiva?',
+      message: ehVendedor
+        ? `A conta de ${alvo} é bloqueada agora e entra no protocolo de exclusão. Conta vendedora não conclui na hora: fica em revisão manual até alguém confirmar o encerramento do recebedor no Pagar.me. Acompanhe pela fila (RUNBOOK-EXCLUSAO-CONTAS).`
+        : `A conta de ${alvo} é bloqueada agora e entra no protocolo de exclusão. Sem pedido, reembolso ou chamado em aberto, a exclusão conclui nesta mesma chamada e não dá para desfazer.`,
+      confirmText: 'Abrir exclusão',
+      tone: 'danger',
+    })) return
+
     setAcaoId(u.id)
-    await supabase.from('verificacoes').delete().eq('user_id', u.id)
-    await supabase.from('produtos').delete().eq('vendedor_id', u.id)
-    const { error } = await supabase.from('profiles').delete().eq('id', u.id)
-    if (!error) {
-      setUsuarios(prev => prev.filter(item => item.id !== u.id))
-    } else {
-      alertDialog({ title: 'Erro', message: 'Não foi possível excluir este perfil: ' + error.message, tone: 'danger' })
+    const { data, error } = await supabase.functions.invoke('admin-usuarios', {
+      body: { action: 'excluir', id: u.id },
+    })
+    const resp = (data || {}) as {
+      error?: string
+      protocolo?: boolean
+      completed?: boolean
+      status?: string
+      requestId?: string
+      blockers?: string[]
+      message?: string
     }
+
+    if (error || resp.error) {
+      let msg = resp.error || 'Não foi possível excluir a conta.'
+      try {
+        const p = await (error as { context?: { json?: () => Promise<{ error?: string }> } })?.context?.json?.()
+        if (p?.error) msg = p.error
+      } catch { /* usa a msg padrão */ }
+      alertDialog({ title: 'Erro', message: msg, tone: 'danger' })
+      setAcaoId(null)
+      return
+    }
+
+    if (resp.completed === false) {
+      const impedimentos = resp.blockers?.length
+        ? `\n\nImpedimentos: ${resp.blockers.join(', ')}.`
+        : ''
+      await alertDialog({
+        title: 'Exclusão na fila',
+        message: `${resp.message || 'Protocolo aberto. A conta já está bloqueada.'}${impedimentos}\n\nProtocolo: ${resp.requestId || '—'}`,
+      })
+      // A conta continua na lista, agora banida: recarrega para mostrar o estado
+      // real em vez de sumir com ela e dar a impressão de exclusão concluída.
+      await carregar()
+      setAcaoId(null)
+      return
+    }
+
+    setUsuarios(prev => prev.filter(item => item.id !== u.id))
     setAcaoId(null)
   }
 
@@ -139,7 +240,7 @@ export default function UsuariosPage() {
                   : 'text-slate-500 hover:text-slate-300 border border-transparent'
               }`}
             >
-              {role === 'todos' ? 'Todos' : role}
+              {role === 'todos' ? 'Todos' : role === 'revisao' ? `Revisão${totalDemo ? ` (${totalDemo})` : ''}` : role}
             </button>
           ))}
         </div>
@@ -158,10 +259,19 @@ export default function UsuariosPage() {
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.03, duration: 0.3 }}
-              className="glass-panel p-5 rounded-2xl border-slate-800 flex flex-col relative overflow-hidden hover:border-slate-700/50 transition-all duration-300"
+              className={`glass-panel p-5 rounded-2xl flex flex-col relative overflow-hidden transition-all duration-300 ${
+                u.conta_demo
+                  ? 'border-violet-500/40 hover:border-violet-500/60'
+                  : 'border-slate-800 hover:border-slate-700/50'
+              }`}
             >
               {/* Top color bar */}
-              <div className={`absolute top-0 left-0 w-full h-0.5 ${rc.bar}`} />
+              <div className={`absolute top-0 left-0 w-full h-0.5 ${u.conta_demo ? 'bg-violet-500' : rc.bar}`} />
+              {u.conta_demo && (
+                <span className="absolute top-3 right-3 px-2 py-0.5 rounded-md bg-violet-500/15 text-violet-300 border border-violet-500/25 text-[9px] font-black uppercase tracking-wider">
+                  Revisão
+                </span>
+              )}
               
               <div className="flex justify-between items-start mb-3">
                 <div>
@@ -229,6 +339,32 @@ export default function UsuariosPage() {
                   Desde {u.created_at ? format(new Date(u.created_at), 'dd/MM/yyyy') : '—'}
                 </span>
               </div>
+              {(u.role === 'ambulante' || u.role === 'restaurante' || u.role === 'entregador') && (
+                <button
+                  onClick={() => alternarVerificado(u)}
+                  disabled={acaoId === u.id}
+                  className={`mt-3 w-full px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-wide border transition-colors flex items-center justify-center gap-1 ${
+                    u.verificado
+                      ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/15'
+                      : 'bg-green-500/10 text-green-400 border-green-500/20 hover:bg-green-500/15'
+                  } disabled:opacity-50`}
+                >
+                  {u.verificado ? <ShieldX size={12} /> : <ShieldCheck size={12} />}
+                  {u.verificado ? 'Tirar verificação' : 'Liberar KYC manual'}
+                </button>
+              )}
+              <button
+                onClick={() => alternarContaDemo(u)}
+                disabled={acaoId === u.id}
+                className={`mt-3 w-full px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-wide border transition-colors flex items-center justify-center gap-1 ${
+                  u.conta_demo
+                    ? 'bg-violet-500/10 text-violet-400 border-violet-500/20 hover:bg-violet-500/15'
+                    : 'bg-slate-500/10 text-slate-400 border-slate-500/20 hover:bg-slate-500/15'
+                } disabled:opacity-50`}
+              >
+                {u.conta_demo ? <Eye size={12} /> : <EyeOff size={12} />}
+                {u.conta_demo ? 'Voltar a aparecer' : 'Ocultar dos clientes'}
+              </button>
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <button
                   onClick={() => resetarPerfil(u)}
@@ -239,12 +375,13 @@ export default function UsuariosPage() {
                   Resetar
                 </button>
                 <button
-                  onClick={() => excluirPerfil(u)}
+                  onClick={() => excluirConta(u)}
                   disabled={acaoId === u.id}
+                  title="Abre o protocolo de exclusão: bloqueia a conta e entra na fila. Conta vendedora só conclui após revisão."
                   className="px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-wide border bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/15 disabled:opacity-50 flex items-center justify-center gap-1"
                 >
                   <Trash2 size={12} />
-                  Excluir perfil
+                  Solicitar exclusão
                 </button>
               </div>
             </motion.div>

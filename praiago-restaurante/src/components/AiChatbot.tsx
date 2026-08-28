@@ -12,6 +12,13 @@ type Message = {
 
 export default function AiChatbot({ plataforma = 'restaurante' }: { plataforma?: string }) {
   const [isOpen, setIsOpen] = useState(false)
+
+  // Avisa quem mais mora naquele canto da tela. O painel do chamado de
+  // verificacao precisa sair da frente enquanto esta janela esta aberta:
+  // sao dois flutuantes no mesmo lugar, e um sempre cobriria o outro.
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('praiago:assistente', { detail: { aberto: isOpen } }))
+  }, [isOpen])
   const [messages, setMessages] = useState<Message[]>([
     { id: 'welcome', role: 'bot', text: 'Ola! Como o suporte PraiaGo pode te auxiliar?' }
   ])

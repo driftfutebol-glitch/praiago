@@ -2,10 +2,10 @@
 // o app com uma sessÃ£o de recuperaÃ§Ã£o e dispara PASSWORD_RECOVERY. Aqui a
 // gente mostra um formulÃ¡rio DE VERDADE (window.prompt nÃ£o abre no Android).
 import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, VEIO_DE_RECOVERY } from '../lib/supabase'
 
 export default function PasswordRecoveryHandler() {
-  const [aberto, setAberto] = useState(false)
+  const [aberto, setAberto] = useState(VEIO_DE_RECOVERY)
   const [senha, setSenha] = useState('')
   const [confirma, setConfirma] = useState('')
   const [msg, setMsg] = useState('')
@@ -14,7 +14,10 @@ export default function PasswordRecoveryHandler() {
 
   useEffect(() => {
     const { data } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') setAberto(true)
+      // PASSWORD_RECOVERY nem sempre dispara: dependendo da versao o supabase-js
+      // trata o link como login normal. Por isso tambem aceitamos o SIGNED_IN
+      // quando a URL de entrada trazia type=recovery.
+      if (event === 'PASSWORD_RECOVERY' || (event === 'SIGNED_IN' && VEIO_DE_RECOVERY)) setAberto(true)
     })
     return () => data.subscription.unsubscribe()
   }, [])
@@ -22,7 +25,7 @@ export default function PasswordRecoveryHandler() {
   if (!aberto) return null
 
   async function salvar() {
-    if (senha.length < 6) { setMsg('A nova senha precisa ter ao menos 6 caracteres.'); return }
+    if (senha.length < 10 || !/[A-Za-z]/.test(senha) || !/\d/.test(senha)) { setMsg('Use pelo menos 10 caracteres, com letras e numeros.'); return }
     if (senha !== confirma) { setMsg('As senhas nÃ£o conferem.'); return }
     setMsg('')
     setSalvando(true)
@@ -49,7 +52,7 @@ export default function PasswordRecoveryHandler() {
         </div>
         {!ok && (
           <>
-            <input type="password" value={senha} onChange={e => setSenha(e.target.value)} placeholder="Nova senha (mÃ­n. 6 caracteres)" style={inputStyle} />
+            <input type="password" value={senha} onChange={e => setSenha(e.target.value)} placeholder="Nova senha (min. 10 caracteres)" style={inputStyle} />
             <input type="password" value={confirma} onChange={e => setConfirma(e.target.value)} placeholder="Repita a nova senha" style={inputStyle} />
             <button
               onClick={salvar}

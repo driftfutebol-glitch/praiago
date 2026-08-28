@@ -1,8 +1,9 @@
 import { useEffect, useState, Fragment } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { MapContainer, TileLayer, Marker, Popup, Polyline, Polygon, Circle, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { Layers, Zap, Navigation, MapPin } from 'lucide-react'
+import { Bike, Layers, MapPin, Navigation, ShoppingCart, Store, UserRound, Zap } from 'lucide-react'
 import { motion } from 'framer-motion'
 import {
   PRAIAGO_ZONES, PRAIA_GRANDE_CENTER,
@@ -10,24 +11,21 @@ import {
 } from '../lib/praiagoZones'
 import { supabase } from '../lib/supabase'
 import { useSessao } from '../lib/auth'
-
-// ── Fix ícones Leaflet ───────────────────────────────────────
-delete (L.Icon.Default.prototype as any)._getIconUrl
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl:       'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl:     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-})
+import { MAPA_TILES, MAPA_ATRIBUICAO, MAPA_ZOOM_MAX } from '../lib/mapa'
 
 function mkIcon(html: string, size = 42) {
   return L.divIcon({ className: '', html, iconSize: [size, size], iconAnchor: [size / 2, size / 2] })
 }
 
+function marker(icon: React.ReactNode, background: string, size = 42, radius = '50%') {
+  return mkIcon(`<div style="width:${size}px;height:${size}px;border-radius:${radius};background:${background};color:#fff;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 8px 20px rgba(15,23,42,0.24)">${renderToStaticMarkup(icon)}</div>`, size)
+}
+
 const ICONS = {
-  restaurante: mkIcon(`<div style="width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,#f97316,#ea580c);display:flex;align-items:center;justify-content:center;border:2px solid #1e293b;box-shadow:0 0 20px rgba(249,115,22,0.6);font-size:26px">🍽️</div>`, 48),
-  entregador:  mkIcon(`<div style="width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,#0ea5e9,#0284c7);display:flex;align-items:center;justify-content:center;border:2px solid #1e293b;box-shadow:0 0 15px rgba(14,165,233,0.6);font-size:20px">🛵</div>`),
-  cliente:     mkIcon(`<div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#22c55e,#16a34a);display:flex;align-items:center;justify-content:center;border:2px solid #1e293b;box-shadow:0 0 15px rgba(34,197,94,0.6);font-size:18px">📍</div>`, 38),
-  ambulante:   mkIcon(`<div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#a855f7,#7c3aed);display:flex;align-items:center;justify-content:center;border:2px solid #1e293b;box-shadow:0 0 15px rgba(168,85,247,0.6);font-size:18px">🥥</div>`, 38),
+  restaurante: marker(<Store size={25} strokeWidth={2.5} />, 'linear-gradient(135deg,#f97316,#ea580c)', 48, '14px'),
+  entregador: marker(<Bike size={21} strokeWidth={2.5} />, 'linear-gradient(135deg,#0ea5e9,#0284c7)'),
+  cliente: marker(<UserRound size={20} strokeWidth={2.6} />, 'linear-gradient(135deg,#38bdf8,#0284c7)', 40),
+  ambulante: marker(<ShoppingCart size={20} strokeWidth={2.6} />, 'linear-gradient(135deg,#22c55e,#16a34a)', 40),
 }
 
 // Fallback em terra (orla de Praia Grande) — usado só se o GPS for negado.
@@ -171,19 +169,16 @@ export default function MapaPage() {
 
   useEffect(() => {
     const style = document.createElement('style');
+    // O mapa e claro (CARTO Voyager, dados do OpenStreetMap). Nao inverter as
+    // cores: o invert existia so pra escurecer um mapa claro e faria o
+    // contrario agora — deixaria tudo escuro de novo.
     style.innerHTML = `
-      .leaflet-layer,
-      .leaflet-control-zoom-in,
-      .leaflet-control-zoom-out,
-      .leaflet-control-attribution {
-        filter: invert(100%) hue-rotate(180deg) brightness(85%) contrast(100%);
-      }
       .leaflet-popup-content-wrapper, .leaflet-popup-tip {
         background: rgba(255,255,255,0.95);
-        color: #f8fafc;
+        color: #0f172a;
         border: 1px solid rgba(249,115,22,0.3);
         backdrop-filter: blur(10px);
-        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        box-shadow: 0 10px 30px rgba(15,23,42,0.18);
       }
     `;
     document.head.appendChild(style);
@@ -385,10 +380,7 @@ export default function MapaPage() {
             <FlyTo center={mapCenter} zoom={mapZoom} />
 
             <TileLayer
-              attribution='&copy; <a href="https://carto.com">CARTO</a>'
-              url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-              subdomains="abcd"
-            />
+              attribution={MAPA_ATRIBUICAO} url={MAPA_TILES} maxZoom={MAPA_ZOOM_MAX} />
 
             {/* ── Polígonos de zonas ──────────────────────── */}
             {camadas.zonas && zonasFiltradas.map(zone => {

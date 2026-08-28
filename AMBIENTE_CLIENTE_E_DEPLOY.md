@@ -1,27 +1,27 @@
 # PraiaGo - ambiente do cliente e deploy
 
-## Projetos separados para hospedagem
+## Plataformas e ambientes
 
-Use um projeto de hospedagem para cada painel/site:
+Cliente e ambulante sao aplicativos nativos. O modo web desses dois projetos
+serve apenas para testes locais e nao deve ser publicado na Vercel.
 
-| Nome do projeto | Pasta raiz | Tipo | Porta local |
+| Nome do projeto | Pasta raiz | Plataforma | Porta local |
 | --- | --- | --- | --- |
-| `praiago-admin` | `praiago-admin` | site/painel web | `5174` |
-| `praiago-restaurante` | `praiago-restaurante` | site/painel web | `5176` |
-| `praiago-cliente` | `praiago-cliente` | app web/PWA do cliente | `5173` |
-| `praiago-ambulante` | `praiago-ambulante` | app web/PWA do ambulante | `5175` |
+| `praiago-admin` | `praiago-admin` | site/painel web na Vercel | `5174` |
+| `praiago-restaurante` | `praiago-restaurante` | site/painel web na Vercel | `5176` |
+| `praiago-cliente` | `praiago-cliente` | aplicativo nativo; web somente para teste local | `5173` |
+| `praiago-ambulante` | `praiago-ambulante` | aplicativo nativo; web somente para teste local | `5175` |
 
-Todos ja tem `vercel.json` com:
+## Vercel
 
-- `buildCommand`: `npm run build`
-- `outputDirectory`: `dist`
-- fallback SPA para rotas React.
+Somente `praiago-admin` e `praiago-restaurante` devem ter projeto na Vercel.
+Cada um usa a propria pasta como `Root Directory`.
 
-No Vercel, crie projetos separados apontando para a mesma branch do GitHub, mudando apenas o `Root Directory`.
+Nao crie projetos Vercel para `praiago-cliente` ou `praiago-ambulante`.
 
 ## Variaveis obrigatorias nos projetos web
 
-Configure em cada projeto hospedado:
+Configure em cada projeto web hospedado:
 
 ```text
 VITE_SUPABASE_URL=https://SEU-PROJETO.supabase.co

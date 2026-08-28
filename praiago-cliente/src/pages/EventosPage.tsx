@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, type CSSProperties } from 'react'
-import { Calendar, MapPin, Clock, Ticket, Navigation, Share2, Loader2, CalendarX, ShoppingCart, X } from 'lucide-react'
+import { Calendar, MapPin, Navigation, Share2, Loader2, CalendarX, ShoppingCart, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
-import { criarCheckoutIngresso } from '../lib/eventTickets'
+import { comprarIngressoPix, type IngressoPix } from '../lib/eventTickets'
 import { useStore, type Sessao } from '../store/useStore'
 import { alertDialog } from '../lib/dialog'
+import { CIDADES_ATENDIDAS, estaNaAreaAtendida } from '../lib/serviceArea'
 
 type Periodo = 'manha' | 'tarde' | 'noite' | 'madrugada'
 
@@ -34,9 +35,26 @@ type TicketLot = {
   nome: string
   preco_origem: number
   preco_venda: number
+  preco_venda_credito: number
   estoque_disponivel: number | null
   status: string
   fonte_url: string | null
+}
+
+const CIDADES = [...CIDADES_ATENDIDAS]
+
+function normalizarLocal(valor: string) {
+  return valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+}
+
+function eventoNaAreaAtendida(evento: Evento) {
+  if (evento.lat != null && evento.lng != null) return estaNaAreaAtendida(evento.lat, evento.lng)
+  const local = normalizarLocal(`${evento.titulo} ${evento.local_nome ?? ''} ${evento.endereco ?? ''}`)
+  return local.includes('santos')
+    || local.includes('sao vicente')
+    || local.includes('praia grande')
+    || local.includes('rocket sea club')
+    || local.includes('rocket beach club')
 }
 
 const PERIODOS: { id: Periodo | 'todos'; label: string; emoji: string }[] = [
@@ -72,7 +90,7 @@ function menorPrecoIngresso(ev: Evento) {
 function abrirNoMapa(ev: Evento) {
   const q = ev.lat != null && ev.lng != null
     ? `${ev.lat},${ev.lng}`
-    : encodeURIComponent(`${ev.local_nome ?? ''} ${ev.endereco ?? ''} Praia Grande SP`)
+    : encodeURIComponent(`${ev.local_nome ?? ''} ${ev.endereco ?? ''} SP`)
   window.open(`https://www.google.com/maps/search/?api=1&query=${q}`, '_blank')
 }
 
@@ -160,27 +178,44 @@ function ComprarIngressoModal({ evento, onClose, sessao }: { evento: Evento; onC
   const [telefone, setTelefone] = useState(sessao?.telefone || '')
   const [loading, setLoading] = useState(false)
   const [erro, setErro] = useState('')
+  const [metodo, setMetodo] = useState<'pix' | 'credito'>('pix')
+  const [pix, setPix] = useState<IngressoPix | null>(null)
+  const [copiado, setCopiado] = useState(false)
   const lote = lotes.find(l => l.id === lotId) || lotes[0]
-  const total = lote ? Number(lote.preco_venda) * quantidade : 0
+  // O credito ja vem com o preco maior do banco; o cliente ve so o total.
+  const precoUnit = lote ? Number(metodo === 'credito' ? lote.preco_venda_credito : lote.preco_venda) : 0
+  const total = precoUnit * quantidade
 
   async function comprar() {
     if (!lote) return
     if (!nome.trim()) { setErro('Informe seu nome para entrega do ingresso.'); return }
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) { setErro('Informe um e-mail valido para entrega.'); return }
+    if (metodo === 'credito') { setErro('Pagamento com cartao chega em breve. Use o PIX por enquanto.'); return }
     setErro('')
     setLoading(true)
     try {
-      const checkout = await criarCheckoutIngresso({
+      const cobranca = await comprarIngressoPix({
         ticket_lot_id: lote.id,
         quantidade,
         cliente_nome: nome.trim(),
-        cliente_email: email.trim().toLowerCase(),
         cliente_telefone: telefone.trim(),
       })
-      window.location.href = checkout.checkout_url
+      setPix(cobranca)
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Nao foi possivel iniciar a compra.')
+    } finally {
       setLoading(false)
+    }
+  }
+
+  async function copiarPix() {
+    if (!pix) return
+    try {
+      await navigator.clipboard.writeText(pix.qr_code)
+      setCopiado(true)
+      setTimeout(() => setCopiado(false), 2500)
+    } catch {
+      setErro('Nao foi possivel copiar. Selecione o codigo e copie na mao.')
     }
   }
 
@@ -198,11 +233,34 @@ function ComprarIngressoModal({ evento, onClose, sessao }: { evento: Evento; onC
           </button>
         </div>
 
+        {pix ? (
+          <div style={{ marginTop: 18, display: 'grid', gap: 12 }}>
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 16, padding: 14 }}>
+              <div style={{ fontSize: 13, fontWeight: 900, color: '#15803d' }}>PIX gerado · {fmtMoney(pix.total)}</div>
+              <div style={{ marginTop: 4, fontSize: 12, color: '#166534', lineHeight: 1.4 }}>
+                Pague no app do seu banco. Assim que cair, o ingresso vai pro seu e-mail.
+              </div>
+            </div>
+            {pix.qr_code_url && (
+              <img src={pix.qr_code_url} alt="QR Code do PIX" style={{ width: 200, height: 200, alignSelf: 'center', borderRadius: 12 }} />
+            )}
+            <div>
+              <label style={modalLabel}>Codigo copia e cola</label>
+              <div style={{ ...modalInput, fontSize: 11, wordBreak: 'break-all', height: 'auto', minHeight: 64, padding: 10, color: '#334155' }}>
+                {pix.qr_code}
+              </div>
+            </div>
+            {erro && <div style={{ color: '#dc2626', fontSize: 13, fontWeight: 800 }}>{erro}</div>}
+            <button onClick={copiarPix} style={{ border: 0, borderRadius: 16, padding: '14px 16px', background: copiado ? 'linear-gradient(135deg, #16a34a, #15803d)' : 'linear-gradient(135deg, #0ea5e9, #22c55e)', color: '#fff', fontSize: 15, fontWeight: 900 }}>
+              {copiado ? 'Codigo copiado!' : 'Copiar codigo PIX'}
+            </button>
+          </div>
+        ) : (
         <div style={{ marginTop: 18, display: 'grid', gap: 12 }}>
           <label style={modalLabel}>Tipo de ingresso</label>
           <select value={lotId} onChange={e => setLotId(e.target.value)} style={modalInput}>
             {lotes.map(l => (
-              <option key={l.id} value={l.id}>{l.nome} · {fmtMoney(Number(l.preco_venda))}</option>
+              <option key={l.id} value={l.id}>{l.nome} · {fmtMoney(Number(metodo === 'credito' ? l.preco_venda_credito : l.preco_venda))}</option>
             ))}
           </select>
 
@@ -226,13 +284,33 @@ function ComprarIngressoModal({ evento, onClose, sessao }: { evento: Evento; onC
             <input value={telefone} onChange={e => setTelefone(e.target.value)} style={modalInput} placeholder="(13) 99999-9999" />
           </div>
 
+          <div>
+            <label style={modalLabel}>Forma de pagamento</label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              {(['pix', 'credito'] as const).map(m => (
+                <button
+                  key={m}
+                  onClick={() => setMetodo(m)}
+                  style={{
+                    border: metodo === m ? '2px solid #0ea5e9' : '1px solid #e2e8f0',
+                    background: metodo === m ? '#f0f9ff' : '#fff',
+                    borderRadius: 14, padding: '11px 10px', fontSize: 13, fontWeight: 900,
+                    color: metodo === m ? '#0369a1' : '#64748b',
+                  }}
+                >
+                  {m === 'pix' ? 'PIX' : 'Cartão de crédito'}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 16, padding: 14 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontSize: 13, fontWeight: 700 }}>
               <span>{quantidade}x {lote?.nome}</span>
               <span>{fmtMoney(total)}</span>
             </div>
             <div style={{ marginTop: 6, fontSize: 11, color: '#94a3b8', lineHeight: 1.35 }}>
-              Valor ja inclui a margem PraiaGo. Entrega do ingresso e conferida por admin apos pagamento.
+              Entrega do ingresso é conferida por admin após o pagamento.
             </div>
           </div>
 
@@ -240,9 +318,10 @@ function ComprarIngressoModal({ evento, onClose, sessao }: { evento: Evento; onC
 
           <button disabled={loading || !lote} onClick={comprar} style={{ border: 0, borderRadius: 16, padding: '14px 16px', background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', color: '#fff', fontSize: 15, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: loading ? 0.6 : 1 }}>
             {loading ? <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> : <ShoppingCart size={18} />}
-            Pagar no Mercado Pago
+            Comprar ingresso
           </button>
         </div>
+        )}
       </motion.div>
     </div>
   )
@@ -280,10 +359,10 @@ export default function EventosPage() {
   const carregar = useCallback(async () => {
     const { data } = await supabase
       .from('eventos')
-      .select('*, event_ticket_lots(id,nome,preco_origem,preco_venda,estoque_disponivel,status,fonte_url)')
+      .select('*, event_ticket_lots(id,nome,preco_origem,preco_venda,preco_venda_credito,estoque_disponivel,status,fonte_url)')
       .eq('status', 'ativo')
       .order('data', { ascending: true, nullsFirst: false })
-    setEventos((data as Evento[]) ?? [])
+    setEventos(((data as Evento[]) ?? []).filter(eventoNaAreaAtendida))
     setLoading(false)
   }, [])
 
@@ -300,15 +379,27 @@ export default function EventosPage() {
   const outros = lista.filter(e => !e.destaque)
 
   return (
-    <div style={{ minHeight: '100vh', background: '#ffffff', paddingBottom: 100 }}>
+    <div style={{ minHeight: '100dvh', background: '#ffffff', paddingBottom: 100 }}>
       <AnimatePresence>
         {comprando && <ComprarIngressoModal evento={comprando} sessao={sessao} onClose={() => setComprando(null)} />}
       </AnimatePresence>
 
-      <div style={{ padding: '20px 20px 12px' }}>
-        <h1 style={{ fontSize: 26, fontWeight: 900, color: '#0f172a', letterSpacing: -0.5 }}>Eventos na Praia 🎉</h1>
-        <p style={{ fontSize: 13, color: '#64748b', marginTop: 4, fontWeight: 500 }}>Praia Grande, SP · manhã, tarde, noite e madrugada</p>
-      </div>
+      {/* Cabeçalho com a cena de praia atrás, igual ao da Home — é o que
+          amarra as duas telas como sendo do mesmo app. */}
+      <header style={{ position: 'relative', overflow: 'hidden', padding: '20px 20px 14px', background: '#fff' }}>
+        <img src="/images/home-beach-v2.webp" alt="" aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', opacity: 0.62, pointerEvents: 'none' }} />
+        <span aria-hidden="true" style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg, #fff 0%, rgba(255,255,255,0.94) 44%, rgba(255,255,255,0.18) 100%)', pointerEvents: 'none' }} />
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <h1 style={{ margin: 0, fontSize: 27, fontWeight: 950, color: '#0f172a', letterSpacing: 0, lineHeight: 1.1, maxWidth: '78%' }}>
+            Eventos na
+            <br />
+            Baixada Santista 🎉
+          </h1>
+          <p style={{ margin: '7px 0 0', maxWidth: '76%', fontSize: 12.5, color: '#64748b', fontWeight: 700, lineHeight: 1.45 }}>
+            {CIDADES.join(' · ')}
+          </p>
+        </div>
+      </header>
 
       {/* Filtros por período */}
       <div style={{ padding: '0 20px 18px', display: 'flex', gap: 8, overflowX: 'auto' }} className="hide-scrollbar">
@@ -340,86 +431,130 @@ export default function EventosPage() {
         </div>
       ) : (
         <>
-          {destaques.length > 0 && (
-            <div style={{ padding: '0 20px 22px' }}>
-              <h2 style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', marginBottom: 14 }}>★ Em destaque</h2>
-              <div style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 4 }} className="hide-scrollbar">
-                {destaques.map(ev => (
-                  <motion.div key={ev.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{
-                    background: 'linear-gradient(135deg, #f8fafc, #ffffff)', border: '1px solid #e2e8f0',
-                    borderRadius: 22, padding: 20, minWidth: 250, flexShrink: 0,
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div style={{ fontSize: 38, marginBottom: 12 }}>{ev.emoji ?? '🎉'}</div>
-                      <span style={{ fontSize: 10, fontWeight: 800, color: '#38bdf8', background: 'rgba(56,189,248,0.1)', padding: '3px 8px', borderRadius: 8, textTransform: 'uppercase' }}>
-                        {PERIODOS.find(p => p.id === ev.periodo)?.label}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: 17, fontWeight: 900, color: '#0f172a', marginBottom: 8 }}>{ev.titulo}</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                      <MapPin size={12} color="#64748b" /><span style={{ fontSize: 12, color: '#64748b' }}>{ev.local_nome ?? 'Praia Grande'}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14 }}>
-                      <Calendar size={12} color="#64748b" /><span style={{ fontSize: 12, color: '#64748b' }}>{fmtData(ev.data)}{ev.hora ? ` · ${ev.hora}` : ''}</span>
-                    </div>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      {lotesDisponiveis(ev).length > 0 && (
-                        <button onClick={() => setComprando(ev)} style={{ flex: 1, background: 'linear-gradient(135deg, #22c55e, #16a34a)', border: 'none', borderRadius: 12, padding: '10px 0', color: '#fff', fontSize: 13, fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                          <ShoppingCart size={14} /> Comprar
-                        </button>
-                      )}
-                      <button onClick={() => abrirNoMapa(ev)} style={{ flex: 1, background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', border: 'none', borderRadius: 12, padding: '10px 0', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                        <Navigation size={14} /> Ver local
-                      </button>
-                      <button type="button" aria-label="Compartilhar evento" onClick={() => compartilhar(ev)} style={{ width: 42, background: 'rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 12, color: '#334155', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Share2 size={15} />
-                      </button>
-                    </div>
-                    <div style={{ marginTop: 10, fontSize: 13, fontWeight: 800, color: menorPrecoIngresso(ev) > 0 ? '#f59e0b' : '#16a34a', display: 'flex', alignItems: 'center', gap: 5 }}>
-                      <Ticket size={14} /> {menorPrecoIngresso(ev) > 0 ? `A partir de ${fmtMoney(menorPrecoIngresso(ev))}` : 'Entrada gratuita'}
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
+          <div style={{ padding: '0 20px 90px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <h2 style={{ fontSize: 19, fontWeight: 950, color: '#0f172a', margin: 0, letterSpacing: 0 }}>Próximos eventos</h2>
+              <span style={{ fontSize: 12.5, fontWeight: 900, color: '#16a34a' }}>{lista.length} {lista.length === 1 ? 'evento' : 'eventos'}</span>
             </div>
-          )}
 
-          <div style={{ padding: '0 20px' }}>
-            <h2 style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', marginBottom: 14 }}>Próximos eventos</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {/* Um layout de cartão só. Antes destaque e "outros" tinham
+                desenhos diferentes (carrossel horizontal vs. linha compacta),
+                o que fazia a mesma informação aparecer de dois jeitos na mesma
+                tela. Agora muda só o selo EM DESTAQUE. */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <AnimatePresence>
-                {outros.map(ev => (
-                  <motion.div key={ev.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} style={{
-                    background: '#f8fafc', borderRadius: 18, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14, border: '1px solid #e2e8f0',
-                  }}>
-                    <div style={{ width: 52, height: 52, borderRadius: 14, background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>{ev.emoji ?? '🎉'}</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>{ev.titulo}</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                        <Clock size={11} color="#64748b" /><span style={{ fontSize: 12, color: '#64748b' }}>{fmtData(ev.data)}{ev.hora ? ` · ${ev.hora}` : ''}</span>
+                {[...destaques, ...outros].map(ev => {
+                  const preco = menorPrecoIngresso(ev)
+                  const temIngresso = lotesDisponiveis(ev).length > 0
+                  return (
+                    <motion.article
+                      key={ev.id}
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      style={{
+                        display: 'flex',
+                        background: '#ffffff',
+                        border: '1px solid #eef2f7',
+                        borderRadius: 20,
+                        overflow: 'hidden',
+                        boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 12px 28px -18px rgba(15,23,42,0.28)',
+                      }}
+                    >
+                      {/* Capa: usa a imagem do evento quando existe; senão um
+                          azulejo com o emoji — nada de foto genérica. */}
+                      <div style={{ position: 'relative', width: 124, flexShrink: 0, background: 'linear-gradient(150deg,#e0f2fe,#dcfce7)' }}>
+                        {ev.imagem_url ? (
+                          <img
+                            src={ev.imagem_url}
+                            alt=""
+                            aria-hidden
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                          />
+                        ) : (
+                          <div style={{ height: '100%', display: 'grid', placeItems: 'center', fontSize: 40 }}>{ev.emoji ?? '🎉'}</div>
+                        )}
+                        {ev.destaque && (
+                          <span style={{
+                            position: 'absolute', top: 8, left: 8,
+                            padding: '3px 8px', borderRadius: 999,
+                            fontSize: 8.5, fontWeight: 900, letterSpacing: 0.4,
+                            color: '#fff', background: '#16a34a',
+                            boxShadow: '0 3px 8px rgba(22,163,74,0.5)',
+                          }}>
+                            EM DESTAQUE
+                          </span>
+                        )}
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
-                        <MapPin size={11} color="#64748b" /><span style={{ fontSize: 12, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.local_nome ?? 'Praia Grande'}</span>
+
+                      <div style={{ flex: 1, minWidth: 0, padding: '13px 14px 14px' }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                          <h3 style={{ flex: 1, minWidth: 0, margin: 0, fontSize: 17, fontWeight: 950, color: '#0f172a', letterSpacing: 0, lineHeight: 1.2 }}>
+                            {ev.titulo}
+                          </h3>
+                          <span style={{
+                            flexShrink: 0, padding: '4px 9px', borderRadius: 999,
+                            fontSize: 11.5, fontWeight: 900,
+                            color: preco > 0 ? '#15803d' : '#0369a1',
+                            background: preco > 0 ? '#dcfce7' : '#e0f2fe',
+                          }}>
+                            {preco > 0 ? fmtMoney(preco) : 'Grátis'}
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 7 }}>
+                          <MapPin size={13} color="#16a34a" strokeWidth={2.5} />
+                          <span style={{ fontSize: 12.5, color: '#475569', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {ev.local_nome ?? 'Baixada Santista'}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3 }}>
+                          <Calendar size={13} color="#16a34a" strokeWidth={2.5} />
+                          <span style={{ fontSize: 12.5, color: '#475569', fontWeight: 700 }}>
+                            {fmtData(ev.data)}{ev.hora ? ` · ${ev.hora.slice(0, 5)}` : ''}
+                          </span>
+                        </div>
+                        {ev.categoria && (
+                          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 700, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {ev.categoria}
+                          </div>
+                        )}
+
+                        {temIngresso && (
+                          <button
+                            onClick={() => setComprando(ev)}
+                            style={{
+                              width: '100%', marginTop: 11, padding: '11px 0', border: 'none', borderRadius: 13,
+                              background: 'linear-gradient(100deg,#16a34a,#22c55e)', color: '#fff',
+                              fontSize: 14, fontWeight: 900, cursor: 'pointer',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                              boxShadow: '0 10px 22px -12px rgba(22,163,74,0.95)',
+                            }}
+                          >
+                            <ShoppingCart size={16} strokeWidth={2.5} /> Comprar
+                          </button>
+                        )}
+
+                        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                          <button
+                            type="button"
+                            onClick={() => compartilhar(ev)}
+                            style={ACAO_SECUNDARIA}
+                          >
+                            <Share2 size={14} strokeWidth={2.4} color="#64748b" /> Compartilhar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => abrirNoMapa(ev)}
+                            style={{ ...ACAO_SECUNDARIA, color: '#0284c7' }}
+                          >
+                            <Navigation size={14} strokeWidth={2.4} color="#0284c7" /> Local
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end', flexShrink: 0 }}>
-                      <span style={{ fontSize: 12, fontWeight: 800, color: menorPrecoIngresso(ev) > 0 ? '#f59e0b' : '#16a34a', background: menorPrecoIngresso(ev) > 0 ? 'rgba(245,158,11,0.1)' : 'rgba(34,197,94,0.1)', borderRadius: 20, padding: '4px 10px' }}>
-                        {menorPrecoIngresso(ev) > 0 ? fmtMoney(menorPrecoIngresso(ev)) : 'Grátis'}
-                      </span>
-                      {lotesDisponiveis(ev).length > 0 && (
-                        <button aria-label="Comprar ingresso" onClick={() => setComprando(ev)} style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.25)', color: '#16a34a', borderRadius: 10, padding: '5px 8px', fontSize: 12, fontWeight: 900, cursor: 'pointer' }}>
-                          <ShoppingCart size={12} /> Comprar
-                        </button>
-                      )}
-                      <button type="button" aria-label="Compartilhar evento" onClick={() => compartilhar(ev)} style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(15,23,42,0.06)', border: '1px solid rgba(15,23,42,0.08)', color: '#334155', borderRadius: 10, padding: '5px 8px', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
-                        <Share2 size={12} /> Compartilhar
-                      </button>
-                      <button aria-label="Ver no mapa" onClick={() => abrirNoMapa(ev)} style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: '#38bdf8', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                        <Navigation size={12} /> Local
-                      </button>
-                    </div>
-                  </motion.div>
-                ))}
+                    </motion.article>
+                  )
+                })}
               </AnimatePresence>
             </div>
           </div>
@@ -427,4 +562,21 @@ export default function EventosPage() {
       )}
     </div>
   )
+}
+
+const ACAO_SECUNDARIA: CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  padding: '9px 0',
+  borderRadius: 12,
+  border: '1px solid #e8eef5',
+  background: '#ffffff',
+  color: '#64748b',
+  fontSize: 12.5,
+  fontWeight: 800,
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 6,
 }

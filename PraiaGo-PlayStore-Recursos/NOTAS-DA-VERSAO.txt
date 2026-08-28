@@ -1,0 +1,10 @@
+<pt-BR>
+Atualização do PraiaGo para o teste aberto.
+
+• Interface mais clara e navegação aprimorada.
+• Melhorias nas categorias, cupons e pagamentos.
+• Correções de estabilidade, desempenho e segurança.
+• Ajustes gerais para uma experiência mais rápida e confiável.
+
+Durante o teste, envie seu feedback sobre erros ou dificuldades encontradas.
+</pt-BR>

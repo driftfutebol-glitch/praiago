@@ -63,7 +63,7 @@ export default function AiChatbot({ plataforma = 'cliente' }: { plataforma?: str
 Regras e Termos da PraiaGo que você deve seguir e informar quando perguntado:
 1. A PraiaGo é apenas uma plataforma de intermediação tecnológica. Não somos fornecedores, não vendemos e não entregamos produtos. Conectamos consumidores a ambulantes e restaurantes.
 2. O ambulante/restaurante é autônomo e responsável pela qualidade, higiene, preço e entrega do produto.
-3. Pagamentos são processados via AbacatePay (Pix ou cartão) diretamente para o vendedor.
+3. Pagamentos são processados com segurança (Pix ou cartão) dentro do próprio app, direto para o vendedor.
 4. Problemas com pedidos, reembolsos, cancelamentos ou trocas devem abrir atendimento no painel. Oriente o usuario a informar o numero do pedido e os detalhes.
 5. Coletamos localização e dados essenciais apenas para conectar as pessoas, seguindo a LGPD.
 Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "suporte".` },
@@ -109,17 +109,27 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
       return
     }
 
+    // Sem login o chamado ficaria orfao (o painel de suporte filtra por usuario_id).
+    if (!sessao?.id) {
+      addMessage('bot', 'Pra abrir um chamado e acompanhar a resposta, entre na sua conta primeiro (aba Perfil). 🙏')
+      setMode('ai'); setTicketSubject('')
+      return
+    }
+
     // Create the ticket
     setLoading(true)
     try {
       const { error } = await supabase.from('tickets').insert({
         plataforma: plataforma,
-        usuario_nome: sessao?.nome || 'Usuário Não Logado',
+        usuario_id: sessao.id,
+        usuario_nome: sessao?.nome || 'Cliente PraiaGo',
         usuario_email: sessao?.email || 'N/A',
         assunto: ticketSubject,
         mensagem: userText,
         status: 'aberto',
-        prioridade: 'media'
+        prioridade: 'media',
+        nao_lida_admin: true,
+        nao_lida_usuario: false,
       })
 
       if (error) throw error
@@ -176,11 +186,16 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
             exit={{ y: 20, opacity: 0, scale: 0.95 }}
             style={{
               position: 'fixed',
-              bottom: 80,
-              right: 24,
-              width: 350,
-              height: 500,
-              maxHeight: '80vh',
+              // No iPhone o teclado NAO encolhe o viewport de layout: com
+              // `bottom` fixo e altura em vh, o painel ficava do mesmo tamanho
+              // e o teclado subia por cima do campo de escrever. `dvh` encolhe
+              // junto com o teclado, entao o campo continua visivel.
+              bottom: 'calc(80px + env(safe-area-inset-bottom))',
+              right: 12,
+              // 350px + 24 de margem nao cabia em tela de 375px: o painel
+              // encostava nas duas bordas e parecia cortado.
+              width: 'min(350px, calc(100vw - 24px))',
+              height: 'min(500px, 70dvh)',
               borderRadius: 24,
               background: 'rgba(255,255,255,0.92)',
               backdropFilter: 'blur(20px)',
@@ -281,9 +296,11 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
                 placeholder={mode === 'ticket' ? "Escreva sua mensagem..." : "Escreva sua dúvida..."}
                 disabled={loading}
                 style={{
-                  flex: 1, padding: '12px 16px', borderRadius: 16,
+                  flex: 1, minWidth: 0, padding: '12px 16px', borderRadius: 16,
                   background: '#f1f5f9', border: '1px solid rgba(0,0,0,0.08)',
-                  color: '#0f172a', fontSize: 14, outline: 'none'
+                  // 16px e o minimo: abaixo disso o Safari do iPhone da zoom
+                  // sozinho ao focar o campo, e a tela inteira "pula".
+                  color: '#0f172a', fontSize: 16, outline: 'none'
                 }}
               />
               <button

@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { getZone } from '../lib/praiagoZones'
-import { getSessao } from '../lib/auth'
+import { getSessao, useSessao } from '../lib/auth'
+import { encontrarCidadeAtendida, LOCAL_REVISAO, type CidadeAtendida } from '../lib/serviceArea'
 
 export type GPSData = {
   lat: number
@@ -46,9 +47,13 @@ function getGpsChannel() {
 // - publica um payload ENRIQUECIDO (id/nome/emoji/zona) via Supabase para que o app do
 //   cliente mostre este ambulante no Radar em tempo real.
 export function useGPS() {
+  const sessaoReativa = useSessao()
   const [data, setData] = useState<GPSData | null>(null)
   const [status, setStatus] = useState<GPSStatus>('idle')
   const [error, setError] = useState<string | null>(null)
+  const [cidadeAtendida, setCidadeAtendida] = useState<CidadeAtendida | null>(null)
+  const [foraDaArea, setForaDaArea] = useState(false)
+  const [modoRevisao, setModoRevisao] = useState(false)
   const watchId = useRef<number | null>(null)
   const channel = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const nome = useRef('Ambulante')
@@ -56,41 +61,63 @@ export function useGPS() {
 
   async function publishPosition(g: GPSData, aberto = isOnline()) {
     const sessao = getSessao()
-    const zona = getZone(g.lat, g.lng)
+    const cidadeReal = encontrarCidadeAtendida(g.lat, g.lng)
+    const perfilConhecido = typeof sessao?.contaDemo === 'boolean'
+    const contaDemo = sessao?.contaDemo === true
+    const usarLocalRevisao = contaDemo && !cidadeReal
+    const posicaoEfetiva = usarLocalRevisao
+      ? { ...g, lat: LOCAL_REVISAO[0], lng: LOCAL_REVISAO[1] }
+      : g
+    const cidadeEfetiva = encontrarCidadeAtendida(posicaoEfetiva.lat, posicaoEfetiva.lng)
+    const zona = getZone(posicaoEfetiva.lat, posicaoEfetiva.lng)
     const id = sessao?.id || deviceId()
     const nomeAtual = sessao?.nome || nome.current
+    const operacaoPermitida = perfilConhecido && (contaDemo || cidadeReal !== null)
+    const realmenteAberto = aberto && operacaoPermitida
+    const nomeZona = zona?.nome ?? cidadeEfetiva ?? 'Área atendida'
 
-    channel.current?.send({
-      type: 'broadcast',
-      event: 'msg',
-      payload: {
-        id,
-        nome: nomeAtual,
-        emoji: '🥥',
-        categoria: 'Ambulante',
-        lat: g.lat,
-        lng: g.lng,
-        accuracy: g.accuracy,
-        aberto,
-        zona: zona?.nome ?? 'Praia Grande',
-        ts: g.ts,
-      },
-    })
+    // A conta de revisão nunca entra no canal público. Para uma conta comum,
+    // um evento fechado remove imediatamente um marcador anterior do cliente.
+    if (sessao?.id && perfilConhecido && !contaDemo) {
+      channel.current?.send({
+        type: 'broadcast',
+        event: 'msg',
+        payload: {
+          id,
+          nome: nomeAtual,
+          emoji: '🥥',
+          categoria: 'Ambulante',
+          lat: realmenteAberto ? posicaoEfetiva.lat : 0,
+          lng: realmenteAberto ? posicaoEfetiva.lng : 0,
+          accuracy: realmenteAberto ? posicaoEfetiva.accuracy : 0,
+          aberto: realmenteAberto,
+          zona: realmenteAberto ? nomeZona : '',
+          ts: g.ts,
+        },
+      })
+    }
 
     if (sessao?.id) {
-      await supabase
-        .from('profiles')
-        .update({
-          online: aberto,
-          lat: g.lat,
-          lng: g.lng,
-          zona: zona?.nome ?? 'Praia Grande',
-        })
-        .eq('id', sessao.id)
+      // Fechado: NÃO persiste a localização (privacidade) — só marca offline.
+      // Aberto: transmite a posição ao vivo.
+      const patch = realmenteAberto
+        ? { online: true, lat: posicaoEfetiva.lat, lng: posicaoEfetiva.lng, zona: nomeZona }
+        : { online: false }
+      await supabase.from('profiles').update(patch).eq('id', sessao.id)
     }
   }
 
   useEffect(() => {
+    if (!sessaoReativa?.id) {
+      setData(null)
+      setStatus('idle')
+      setError(null)
+      setCidadeAtendida(null)
+      setForaDaArea(false)
+      setModoRevisao(false)
+      return
+    }
+
     channel.current = getGpsChannel()
     supabase.auth.getUser()
       .then(({ data }) => { nome.current = (data.user?.user_metadata?.nome as string) || 'Ambulante' })
@@ -121,7 +148,15 @@ export function useGPS() {
         heading: p.coords.heading,
         ts: Date.now(),
       }
-      setData(g)
+      const cidadeReal = encontrarCidadeAtendida(g.lat, g.lng)
+      const revisaoForaDaArea = sessaoReativa.contaDemo === true && !cidadeReal
+      const posicaoEfetiva = revisaoForaDaArea
+        ? { ...g, lat: LOCAL_REVISAO[0], lng: LOCAL_REVISAO[1] }
+        : g
+      setData(posicaoEfetiva)
+      setCidadeAtendida(encontrarCidadeAtendida(posicaoEfetiva.lat, posicaoEfetiva.lng))
+      setForaDaArea(sessaoReativa.contaDemo !== true && !cidadeReal)
+      setModoRevisao(revisaoForaDaArea)
       lastGPS.current = g
       setStatus('active')
       setError(null)
@@ -145,7 +180,8 @@ export function useGPS() {
       if (g) {
         publishPosition(g)
       } else if (sessao?.id) {
-        supabase.from('profiles').update({ online: isOnline() }).eq('id', sessao.id)
+        // Sem posição validada nunca se ativa o perfil às cegas.
+        supabase.from('profiles').update({ online: false }).eq('id', sessao.id)
       }
     }
     window.addEventListener(ONLINE_EVENT, onOnlineChange)
@@ -162,7 +198,7 @@ export function useGPS() {
       // o canal de GPS é singleton e fica vivo pro app inteiro — não remover aqui
       window.removeEventListener(ONLINE_EVENT, onOnlineChange)
     }
-  }, [])
+  }, [sessaoReativa?.id, sessaoReativa?.contaDemo])
 
-  return { data, status, error }
+  return { data, status, error, cidadeAtendida, foraDaArea, modoRevisao }
 }

@@ -1,0 +1,26 @@
+locale,app_name,short_description,full_description,release_notes,translation_instructions
+"pt-BR","PraiaGo","Peça comida, bebidas e produtos na praia com entrega até você.","O PraiaGo conecta você a ambulantes, restaurantes e lojas próximos da praia. Encontre comidas, bebidas, porções, açaí, espetinhos e outros produtos disponíveis na região.
+
+Com o PraiaGo, você pode:
+• encontrar vendedores e estabelecimentos próximos;
+• consultar cardápios, preços e disponibilidade;
+• fazer pedidos para entrega no seu ponto da praia;
+• informar sua localização por GPS, reta ou barraca;
+• acompanhar o andamento dos pedidos;
+• pagar com PIX, cartão ou métodos presenciais disponíveis;
+• usar cupons de desconto;
+• consultar eventos e ingressos disponíveis;
+• avaliar o atendimento e falar com o suporte.
+
+Sua localização é utilizada somente para mostrar opções próximas e ajudar na entrega do pedido. Os pagamentos online são processados de forma segura por um parceiro especializado. Os dados completos do cartão não ficam armazenados nos servidores do PraiaGo.
+
+O PraiaGo atua como plataforma de intermediação entre clientes e vendedores independentes. A disponibilidade, os preços, o preparo, a entrega e a qualidade dos produtos são de responsabilidade de cada vendedor.
+
+Serviço disponível inicialmente em Praia Grande, São Paulo. Aplicativo destinado a maiores de 18 anos.","Atualização do PraiaGo para o teste aberto.
+
+• Interface mais clara e navegação aprimorada.
+• Melhorias nas categorias, cupons e pagamentos.
+• Correções de estabilidade, desempenho e segurança.
+• Ajustes gerais para uma experiência mais rápida e confiável.
+
+Durante o teste, envie seu feedback sobre erros ou dificuldades encontradas.","Preservar sem tradução as marcas e termos: PraiaGo, Praia Grande, PIX e CPF. Usar linguagem natural, clara e adequada a um aplicativo de pedidos e entregas na praia. Não adicionar promessas, recursos, preços ou países que não estejam no texto original. Manter as listas e respeitar os limites: nome com até 30 caracteres e descrição curta com até 80 caracteres."

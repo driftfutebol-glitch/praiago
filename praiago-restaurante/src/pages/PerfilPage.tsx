@@ -1,21 +1,209 @@
-import { useEffect, useState } from 'react'
-import { Bell, ChevronRight, CreditCard, HelpCircle, Loader2, LogOut, MapPin, Phone, Shield, Star, Store, TrendingUp } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Bell, CheckCircle2, ChevronRight, Clock, HelpCircle, Loader2, LogOut, MapPin, Navigation, Phone, Search, Send, Shield, Star, Store, TrendingUp, Wallet, XCircle } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
+import { Capacitor } from '@capacitor/core'
+import { Geolocation } from '@capacitor/geolocation'
 import { supabase } from '../lib/supabase'
 import { getSessao, logout } from '../lib/auth'
 import SuportePanel from '../components/SuportePanel'
-import { buscarStatusMercadoPago, iniciarVinculoMercadoPago, type MercadoPagoLinkStatus } from '../lib/mercadopago'
+import SellerPhotoManager from '../components/SellerPhotoManager'
+import TrocaNomeLoja from '../components/TrocaNomeLoja'
+import EditorHorarios from '../components/EditorHorarios'
+import { sellerPhotoUrl } from '../lib/sellerPhotos'
 
 type PerfilInfo = {
   nome: string
   avaliacao: number
   totalAvaliacoes: number
-  telefone: string | null
   endereco: string | null
+  fotoPerfilPath: string | null
+  fotoCapaPath: string | null
+}
+
+type SolicitacaoLocalizacao = {
+  id: string
+  status: 'pendente' | 'aprovada' | 'rejeitada' | 'utilizada' | 'cancelada'
+  motivo: string
+  observacao_admin: string | null
+  solicitado_em: string
+  revisado_em: string | null
+  autorizado_ate: string | null
+  utilizado_em: string | null
+}
+
+type PhotonFeature = {
+  properties: {
+    osm_id?: number
+    osm_type?: string
+    name?: string
+    street?: string
+    housenumber?: string
+    district?: string
+    locality?: string
+    city?: string
+    county?: string
+    state?: string
+    postcode?: string
+  }
+  geometry: {
+    coordinates: [number, number]
+  }
+}
+
+type EnderecoSelecionado = {
+  rua: string
+  bairro: string
+  cidade: string
+  estado: string
+  cep: string
+  lat: number
+  lng: number
+  origem: 'busca' | 'gps'
+}
+
+type ReferenciaBusca = {
+  lat: number
+  lng: number
+  accuracy: number
 }
 
 type Painel = 'notificacoes' | 'seguranca' | 'ajuda'
+
+const CENTRO_PRAIA_GRANDE = { lat: -24.008, lng: -46.412 }
+const PRECISAO_MAXIMA_PONTO_FIXO_METROS = 150
+
+function normalizarTexto(valor: string) {
+  return valor
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\b(rua|avenida|av|travessa|alameda|estrada|rodovia)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+}
+
+function mesmaRua(a: string, b: string) {
+  const ruaA = normalizarTexto(a)
+  const ruaB = normalizarTexto(b)
+  return ruaA.length > 3 && ruaB.length > 3 && (ruaA === ruaB || ruaA.includes(ruaB) || ruaB.includes(ruaA))
+}
+
+function cidadeDaFeature(feature: PhotonFeature) {
+  return `${feature.properties.city ?? ''} ${feature.properties.county ?? ''}`.toLowerCase()
+}
+
+function distanciaMetros(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const raioTerra = 6_371_000
+  const rad = Math.PI / 180
+  const dLat = (b.lat - a.lat) * rad
+  const dLng = (b.lng - a.lng) * rad
+  const latA = a.lat * rad
+  const latB = b.lat * rad
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(latA) * Math.cos(latB) * Math.sin(dLng / 2) ** 2
+  return 2 * raioTerra * Math.asin(Math.sqrt(h))
+}
+
+async function obterLocalizacaoAtual(): Promise<ReferenciaBusca> {
+  if (Capacitor.isNativePlatform()) {
+    let permissao = await Geolocation.checkPermissions()
+    if (permissao.location !== 'granted' && permissao.coarseLocation !== 'granted') {
+      permissao = await Geolocation.requestPermissions({ permissions: ['location'] })
+    }
+    if (permissao.location !== 'granted' && permissao.coarseLocation !== 'granted') {
+      throw Object.assign(new Error('Permissao de localizacao negada.'), { code: 1 })
+    }
+
+    const posicao = await Geolocation.getCurrentPosition({
+      enableHighAccuracy: true,
+      timeout: 20000,
+      maximumAge: 0,
+    })
+    return {
+      lat: posicao.coords.latitude,
+      lng: posicao.coords.longitude,
+      accuracy: posicao.coords.accuracy ?? 999,
+    }
+  }
+
+  if (typeof navigator === 'undefined' || !navigator.geolocation) {
+    throw new Error('GPS indisponivel.')
+  }
+
+  const posicao = await new Promise<GeolocationPosition>((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      timeout: 20000,
+      maximumAge: 0,
+    })
+  })
+  return {
+    lat: posicao.coords.latitude,
+    lng: posicao.coords.longitude,
+    accuracy: posicao.coords.accuracy ?? 999,
+  }
+}
+
+function enderecoDaFeature(feature: PhotonFeature, lat?: number, lng?: number): EnderecoSelecionado | null {
+  const [featureLng, featureLat] = feature.geometry.coordinates
+  const rua = feature.properties.street || feature.properties.name || ''
+  const enderecoLat = lat ?? featureLat
+  const enderecoLng = lng ?? featureLng
+  if (!rua || !Number.isFinite(enderecoLat) || !Number.isFinite(enderecoLng)) return null
+
+  return {
+    rua,
+    bairro: feature.properties.district || feature.properties.locality || '',
+    cidade: feature.properties.city || feature.properties.county || 'Praia Grande',
+    estado: feature.properties.state || 'Sao Paulo',
+    cep: feature.properties.postcode || '',
+    lat: enderecoLat,
+    lng: enderecoLng,
+    origem: lat != null && lng != null ? 'gps' : 'busca',
+  }
+}
+
+function montarEndereco(endereco: EnderecoSelecionado, numero: string) {
+  return [
+    endereco.rua,
+    numero,
+    endereco.bairro,
+    endereco.cidade,
+    endereco.estado,
+    endereco.cep,
+  ].filter(Boolean).join(', ')
+}
+
+function apenasDigitos(valor: string) {
+  return String(valor ?? '').replace(/\D/g, '')
+}
+
+/** Mascara so pra leitura; no banco vai o telefone em digitos puros. */
+function formatarTelefone(valor: string) {
+  const d = apenasDigitos(valor).slice(0, 11)
+  if (d.length <= 2) return d
+  if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`
+  if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
+}
+
+function normalizarNumeroEndereco(numero: string) {
+  const valor = numero.trim()
+  return /^s\s*\/?\s*n$/i.test(valor) ? 'S/N' : valor
+}
+
+function extrairNumeroEndereco(valor: string) {
+  const endereco = valor.trim()
+  const porVirgula = endereco.match(/,\s*((?:s\s*\/?\s*n)|\d+[a-z0-9./-]*)\s*$/i)
+  if (porVirgula?.[1]) return normalizarNumeroEndereco(porVirgula[1])
+
+  const aoFinal = endereco.match(/\s+((?:s\s*\/?\s*n)|\d+[a-z0-9./-]*)\s*$/i)
+  return aoFinal?.[1] ? normalizarNumeroEndereco(aoFinal[1]) : ''
+}
+
+function enderecoCompletoDigitado(endereco: EnderecoSelecionado, numero: string) {
+  return [endereco.rua, normalizarNumeroEndereco(numero)].filter(Boolean).join(', ')
+}
 
 const painelConteudo: Record<Painel, { titulo: string; texto: string; itens: string[] }> = {
   notificacoes: {
@@ -54,23 +242,147 @@ export default function PerfilPage() {
     nome: sessao?.nome || 'Meu Restaurante',
     avaliacao: 0,
     totalAvaliacoes: 0,
-    telefone: null,
     endereco: null,
+    fotoPerfilPath: null,
+    fotoCapaPath: null,
   })
   const [pedidosMes, setPedidosMes] = useState(0)
   const [faturamentoMes, setFaturamentoMes] = useState(0)
   const [painelAberto, setPainelAberto] = useState<Painel | null>(null)
   const [suporteAberto, setSuporteAberto] = useState(false)
-  const [mpStatus, setMpStatus] = useState<MercadoPagoLinkStatus | null>(null)
-  const [mpLoading, setMpLoading] = useState(false)
-  const [mpErro, setMpErro] = useState('')
+  const [telefoneComercial, setTelefoneComercial] = useState('')
+  const [salvandoTelefone, setSalvandoTelefone] = useState(false)
+  const [telefoneMsg, setTelefoneMsg] = useState('')
+  // Endereco escrito da loja. Existe separado do fluxo de correcao porque
+  // PREENCHER um endereco vazio nao e mudar a loja de lugar — a coordenada nao
+  // se mexe. Ver `restaurante_pode_preencher_endereco_vazio` no banco.
+  const [enderecoBase, setEnderecoBase] = useState('')
+  const [salvandoEndereco, setSalvandoEndereco] = useState(false)
+  const [enderecoMsg, setEnderecoMsg] = useState('')
+  // Grade por dia da semana vinda do banco (jsonb). Null = loja ainda no
+  // formato antigo; o editor espalha o par abre/fecha pelos 7 dias.
+  const [horariosPerfil, setHorariosPerfil] = useState<unknown>(null)
+  const [horaAbre, setHoraAbre] = useState('')
+  const [horaFecha, setHoraFecha] = useState('')
+  const [salvandoHorario, setSalvandoHorario] = useState(false)
+  const [horarioMsg, setHorarioMsg] = useState('')
+  // O ponto da loja e fixo. Depois de definido, so muda com uma autorizacao
+  // administrativa de uso unico.
+  const [lat, setLat] = useState<number | null>(null)
+  const [lng, setLng] = useState<number | null>(null)
+  const [salvandoLocal, setSalvandoLocal] = useState(false)
+  const [localMsg, setLocalMsg] = useState('')
+  const [solicitacaoLocal, setSolicitacaoLocal] = useState<SolicitacaoLocalizacao | null>(null)
+  const [motivoCorrecao, setMotivoCorrecao] = useState('')
+  const [novoEndereco, setNovoEndereco] = useState('')
+  const [numeroEndereco, setNumeroEndereco] = useState('')
+  const [sugestoesEndereco, setSugestoesEndereco] = useState<PhotonFeature[]>([])
+  const [enderecoSelecionado, setEnderecoSelecionado] = useState<EnderecoSelecionado | null>(null)
+  const [buscandoEndereco, setBuscandoEndereco] = useState(false)
+  const [buscandoGps, setBuscandoGps] = useState(false)
+  const [referenciaBusca, setReferenciaBusca] = useState<ReferenciaBusca | null>(null)
+  const [enviandoSolicitacao, setEnviandoSolicitacao] = useState(false)
+  const buscaEnderecoTimerRef = useRef<number | null>(null)
+  const buscaEnderecoControllerRef = useRef<AbortController | null>(null)
+
+  const buscarSugestoesEndereco = useCallback(async (termoBruto: string, signal?: AbortSignal) => {
+    const termo = termoBruto.trim()
+    if (termo.length < 3) {
+      setSugestoesEndereco([])
+      setLocalMsg('Digite pelo menos 3 letras da rua ou avenida.')
+      return
+    }
+
+    setBuscandoEndereco(true)
+    setSugestoesEndereco([])
+    setLocalMsg('')
+
+    try {
+      const url = new URL('https://photon.komoot.io/api/')
+      url.searchParams.set('q', `${termo}, Praia Grande, Sao Paulo, Brasil`)
+      url.searchParams.set('limit', '8')
+      const referencia = referenciaBusca ?? CENTRO_PRAIA_GRANDE
+      url.searchParams.set('lat', String(referencia.lat))
+      url.searchParams.set('lon', String(referencia.lng))
+      url.searchParams.set('zoom', referenciaBusca ? '15' : '12')
+      url.searchParams.set('location_bias_scale', referenciaBusca ? '0.1' : '0.2')
+      url.searchParams.append('layer', 'street')
+      url.searchParams.append('layer', 'house')
+
+      const resposta = await fetch(url, {
+        signal,
+        headers: { Accept: 'application/json' },
+      })
+      if (!resposta.ok) throw new Error('busca indisponivel')
+
+      const data = (await resposta.json()) as { features?: PhotonFeature[] }
+      const resultados = (data.features ?? []).filter(feature => cidadeDaFeature(feature).includes('praia grande'))
+      const unicos = resultados.filter((feature, index, lista) => {
+        const chave = [
+          feature.properties.street || feature.properties.name,
+          feature.properties.housenumber,
+          feature.properties.district,
+          feature.properties.postcode,
+        ].join('|').toLowerCase()
+        return lista.findIndex(item => [
+          item.properties.street || item.properties.name,
+          item.properties.housenumber,
+          item.properties.district,
+          item.properties.postcode,
+        ].join('|').toLowerCase() === chave) === index
+      }).sort((a, b) => {
+        const [lngA, latA] = a.geometry.coordinates
+        const [lngB, latB] = b.geometry.coordinates
+        return distanciaMetros(referencia, { lat: latA, lng: lngA }) - distanciaMetros(referencia, { lat: latB, lng: lngB })
+      })
+
+      if (signal?.aborted) return
+      setSugestoesEndereco(unicos)
+      setLocalMsg(unicos.length
+        ? 'Selecione a rua correta na lista abaixo.'
+        : 'Nenhuma rua encontrada em Praia Grande. Confira o nome e tente novamente.')
+    } catch (error) {
+      if ((error as Error).name !== 'AbortError') {
+        setSugestoesEndereco([])
+        setLocalMsg('Nao consegui buscar enderecos agora. Confira a internet e tente novamente.')
+      }
+    } finally {
+      if (!signal?.aborted) setBuscandoEndereco(false)
+    }
+  }, [referenciaBusca])
+
+  const agendarBuscaEndereco = useCallback((termo: string, atrasoMs: number) => {
+    if (buscaEnderecoTimerRef.current != null) {
+      window.clearTimeout(buscaEnderecoTimerRef.current)
+    }
+    buscaEnderecoControllerRef.current?.abort()
+
+    const controller = new AbortController()
+    buscaEnderecoControllerRef.current = controller
+    buscaEnderecoTimerRef.current = window.setTimeout(() => {
+      buscaEnderecoTimerRef.current = null
+      void buscarSugestoesEndereco(termo, controller.signal)
+    }, atrasoMs)
+  }, [buscarSugestoesEndereco])
+
+  const carregarSolicitacaoLocal = useCallback(async () => {
+    if (!sessao?.id) return
+    const { data } = await supabase
+      .from('solicitacoes_correcao_localizacao')
+      .select('id,status,motivo,observacao_admin,solicitado_em,revisado_em,autorizado_ate,utilizado_em')
+      .eq('restaurante_id', sessao.id)
+      .order('solicitado_em', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    setSolicitacaoLocal((data as SolicitacaoLocalizacao | null) ?? null)
+  }, [sessao?.id])
 
   useEffect(() => {
     if (!sessao) return
 
     supabase
       .from('profiles')
-      .select('nome, razao_social, avaliacao_media, total_avaliacoes, telefone_comercial, endereco')
+      .select('nome, razao_social, avaliacao_media, total_avaliacoes, telefone_comercial, endereco, horario_abre, horario_fecha, horarios, lat, lng, foto_perfil_path, foto_capa_path')
       .eq('id', sessao.id)
       .maybeSingle()
       .then(({ data }) => {
@@ -79,9 +391,16 @@ export default function PerfilPage() {
           nome: data.nome || data.razao_social || sessao.nome || 'Meu Restaurante',
           avaliacao: Number(data.avaliacao_media) || 0,
           totalAvaliacoes: Number(data.total_avaliacoes) || 0,
-          telefone: data.telefone_comercial,
           endereco: data.endereco,
+          fotoPerfilPath: data.foto_perfil_path,
+          fotoCapaPath: data.foto_capa_path,
         })
+        setHoraAbre(data.horario_abre || '')
+        setHoraFecha(data.horario_fecha || '')
+        setHorariosPerfil(data.horarios ?? null)
+        setTelefoneComercial(formatarTelefone(data.telefone_comercial || ''))
+        setLat(data.lat != null ? Number(data.lat) : null)
+        setLng(data.lng != null ? Number(data.lng) : null)
       })
 
     const inicioMes = new Date()
@@ -98,20 +417,304 @@ export default function PerfilPage() {
         setPedidosMes(entregues.length)
         setFaturamentoMes(entregues.reduce((a, p) => a + (Number(p.total) || 0), 0))
       })
-
-    buscarStatusMercadoPago(sessao.id).then(setMpStatus)
   }, [sessao])
 
-  async function conectarMercadoPago() {
-    if (!sessao) return
-    setMpErro('')
-    setMpLoading(true)
-    try {
-      await iniciarVinculoMercadoPago(sessao.id)
-    } catch (err) {
-      setMpErro(err instanceof Error ? err.message : 'Nao foi possivel vincular o Mercado Pago.')
-      setMpLoading(false)
+  useEffect(() => {
+    if (!sessao?.id) return
+    carregarSolicitacaoLocal()
+    const channel = supabase
+      .channel(`correcao_local_perfil_${sessao.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'solicitacoes_correcao_localizacao',
+        filter: `restaurante_id=eq.${sessao.id}`,
+      }, () => carregarSolicitacaoLocal())
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [sessao?.id, carregarSolicitacaoLocal])
+
+  useEffect(() => {
+    const termo = novoEndereco.trim()
+    const enderecoEscolhido = enderecoSelecionado
+      ? enderecoCompletoDigitado(enderecoSelecionado, numeroEndereco)
+      : ''
+    if (solicitacaoLocal?.status !== 'aprovada' || termo.length < 3 || termo === enderecoEscolhido) {
+      setBuscandoEndereco(false)
+      setSugestoesEndereco([])
+      return
     }
+
+    agendarBuscaEndereco(termo, 500)
+
+    return () => {
+      if (buscaEnderecoTimerRef.current != null) {
+        window.clearTimeout(buscaEnderecoTimerRef.current)
+        buscaEnderecoTimerRef.current = null
+      }
+      buscaEnderecoControllerRef.current?.abort()
+    }
+  }, [novoEndereco, numeroEndereco, solicitacaoLocal?.status, enderecoSelecionado, agendarBuscaEndereco])
+
+  async function salvarHorario() {
+    if (!sessao) return
+    setSalvandoHorario(true)
+    setHorarioMsg('')
+    const { error } = await supabase
+      .from('profiles')
+      .update({ horario_abre: horaAbre || null, horario_fecha: horaFecha || null })
+      .eq('id', sessao.id)
+    setSalvandoHorario(false)
+    setHorarioMsg(error ? 'Nao deu pra salvar. Tente de novo.' : 'Horario salvo! Ja aparece pros clientes.')
+    setTimeout(() => setHorarioMsg(''), 3500)
+  }
+
+  async function solicitarCorrecaoLocalizacao() {
+    if (!sessao) return
+    const motivo = motivoCorrecao.trim()
+    if (motivo.length < 8) {
+      setLocalMsg('Explique em poucas palavras por que o ponto atual esta errado.')
+      return
+    }
+    setEnviandoSolicitacao(true)
+    setLocalMsg('')
+    const { data, error } = await supabase.rpc('solicitar_correcao_localizacao', {
+      p_motivo: motivo,
+    })
+    setEnviandoSolicitacao(false)
+    if (error) {
+      setLocalMsg(error.message.includes('Ja existe')
+        ? 'Ja existe uma solicitacao aguardando analise.'
+        : 'Nao foi possivel enviar a solicitacao. Tente novamente.')
+      return
+    }
+    setSolicitacaoLocal(data as SolicitacaoLocalizacao)
+    setMotivoCorrecao('')
+    setLocalMsg('Solicitacao enviada ao painel PraiaGo. Voce sera avisado quando for revisada.')
+  }
+
+  function selecionarEndereco(feature: PhotonFeature) {
+    const endereco = enderecoDaFeature(feature)
+    if (!endereco) return
+    const numero = normalizarNumeroEndereco(
+      feature.properties.housenumber || extrairNumeroEndereco(novoEndereco) || numeroEndereco,
+    )
+    setNovoEndereco(enderecoCompletoDigitado(endereco, numero))
+    setNumeroEndereco(numero)
+    setEnderecoSelecionado(endereco)
+    setSugestoesEndereco([])
+    setLocalMsg(numero
+      ? 'Endereco selecionado. Confira a rua e o numero antes de salvar.'
+      : 'Rua selecionada. Acrescente o numero no mesmo campo para continuar.')
+  }
+
+  async function capturarReferenciaBusca() {
+    if (referenciaBusca || buscandoGps) return referenciaBusca
+
+    setBuscandoGps(true)
+    setLocalMsg('Buscando enderecos perto da sua localizacao...')
+    try {
+      const referencia = await obterLocalizacaoAtual()
+      setReferenciaBusca(referencia)
+      setLocalMsg(`Busca ajustada para perto de voce (precisao de ${Math.round(referencia.accuracy)} m).`)
+      return referencia
+    } catch (error) {
+      const codigo = (error as { code?: number }).code
+      setLocalMsg(codigo === 1
+        ? 'Permita o acesso a localizacao para ver primeiro os enderecos perto de voce.'
+        : 'Nao consegui obter o GPS. A busca continua limitada a Praia Grande.')
+      return null
+    } finally {
+      setBuscandoGps(false)
+    }
+  }
+
+  async function buscarEnderecoNoGps(referencia: ReferenciaBusca) {
+    const url = new URL('https://photon.komoot.io/reverse')
+    url.searchParams.set('lat', String(referencia.lat))
+    url.searchParams.set('lon', String(referencia.lng))
+    url.searchParams.set('limit', '5')
+    url.searchParams.set('radius', '1')
+
+    const resposta = await fetch(url, { headers: { Accept: 'application/json' } })
+    if (!resposta.ok) throw new Error('endereco indisponivel')
+    const data = (await resposta.json()) as { features?: PhotonFeature[] }
+    return (data.features ?? []).find(item => item.properties.street || item.properties.name) ?? null
+  }
+
+  async function buscarPontoExato(endereco: EnderecoSelecionado, numero: string) {
+    if (numero.toUpperCase() === 'S/N') return null
+
+    const url = new URL('https://photon.komoot.io/structured')
+    url.searchParams.set('street', endereco.rua)
+    url.searchParams.set('housenumber', numero)
+    url.searchParams.set('city', 'Praia Grande')
+    url.searchParams.set('state', 'Sao Paulo')
+    url.searchParams.set('countrycode', 'BR')
+    url.searchParams.set('limit', '10')
+    const referencia = referenciaBusca ?? CENTRO_PRAIA_GRANDE
+    url.searchParams.set('lat', String(referencia.lat))
+    url.searchParams.set('lon', String(referencia.lng))
+
+    const resposta = await fetch(url, { headers: { Accept: 'application/json' } })
+    if (!resposta.ok) throw new Error('busca indisponivel')
+    const data = (await resposta.json()) as { features?: PhotonFeature[] }
+    const numeroNormalizado = normalizarTexto(numero)
+    const feature = (data.features ?? []).find(item => {
+      const rua = item.properties.street || item.properties.name || ''
+      const numeroEncontrado = normalizarTexto(item.properties.housenumber || '')
+      return cidadeDaFeature(item).includes('praia grande')
+        && mesmaRua(rua, endereco.rua)
+        && numeroEncontrado === numeroNormalizado
+    })
+    return feature ? enderecoDaFeature(feature) : null
+  }
+
+  async function usarLocalizacaoAtual() {
+    setBuscandoGps(true)
+    setSugestoesEndereco([])
+    setLocalMsg('Localizando a rua mais proxima...')
+
+    try {
+      const referencia = await obterLocalizacaoAtual()
+      setReferenciaBusca(referencia)
+      if (referencia.accuracy > PRECISAO_MAXIMA_PONTO_FIXO_METROS) {
+        setLocalMsg(`O GPS esta impreciso (${Math.round(referencia.accuracy)} m). Va ate a entrada da loja, ative a localizacao precisa e tente novamente.`)
+        return
+      }
+
+      const feature = await buscarEnderecoNoGps(referencia)
+      const endereco = feature ? enderecoDaFeature(feature, referencia.lat, referencia.lng) : null
+      if (!endereco) throw new Error('rua nao encontrada')
+
+      const numero = normalizarNumeroEndereco(feature?.properties.housenumber || '')
+      setNovoEndereco(enderecoCompletoDigitado(endereco, numero))
+      setNumeroEndereco(numero)
+      setEnderecoSelecionado(endereco)
+      setLocalMsg(numero
+        ? `Ponto preciso encontrado (${Math.round(referencia.accuracy)} m). Confira o endereco.`
+        : `Ponto preciso encontrado (${Math.round(referencia.accuracy)} m). Acrescente o numero no mesmo campo.`)
+    } catch (error) {
+      const codigo = (error as { code?: number }).code
+      setLocalMsg(codigo === 1
+        ? 'Precisamos da permissao de localizacao. Ative o GPS e permita o acesso.'
+        : 'O GPS foi capturado, mas nao encontrei a rua. Digite o endereco para buscar.')
+    } finally {
+      setBuscandoGps(false)
+    }
+  }
+
+  async function aplicarCorrecaoLocalizacao() {
+    if (!sessao || !solicitacaoLocal || solicitacaoLocal.status !== 'aprovada') return
+    if (!enderecoSelecionado) {
+      setLocalMsg('Escolha um endereco da lista ou use sua localizacao atual.')
+      return
+    }
+    const numero = normalizarNumeroEndereco(numeroEndereco || extrairNumeroEndereco(novoEndereco))
+    if (!numero) {
+      setLocalMsg('Informe o numero da loja. Use S/N se o local nao tiver numero.')
+      return
+    }
+    setSalvandoLocal(true)
+    setLocalMsg('Confirmando o numero e o ponto fixo...')
+
+    let pontoFixo = enderecoSelecionado
+    try {
+      if (enderecoSelecionado.origem !== 'gps') {
+        if (referenciaBusca && referenciaBusca.accuracy <= PRECISAO_MAXIMA_PONTO_FIXO_METROS) {
+          const featureGps = await buscarEnderecoNoGps(referenciaBusca)
+          const ruaGps = featureGps?.properties.street || featureGps?.properties.name || ''
+          if (mesmaRua(ruaGps, enderecoSelecionado.rua)) {
+            pontoFixo = { ...enderecoSelecionado, lat: referenciaBusca.lat, lng: referenciaBusca.lng, origem: 'gps' }
+          }
+        }
+
+        if (pontoFixo.origem !== 'gps') {
+          const pontoExato = await buscarPontoExato(enderecoSelecionado, numero)
+          if (pontoExato) pontoFixo = pontoExato
+        }
+      }
+    } catch {
+      // A rua escolhida continua sendo um ponto fixo valido mesmo quando o
+      // provedor nao possui a numeracao exata ou esta temporariamente offline.
+      pontoFixo = enderecoSelecionado
+    }
+
+    const endereco = montarEndereco(enderecoSelecionado, numero)
+    setLocalMsg('Salvando o novo ponto fixo...')
+    const { data, error } = await supabase.rpc('aplicar_correcao_localizacao', {
+      p_solicitacao_id: solicitacaoLocal.id,
+      p_lat: pontoFixo.lat,
+      p_lng: pontoFixo.lng,
+      p_endereco: endereco,
+    })
+    setSalvandoLocal(false)
+    if (error) {
+      setLocalMsg(error.message.includes('expirou')
+        ? 'A autorizacao expirou. Envie uma nova solicitacao.'
+        : 'Nao foi possivel corrigir o ponto. Tente novamente.')
+      return
+    }
+    setLat(pontoFixo.lat)
+    setLng(pontoFixo.lng)
+    setPerfil(atual => ({ ...atual, endereco }))
+    setSolicitacaoLocal(data as SolicitacaoLocalizacao)
+    setLocalMsg(pontoFixo.origem === 'gps'
+      ? 'Localizacao corrigida e travada no ponto preciso da loja.'
+      : 'Localizacao corrigida e travada no endereco selecionado.')
+    setTimeout(() => setLocalMsg(''), 6000)
+  }
+
+  // O telefone comercial ficava so como texto "Adicione no cadastro" — e o
+  // cadastro nunca pediu esse campo. Sem edicao aqui o vendedor nao tinha
+  // NENHUM caminho pra preencher.
+  async function salvarTelefoneComercial() {
+    if (!sessao) return
+    const digitos = apenasDigitos(telefoneComercial)
+    if (digitos && (digitos.length < 10 || digitos.length > 11)) {
+      setTelefoneMsg('Informe o telefone com DDD (ex: 13 99999-8888).')
+      return
+    }
+    setSalvandoTelefone(true)
+    setTelefoneMsg('')
+    const { error } = await supabase
+      .from('profiles')
+      .update({ telefone_comercial: digitos || null })
+      .eq('id', sessao.id)
+    setSalvandoTelefone(false)
+    if (error) {
+      setTelefoneMsg('Nao deu pra salvar. Tente de novo.')
+      return
+    }
+    setTelefoneMsg(digitos ? 'Telefone salvo!' : 'Telefone removido.')
+    setTimeout(() => setTelefoneMsg(''), 3500)
+  }
+
+  /** Grava o endereco escrito UMA vez, sem tocar em lat/lng.
+   *  A loja nasce com coordenada e sem endereco (o cadastro grava as duas em
+   *  momentos diferentes), e antes disso ela ficava sem poder nunca dizer ao
+   *  cliente onde fica. Depois de preenchido, so muda pelo fluxo de correcao. */
+  async function salvarEnderecoBase() {
+    if (!sessao) return
+    const texto = enderecoBase.trim().replace(/\s+/g, ' ')
+    if (texto.length < 8) {
+      setEnderecoMsg('Escreva o endereco completo: rua, numero, bairro e cidade.')
+      return
+    }
+    setSalvandoEndereco(true)
+    setEnderecoMsg('')
+    const { error } = await supabase.from('profiles').update({ endereco: texto }).eq('id', sessao.id)
+    setSalvandoEndereco(false)
+    if (error) {
+      // 42501 = a trava do banco. Acontece se o endereco ja tiver sido gravado
+      // por outro caminho enquanto esta tela estava aberta.
+      setEnderecoMsg(error.code === '42501'
+        ? 'Este endereco ja foi definido. Para trocar, peca a correcao abaixo.'
+        : 'Nao deu pra salvar o endereco. Tente de novo.')
+      return
+    }
+    setPerfil(atual => ({ ...atual, endereco: texto }))
+    setEnderecoMsg('Endereco salvo! Ja aparece pro cliente.')
   }
 
   function sair() {
@@ -119,20 +722,33 @@ export default function PerfilPage() {
     navigate('/login')
   }
 
+  const autorizacaoValida = solicitacaoLocal?.status === 'aprovada'
+    && Boolean(solicitacaoLocal.autorizado_ate)
+    && new Date(solicitacaoLocal.autorizado_ate as string).getTime() > Date.now()
+  const aguardandoAnalise = solicitacaoLocal?.status === 'pendente'
+  const localMsgSucesso = /(enviada|corrigida|selecionada|encontrada)/i.test(localMsg)
+  const localMsgProcessando = localMsg.endsWith('...')
+  const fotoPerfil = sellerPhotoUrl(perfil.fotoPerfilPath)
+  const fotoCapa = sellerPhotoUrl(perfil.fotoCapaPath)
+
   return (
-    <div style={{ padding: '32px 40px 48px', minHeight: '100vh' }}>
+    <div className="restaurant-page" style={{ padding: '32px 40px 48px', minHeight: '100vh' }}>
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}>
         <h1 style={{ fontSize: 38, fontWeight: 900, color: '#0f172a', margin: '0 0 8px', letterSpacing: -1 }}>Central do Restaurante</h1>
         <p style={{ fontSize: 15, color: '#64748b', margin: '0 0 32px', fontWeight: 600 }}>Gerencie seu perfil e configuracoes da conta</p>
       </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-panel" style={{
-        background: 'linear-gradient(135deg, rgba(249,115,22,0.16), rgba(255,255,255,0.92))',
+        background: fotoCapa ? '#fff' : 'linear-gradient(135deg, rgba(249,115,22,0.16), rgba(255,255,255,0.92))',
         border: '1px solid rgba(249,115,22,0.25)',
         borderRadius: 24,
         padding: 32,
         marginBottom: 32,
+        position: 'relative',
+        overflow: 'hidden',
       }}>
+        {fotoCapa && <img src={fotoCapa} alt="" aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.16 }} />}
+        <div style={{ position: 'relative' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
           <div style={{
             width: 88,
@@ -144,8 +760,11 @@ export default function PerfilPage() {
             justifyContent: 'center',
             border: '1px solid rgba(249,115,22,0.28)',
             boxShadow: '0 10px 24px rgba(249,115,22,0.16)',
+            overflow: 'hidden',
           }}>
-            <Store size={38} color="#f97316" />
+            {fotoPerfil
+              ? <img src={fotoPerfil} alt={perfil.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : <Store size={38} color="#f97316" />}
           </div>
           <div>
             <div style={{ fontSize: 28, fontWeight: 900, color: '#0f172a' }}>{perfil.nome}</div>
@@ -163,7 +782,18 @@ export default function PerfilPage() {
             </div>
           </div>
         </div>
+        </div>
       </motion.div>
+
+      {sessao?.id && (
+        <SellerPhotoManager
+          userId={sessao.id}
+          profilePath={perfil.fotoPerfilPath}
+          coverPath={perfil.fotoCapaPath}
+          accent="#ea580c"
+          onChanged={({ profilePath, coverPath }) => setPerfil(current => ({ ...current, fotoPerfilPath: profilePath, fotoCapaPath: coverPath }))}
+        />
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24, marginBottom: 32 }}>
         <InfoCard title="Desempenho do mes" icon={<TrendingUp size={16} color="#16a34a" />}>
@@ -172,28 +802,308 @@ export default function PerfilPage() {
         </InfoCard>
 
         <InfoCard title="Informacoes publicas" icon={<MapPin size={16} color="#0ea5e9" />}>
-          <PublicInfo icon={<Phone size={18} color="#64748b" />} label="Telefone comercial" value={perfil.telefone || 'Adicione no cadastro'} />
-          <PublicInfo icon={<MapPin size={18} color="#64748b" />} label="Endereco da base" value={perfil.endereco || 'Adicione no cadastro'} />
+          <div>
+            <label htmlFor="telefone-comercial" style={{ fontSize: 11, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 6, letterSpacing: 0.5 }}>TELEFONE COMERCIAL</label>
+            <input
+              id="telefone-comercial"
+              value={telefoneComercial}
+              onChange={e => { setTelefoneComercial(formatarTelefone(e.target.value)); setTelefoneMsg('') }}
+              inputMode="tel"
+              placeholder="(13) 99999-8888"
+              style={{ width: '100%', boxSizing: 'border-box', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 14, padding: 12, fontSize: 15, fontWeight: 700, color: '#0f172a', background: '#f8fafc' }}
+            />
+            <button
+              type="button"
+              onClick={salvarTelefoneComercial}
+              disabled={salvandoTelefone}
+              style={{ width: '100%', marginTop: 10, border: '1px solid rgba(14,165,233,0.25)', background: '#eff6ff', color: '#0284c7', borderRadius: 14, padding: 13, fontSize: 13.5, fontWeight: 900, cursor: salvandoTelefone ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+            >
+              {salvandoTelefone ? <Loader2 size={17} className="animate-spin-slow" /> : <Phone size={17} />}
+              {salvandoTelefone ? 'Salvando...' : 'Salvar telefone'}
+            </button>
+            {telefoneMsg && <div role="status" style={{ marginTop: 8, fontSize: 12.5, fontWeight: 800, color: telefoneMsg.includes('salvo') || telefoneMsg.includes('removido') ? '#16a34a' : '#ef4444' }}>{telefoneMsg}</div>}
+          </div>
+          {/* Tres estados, porque a loja pode estar em tres situacoes bem
+              diferentes — e antes as tres mostravam a mesma frase inutil:
+              1. tem endereco  -> so exibe;
+              2. tem coordenada e nao tem endereco -> DEIXA PREENCHER aqui
+                 mesmo (nao mexe no ponto, entao nao precisa de autorizacao);
+              3. nao tem nem coordenada -> manda definir o ponto primeiro. */}
+          {perfil.endereco ? (
+            <PublicInfo
+              icon={<MapPin size={18} color="#64748b" />}
+              label="Endereco da base"
+              value={perfil.endereco}
+            />
+          ) : lat != null && lng != null ? (
+            <div style={{ borderTop: '1px solid rgba(0,0,0,0.06)', paddingTop: 14, marginTop: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <MapPin size={18} color="#d97706" />
+                <div style={{ fontSize: 12.5, fontWeight: 900, color: '#0f172a' }}>Endereco da base</div>
+              </div>
+              <p style={{ margin: '0 0 10px', fontSize: 12.5, color: '#b45309', fontWeight: 700, lineHeight: 1.45 }}>
+                Seu ponto ja esta no mapa, mas sem endereco escrito. O cliente ve o pino e nao sabe ler onde e.
+              </p>
+              <input
+                value={enderecoBase}
+                onChange={e => { setEnderecoBase(e.target.value); setEnderecoMsg('') }}
+                placeholder="Rua, numero, bairro, cidade"
+                autoComplete="street-address"
+                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 14, padding: 12, fontSize: 15, fontWeight: 700, color: '#0f172a', background: '#f8fafc' }}
+              />
+              <button
+                type="button"
+                onClick={salvarEnderecoBase}
+                disabled={salvandoEndereco}
+                style={{ width: '100%', marginTop: 10, border: '1px solid rgba(245,158,11,0.3)', background: '#fffbeb', color: '#b45309', borderRadius: 14, padding: 13, fontSize: 13.5, fontWeight: 900, cursor: salvandoEndereco ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              >
+                {salvandoEndereco ? <Loader2 size={17} className="animate-spin-slow" /> : <MapPin size={17} />}
+                {salvandoEndereco ? 'Salvando...' : 'Salvar endereco'}
+              </button>
+              {/* Aviso antes de salvar, nao depois: escrever o endereco e uma
+                  acao de uma vez so — trocar depois exige autorizacao. */}
+              <div style={{ marginTop: 7, fontSize: 11.5, color: '#64748b', fontWeight: 700, lineHeight: 1.4 }}>
+                Confira antes de salvar: depois de gravado, mudar o endereco passa pela autorizacao PraiaGo.
+              </div>
+              {enderecoMsg && (
+                <div role="status" style={{ marginTop: 8, fontSize: 12.5, fontWeight: 800, color: enderecoMsg.startsWith('Endereco salvo') ? '#16a34a' : '#ef4444' }}>
+                  {enderecoMsg}
+                </div>
+              )}
+            </div>
+          ) : (
+            <PublicInfo
+              icon={<MapPin size={18} color="#64748b" />}
+              label="Endereco da base"
+              value='Defina o ponto em "Localizacao da loja" logo abaixo'
+            />
+          )}
         </InfoCard>
       </div>
 
-      <InfoCard title="Recebimentos Mercado Pago" icon={<CreditCard size={16} color="#0284c7" />}>
-        <Metric
-          label="Status do split"
-          value={mpStatus?.provider === 'mercadopago' && mpStatus.status === 'verificado' ? 'Conta vinculada' : 'Pendente'}
-          color={mpStatus?.provider === 'mercadopago' && mpStatus.status === 'verificado' ? '#16a34a' : '#d97706'}
-        />
-        <button
-          type="button"
-          onClick={conectarMercadoPago}
-          disabled={mpLoading}
-          style={{ width: '100%', border: '1px solid rgba(2,132,199,0.25)', background: '#eff6ff', color: '#0284c7', borderRadius: 16, padding: 16, fontSize: 14, fontWeight: 900, cursor: mpLoading ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
-        >
-          {mpLoading ? <Loader2 size={18} className="animate-spin-slow" /> : <CreditCard size={18} />}
-          {mpStatus?.provider === 'mercadopago' ? 'Atualizar vinculo Mercado Pago' : 'Vincular conta Mercado Pago'}
-        </button>
-        {mpErro && <div style={{ color: '#ef4444', fontSize: 13, fontWeight: 800 }}>{mpErro}</div>}
+      <motion.button
+        initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }}
+        onClick={() => navigate('/carteira')}
+        className="glass-panel"
+        style={{ width: '100%', borderRadius: 24, padding: 20, border: '1px solid rgba(0,0,0,0.06)', background: 'linear-gradient(135deg, rgba(14,165,233,0.08), rgba(34,197,94,0.08))', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left', marginBottom: 4 }}
+      >
+        <div style={{ width: 46, height: 46, borderRadius: 14, background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Wallet size={22} color="#fff" />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 15, fontWeight: 900, color: '#0f172a' }}>Minha Carteira</div>
+          <div style={{ fontSize: 12.5, color: '#64748b', fontWeight: 600 }}>Saldo, repasses e saque pra sua conta bancaria</div>
+        </div>
+        <ChevronRight size={20} color="#94a3b8" />
+      </motion.button>
+
+      <InfoCard title="Localizacao da loja (ponto fixo)" icon={<MapPin size={16} color="#f43f5e" />}>
+        <p style={{ fontSize: 13, color: '#64748b', fontWeight: 500, margin: 0 }}>
+          O restaurante nao se move: este ponto fica <strong>fixo</strong> no mapa. Para corrigir um ponto errado, envie uma solicitacao e aguarde a autorizacao PraiaGo.
+        </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: (lat != null && lng != null) ? 'rgba(34,197,94,0.08)' : 'rgba(245,158,11,0.08)', border: `1px solid ${(lat != null && lng != null) ? 'rgba(34,197,94,0.25)' : 'rgba(245,158,11,0.25)'}`, borderRadius: 14, padding: '12px 14px' }}>
+          <MapPin size={18} color={(lat != null && lng != null) ? '#16a34a' : '#d97706'} />
+          <div style={{ flex: 1, fontSize: 13, fontWeight: 800, color: (lat != null && lng != null) ? '#15803d' : '#b45309' }}>
+            {(lat != null && lng != null)
+              ? 'Ponto fixo confirmado para esta loja'
+              : 'Sem ponto definido — sua loja ainda nao aparece no mapa.'}
+          </div>
+          {lat != null && lng != null && (
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`}
+              target="_blank"
+              rel="noreferrer"
+              style={{ color: '#0284c7', fontSize: 12, fontWeight: 900, textDecoration: 'none' }}
+            >
+              Ver mapa
+            </a>
+          )}
+        </div>
+
+        {aguardandoAnalise && solicitacaoLocal && (
+          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', border: '1px solid rgba(245,158,11,0.3)', background: '#fffbeb', borderRadius: 16, padding: 14 }}>
+            <Clock size={20} color="#d97706" />
+            <div>
+              <div style={{ color: '#92400e', fontSize: 14, fontWeight: 900 }}>Aguardando aprovacao do admin</div>
+              <div style={{ color: '#a16207', fontSize: 12, marginTop: 4, lineHeight: 1.45 }}>{solicitacaoLocal.motivo}</div>
+            </div>
+          </div>
+        )}
+
+        {autorizacaoValida && solicitacaoLocal && (
+          <div style={{ display: 'grid', gap: 12, border: '1px solid rgba(34,197,94,0.3)', background: '#f0fdf4', borderRadius: 16, padding: 14 }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <CheckCircle2 size={20} color="#16a34a" />
+              <div>
+                <div style={{ color: '#166534', fontSize: 14, fontWeight: 900 }}>Correcao autorizada</div>
+                <div style={{ color: '#15803d', fontSize: 12, marginTop: 2 }}>
+                  Va ate a loja e grave o novo ponto ate {new Date(solicitacaoLocal.autorizado_ate as string).toLocaleDateString('pt-BR')}.
+                </div>
+              </div>
+            </div>
+            {solicitacaoLocal.observacao_admin && (
+              <div style={{ color: '#166534', fontSize: 12, fontWeight: 700 }}>Admin: {solicitacaoLocal.observacao_admin}</div>
+            )}
+            <button
+              type="button"
+              onClick={usarLocalizacaoAtual}
+              disabled={buscandoGps || salvandoLocal}
+              style={{ width: '100%', border: '1px solid rgba(2,132,199,0.3)', background: '#eff6ff', color: '#0369a1', borderRadius: 12, padding: 12, fontSize: 13, fontWeight: 900, cursor: buscandoGps ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+            >
+              {buscandoGps ? <Loader2 size={17} className="animate-spin-slow" /> : <Navigation size={17} />}
+              {buscandoGps ? 'Buscando rua proxima...' : 'Usar localizacao atual da loja'}
+            </button>
+            <div style={{ position: 'relative' }}>
+              <label style={{ fontSize: 11, fontWeight: 900, color: '#166534' }}>
+                ENDERECO COMPLETO (RUA E NUMERO)
+                <div style={{ position: 'relative', marginTop: 6 }}>
+                  <input
+                    value={novoEndereco}
+                    onFocus={() => { void capturarReferenciaBusca() }}
+                    onChange={e => {
+                      const valor = e.target.value
+                      setNovoEndereco(valor)
+                      setNumeroEndereco(extrairNumeroEndereco(valor))
+                      setEnderecoSelecionado(null)
+                      setLocalMsg('')
+                    }}
+                    placeholder="Ex.: Rua Darcy Alves Costa, 123"
+                    autoComplete="off"
+                    aria-autocomplete="list"
+                    aria-expanded={sugestoesEndereco.length > 0}
+                    onKeyDown={event => {
+                      if (event.key !== 'Enter') return
+                      event.preventDefault()
+                      setEnderecoSelecionado(null)
+                      agendarBuscaEndereco(novoEndereco, 0)
+                    }}
+                    style={{ display: 'block', width: '100%', boxSizing: 'border-box', border: '1px solid rgba(22,101,52,0.25)', borderRadius: 12, padding: '12px 50px 12px 12px', background: '#fff', color: '#0f172a', fontSize: 14, fontWeight: 700 }}
+                  />
+                  <button
+                    type="button"
+                    title="Buscar endereco"
+                    aria-label="Buscar endereco"
+                    disabled={buscandoEndereco || novoEndereco.trim().length < 3}
+                    onClick={() => {
+                      setEnderecoSelecionado(null)
+                      agendarBuscaEndereco(novoEndereco, 0)
+                    }}
+                    style={{ position: 'absolute', right: 5, top: '50%', transform: 'translateY(-50%)', width: 34, height: 34, border: 0, borderRadius: 9, background: '#16a34a', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: buscandoEndereco ? 'wait' : 'pointer', opacity: novoEndereco.trim().length < 3 ? 0.45 : 1 }}
+                  >
+                    {buscandoEndereco ? <Loader2 size={17} className="animate-spin-slow" /> : <Search size={17} />}
+                  </button>
+                </div>
+              </label>
+              {sugestoesEndereco.length > 0 && (
+                <div role="listbox" style={{ position: 'absolute', zIndex: 20, top: '100%', left: 0, right: 0, marginTop: 6, overflow: 'hidden', border: '1px solid #cbd5e1', borderRadius: 8, background: '#fff', boxShadow: '0 12px 28px rgba(15,23,42,0.16)' }}>
+                  {sugestoesEndereco.map(feature => {
+                    const rua = feature.properties.street || feature.properties.name || 'Endereco'
+                    const titulo = [rua, feature.properties.housenumber].filter(Boolean).join(', ')
+                    const detalhe = [feature.properties.district, feature.properties.city, feature.properties.postcode].filter(Boolean).join(' - ')
+                    return (
+                      <button
+                        type="button"
+                        role="option"
+                        key={`${feature.properties.osm_type ?? 'osm'}-${feature.properties.osm_id ?? rua}-${detalhe}`}
+                        onClick={() => selecionarEndereco(feature)}
+                        style={{ width: '100%', border: 0, borderBottom: '1px solid #e2e8f0', background: '#fff', padding: '11px 12px', textAlign: 'left', cursor: 'pointer' }}
+                      >
+                        <span style={{ display: 'block', color: '#0f172a', fontSize: 13, fontWeight: 900 }}>{titulo}</span>
+                        {detalhe && <span style={{ display: 'block', marginTop: 3, color: '#64748b', fontSize: 11, fontWeight: 700 }}>{detalhe}</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+            {enderecoSelecionado && (
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 12px', border: '1px solid rgba(34,197,94,0.25)', borderRadius: 10, background: '#fff', color: '#166534', fontSize: 12, fontWeight: 800, lineHeight: 1.45 }}>
+                <MapPin size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+                <span>{montarEndereco(enderecoSelecionado, numeroEndereco || 'numero pendente')}</span>
+              </div>
+            )}
+            {referenciaBusca && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: '#0369a1', fontSize: 11, fontWeight: 800 }}>
+                <Navigation size={14} />
+                Sugestoes ordenadas pela sua localizacao atual ({Math.round(referenciaBusca.accuracy)} m de precisao)
+              </div>
+            )}
+            <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" style={{ color: '#64748b', fontSize: 10, fontWeight: 700, textDecoration: 'none' }}>
+              Enderecos: OpenStreetMap, busca Photon
+            </a>
+            <button
+              type="button"
+              onClick={aplicarCorrecaoLocalizacao}
+              disabled={salvandoLocal || buscandoGps || !enderecoSelecionado || !numeroEndereco.trim()}
+              style={{ width: '100%', border: 0, background: '#16a34a', color: '#fff', borderRadius: 14, padding: 14, fontSize: 14, fontWeight: 900, cursor: salvandoLocal ? 'wait' : 'pointer', opacity: !enderecoSelecionado || !numeroEndereco.trim() ? 0.55 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9 }}
+            >
+              {salvandoLocal ? <Loader2 size={18} className="animate-spin-slow" /> : <MapPin size={18} />}
+              {salvandoLocal ? 'Salvando ponto...' : 'Salvar endereco e ponto fixo'}
+            </button>
+          </div>
+        )}
+
+        {solicitacaoLocal?.status === 'rejeitada' && (
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', border: '1px solid rgba(239,68,68,0.25)', background: '#fef2f2', borderRadius: 16, padding: 14 }}>
+            <XCircle size={20} color="#dc2626" />
+            <div>
+              <div style={{ color: '#991b1b', fontSize: 14, fontWeight: 900 }}>Solicitacao nao autorizada</div>
+              <div style={{ color: '#b91c1c', fontSize: 12, marginTop: 4 }}>{solicitacaoLocal.observacao_admin || 'Confira os dados e envie uma nova solicitacao.'}</div>
+            </div>
+          </div>
+        )}
+
+        {!aguardandoAnalise && !autorizacaoValida && (
+          <div style={{ display: 'grid', gap: 10 }}>
+            <label style={{ fontSize: 11, fontWeight: 900, color: '#64748b' }}>
+              POR QUE O PONTO PRECISA SER CORRIGIDO?
+              <textarea
+                value={motivoCorrecao}
+                onChange={e => setMotivoCorrecao(e.target.value)}
+                rows={3}
+                maxLength={500}
+                placeholder="Ex.: o ponto foi salvo no endereco vizinho durante o cadastro."
+                style={{ display: 'block', width: '100%', boxSizing: 'border-box', resize: 'vertical', marginTop: 6, border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: 12, background: '#f8fafc', color: '#0f172a', fontSize: 14, fontWeight: 650 }}
+              />
+            </label>
+            <button
+              type="button"
+              onClick={solicitarCorrecaoLocalizacao}
+              disabled={enviandoSolicitacao}
+              style={{ width: '100%', border: '1px solid rgba(244,63,94,0.25)', background: '#fff1f2', color: '#e11d48', borderRadius: 14, padding: 14, fontSize: 14, fontWeight: 900, cursor: enviandoSolicitacao ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9 }}
+            >
+              {enviandoSolicitacao ? <Loader2 size={18} className="animate-spin-slow" /> : <Send size={18} />}
+              {enviandoSolicitacao ? 'Enviando...' : 'Solicitar correcao ao admin'}
+            </button>
+          </div>
+        )}
+        {localMsg && <div role="status" style={{ color: localMsgSucesso ? '#16a34a' : localMsgProcessando ? '#64748b' : '#ef4444', fontSize: 13, fontWeight: 800 }}>{localMsg}</div>}
       </InfoCard>
+
+      {/* Onde o dinheiro cai fica na Carteira (conta bancaria no gateway), nao
+          aqui: a chave Pix saiu porque o repasse deixou de usar chave. */}
+      {sessao?.id && (
+        <TrocaNomeLoja
+          vendedorId={sessao.id}
+          nomeAtual={perfil.nome}
+          onNomeAprovado={nomeNovo => setPerfil(atual => (atual.nome === nomeNovo ? atual : { ...atual, nome: nomeNovo }))}
+        />
+      )}
+
+      {/* Horário POR DIA DA SEMANA. Antes era um par abre/fecha só, valendo
+          igual pra semana inteira — não dava pra fechar na segunda, abrir mais
+          cedo no sábado nem marcar 24 horas, que é como loja de praia funciona.
+          O EditorHorarios grava a grade nova e mantém os campos antigos
+          preenchidos, pra quem ainda não atualizou o app não ver "sem horário". */}
+      {sessao?.id && (
+        <EditorHorarios
+          userId={sessao.id}
+          horariosIniciais={horariosPerfil}
+          abreAntigo={horaAbre}
+          fechaAntigo={horaFecha}
+          accent="#f97316"
+        />
+      )}
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-panel" style={{ borderRadius: 24, overflow: 'hidden', border: '1px solid rgba(0,0,0,0.06)', marginBottom: 24 }}>
         {[

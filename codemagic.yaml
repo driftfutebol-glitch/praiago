@@ -38,15 +38,18 @@ definitions:
       script: |
         cd "$APP_DIR/ios/App"
         if [ -n "$APP_STORE_APPLE_ID" ]; then
-          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || echo "")
+          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-build-number "$APP_STORE_APPLE_ID" --all-versions)
         else
           LATEST_BUILD_NUMBER=""
         fi
 
         if [ -z "$LATEST_BUILD_NUMBER" ]; then
           UPDATED_BUILD_NUMBER=$BUILD_NUMBER
+        elif echo "$LATEST_BUILD_NUMBER" | grep -Eq '^[0-9]+$'; then
+          UPDATED_BUILD_NUMBER=$((LATEST_BUILD_NUMBER + 1))
         else
-          UPDATED_BUILD_NUMBER=$(($LATEST_BUILD_NUMBER + 1))
+          echo "Unexpected build number returned by App Store Connect: $LATEST_BUILD_NUMBER"
+          exit 1
         fi
 
         agvtool new-version -all "$UPDATED_BUILD_NUMBER"
@@ -84,6 +87,7 @@ workflows:
     environment:
       groups:
         - praiago_public_env
+      node: 22.14.0
       xcode: latest
       vars:
         APP_DIR: praiago-cliente
@@ -94,7 +98,7 @@ workflows:
       - *prepare_capacitor_ios
       - *build_unsigned_simulator
     artifacts:
-      - praiago-cliente/ios/App/build/**/*
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
       - /tmp/xcodebuild_logs/*.log
 
   ios-ambulante-simulator:
@@ -104,6 +108,7 @@ workflows:
     environment:
       groups:
         - praiago_public_env
+      node: 22.14.0
       xcode: latest
       vars:
         APP_DIR: praiago-ambulante
@@ -114,27 +119,7 @@ workflows:
       - *prepare_capacitor_ios
       - *build_unsigned_simulator
     artifacts:
-      - praiago-ambulante/ios/App/build/**/*
-      - /tmp/xcodebuild_logs/*.log
-
-  ios-restaurante-simulator:
-    name: iOS Restaurante - simulator check
-    max_build_duration: 60
-    instance_type: mac_mini_m2
-    environment:
-      groups:
-        - praiago_public_env
-      xcode: latest
-      vars:
-        APP_DIR: praiago-restaurante
-        XCODE_PROJECT: ios/App/App.xcodeproj
-        XCODE_SCHEME: App
-    scripts:
-      - *validate_public_env
-      - *prepare_capacitor_ios
-      - *build_unsigned_simulator
-    artifacts:
-      - praiago-restaurante/ios/App/build/**/*
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
       - /tmp/xcodebuild_logs/*.log
 
   ios-cliente-testflight:
@@ -142,11 +127,12 @@ workflows:
     max_build_duration: 120
     instance_type: mac_mini_m2
     integrations:
-      app_store_connect: praiago-apple
+      app_store_connect: "Codemagic PraiaGo"
     environment:
       groups:
         - praiago_public_env
         - praiago_ios_appstore
+      node: 22.14.0
       xcode: latest
       ios_signing:
         distribution_type: app_store
@@ -164,25 +150,25 @@ workflows:
       - *increment_ios_build_number
       - *build_testflight_ipa
     artifacts:
-      - praiago-cliente/ios/App/build/ios/ipa/*.ipa
+      - praiago-cliente/build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
       - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
     publishing:
       app_store_connect:
         auth: integration
-        submit_to_testflight: true
-        expire_build_submitted_for_review: true
-
+        # Upload first. External TestFlight beta review is submitted only after
+        # the required test contact/review metadata is completed in App Store Connect.
   ios-ambulante-testflight:
     name: iOS Ambulante - TestFlight
     max_build_duration: 120
     instance_type: mac_mini_m2
     integrations:
-      app_store_connect: praiago-apple
+      app_store_connect: "Codemagic PraiaGo"
     environment:
       groups:
         - praiago_public_env
         - praiago_ios_appstore
+      node: 22.14.0
       xcode: latest
       ios_signing:
         distribution_type: app_store
@@ -200,47 +186,11 @@ workflows:
       - *increment_ios_build_number
       - *build_testflight_ipa
     artifacts:
-      - praiago-ambulante/ios/App/build/ios/ipa/*.ipa
+      - praiago-ambulante/build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
       - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
     publishing:
       app_store_connect:
         auth: integration
-        submit_to_testflight: true
-        expire_build_submitted_for_review: true
-
-  ios-restaurante-testflight:
-    name: iOS Restaurante - TestFlight
-    max_build_duration: 120
-    instance_type: mac_mini_m2
-    integrations:
-      app_store_connect: praiago-apple
-    environment:
-      groups:
-        - praiago_public_env
-        - praiago_ios_appstore
-      xcode: latest
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.ferrazcode.praiago.restaurante
-      vars:
-        APP_DIR: praiago-restaurante
-        XCODE_PROJECT: ios/App/App.xcodeproj
-        XCODE_SCHEME: App
-        APP_STORE_APPLE_ID_SOURCE: PRAIAGO_RESTAURANTE_APPLE_ID
-    scripts:
-      - *validate_public_env
-      - *prepare_capacitor_ios
-      - *configure_ios_signing
-      - *resolve_apple_app_id
-      - *increment_ios_build_number
-      - *build_testflight_ipa
-    artifacts:
-      - praiago-restaurante/ios/App/build/ios/ipa/*.ipa
-      - /tmp/xcodebuild_logs/*.log
-      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
-    publishing:
-      app_store_connect:
-        auth: integration
-        submit_to_testflight: true
-        expire_build_submitted_for_review: true
+        # Upload first. External TestFlight beta review is submitted only after
+        # the required test contact/review metadata is completed in App Store Connect.

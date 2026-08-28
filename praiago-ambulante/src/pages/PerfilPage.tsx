@@ -1,202 +1,400 @@
-import { useEffect, useState } from 'react'
-import { Star, MapPin, Package, TrendingUp, ChevronRight, LogOut, Bell, Shield, HelpCircle, CreditCard, Loader2 } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import {
+  CheckCircle2,
+  ChevronRight,
+  HelpCircle,
+  Loader2,
+  LogOut,
+  MapPin,
+  PackageCheck,
+  Phone,
+  Star,
+  Store,
+  Trash2,
+  TrendingUp,
+  Wallet,
+} from 'lucide-react'
+import { AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
-import { logout, useSessao } from '../lib/auth'
-import { buscarStatusMercadoPago, iniciarVinculoMercadoPago, type MercadoPagoLinkStatus } from '../lib/mercadopago'
 import SuportePanel from '../components/SuportePanel'
+import SellerPhotoManager from '../components/SellerPhotoManager'
+import TrocaNomeLoja from '../components/TrocaNomeLoja'
+import EditorHorarios from '../components/EditorHorarios'
+import { logout, useSessao } from '../lib/auth'
+import { alertDialog, confirmDialog, promptDialog } from '../lib/dialog'
+import { supabase } from '../lib/supabase'
+import { sellerPhotoUrl } from '../lib/sellerPhotos'
+import { TEXTO_AREA_ATENDIDA } from '../lib/serviceArea'
 
-const menuItems = [
-  { icon: TrendingUp, label: 'Resumo de vendas', desc: 'Quanto você vendeu, dia a dia', to: '/vendas' },
-  { icon: Star, label: 'Avaliações', desc: 'O que os clientes acharam de você', to: '/avaliacoes' },
-  { icon: Bell, label: 'Notificações', desc: 'Alertas de pedidos e novidades' },
-  { icon: Shield, label: 'Segurança', desc: 'Sincronização e Conta' },
-  { icon: HelpCircle, label: 'Suporte', desc: 'Central Tática PraiaGo' },
-]
+type Profile = {
+  nome: string | null
+  categoria: string | null
+  zona: string | null
+  telefone_comercial: string | null
+  avaliacao_media: number | null
+  total_avaliacoes: number | null
+  horario_abre: string | null
+  horario_fecha: string | null
+  /** Grade por dia da semana. Null = banca ainda no formato antigo. */
+  horarios: unknown
+  online: boolean | null
+  verificado: boolean | null
+  foto_perfil_path: string | null
+  foto_capa_path: string | null
+}
+
+type MonthStats = {
+  completedOrders: number
+  revenue: number
+}
+
+const money = (value: number) => value.toLocaleString('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+})
+
+const onlyDigits = (value: string) => String(value ?? '').replace(/\D/g, '')
+
+/** Mascara so pra leitura; no banco vai o telefone em digitos puros. */
+function formatPhone(value: string) {
+  const d = onlyDigits(value).slice(0, 11)
+  if (d.length <= 2) return d
+  if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`
+  if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
+}
 
 export default function PerfilPage() {
   const navigate = useNavigate()
-  const sessao = useSessao()
-  const [mpStatus, setMpStatus] = useState<MercadoPagoLinkStatus | null>(null)
-  const [mpLoading, setMpLoading] = useState(false)
-  const [mpErro, setMpErro] = useState('')
-  const [suporteAberto, setSuporteAberto] = useState(false)
+  const session = useSessao()
+  const [profile, setProfile] = useState<Profile | null>(null)
+  const [stats, setStats] = useState<MonthStats>({ completedOrders: 0, revenue: 0 })
+  const [supportOpen, setSupportOpen] = useState(false)
+  // Grade por dia da semana (jsonb). Null = banca ainda no formato antigo.
+  const [horariosPerfil, setHorariosPerfil] = useState<unknown>(null)
+  const [openingTime, setOpeningTime] = useState('')
+  const [closingTime, setClosingTime] = useState('')
+  const [businessPhone, setBusinessPhone] = useState('')
+  const [savingPhone, setSavingPhone] = useState(false)
+  const [deletingAccount, setDeletingAccount] = useState(false)
+  const [phoneMessage, setPhoneMessage] = useState<{ text: string; error: boolean } | null>(null)
+
+  const load = useCallback(async () => {
+    if (!session?.id) return
+    const monthStart = new Date()
+    monthStart.setDate(1)
+    monthStart.setHours(0, 0, 0, 0)
+
+    const [{ data: profileData }, { data: orders }] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('nome,categoria,zona,telefone_comercial,avaliacao_media,total_avaliacoes,horario_abre,horario_fecha,horarios,online,verificado,foto_perfil_path,foto_capa_path')
+        .eq('id', session.id)
+        .maybeSingle(),
+      supabase
+        .from('pedidos')
+        .select('total,status')
+        .eq('vendedor_id', session.id)
+        .eq('status', 'entregue')
+        .gte('created_at', monthStart.toISOString()),
+    ])
+
+    const nextProfile = (profileData || null) as Profile | null
+    setProfile(nextProfile)
+    setOpeningTime(nextProfile?.horario_abre || '')
+    setClosingTime(nextProfile?.horario_fecha || '')
+    setHorariosPerfil(nextProfile?.horarios ?? null)
+    setBusinessPhone(formatPhone(nextProfile?.telefone_comercial || ''))
+    setStats({
+      completedOrders: orders?.length || 0,
+      revenue: (orders || []).reduce((sum, order) => sum + (Number(order.total) || 0), 0),
+    })
+  }, [session?.id])
 
   useEffect(() => {
-    if (!sessao) return
-    buscarStatusMercadoPago(sessao.id).then(setMpStatus)
-  }, [sessao])
+    if (!session?.id) return
+    void load()
+    const channel = supabase
+      .channel(`ambulante_perfil_${session.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${session.id}` }, load)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos', filter: `vendedor_id=eq.${session.id}` }, load)
+      .subscribe()
+    return () => { void supabase.removeChannel(channel) }
+  }, [load, session?.id])
 
-  async function conectarMercadoPago() {
-    if (!sessao) return
-    setMpErro('')
-    setMpLoading(true)
+  // O antigo `saveSchedule` (um par abre/fecha pra semana toda) saiu junto com
+  // a UI dele: quem grava horário agora é o EditorHorarios, que salva a grade
+  // por dia E mantém os campos antigos preenchidos por compatibilidade.
+
+  // O telefone comercial nunca teve onde ser preenchido: o cadastro nao pede e
+  // o painel so exibia. Sem edicao aqui a coluna ficava nula pra sempre.
+  async function saveBusinessPhone() {
+    if (!session?.id) return
+    const digits = onlyDigits(businessPhone)
+    if (digits && (digits.length < 10 || digits.length > 11)) {
+      setPhoneMessage({ text: 'Informe o telefone com DDD (ex: 13 99999-8888).', error: true })
+      return
+    }
+    setSavingPhone(true)
+    const { error } = await supabase
+      .from('profiles')
+      .update({ telefone_comercial: digits || null })
+      .eq('id', session.id)
+    setSavingPhone(false)
+    setPhoneMessage(error
+      ? { text: 'Não foi possível salvar o telefone.', error: true }
+      : { text: digits ? 'Telefone salvo.' : 'Telefone removido.', error: false })
+    if (!error) void load()
+  }
+
+  function signOut() {
+    logout()
+    void supabase.auth.signOut()
+    navigate('/login', { replace: true })
+  }
+
+  async function deleteAccount() {
+    if (!session?.id || deletingAccount) return
+    const continueDeletion = await confirmDialog({
+      title: 'Excluir conta de ambulante?',
+      message: 'Seu login, perfil, cardápio, fotos da banca e dados de verificação serão apagados. Pedidos, repasses e registros financeiros necessários ficam restritos. Saldo, estorno ou disputa pendente continuarão sendo tratados sem manter sua conta ativa.',
+      confirmText: 'Continuar',
+      cancelText: 'Cancelar',
+      tone: 'danger',
+    })
+    if (!continueDeletion) return
+
+    // Pede o e-mail em vez de uma palavra fixa: confirma a intencao e ja
+    // entrega a equipe o dado que ela vai usar para localizar a conta.
+    const emailInformado = await promptDialog({
+      title: 'Confirme seu e-mail',
+      message: 'Digite o e-mail da sua conta para registrarmos o pedido de exclusao. A equipe verifica saldo, repasses e disputas antes de concluir.',
+      placeholder: session?.email || 'voce@exemplo.com',
+      confirmText: 'Enviar pedido',
+      cancelText: 'Cancelar',
+      tone: 'danger',
+    })
+    if (!emailInformado || !emailInformado.trim()) return
+
+    setDeletingAccount(true)
     try {
-      await iniciarVinculoMercadoPago(sessao.id)
-    } catch (err) {
-      setMpErro(err instanceof Error ? err.message : 'Nao foi possivel vincular o Mercado Pago.')
-      setMpLoading(false)
+      const { data, error } = await supabase
+        .from('solicitacoes_exclusao')
+        .insert({
+          user_id: session.id,
+          email_informado: emailInformado.trim(),
+          nome_informado: profile?.nome ?? null,
+          // CPF nao e pedido no formulario; a equipe consulta pelo user_id.
+          cpf_informado: null,
+          papel_informado: 'ambulante',
+        })
+        .select('id')
+        .single()
+
+      // 23505 = ja existe pedido pendente. E a mesma solicitacao dele, entao
+      // confirmamos em vez de tratar como falha.
+      if (error && error.code === '23505') {
+        await alertDialog({
+          title: 'Pedido ja registrado',
+          message: 'Voce ja tem um pedido de exclusao em analise. A equipe conclui em ate 30 dias.',
+        })
+        return
+      }
+
+      if (error || !data) {
+        await alertDialog({
+          title: 'Nao foi possivel registrar',
+          message: 'Seu pedido nao foi enviado. Tente novamente. Se o erro continuar, fale com contato@praiago.com.br.',
+          tone: 'danger',
+        })
+        return
+      }
+
+      await alertDialog({
+        title: 'Pedido registrado',
+        message: `Recebemos seu pedido. A equipe verifica saldo, repasses e disputas e conclui em ate 30 dias. Protocolo: ${data.id}.`,
+        tone: 'success',
+      })
+    } catch (error) {
+      console.error('Falha inesperada ao solicitar exclusao:', error)
+      await alertDialog({
+        title: 'Não foi possível confirmar',
+        message: 'Não conseguimos confirmar o protocolo agora. Entre novamente para verificar antes de repetir a solicitação.',
+        tone: 'danger',
+      })
+    } finally {
+      setDeletingAccount(false)
     }
   }
 
-  function sair() {
-    logout()
-    navigate('/login')
-  }
+  const rating = Number(profile?.avaliacao_media) || 0
+  const reviewCount = Number(profile?.total_avaliacoes) || 0
+  const profilePhoto = sellerPhotoUrl(profile?.foto_perfil_path)
+  const coverPhoto = sellerPhotoUrl(profile?.foto_capa_path)
+  const menuItems = [
+    { icon: Wallet, title: 'Carteira', detail: 'Conta bancária, saldo e saques', action: () => navigate('/carteira') },
+    { icon: TrendingUp, title: 'Vendas', detail: 'Resumo de pedidos entregues', action: () => navigate('/vendas') },
+    { icon: Star, title: 'Avaliações', detail: 'Notas e comentários dos clientes', action: () => navigate('/avaliacoes') },
+    { icon: HelpCircle, title: 'Suporte', detail: 'Atendimento da equipe PraiaGo', action: () => setSupportOpen(true) },
+  ]
 
   return (
-    <div style={{ minHeight: '100vh', paddingBottom: 40 }}>
-      {/* Header com avatar */}
-      <div style={{
-        background: 'linear-gradient(135deg, rgba(14,165,233,0.2), rgba(34,197,94,0.2))',
-        padding: '32px 20px 48px', position: 'relative', overflow: 'hidden',
-        borderBottom: '1px solid rgba(0,0,0,0.05)'
-      }}>
-        <div style={{ position: 'absolute', top: -50, right: -50, width: 200, height: 200, borderRadius: '50%', background: 'linear-gradient(135deg, rgba(14,165,233,0.3), rgba(34,197,94,0.3))', filter: 'blur(50px)' }} />
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 20, position: 'relative', zIndex: 1 }}>
-          <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="neon-border" style={{
-            width: 72, height: 72, borderRadius: 20,
-            background: 'rgba(0,0,0,0.05)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 32, boxShadow: '0 0 20px rgba(34,197,94,0.2)'
-          }}>🌴</motion.div>
-          <div>
-            <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.1 }} style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', textTransform: 'capitalize', letterSpacing: -0.5 }}>{sessao?.nome || 'Ambulante'}</motion.div>
-            <motion.div initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ delay: 0.2 }} style={{ fontSize: 13, color: '#64748b', marginTop: 4, fontWeight: 500 }}>{sessao?.email || ''}</motion.div>
-            <motion.div initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3 }} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, background: 'rgba(245,158,11,0.1)', padding: '4px 10px', borderRadius: 12, border: '1px solid rgba(245,158,11,0.2)', width: 'fit-content' }}>
-              <Star size={14} color="#fbbf24" fill="#fbbf24" />
-              <span style={{ fontSize: 13, color: '#fbbf24', fontWeight: 900 }}>0,0</span>
-              <span style={{ fontSize: 11, color: 'rgba(251,191,36,0.7)', fontWeight: 600 }}>· 0 avaliações</span>
-            </motion.div>
+    <div className="page-shell">
+      <section className="surface" style={{ marginBottom: 12, padding: 16, boxShadow: 'none', position: 'relative', overflow: 'hidden' }}>
+        {coverPhoto && <img src={coverPhoto} alt="" aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.12 }} />}
+        <div style={{ position: 'relative' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
+          <div style={{ width: 54, height: 54, display: 'grid', placeItems: 'center', flex: '0 0 54px', overflow: 'hidden', borderRadius: 8, background: '#eaf6fa', color: '#008fc0' }}>
+            {profilePhoto
+              ? <img src={profilePhoto} alt={profile?.nome || 'Ambulante'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : <Store size={26} />}
           </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h1 style={{ margin: 0, overflow: 'hidden', color: '#132238', fontSize: 20, fontWeight: 900, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile?.nome || session?.nome || 'Ambulante'}</h1>
+            <div style={{ marginTop: 4, color: '#617089', fontSize: 12, fontWeight: 650 }}>{profile?.categoria || 'Categoria da banca não definida'}</div>
+          </div>
+          <span className="status-pill" style={{ color: profile?.verificado ? '#148447' : '#b54708', background: profile?.verificado ? '#eaf8ef' : '#fff4e5' }}>
+            <CheckCircle2 size={13} />
+            {profile?.verificado ? 'Aprovado' : 'Em análise'}
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14, paddingTop: 12, borderTop: '1px solid #e7ecf1' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: rating > 0 ? '#9a6700' : '#718096', fontSize: 12, fontWeight: 800 }}>
+            <Star size={15} fill={rating > 0 ? 'currentColor' : 'none'} />
+            {rating > 0 ? rating.toFixed(1).replace('.', ',') : 'Sem nota'}
+            <span style={{ color: '#8793a5', fontWeight: 650 }}>({reviewCount})</span>
+          </div>
+          <div style={{ width: 1, height: 16, background: '#dfe6ed' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, color: '#617089', fontSize: 12, fontWeight: 700 }}>
+            <MapPin size={15} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile?.zona || 'Localização ainda não registrada'}</span>
+          </div>
+        </div>
+        </div>
+      </section>
+
+      {session?.id && (
+        <SellerPhotoManager
+          userId={session.id}
+          profilePath={profile?.foto_perfil_path || null}
+          coverPath={profile?.foto_capa_path || null}
+          onChanged={({ profilePath, coverPath }) => setProfile(current => current ? { ...current, foto_perfil_path: profilePath, foto_capa_path: coverPath } : current)}
+        />
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+        <div className="surface" style={{ padding: 14, boxShadow: 'none' }}>
+          <PackageCheck size={18} color="#008fc0" />
+          <div style={{ marginTop: 9, color: '#132238', fontSize: 22, fontWeight: 900 }}>{stats.completedOrders}</div>
+          <div style={{ color: '#617089', fontSize: 11, lineHeight: 1.3, fontWeight: 700 }}>Entregues no mês</div>
+        </div>
+        <div className="surface" style={{ padding: 14, boxShadow: 'none' }}>
+          <TrendingUp size={18} color="#148447" />
+          <div style={{ marginTop: 9, color: '#132238', fontSize: 18, fontWeight: 900 }}>{money(stats.revenue)}</div>
+          <div style={{ color: '#617089', fontSize: 11, lineHeight: 1.3, fontWeight: 700 }}>Vendas brutas no mês</div>
         </div>
       </div>
 
-      <div style={{ padding: '0 20px', marginTop: -24, position: 'relative', zIndex: 10 }}>
-        {/* Stats rápidos */}
-        <div style={{
-          display: 'grid', gridTemplateColumns: '1fr 1fr 1fr',
-          gap: 12, marginBottom: 24,
-        }}>
-          {[
-            { icon: Package, label: 'Pedidos', value: '0', color: '#38bdf8' },
-            { icon: TrendingUp, label: 'Este mês', value: 'R$ 0', color: '#4ade80' },
-            { icon: MapPin, label: 'Praia', value: 'Grande', color: '#fbbf24' },
-          ].map(({ icon: Icon, label, value, color }, i) => (
-            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 + i * 0.1 }} key={label} className="glass-panel" style={{
-              borderRadius: 20, padding: '16px 10px',
-              textAlign: 'center', border: `1px solid ${color}30`,
-              boxShadow: `0 4px 20px ${color}10`
-            }}>
-              <Icon size={20} color={color} style={{ margin: '0 auto 8px' }} />
-              <div style={{ fontSize: 16, fontWeight: 900, color: '#0f172a' }}>{value}</div>
-              <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600, marginTop: 4 }}>{label}</div>
-            </motion.div>
+      {session?.id && (
+        <TrocaNomeLoja
+          vendedorId={session.id}
+          nomeAtual={profile?.nome || session.nome || ''}
+          onNomeAprovado={nomeNovo => setProfile(current => (
+            !current || current.nome === nomeNovo ? current : { ...current, nome: nomeNovo }
           ))}
+        />
+      )}
+
+      <section className="surface" style={{ marginBottom: 14, padding: 15, boxShadow: 'none' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Phone size={18} color="#008fc0" />
+          <div>
+            <div style={{ color: '#132238', fontSize: 14, fontWeight: 900 }}>Telefone comercial</div>
+            <div style={{ marginTop: 2, color: '#617089', fontSize: 11, fontWeight: 600 }}>É por aqui que a equipe PraiaGo fala com você fora do app.</div>
+          </div>
         </div>
 
-        {/* Info da banca */}
-        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 }} className="glass-panel" style={{
-          borderRadius: 24, padding: '20px', marginBottom: 20,
-        }}>
-          <div style={{ fontSize: 12, fontWeight: 900, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 16 }}>
-            DADOS DA BANCA
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 14, color: '#64748b', fontWeight: 500 }}>Nome</span>
-              <span style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>{sessao?.nome || 'Não definido'}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 14, color: '#64748b', fontWeight: 500 }}>Categoria</span>
-              <span style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>Não definida</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 14, color: '#64748b', fontWeight: 500 }}>Radar Ativo</span>
-              <span style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>Praia Grande, SP</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 14, color: '#64748b', fontWeight: 500 }}>Status da conexão</span>
-              <span style={{ fontSize: 11, fontWeight: 900, color: '#4ade80', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: 12, padding: '4px 12px', letterSpacing: 1, textTransform: 'uppercase' }}>Conectado</span>
-            </div>
-          </div>
-        </motion.div>
+        <label style={{ display: 'block', marginTop: 13 }}>
+          <span className="field-label">Telefone com DDD</span>
+          <input
+            value={businessPhone}
+            onChange={event => { setBusinessPhone(formatPhone(event.target.value)); setPhoneMessage(null) }}
+            inputMode="tel"
+            placeholder="(13) 99999-8888"
+            style={{ width: '100%', boxSizing: 'border-box', minHeight: 44, marginTop: 6, padding: '0 10px', border: '1px solid #dfe6ed', borderRadius: 8, background: '#f8fafc', color: '#132238', fontWeight: 800 }}
+          />
+        </label>
 
-        {/* Menu de opções */}
-        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.55 }} className="glass-panel" style={{
-          borderRadius: 24, padding: '20px', marginBottom: 20,
-        }}>
-          <div style={{ fontSize: 12, fontWeight: 900, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 16 }}>
-            RECEBIMENTOS MERCADO PAGO
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-            <span style={{ fontSize: 14, color: '#64748b', fontWeight: 600 }}>Status do split</span>
-            <span style={{ fontSize: 12, fontWeight: 900, color: mpStatus?.provider === 'mercadopago' && mpStatus.status === 'verificado' ? '#16a34a' : '#d97706', background: mpStatus?.provider === 'mercadopago' && mpStatus.status === 'verificado' ? 'rgba(34,197,94,0.1)' : 'rgba(245,158,11,0.1)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 12, padding: '5px 10px', textTransform: 'uppercase' }}>
-              {mpStatus?.provider === 'mercadopago' && mpStatus.status === 'verificado' ? 'Vinculado' : 'Pendente'}
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={conectarMercadoPago}
-            disabled={mpLoading}
-            style={{ width: '100%', border: '1px solid rgba(2,132,199,0.25)', background: '#eff6ff', color: '#0284c7', borderRadius: 16, padding: 14, fontSize: 14, fontWeight: 900, cursor: mpLoading ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}
-          >
-            {mpLoading ? <Loader2 size={18} className="animate-spin-slow" /> : <CreditCard size={18} />}
-            {mpStatus?.provider === 'mercadopago' ? 'Atualizar vinculo Mercado Pago' : 'Vincular conta Mercado Pago'}
-          </button>
-          {mpErro && <div style={{ marginTop: 10, color: '#ef4444', fontSize: 13, fontWeight: 800 }}>{mpErro}</div>}
-        </motion.div>
+        {phoneMessage && <div style={{ marginTop: 9, color: phoneMessage.error ? '#b42335' : '#148447', fontSize: 11, fontWeight: 750 }}>{phoneMessage.text}</div>}
+        <button type="button" className="secondary-button" onClick={() => void saveBusinessPhone()} disabled={savingPhone} style={{ width: '100%', marginTop: 11 }}>
+          {savingPhone ? <Loader2 size={17} className="animate-spin-slow" /> : <Phone size={17} />}
+          Salvar telefone
+        </button>
+      </section>
 
-        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.6 }} className="glass-panel" style={{
-          borderRadius: 24, overflow: 'hidden', marginBottom: 20,
-        }}>
-          {menuItems.map(({ icon: Icon, label, desc, to }, i) => (
-            <motion.button whileTap={{ backgroundColor: 'rgba(0,0,0,0.05)' }} key={label} onClick={() => { if (label === 'Suporte') setSuporteAberto(true); else if (to) navigate(to) }} style={{
-              width: '100%', background: 'transparent', border: 'none', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', gap: 16, padding: '16px 20px',
-              borderTop: i > 0 ? '1px solid rgba(0,0,0,0.05)' : 'none',
-              textAlign: 'left', transition: 'background 0.2s'
-            }}>
-              <div style={{
-                width: 44, height: 44, borderRadius: 14, background: 'rgba(0,0,0,0.05)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                border: '1px solid rgba(0,0,0,0.08)'
-              }}>
-                <Icon size={20} color="#cbd5e1" />
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>{label}</div>
-                <div style={{ fontSize: 12, color: '#64748b', marginTop: 2, fontWeight: 500 }}>{desc}</div>
-              </div>
-              <ChevronRight size={18} color="#64748b" />
-            </motion.button>
-          ))}
-        </motion.div>
+      {/* Horário POR DIA DA SEMANA. Antes era um par abre/fecha só, igual pra
+          semana inteira — não dava pra fechar na segunda, abrir mais cedo no
+          sábado nem marcar 24 horas. O editor grava a grade nova e mantém os
+          campos antigos preenchidos, pra quem não atualizou o app não ver a
+          banca como "sem horário". */}
+      {session?.id && (
+        <EditorHorarios
+          userId={session.id}
+          horariosIniciais={horariosPerfil}
+          abreAntigo={openingTime}
+          fechaAntigo={closingTime}
+          accent="#008fc0"
+        />
+      )}
 
-        {/* Logout */}
-        <motion.button whileTap={{ scale: 0.98 }} initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.7 }} onClick={sair} className="glass-panel" style={{
-          width: '100%', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 24,
-          padding: '16px 20px', cursor: 'pointer', display: 'flex', alignItems: 'center',
-          gap: 16, background: 'rgba(239,68,68,0.05)',
-        }}>
-          <div style={{
-            width: 44, height: 44, borderRadius: 14, background: 'rgba(239,68,68,0.1)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-          }}>
-            <LogOut size={20} color="#f87171" />
-          </div>
-          <span style={{ fontSize: 15, fontWeight: 900, color: '#f87171', textTransform: 'uppercase', letterSpacing: 0.5 }}>Sair da conta</span>
-        </motion.button>
+      <section className="surface" style={{ marginBottom: 14, overflow: 'hidden', boxShadow: 'none' }}>
+        {menuItems.map((item, index) => {
+          const Icon = item.icon
+          return (
+            <button type="button" key={item.title} onClick={item.action} style={{ width: '100%', minHeight: 66, display: 'flex', alignItems: 'center', gap: 12, padding: '10px 13px', border: 0, borderTop: index ? '1px solid #e7ecf1' : 0, background: '#fff', color: '#132238', textAlign: 'left', cursor: 'pointer' }}>
+              <span style={{ width: 38, height: 38, display: 'grid', placeItems: 'center', flex: '0 0 38px', borderRadius: 8, background: '#f2f5f7', color: '#526178' }}><Icon size={19} /></span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 13, fontWeight: 900 }}>{item.title}</span>
+                <span style={{ display: 'block', marginTop: 2, color: '#718096', fontSize: 11, fontWeight: 600 }}>{item.detail}</span>
+              </span>
+              <ChevronRight size={17} color="#8793a5" />
+            </button>
+          )
+        })}
+      </section>
+
+      <button type="button" className="danger-button" onClick={signOut} style={{ width: '100%' }}>
+        <LogOut size={18} />
+        Sair da conta
+      </button>
+
+      {/* AREA_ATENDIDA_INFO — a Apple pede que a cobertura fique clara no app */}
+      <div style={{ marginTop: 12, padding: '12px 14px', borderRadius: 14, background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+        <div style={{ fontSize: 12.5, fontWeight: 900, color: '#166534', marginBottom: 4 }}>
+          Onde o PraiaGo opera
+        </div>
+        <div style={{ fontSize: 12, lineHeight: 1.5, fontWeight: 600, color: '#14532d' }}>
+          Clientes de qualquer lugar veem sua banca. Para receber pedidos é
+          preciso estar atendendo dentro da área: {TEXTO_AREA_ATENDIDA} — SP, Brasil.
+        </div>
+      </div>
+
+      <button type="button" disabled={deletingAccount} onClick={() => void deleteAccount()} style={{ width: '100%', minHeight: 44, marginTop: 10, border: 0, background: 'transparent', color: '#b42335', fontSize: 12.5, fontWeight: 850, cursor: deletingAccount ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: deletingAccount ? 0.65 : 1 }}>
+        {deletingAccount ? <Loader2 size={17} className="animate-spin-slow" /> : <Trash2 size={17} />}
+        {deletingAccount ? 'Processando exclusão…' : 'Excluir minha conta'}
+      </button>
+      <div style={{ marginTop: 2, textAlign: 'center', color: '#718096', fontSize: 11, lineHeight: 1.45 }}>
+        Consulte os dados apagados ou preservados na <a href="https://www.praiago.com.br/excluir-conta.html" target="_blank" rel="noopener noreferrer" style={{ color: '#008fc0', fontWeight: 850 }}>página de exclusão</a>.
       </div>
 
       <AnimatePresence>
-        {suporteAberto && sessao && (
+        {supportOpen && session && (
           <SuportePanel
-            onClose={() => setSuporteAberto(false)}
-            usuarioId={sessao.id}
-            usuarioNome={sessao.nome || 'Ambulante'}
-            usuarioEmail={sessao.email || ''}
+            onClose={() => setSupportOpen(false)}
+            usuarioId={session.id}
+            usuarioNome={profile?.nome || session.nome || 'Ambulante'}
+            usuarioEmail={session.email || ''}
             plataforma="ambulante"
           />
         )}

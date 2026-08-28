@@ -41,6 +41,9 @@ type TicketLot = {
   preco_origem: number
   markup_percent: number
   preco_venda: number
+  markup_percent_credito: number
+  preco_venda_credito: number
+  lote_ordem: number | null
   estoque_disponivel: number | null
   status: 'pendente_aprovacao' | 'disponivel' | 'pausado' | 'esgotado'
   fonte_url: string | null
@@ -111,31 +114,26 @@ export default function EventosPage() {
 
   async function cacarEventos() {
     setCacando(true); setCacaMsg('')
-    const { data, error } = await supabase.functions.invoke('caca-eventos', { body: { buscar: true } })
+    // Dispara o robô em SEGUNDO PLANO (RPC async, via pg_net). Antes o navegador
+    // esperava ~100s pelo scrape inteiro e estourava o limite do gateway do
+    // Supabase ("Edge Function returned a non-2xx"). Agora retorna na hora e os
+    // eventos aparecem sozinhos (realtime) conforme o robô salva.
+    const { error } = await supabase.rpc('rodar_robo_eventos')
     setCacando(false)
-    if (error) { setCacaMsg('O robô não conseguiu rodar agora: ' + error.message); return }
-    const ins = data?.inseridos ?? 0
-    const ign = data?.ignorados ?? 0
-    const lotes = data?.ingressos_salvos ?? 0
-    const fontes = data?.fontes_consultadas ?? 0
-    setCacaMsg(
-      ins > 0
-        ? `Robô achou ${ins} evento(s) novo(s) para aprovação e ${lotes} lote(s) de ingresso! ${ign ? `(${ign} já existiam)` : ''}`
-        : fontes > 0
-          ? `Robô consultou as fontes; ${lotes} lote(s) de ingresso foram atualizados.`
-          : 'Configure EVENTOS_SOURCE_URLS no Supabase para o robô buscar casas, baladas e organizadores automaticamente.'
-    )
-    carregar()
-    setTimeout(() => setCacaMsg(''), 8000)
+    if (error) { setCacaMsg('Não deu pra iniciar o robô: ' + error.message); return }
+    setCacaMsg('🤖 Robô rodando em segundo plano — os eventos e ingressos aparecem aqui em até ~2 min.')
+    setTimeout(() => { void carregar() }, 75000)
+    setTimeout(() => setCacaMsg(''), 90000)
   }
 
   const carregar = useCallback(async () => {
     const hoje = hojeSpIso()
-    await supabase.functions.invoke('caca-eventos', { body: { cleanup: true } }).catch(() => null)
+    // (removido) NAO chamar a edge function a cada load — virava tempestade de
+    // chamadas com o realtime. A limpeza/ciclo de vida roda no cron horario.
     const [{ data }, { data: pedidos }, { data: reembolsos }] = await Promise.all([
       supabase
         .from('eventos')
-        .select('*, event_ticket_lots(id,nome,preco_origem,markup_percent,preco_venda,estoque_disponivel,status,fonte_url)')
+        .select('*, event_ticket_lots(id,nome,preco_origem,markup_percent,preco_venda,markup_percent_credito,preco_venda_credito,lote_ordem,estoque_disponivel,status,fonte_url)')
         .neq('status', 'inativo')
         .or(`data.is.null,data.gte.${hoje}`)
         .order('created_at', { ascending: false }),
@@ -223,7 +221,7 @@ export default function EventosPage() {
       evento_id: ev.id,
       nome: nome.trim(),
       preco_origem: preco,
-      markup_percent: 25,
+      markup_percent: 10,
       estoque_total: estoque,
       estoque_disponivel: estoque,
       status: ev.status === 'ativo' ? 'disponivel' : 'pendente_aprovacao',
@@ -271,7 +269,7 @@ export default function EventosPage() {
   }
 
   async function processarReembolso(refundId: string) {
-    if (!await confirmDialog({ title: 'Processar reembolso', message: 'Processar o reembolso no Mercado Pago agora?', confirmText: 'Processar', tone: 'danger' })) return
+    if (!await confirmDialog({ title: 'Processar reembolso', message: 'Processar o reembolso agora?', confirmText: 'Processar', tone: 'danger' })) return
     const { error } = await supabase.functions.invoke('evento-ticket-refund', {
       body: { acao: 'processar', refund_id: refundId },
     })
@@ -326,7 +324,7 @@ export default function EventosPage() {
               <h2 className="text-lg font-black text-slate-100 flex items-center gap-2">
                 <ShoppingCart size={18} className="text-emerald-400" /> Ingressos para entregar
               </h2>
-              <p className="text-xs text-slate-500 font-semibold">Pagamentos aprovados no Mercado Pago aguardando envio do ingresso.</p>
+              <p className="text-xs text-slate-500 font-semibold">Pagamentos aprovados aguardando envio do ingresso.</p>
             </div>
             <span className="text-xs font-black text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-2.5 py-1">
               {pedidosPendentes.length} pendente(s)
@@ -528,9 +526,16 @@ export default function EventosPage() {
                       {lotes.map(lote => (
                         <div key={lote.id} className="rounded-xl bg-slate-950/35 border border-slate-800/70 px-3 py-2 flex items-center gap-3">
                           <div className="min-w-0 flex-1">
-                            <div className="text-xs font-black text-slate-200 truncate">{lote.nome}</div>
+                            <div className="text-xs font-black text-slate-200 truncate">
+                              {lote.nome}
+                              {lote.lote_ordem != null && (
+                                <span className="ml-1.5 text-[10px] font-bold text-sky-300">
+                                  {lote.lote_ordem === 0 ? 'promocional' : `${lote.lote_ordem}º lote`}
+                                </span>
+                              )}
+                            </div>
                             <div className="text-[11px] text-slate-500 mt-0.5">
-                              Origem {fmtMoney(lote.preco_origem)} · venda {fmtMoney(lote.preco_venda)} · +{Number(lote.markup_percent || 25)}%
+                              Origem {fmtMoney(lote.preco_origem)} · pix/débito {fmtMoney(lote.preco_venda)} (+{Number(lote.markup_percent)}%) · crédito {fmtMoney(lote.preco_venda_credito)} (+{Number(lote.markup_percent_credito)}%)
                               {lote.estoque_disponivel != null ? ` · ${lote.estoque_disponivel} disp.` : ''}
                             </div>
                           </div>

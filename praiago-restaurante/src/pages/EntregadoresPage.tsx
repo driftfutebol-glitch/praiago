@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import {
-  UserPlus, Phone, Bike, Car, Footprints, X, CheckCircle, Clock, MapPin, Search,
+  UserPlus, Phone, Bike, Car, X, CheckCircle, Clock, MapPin, Search,
   Shield, Upload, Camera, CreditCard, FileText, Loader2, AlertTriangle, XCircle,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -8,7 +8,7 @@ import { supabase } from '../lib/supabase'
 import { useSessao } from '../lib/auth'
 import { alertDialog } from '../lib/dialog'
 
-type Veiculo = 'moto' | 'bicicleta' | 'carro' | 'a_pe'
+type Veiculo = 'moto' | 'bicicleta'
 type StatusEntregador = 'disponivel' | 'em_entrega' | 'offline'
 type VerifStatus = 'nao_verificado' | 'pendente' | 'aprovado' | 'rejeitado'
 
@@ -27,8 +27,6 @@ type Entregador = {
 const veiculoConfig: Record<Veiculo, { icon: typeof Bike; label: string; emoji: string }> = {
   moto: { icon: Bike, label: 'Moto', emoji: '🏍️' },
   bicicleta: { icon: Bike, label: 'Bicicleta', emoji: '🚴' },
-  carro: { icon: Car, label: 'Carro', emoji: '🚗' },
-  a_pe: { icon: Footprints, label: 'A pé', emoji: '🚶' },
 }
 
 const statusConfig: Record<StatusEntregador, { label: string; bg: string; color: string; border: string }> = {
@@ -238,7 +236,7 @@ function VerificationModal({ entregador, restaurante_id, onClose }: {
                 <div style={{ background: 'rgba(14,165,233,0.08)', border: '1px solid rgba(14,165,233,0.2)', borderRadius: 14, padding: '10px 14px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
                   <AlertTriangle size={14} color="#38bdf8" />
                   <span style={{ fontSize: 11, color: '#7dd3fc', fontWeight: 500 }}>
-                    {entregador.veiculo === 'a_pe' || entregador.veiculo === 'bicicleta' ? 'Se não possuir CNH, envie qualquer documento com foto.' : 'Obrigatório para veículos motorizados.'}
+                    {entregador.veiculo === 'bicicleta' ? 'Se não possuir CNH, envie qualquer documento com foto.' : 'Obrigatório para entregadores de moto.'}
                   </span>
                 </div>
                 <FileUploadArea file={cnh} preview={cnhPreview} inputRef={cnhRef} setFile={setCnh} setPreview={setCnhPreview} label="Enviar CNH ou documento" height={160} />

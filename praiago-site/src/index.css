@@ -1,0 +1,151 @@
+@import "tailwindcss";
+
+/* Paleta herdada dos apps (praiago-cliente/src/index.css) pra marca bater em
+   todo lugar: azul do mar, verde do coqueiro, dourado da areia. */
+@theme {
+  --color-mar: #0ea5e9;
+  --color-mar-fundo: #04629b;
+  --color-mar-noite: #012a4a;
+  --color-coqueiro: #22c55e;
+  --color-areia: #fbbf24;
+  --color-tinta: #0f172a;
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+:root {
+  color-scheme: light;
+  background-color: #ffffff;
+  color: #0f172a;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+body {
+  margin: 0;
+  min-width: 320px;
+  overflow-x: hidden;
+  background: #ffffff;
+}
+
+/* A intro trava o scroll enquanto esta na tela. */
+body.intro-aberta { overflow: hidden; }
+
+/* Respeitar quem pediu menos animacao no sistema: o site inteiro e movimento,
+   entao aqui isso importa mais que o normal. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Utilitarios ────────────────────────────────────────── */
+
+.texto-gradiente {
+  background: linear-gradient(100deg, #0284c7 0%, #0ea5e9 32%, #14b8a6 62%, #22c55e 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.vidro {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(18px) saturate(1.6);
+  -webkit-backdrop-filter: blur(18px) saturate(1.6);
+  border: 1px solid rgba(2, 32, 71, 0.07);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 10px 34px -12px rgba(2, 32, 71, 0.16);
+}
+
+.vidro-escuro {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+/* Sombra de aparelho — usada nos mockups de celular */
+.sombra-aparelho {
+  box-shadow:
+    0 2px 4px rgba(2, 32, 71, 0.10),
+    0 12px 28px -8px rgba(2, 32, 71, 0.22),
+    0 42px 80px -24px rgba(2, 32, 71, 0.34);
+}
+
+/* Marquee das avaliacoes: duas copias da lista correndo em loop.
+   `will-change` evita repaint pesado em tela grande. */
+@keyframes correr-esquerda {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-50%, 0, 0); }
+}
+.marquee-faixa {
+  display: flex;
+  width: max-content;
+  will-change: transform;
+  animation: correr-esquerda linear infinite;
+}
+.marquee-faixa.invertida { animation-direction: reverse; }
+/* Pausa no hover pra dar tempo de ler */
+.marquee:hover .marquee-faixa { animation-play-state: paused; }
+
+/* Mascara nas pontas do marquee, pra faixa sumir em vez de cortar seco */
+.marquee {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+}
+
+/* Brilho que atravessa os botoes principais */
+@keyframes varrer {
+  0%   { transform: translateX(-120%) skewX(-18deg); }
+  55%  { transform: translateX(320%) skewX(-18deg); }
+  100% { transform: translateX(320%) skewX(-18deg); }
+}
+.varredura::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  width: 38%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.42), transparent);
+  animation: varrer 3.6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Pulso do ponto "ao vivo" */
+@keyframes pulso-vivo {
+  0%   { transform: scale(1); opacity: 0.75; }
+  70%  { transform: scale(2.6); opacity: 0; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+.ponto-vivo::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: currentColor;
+  animation: pulso-vivo 2s ease-out infinite;
+}
+
+/* Indicador de rolagem do hero */
+@keyframes descer-roda {
+  0%   { transform: translateY(0); opacity: 0; }
+  35%  { opacity: 1; }
+  100% { transform: translateY(13px); opacity: 0; }
+}
+.roda-mouse { animation: descer-roda 1.8s ease-in-out infinite; }
+
+/* Scrollbar discreta, combinando com a marca */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: #f1f5f9; }
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(#0ea5e9, #22c55e);
+  border-radius: 999px;
+  border: 2px solid #f1f5f9;
+}

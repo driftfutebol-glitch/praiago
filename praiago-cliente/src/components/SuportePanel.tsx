@@ -199,7 +199,15 @@ export default function SuportePanel({
                   <div style={{ fontSize: 13.5, fontWeight: 800, color: '#0f172a', textAlign: 'center', marginBottom: 8 }}>Como foi o atendimento?</div>
                   <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginBottom: 10 }}>
                     {[1, 2, 3, 4, 5].map(i => (
-                      <button key={i} onClick={() => setNota(i)} aria-label={`${i} estrelas`} style={{ border: 0, background: 'none', cursor: 'pointer', padding: 2 }}>
+                      <button
+                        key={i}
+                        type="button"
+                        className="alvo-toque"
+                        onClick={() => setNota(i)}
+                        aria-label={`${i} ${i === 1 ? 'estrela' : 'estrelas'}`}
+                        aria-pressed={i <= nota}
+                        style={{ border: 0, background: 'none', cursor: 'pointer', padding: 0 }}
+                      >
                         <Star size={30} color={i <= nota ? '#f59e0b' : '#e2e8f0'} fill={i <= nota ? '#f59e0b' : '#e2e8f0'} />
                       </button>
                     ))}

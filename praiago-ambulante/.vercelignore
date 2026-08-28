@@ -1,0 +1,14 @@
+android
+ios
+release
+dist
+node_modules
+.vercel
+.env
+.env.*
+*.aab
+*.apk
+*.jks
+*.keystore
+key.properties
+google-services.json

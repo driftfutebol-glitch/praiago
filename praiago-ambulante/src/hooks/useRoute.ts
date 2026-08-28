@@ -10,14 +10,21 @@ export type RouteInfo = {
 export function useRoute(from: [number, number] | null, to: [number, number] | null) {
   const [route, setRoute] = useState<RouteInfo | null>(null)
   const timerRef = useRef<number | null>(null)
+  const fromLat = from?.[0] ?? null
+  const fromLng = from?.[1] ?? null
+  const toLat = to?.[0] ?? null
+  const toLng = to?.[1] ?? null
 
   useEffect(() => {
-    if (!from || !to) return
+    if (fromLat === null || fromLng === null || toLat === null || toLng === null) {
+      setRoute(null)
+      return
+    }
     if (timerRef.current) clearTimeout(timerRef.current)
 
     // Debounce: só faz a requisição 2s depois da última mudança de GPS
     timerRef.current = window.setTimeout(() => {
-      const url = `https://router.project-osrm.org/route/v1/driving/${from[1]},${from[0]};${to[1]},${to[0]}?overview=full&geometries=geojson`
+      const url = `https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson`
       fetch(url)
         .then(r => r.json())
         .then(data => {
@@ -38,10 +45,7 @@ export function useRoute(from: [number, number] | null, to: [number, number] | n
     }, 2000)
 
     return () => { if (timerRef.current) clearTimeout(timerRef.current) }
-  }, [
-    from?.[0].toFixed(3), from?.[1].toFixed(3), // precisão ~100m para evitar requests excessivos
-    to?.[0], to?.[1],
-  ])
+  }, [fromLat, fromLng, toLat, toLng])
 
   return route
 }

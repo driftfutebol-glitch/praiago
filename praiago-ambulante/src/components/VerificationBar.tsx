@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ShieldAlert, CheckCircle, ChevronDown, ChevronUp, Camera, UploadCloud } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -6,6 +6,60 @@ import { useSessao } from '../lib/auth'
 import { alertDialog } from '../lib/dialog'
 
 type Status = 'pendente' | 'aprovado' | 'rejeitado' | null
+type KycImage = { file: File; previewUrl: string }
+type KycDocumentKind = 'rg-frente' | 'rg-verso' | 'selfie'
+
+const KYC_BUCKET = 'kyc-documentos'
+const KYC_IMAGE_TYPES = new Map([
+  ['image/jpeg', 'jpg'],
+  ['image/png', 'png'],
+  ['image/webp', 'webp'],
+])
+
+function onlyDigits(value: string) {
+  return value.replace(/\D/g, '')
+}
+
+function isValidCpf(value: string) {
+  const cpf = onlyDigits(value)
+  if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false
+  let sum = 0
+  for (let i = 0; i < 9; i++) sum += Number(cpf[i]) * (10 - i)
+  let digit = 11 - (sum % 11)
+  if (digit >= 10) digit = 0
+  if (digit !== Number(cpf[9])) return false
+  sum = 0
+  for (let i = 0; i < 10; i++) sum += Number(cpf[i]) * (11 - i)
+  digit = 11 - (sum % 11)
+  if (digit >= 10) digit = 0
+  return digit === Number(cpf[10])
+}
+
+function isValidCnpj(value: string) {
+  const cnpj = onlyDigits(value)
+  if (!cnpj) return true
+  if (cnpj.length !== 14 || /^(\d)\1{13}$/.test(cnpj)) return false
+  const calc = (base: string, weights: number[]) => {
+    const sum = weights.reduce((acc, weight, i) => acc + Number(base[i]) * weight, 0)
+    const rest = sum % 11
+    return rest < 2 ? 0 : 11 - rest
+  }
+  const d1 = calc(cnpj.slice(0, 12), [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2])
+  const d2 = calc(cnpj.slice(0, 13), [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2])
+  return d1 === Number(cnpj[12]) && d2 === Number(cnpj[13])
+}
+
+function isAdult(date: string) {
+  const birth = new Date(date)
+  if (Number.isNaN(birth.getTime())) return false
+  const age18 = new Date()
+  age18.setFullYear(age18.getFullYear() - 18)
+  return birth <= age18 && birth.getFullYear() >= 1900
+}
+
+function hasFullName(value: string) {
+  return /^[A-Za-zÀ-ÿ]{2,}([ '-][A-Za-zÀ-ÿ]{2,})+$/.test(value.trim())
+}
 
 export default function VerificationBar() {
   const sessao = useSessao()
@@ -16,11 +70,12 @@ export default function VerificationBar() {
   const [loading, setLoading] = useState(false)
 
   // Form state
+  const [nomeCompleto, setNomeCompleto] = useState('')
   const [cpf, setCpf] = useState('')
   const [nascimento, setNascimento] = useState('')
-  const [rgFrente, setRgFrente] = useState('')
-  const [rgVerso, setRgVerso] = useState('')
-  const [selfie, setSelfie] = useState('')
+  const [rgFrente, setRgFrente] = useState<KycImage | null>(null)
+  const [rgVerso, setRgVerso] = useState<KycImage | null>(null)
+  const [selfie, setSelfie] = useState<KycImage | null>(null)
   const [licenca, setLicenca] = useState(true)
   const [praia, setPraia] = useState('Boqueirão')
   const [cnpj, setCnpj] = useState('')
@@ -28,6 +83,19 @@ export default function VerificationBar() {
   useEffect(() => {
     if (!sessao) return
     async function fetchStatus() {
+      const { data: perfil } = await supabase
+        .from('profiles')
+        .select('verificado')
+        .eq('id', sessao!.id)
+        .maybeSingle()
+
+      if (perfil?.verificado === true) {
+        setStatus('aprovado')
+        setMotivo('')
+        setExpanded(false)
+        return
+      }
+
       const { data } = await supabase
         .from('verificacoes')
         .select('status, motivo_rejeicao')
@@ -44,48 +112,117 @@ export default function VerificationBar() {
     fetchStatus()
 
     const ch = supabase.channel('verif_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'verificacoes', filter: `user_id=eq.${sessao.id}` }, (payload) => {
-        if (payload.new) {
-          const newRow = payload.new as any
-          setStatus(newRow.status as Status)
-          setMotivo(newRow.motivo_rejeicao || '')
-        }
-      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'verificacoes', filter: `user_id=eq.${sessao.id}` }, () => { fetchStatus() })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${sessao.id}` }, () => { fetchStatus() })
       .subscribe()
     return () => { supabase.removeChannel(ch) }
   }, [sessao])
 
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>, setter: (v: string) => void) => {
-    const file = e.target.files?.[0]
+  useEffect(() => () => {
+    if (rgFrente) URL.revokeObjectURL(rgFrente.previewUrl)
+  }, [rgFrente])
+
+  useEffect(() => () => {
+    if (rgVerso) URL.revokeObjectURL(rgVerso.previewUrl)
+  }, [rgVerso])
+
+  useEffect(() => () => {
+    if (selfie) URL.revokeObjectURL(selfie.previewUrl)
+  }, [selfie])
+
+  const handleFile = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+    setter: Dispatch<SetStateAction<KycImage | null>>,
+  ) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => setter(ev.target?.result as string)
-    reader.readAsDataURL(file)
+
+    if (!KYC_IMAGE_TYPES.has(file.type.toLowerCase())) {
+      await alertDialog({ title: 'Arquivo invalido', message: 'Use uma foto JPG, PNG ou WebP.', tone: 'danger' })
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      await alertDialog({ title: 'Foto muito grande', message: 'Cada foto pode ter no maximo 5 MB.', tone: 'danger' })
+      return
+    }
+
+    setter({ file, previewUrl: URL.createObjectURL(file) })
   }
 
   const submit = async () => {
     if (!sessao) return
+    if (!hasFullName(nomeCompleto)) {
+      await alertDialog({ title: 'Nome real obrigatorio', message: 'Informe nome e sobrenome reais do responsavel.', tone: 'danger' })
+      return
+    }
+    if (!isValidCpf(cpf)) {
+      await alertDialog({ title: 'CPF invalido', message: 'Informe um CPF real antes de enviar a verificacao.', tone: 'danger' })
+      return
+    }
+    if (!isAdult(nascimento)) {
+      await alertDialog({ title: 'Data invalida', message: 'A data precisa ser real e o responsavel deve ter pelo menos 18 anos.', tone: 'danger' })
+      return
+    }
+    if (!rgFrente || !rgVerso || !selfie) {
+      await alertDialog({ title: 'Documentos obrigatorios', message: 'Envie frente, verso do documento e selfie segurando o documento.', tone: 'danger' })
+      return
+    }
+    if (!isValidCnpj(cnpj)) {
+      await alertDialog({ title: 'CNPJ invalido', message: 'Se informar CNPJ/MEI, ele precisa ser valido.', tone: 'danger' })
+      return
+    }
     setLoading(true)
+    const submissionId = crypto.randomUUID()
+    const uploadPlan: Array<{ kind: KycDocumentKind; image: KycImage }> = [
+      { kind: 'rg-frente', image: rgFrente },
+      { kind: 'rg-verso', image: rgVerso },
+      { kind: 'selfie', image: selfie },
+    ]
+    const uploads = await Promise.all(uploadPlan.map(async ({ kind, image }) => {
+      const extension = KYC_IMAGE_TYPES.get(image.file.type.toLowerCase())!
+      const path = `${sessao.id}/${submissionId}/${kind}.${extension}`
+      const { error } = await supabase.storage.from(KYC_BUCKET).upload(path, image.file, {
+        contentType: image.file.type,
+        cacheControl: '3600',
+        upsert: false,
+      })
+      return { kind, path, error }
+    }))
+
+    const uploadedPaths = uploads.filter(upload => !upload.error).map(upload => upload.path)
+    if (uploads.some(upload => upload.error)) {
+      if (uploadedPaths.length > 0) await supabase.storage.from(KYC_BUCKET).remove(uploadedPaths)
+      setLoading(false)
+      await alertDialog({ title: 'Falha no envio', message: 'Nao foi possivel proteger todos os documentos. Tente novamente.', tone: 'danger' })
+      return
+    }
+
+    const documentPath = (kind: KycDocumentKind) => uploads.find(upload => upload.kind === kind)!.path
     const { error } = await supabase.from('verificacoes').insert({
       user_id: sessao.id,
       tipo: 'ambulante',
-      nome_completo: sessao.nome, // Mocking from session for now
-      cpf,
+      nome_completo: nomeCompleto.trim(),
+      cpf: onlyDigits(cpf),
       data_nascimento: nascimento,
-      rg_frente_url: rgFrente,
-      rg_verso_url: rgVerso,
-      selfie_url: selfie,
+      rg_frente_url: documentPath('rg-frente'),
+      rg_verso_url: documentPath('rg-verso'),
+      selfie_url: documentPath('selfie'),
       licenca_ambulante: licenca,
       praia_principal: praia,
-      cnpj,
+      cnpj: onlyDigits(cnpj) || null,
       status: 'pendente'
     })
     setLoading(false)
     if (!error) {
       setStatus('pendente')
       setExpanded(false)
+      setRgFrente(null)
+      setRgVerso(null)
+      setSelfie(null)
     } else {
-      alertDialog({ title: 'Não deu pra enviar', message: 'Tivemos um problema ao enviar sua verificação. Tente de novo em instantes.', tone: 'danger' })
+      await supabase.storage.from(KYC_BUCKET).remove(uploadedPaths)
+      await alertDialog({ title: 'Não deu pra enviar', message: 'Tivemos um problema ao enviar sua verificação. Tente de novo em instantes.', tone: 'danger' })
     }
   }
 
@@ -94,16 +231,21 @@ export default function VerificationBar() {
   return (
     <div style={{ background: '#eef2f7', borderBottom: '1px solid rgba(0,0,0,0.05)', position: 'relative', zIndex: 50 }}>
       {/* Header Bar */}
-      <div 
+      <button
+        type="button"
         onClick={() => status !== 'pendente' && setExpanded(!expanded)}
+        disabled={status === 'pendente'}
         style={{ 
+          width: '100%',
           padding: '12px 20px', 
           display: 'flex', 
           alignItems: 'center', 
           justifyContent: 'space-between',
+          border: 0,
+          textAlign: 'left',
           background: status === 'rejeitado' ? 'rgba(239, 68, 68, 0.15)' : status === 'pendente' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(14, 165, 233, 0.15)',
           borderBottom: `1px solid ${status === 'rejeitado' ? 'rgba(239,68,68,0.3)' : status === 'pendente' ? 'rgba(245,158,11,0.3)' : 'rgba(14,165,233,0.3)'}`,
-          cursor: status === 'pendente' ? 'default' : 'pointer'
+          cursor: status === 'pendente' ? 'default' : 'pointer',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -128,7 +270,7 @@ export default function VerificationBar() {
             {expanded ? <ChevronUp size={20} color="#334155" /> : <ChevronDown size={20} color="#334155" />}
           </div>
         )}
-      </div>
+      </button>
 
       {/* Expanded Form */}
       <AnimatePresence>
@@ -158,7 +300,8 @@ export default function VerificationBar() {
               {step === 1 && (
                 <div style={stepContainer}>
                   <div style={stepTitle}>Passo 1: Dados Pessoais</div>
-                  <input style={inputStyle} placeholder="CPF (Apenas números)" value={cpf} onChange={e => setCpf(e.target.value)} />
+                  <input style={inputStyle} maxLength={120} placeholder="Nome completo real" value={nomeCompleto} onChange={e => setNomeCompleto(e.target.value)} />
+                  <input style={inputStyle} inputMode="numeric" maxLength={14} placeholder="CPF (apenas números)" value={cpf} onChange={e => setCpf(e.target.value)} />
                   <input style={inputStyle} type="date" value={nascimento} onChange={e => setNascimento(e.target.value)} />
                   <button style={btnStyle} onClick={() => setStep(2)}>Próximo</button>
                 </div>
@@ -170,15 +313,15 @@ export default function VerificationBar() {
                   
                   <label style={uploadBtn}>
                     <UploadCloud size={20} /> Frente do RG
-                    <input type="file" hidden accept="image/*" onChange={e => handleFile(e, setRgFrente)} />
+                    <input type="file" hidden accept="image/jpeg,image/png,image/webp" capture="environment" onChange={e => void handleFile(e, setRgFrente)} />
                   </label>
-                  {rgFrente && <img src={rgFrente} style={previewImg} alt="frente" />}
+                  {rgFrente && <img src={rgFrente.previewUrl} style={previewImg} alt="Frente do documento" />}
 
                   <label style={uploadBtn}>
                     <UploadCloud size={20} /> Verso do RG
-                    <input type="file" hidden accept="image/*" onChange={e => handleFile(e, setRgVerso)} />
+                    <input type="file" hidden accept="image/jpeg,image/png,image/webp" capture="environment" onChange={e => void handleFile(e, setRgVerso)} />
                   </label>
-                  {rgVerso && <img src={rgVerso} style={previewImg} alt="verso" />}
+                  {rgVerso && <img src={rgVerso.previewUrl} style={previewImg} alt="Verso do documento" />}
 
                   <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
                     <button style={btnStyleGhost} onClick={() => setStep(1)}>Voltar</button>
@@ -189,14 +332,14 @@ export default function VerificationBar() {
 
               {step === 3 && (
                 <div style={stepContainer}>
-                  <div style={stepTitle}>Passo 3: Face ID</div>
-                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>Tire uma selfie segurando seu documento. (Integração Face ID em breve)</div>
+                  <div style={stepTitle}>Passo 3: Validação facial</div>
+                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>Tire uma selfie segurando o documento ao lado do rosto.</div>
                   
                   <label style={{...uploadBtn, background: 'rgba(34,197,94,0.1)', color: '#4ade80', borderColor: 'rgba(34,197,94,0.3)'}}>
                     <Camera size={20} /> Tirar Selfie
-                    <input type="file" hidden accept="image/*" onChange={e => handleFile(e, setSelfie)} />
+                    <input type="file" hidden accept="image/jpeg,image/png,image/webp" capture="user" onChange={e => void handleFile(e, setSelfie)} />
                   </label>
-                  {selfie && <img src={selfie} style={previewImg} alt="selfie" />}
+                  {selfie && <img src={selfie.previewUrl} style={previewImg} alt="Selfie com documento" />}
 
                   <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
                     <button style={btnStyleGhost} onClick={() => setStep(2)}>Voltar</button>
@@ -235,12 +378,12 @@ export default function VerificationBar() {
               {step === 5 && (
                 <div style={stepContainer}>
                   <div style={stepTitle}>Passo 5: CNPJ (Opcional)</div>
-                  <input style={inputStyle} placeholder="CNPJ (Se tiver MEI/Empresa)" value={cnpj} onChange={e => setCnpj(e.target.value)} />
+                  <input style={inputStyle} inputMode="numeric" maxLength={18} placeholder="CNPJ (se tiver MEI/empresa)" value={cnpj} onChange={e => setCnpj(e.target.value)} />
                   
                   <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
                     <button style={btnStyleGhost} onClick={() => setStep(4)}>Voltar</button>
                     <button style={{...btnStyle, background: 'linear-gradient(135deg, #0ea5e9, #22c55e)'}} onClick={submit} disabled={loading}>
-                      {loading ? 'Enviando...' : 'ENVIAR PARA ANÁLISE'}
+                      {loading ? 'Enviando...' : 'Enviar para análise'}
                     </button>
                   </div>
                 </div>
@@ -255,24 +398,24 @@ export default function VerificationBar() {
 }
 
 const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '14px', borderRadius: 12, border: '1px solid rgba(0,0,0,0.08)',
+  width: '100%', padding: '14px', borderRadius: 8, border: '1px solid rgba(0,0,0,0.08)',
   background: '#ffffff', color: '#0f172a', outline: 'none', fontSize: 14
 }
 const btnStyle: React.CSSProperties = {
-  flex: 1, padding: '14px', borderRadius: 12, border: 'none', background: '#0ea5e9',
+  flex: 1, padding: '14px', borderRadius: 8, border: 'none', background: '#0ea5e9',
   color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer'
 }
 const btnStyleGhost: React.CSSProperties = {
-  flex: 1, padding: '14px', borderRadius: 12, border: '1px solid rgba(0,0,0,0.15)',
+  flex: 1, padding: '14px', borderRadius: 8, border: '1px solid rgba(0,0,0,0.15)',
   background: 'transparent', color: '#334155', fontWeight: 800, fontSize: 14, cursor: 'pointer'
 }
 const stepContainer: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 12 }
 const stepTitle: React.CSSProperties = { fontSize: 16, fontWeight: 900, color: '#0f172a', marginBottom: 4 }
 const uploadBtn: React.CSSProperties = {
-  width: '100%', padding: '16px', borderRadius: 12, border: '1px dashed rgba(0,0,0,0.25)',
+  width: '100%', padding: '16px', borderRadius: 8, border: '1px dashed rgba(0,0,0,0.25)',
   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, color: '#1e293b',
   cursor: 'pointer', background: 'rgba(0,0,0,0.03)'
 }
 const previewImg: React.CSSProperties = {
-  width: '100%', height: 120, objectFit: 'cover', borderRadius: 12, border: '1px solid rgba(0,0,0,0.08)'
+  width: '100%', height: 120, objectFit: 'cover', borderRadius: 8, border: '1px solid rgba(0,0,0,0.08)'
 }

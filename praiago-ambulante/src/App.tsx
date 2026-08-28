@@ -1,17 +1,11 @@
 import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useEffect, useState } from 'react'
-import { logout, useSessao } from './lib/auth'
+import { lazy, Suspense, useEffect, useState } from 'react'
+import { LoaderCircle, LocateFixed } from 'lucide-react'
+import { getSessao, logout, setContaDemo, useSessao } from './lib/auth'
 import { supabase } from './lib/supabase'
-import LoginPage from './pages/LoginPage'
-import DashboardPage from './pages/DashboardPage'
-import PedidosPage from './pages/PedidosPage'
-import VendasPage from './pages/VendasPage'
-import AvaliacoesPage from './pages/AvaliacoesPage'
-import CardapioPage from './pages/CardapioPage'
-import PerfilPage from './pages/PerfilPage'
-import ZonasPage from './pages/ZonasPage'
 import BottomNav from './components/BottomNav'
+import ChamadoKycPanel from './components/ChamadoKycPanel'
 import VerificationBar from './components/VerificationBar'
 import { DialogHost } from './lib/dialog'
 import AiChatbot from './components/AiChatbot'
@@ -19,65 +13,102 @@ import PasswordRecoveryHandler from './components/PasswordRecoveryHandler'
 import { useGPS } from './hooks/useGPS'
 import { useOrderNotifications } from './hooks/useOrderNotifications'
 
-const PUBLIC_ROUTES = ['/login', '/cadastro']
+const PUBLIC_ROUTES = ['/login']
+
+const LoginPage = lazy(() => import('./pages/LoginPage'))
+const DashboardPage = lazy(() => import('./pages/DashboardPage'))
+const PedidosPage = lazy(() => import('./pages/PedidosPage'))
+const VendasPage = lazy(() => import('./pages/VendasPage'))
+const AvaliacoesPage = lazy(() => import('./pages/AvaliacoesPage'))
+const CardapioPage = lazy(() => import('./pages/CardapioPage'))
+const PerfilPage = lazy(() => import('./pages/PerfilPage'))
+const ZonasPage = lazy(() => import('./pages/ZonasPage'))
+const CarteiraPage = lazy(() => import('./pages/CarteiraPage'))
+
+function RouteLoading() {
+  return (
+    <div style={{ minHeight: 240, display: 'grid', placeItems: 'center', color: '#008fc0' }} role="status" aria-label="Carregando tela">
+      <LoaderCircle size={24} className="animate-spin-slow" />
+    </div>
+  )
+}
 
 // Logo do PraiaGo Ambulante
-function LogoBar({ gpsStatus }: { gpsStatus: string }) {
-  const isActive = gpsStatus === 'active'
-  const isError = gpsStatus === 'error'
+function LogoBar({ gpsStatus, foraDaArea, modoRevisao }: { gpsStatus: string; foraDaArea: boolean; modoRevisao: boolean }) {
+  const isActive = gpsStatus === 'active' && !foraDaArea
+  const isError = gpsStatus === 'error' || gpsStatus === 'denied'
+  const statusLabel = modoRevisao
+    ? 'Cenario de revisao'
+    : foraDaArea
+      ? 'Fora da area'
+      : isActive
+        ? 'Localizacao ativa'
+        : isError
+          ? 'Sem localizacao'
+          : 'Localizando'
+  const statusColor = modoRevisao ? '#6d28d9' : isActive ? '#148447' : foraDaArea || isError ? '#b54708' : '#617089'
+  const statusBackground = modoRevisao ? '#f5f3ff' : isActive ? '#eef9f2' : foraDaArea || isError ? '#fff4e5' : '#edf1f5'
+  const statusBorder = modoRevisao ? '#c4b5fd' : isActive ? '#cce9d8' : foraDaArea || isError ? '#f4d39f' : '#dce3ea'
   return (
-    <div className="glass-panel" style={{
+    <header style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '16px 20px',
-      borderBottom: '1px solid rgba(0,0,0,0.05)',
+      minHeight: 66,
+      padding: '8px 16px',
+      // A folga do entalhe entra como padding DAQUI, e nao como espaco vazio
+      // acima. Assim o fundo branco do cabecalho passa por baixo da barra de
+      // status: relogio, bateria e sinal ficam legiveis em cima dele, em vez
+      // de cair por cima do logo.
+      //
+      // Com `viewport-fit=cover` a pagina vai ate a borda de cima da tela, e
+      // sem isto o iPhone desenha a barra de status por cima do conteudo. O
+      // valor muda por aparelho — no iPhone com entalhe da ~47px, no SE da 20,
+      // e no Android da 0 — entao nao da para chutar um numero fixo.
+      paddingTop: 'calc(8px + env(safe-area-inset-top))',
+      borderBottom: '1px solid #e7ecf1',
+      background: 'rgba(255,255,255,0.96)',
+      backdropFilter: 'blur(14px)',
       position: 'sticky', top: 0, zIndex: 60,
     }}>
-      {/* Logo */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div className="neon-border" style={{ borderRadius: 12, display: 'flex' }}>
-          <svg width="38" height="38" viewBox="0 0 38 38" fill="none">
-            <rect width="38" height="38" rx="12" fill="url(#amb-g)"/>
-            <defs>
-              <linearGradient id="amb-g" x1="0" y1="0" x2="38" y2="38" gradientUnits="userSpaceOnUse">
-                <stop stopColor="#0ea5e9"/>
-                <stop offset="1" stopColor="#22c55e"/>
-              </linearGradient>
-            </defs>
-            <path d="M7 26 Q11 22 15 26 Q19 30 23 26 Q27 22 30 26" stroke="white" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
-            <circle cx="25" cy="12" r="5" fill="#fbbf24" stroke="rgba(255,255,255,0.8)" strokeWidth="1.5"/>
-            <path d="M12 32 Q13 25 15 21" stroke="white" strokeWidth="2.2" strokeLinecap="round" fill="none"/>
-            <path d="M15 21 Q11 17 8 18 M15 21 Q15 16 13 14 M15 21 Q19 17 19 14" stroke="white" strokeWidth="1.8" strokeLinecap="round" fill="none"/>
-          </svg>
+      {/* Logo — mesma marca e mesmo recorte do app do cliente.
+          O PNG e quadrado (1600x1600) com muita margem: a caixa de 140x59
+          recorta so o brasao, e por isso a imagem e maior que o container. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        <div
+          aria-label="PraiaGo"
+          style={{ width: 116, height: 47, overflow: 'hidden', position: 'relative', flexShrink: 0 }}
+        >
+          <img
+            src="/praiago-logo-transparent.png"
+            alt="PraiaGo"
+            style={{
+              position: 'absolute', width: 194, height: 194, maxWidth: 'none',
+              left: -48, top: -57, display: 'block',
+            }}
+          />
         </div>
-        <div>
-          <div style={{ fontSize: 20, fontWeight: 900, letterSpacing: -0.5, lineHeight: 1, display: 'flex', alignItems: 'baseline' }}>
-            <span style={{ color: '#0f172a' }}>Praia</span><span className="tactical-gradient-text" style={{ marginLeft: 1 }}>Go</span>
-          </div>
-          <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 2, color: '#4ade80', textTransform: 'uppercase', marginTop: 2 }}>Ambulante</div>
-        </div>
+        <span style={{ border: '1px solid #cce9d8', borderRadius: 999, background: '#eef9f2', color: '#148447', padding: '4px 7px', fontSize: 9, lineHeight: 1, fontWeight: 850, textTransform: 'uppercase' }}>
+          Ambulante
+        </span>
       </div>
 
       {/* GPS badge */}
       <motion.div animate={isActive ? { opacity: [0.7, 1, 0.7] } : {}} transition={{ repeat: Infinity, duration: 2 }} style={{
         display: 'flex', alignItems: 'center', gap: 6,
-        background: isActive ? 'rgba(34,197,94,0.15)' : isError ? 'rgba(239,68,68,0.15)' : 'rgba(100,116,139,0.15)',
-        border: `1px solid ${isActive ? 'rgba(34,197,94,0.3)' : isError ? 'rgba(239,68,68,0.3)' : 'rgba(100,116,139,0.3)'}`,
-        borderRadius: 20, padding: '6px 12px',
-        boxShadow: isActive ? '0 0 10px rgba(34,197,94,0.2)' : 'none'
+        maxWidth: 146,
+        background: statusBackground,
+        border: `1px solid ${statusBorder}`,
+        borderRadius: 999, padding: '7px 9px',
+        color: statusColor,
       }}>
-        <div style={{
-          width: 8, height: 8, borderRadius: '50%',
-          background: isActive ? '#22c55e' : isError ? '#ef4444' : '#64748b',
-          boxShadow: isActive ? '0 0 8px #22c55e' : 'none',
-        }} />
+        <LocateFixed size={14} aria-hidden="true" />
         <span style={{
-          fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5,
-          color: isActive ? '#4ade80' : isError ? '#f87171' : '#94a3b8',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          fontSize: 10, fontWeight: 800,
         }}>
-          {isActive ? 'GPS ON' : isError ? 'ERRO' : 'BUSCA'}
+          {statusLabel}
         </span>
       </motion.div>
-    </div>
+    </header>
   )
 }
 
@@ -166,18 +197,46 @@ function GlobalAvisoToast() {
   const [aviso, setAviso] = useState<{ id?: string; titulo?: string; mensagem?: string; cupom_codigo?: string | null } | null>(null)
 
   useEffect(() => {
+    const sessao = getSessao()
+
+    const mostrar = (row: { id?: string; titulo?: string; mensagem?: string; cupom_codigo?: string | null }) => {
+      setAviso(row)
+      playAvisoSound()
+      window.setTimeout(() => setAviso(current => current?.id === row.id ? null : current), 8000)
+    }
+
     const channel = supabase
       .channel('avisos_ambulante')
+      // Broadcast da equipe: promocao, comunicado.
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'avisos' }, payload => {
         const row = payload.new as { id?: string; titulo?: string; mensagem?: string; publico?: string; cupom_codigo?: string | null }
         if (row.publico && row.publico !== 'ambulantes' && row.publico !== 'todos') return
-        setAviso(row)
-        playAvisoSound()
-        window.setTimeout(() => setAviso(current => current?.id === row.id ? null : current), 8000)
+        mostrar(row)
       })
       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
+    // Aviso dirigido a ESTE vendedor — hoje e o KYC aprovado ou recusado. E
+    // um canal separado porque leva filtro por vendedor_id; junto no de cima,
+    // o filtro valeria para os dois e o broadcast pararia de chegar.
+    let pessoal: ReturnType<typeof supabase.channel> | null = null
+    if (sessao?.id) {
+      pessoal = supabase
+        .channel(`notif_vendedor_${sessao.id}`)
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'notificacoes_vendedor', filter: `vendedor_id=eq.${sessao.id}` },
+          payload => {
+            const row = payload.new as { id?: string; titulo?: string; mensagem?: string }
+            mostrar(row)
+          },
+        )
+        .subscribe()
+    }
+
+    return () => {
+      supabase.removeChannel(channel)
+      if (pessoal) supabase.removeChannel(pessoal)
+    }
   }, [])
 
   if (!aviso) return null
@@ -215,42 +274,73 @@ function GlobalAvisoToast() {
   )
 }
 
+function KycLockedPanel() {
+  return (
+    <div style={{ padding: 24 }}>
+      <div style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: 18, padding: 18 }}>
+        <div style={{ fontSize: 18, fontWeight: 900, color: '#92400e', marginBottom: 6 }}>Verificacao obrigatoria</div>
+        <p style={{ margin: 0, color: '#92400e', fontSize: 14, lineHeight: 1.5, fontWeight: 600 }}>
+          Seu acesso operacional fica bloqueado ate o KYC ser aprovado. Envie CPF real, documento, selfie e local de atuacao acima. Enquanto isso voce nao aparece no mapa e nao pode criar produtos.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   const location = useLocation()
   const navigate = useNavigate()
   const isPublic = PUBLIC_ROUTES.includes(location.pathname)
   const sessao = useSessao()
+  const [kycLocked, setKycLocked] = useState(false)
 
   // GPS ativo em todo o app — transmite posição em tempo real
-  const { status: gpsStatus } = useGPS()
+  const { status: gpsStatus, foraDaArea, modoRevisao } = useGPS()
 
   useEffect(() => {
     if (!sessao?.id || isPublic) return
 
     let ativo = true
-    const bloquearSeBanido = (perfil?: { status?: string } | null) => {
-      if (!ativo || perfil?.status !== 'banido') return
+    type PerfilGate = { status?: string; role?: string; verificado?: boolean | null; conta_demo?: boolean | null }
+    const bloquearAcessoInvalido = (perfil?: PerfilGate | null, userId?: string) => {
+      if (!ativo) return false
+      if (perfil?.status !== 'banido' && perfil?.role === 'ambulante' && userId === sessao.id) return true
       logout()
+      supabase.auth.signOut()
       navigate('/login', { replace: true })
+      return false
+    }
+    const atualizarGate = (perfil?: PerfilGate | null, userId = sessao.id) => {
+      if (!ativo) return
+      if (!bloquearAcessoInvalido(perfil, userId)) return
+      setContaDemo(perfil?.conta_demo === true)
+      setKycLocked(perfil?.verificado !== true)
     }
 
-    supabase
-      .from('profiles')
-      .select('status')
-      .eq('id', sessao.id)
-      .maybeSingle()
-      .then(({ data }) => bloquearSeBanido(data))
-
-    const channel = supabase
-      .channel(`ambulante_status_${sessao.id}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${sessao.id}` }, payload => {
-        bloquearSeBanido(payload.new as { status?: string })
-      })
+    const checarStatus = async () => {
+      const { data: authData } = await supabase.auth.getUser()
+      if (!authData.user) {
+        bloquearAcessoInvalido(null, undefined)
+        return
+      }
+      const { data } = await supabase
+        .from('profiles')
+        .select('status,role,verificado,conta_demo')
+        .eq('id', sessao.id)
+        .maybeSingle()
+      atualizarGate(data, authData.user.id)
+    }
+    checarStatus()
+    const channel = supabase.channel(`ambulante_kyc_gate_${sessao.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${sessao.id}` }, payload => atualizarGate(payload.new as PerfilGate))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'verificacoes', filter: `user_id=eq.${sessao.id}` }, () => checarStatus())
       .subscribe()
+    const timer = window.setInterval(checarStatus, 10000)
 
     return () => {
       ativo = false
       supabase.removeChannel(channel)
+      window.clearInterval(timer)
     }
   }, [sessao?.id, isPublic, navigate])
 
@@ -258,32 +348,62 @@ export default function App() {
   if (!sessao && !isPublic) return <Navigate to="/login" replace />
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#ffffff' }}>
+    <div style={{
+      display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#f4f7fa',
+      // Telas publicas (login, recuperar senha) nao tem o cabecalho que
+      // absorve a folga do entalhe, entao a folga entra aqui. Nas outras
+      // fica zero, senao a folga contaria duas vezes.
+      paddingTop: isPublic ? 'env(safe-area-inset-top)' : 0,
+    }}>
       <PasswordRecoveryHandler />
-      {!isPublic && <LogoBar gpsStatus={gpsStatus} />}
+      {!isPublic && <LogoBar gpsStatus={gpsStatus} foraDaArea={foraDaArea} modoRevisao={modoRevisao} />}
       {!isPublic && <VerificationBar />}
-      <main style={{ flex: 1, overflowY: 'auto', paddingBottom: isPublic ? 0 : '80px', position: 'relative' }}>
-        <AnimatePresence mode="wait">
-          <Routes location={location} key={location.pathname}>
-            <Route path="/login"    element={<PageWrapper><LoginPage /></PageWrapper>} />
-            <Route path="/"         element={<PageWrapper><DashboardPage /></PageWrapper>} />
-            <Route path="/pedidos"  element={<PageWrapper><PedidosPage /></PageWrapper>} />
-            <Route path="/vendas"   element={<PageWrapper><VendasPage /></PageWrapper>} />
-            <Route path="/avaliacoes" element={<PageWrapper><AvaliacoesPage /></PageWrapper>} />
-            <Route path="/cardapio" element={<PageWrapper><CardapioPage /></PageWrapper>} />
-            <Route path="/zonas"    element={<PageWrapper><ZonasPage /></PageWrapper>} />
-            <Route path="/perfil"   element={<PageWrapper><PerfilPage /></PageWrapper>} />
-          </Routes>
-        </AnimatePresence>
+      {/* O espaco reservado aqui embaixo repete a conta da propria barra, em
+          vez de um numero solto: ela tem 70px de altura e flutua a
+          `max(10px, env(safe-area-inset-bottom))` do fim da tela (veja
+          BottomNav.tsx). Os 16px finais sao a folga para o ultimo item nao
+          encostar nela.
+
+          O numero fixo de antes (82px) dava 2px de sobra no Android — perto
+          demais de esconder conteudo se a barra mudasse de altura. */}
+      <main style={{
+        flex: 1, overflowY: 'auto', position: 'relative',
+        paddingBottom: isPublic
+          ? 0
+          : 'calc(70px + max(10px, env(safe-area-inset-bottom)) + 16px)',
+      }}>
+        {!isPublic && kycLocked ? (
+          <KycLockedPanel />
+        ) : (
+          <Suspense fallback={<RouteLoading />}>
+            <AnimatePresence mode="wait">
+              <Routes location={location} key={location.pathname}>
+                <Route path="/login"    element={<PageWrapper><LoginPage /></PageWrapper>} />
+                <Route path="/"         element={<PageWrapper><DashboardPage /></PageWrapper>} />
+                <Route path="/pedidos"  element={<PageWrapper><PedidosPage /></PageWrapper>} />
+                <Route path="/vendas"   element={<PageWrapper><VendasPage /></PageWrapper>} />
+                <Route path="/avaliacoes" element={<PageWrapper><AvaliacoesPage /></PageWrapper>} />
+                <Route path="/cardapio" element={<PageWrapper><CardapioPage /></PageWrapper>} />
+                <Route path="/zonas"    element={<PageWrapper><ZonasPage /></PageWrapper>} />
+                <Route path="/perfil"   element={<PageWrapper><PerfilPage /></PageWrapper>} />
+                <Route path="/carteira" element={<PageWrapper><CarteiraPage /></PageWrapper>} />
+              </Routes>
+            </AnimatePresence>
+          </Suspense>
+        )}
       </main>
-      {!isPublic && <BottomNav />}
-      {!isPublic && <AiChatbot plataforma="ambulante" />}
-      {!isPublic && <GlobalOrderToast />}
+      {!isPublic && !kycLocked && <BottomNav />}
+      {!isPublic && !kycLocked && <AiChatbot plataforma="ambulante" />}
+      {!isPublic && !kycLocked && <GlobalOrderToast />}
       {!isPublic && (
         <AnimatePresence>
           <GlobalAvisoToast />
         </AnimatePresence>
       )}
+      {/* Fora da trava do kycLocked de proposito: o chamado de verificacao e
+          exatamente o que tira o vendedor dessa trava. Esconde-lo ali seria
+          trancar a porta e guardar a chave do lado de dentro. */}
+      {!isPublic && <ChamadoKycPanel />}
       <DialogHost />
     </div>
   )

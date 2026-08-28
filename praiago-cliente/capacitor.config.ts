@@ -7,7 +7,7 @@ const otaUpdateUrl =
 
 const config: CapacitorConfig = {
   appId: 'com.ferrazcode.praiago.cliente',
-  appName: 'PraiaGo Cliente',
+  appName: 'PraiaGo',
   webDir: 'dist',
   plugins: {
     CapacitorUpdater: {

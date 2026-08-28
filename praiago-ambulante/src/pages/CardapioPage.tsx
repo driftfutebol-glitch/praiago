@@ -1,295 +1,493 @@
-import { useState, useEffect, useRef } from 'react'
-import { Plus, Trash2, Edit2, Check, X, Camera, Loader2 } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { supabase } from '../lib/supabase'
+import { useEffect, useRef, useState } from 'react'
+import {
+  Camera,
+  CheckCircle2,
+  Edit3,
+  ImagePlus,
+  Loader2,
+  PackageOpen,
+  Plus,
+  Trash2,
+  X,
+} from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
+import ProductCategoryPicker, { CategoryPhoto } from '../components/ProductCategoryPicker'
 import { getSessao } from '../lib/auth'
-import { alertDialog } from '../lib/dialog'
+import { alertDialog, confirmDialog } from '../lib/dialog'
+import { FEATURED_PRODUCT_CATEGORIES, getProductCategory } from '../lib/productCategories'
+import { supabase } from '../lib/supabase'
+
+const PRODUCT_IMAGE_TYPES = new Map([
+  ['image/jpeg', 'jpg'],
+  ['image/png', 'png'],
+  ['image/webp', 'webp'],
+])
 
 type Produto = {
   id: string
-  vendedor_id?: string
   nome: string
   preco: number
-  descricao: string
+  descricao: string | null
   categoria: string
   ativo: boolean
   foto: string | null
-  emoji: string
+  emoji: string | null
+  // NULO = a loja nao controla estoque desse item (ilimitado). 0 = esgotado.
+  estoque: number | null
 }
 
-type NovoForm = { nome: string; preco: string; descricao: string; emoji: string; foto: string | null }
+type ProfileInfo = {
+  nome: string | null
+  categoria: string | null
+  emoji: string | null
+  verificado: boolean | null
+}
+
+type ProductForm = {
+  id: string | null
+  nome: string
+  preco: string
+  descricao: string
+  categoria: string
+  foto: string | null
+  estoque: string
+}
+
+const emptyForm = (): ProductForm => ({
+  id: null,
+  nome: '',
+  preco: '',
+  descricao: '',
+  categoria: FEATURED_PRODUCT_CATEGORIES[0].label,
+  foto: null,
+  estoque: '',
+})
+
+const money = (value: number) => value.toLocaleString('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+})
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  minHeight: 46,
+  border: '1px solid #dfe6ed',
+  borderRadius: 8,
+  background: '#f8fafc',
+  color: '#132238',
+  padding: '11px 12px',
+  outline: 0,
+  fontSize: 14,
+  fontWeight: 650,
+}
 
 export default function CardapioPage() {
-  const [produtos, setProdutos] = useState<Produto[]>([])
-  const [editando, setEditando] = useState<string | null>(null)
-  const [editNome, setEditNome] = useState('')
-  const [editPreco, setEditPreco] = useState('')
-  const [adicionando, setAdicionando] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [novo, setNovo] = useState<NovoForm>({ nome: '', preco: '', descricao: '', emoji: '🍽️', foto: null })
-  
   const sessao = getSessao()
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [produtos, setProdutos] = useState<Produto[]>([])
+  const [profile, setProfile] = useState<ProfileInfo | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [form, setForm] = useState<ProductForm>(emptyForm)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
 
   useEffect(() => {
-    fetchProdutos()
-  }, [])
+    if (!sessao?.id) return
+    let active = true
 
-  async function fetchProdutos() {
-    if (!sessao) return
-    setLoading(true)
-    const { data, error: _err2 } = await supabase
-      .from('produtos')
-      .select('*')
-      .eq('vendedor_id', sessao.id)
-      .order('created_at', { ascending: false })
-      
-    if (data) {
-      setProdutos(data)
-    }
-    setLoading(false)
-  }
+    const load = async () => {
+      const [{ data: products }, { data: profileData }] = await Promise.all([
+        supabase
+          .from('produtos')
+          .select('id,nome,preco,descricao,categoria,ativo,foto,emoji,estoque')
+          .eq('vendedor_id', sessao.id)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('profiles')
+          .select('nome,categoria,emoji,verificado')
+          .eq('id', sessao.id)
+          .maybeSingle(),
+      ])
 
-  async function toggleAtivo(id: string) {
-    const prod = produtos.find(p => p.id === id)
-    if (!prod) return
-    
-    // Update Optimistically
-    setProdutos(prev => prev.map(p => p.id === id ? { ...p, ativo: !p.ativo } : p))
-    
-    const { error: _err } = await supabase.from('produtos').update({ ativo: !prod.ativo }).eq('id', id)
-    if (_err) {
-      // Revert on error
-      setProdutos(prev => prev.map(p => p.id === id ? { ...p, ativo: prod.ativo } : p))
-      console.error(_err)
-    }
-  }
-
-  async function deletar(id: string) {
-    setProdutos(prev => prev.filter(p => p.id !== id))
-    await supabase.from('produtos').delete().eq('id', id)
-  }
-
-  async function salvarEdicao(id: string) {
-    const p = produtos.find(p => p.id === id)
-    if (!p) return
-    
-    const newNome = editNome || p.nome
-    const newPreco = parseFloat(editPreco) || p.preco
-
-    setProdutos(prev => prev.map(p => p.id === id
-      ? { ...p, nome: newNome, preco: newPreco }
-      : p
-    ))
-    setEditando(null)
-    
-    await supabase.from('produtos').update({ nome: newNome, preco: newPreco }).eq('id', id)
-  }
-
-  async function adicionarProduto() {
-    if (!novo.nome.trim() || !sessao) return
-    
-    const prod = {
-      vendedor_id: sessao.id,
-      vendedor_nome: sessao.nome,        // pro cliente mostrar o nome da loja
-      vendedor_categoria: 'Ambulante',
-      vendedor_emoji: '🥥',
-      nome: novo.nome,
-      preco: parseFloat(novo.preco) || 0,
-      descricao: novo.descricao,
-      categoria: 'Ambulante', // Ambulante n tem categoria na UI
-      ativo: true,
-      emoji: novo.emoji,
-      foto: novo.foto,
+      if (!active) return
+      setProdutos((products || []) as Produto[])
+      setProfile((profileData || null) as ProfileInfo | null)
+      setLoading(false)
     }
 
-    const { data, error } = await supabase.from('produtos').insert(prod).select().single()
-    if (data) {
-      setProdutos(prev => [data, ...prev])
-      setNovo({ nome: '', preco: '', descricao: '', emoji: '🍽️', foto: null })
-      setAdicionando(false)
-    } else {
-      console.error("Erro ao adicionar produto:", error)
+    void load()
+    const channel = supabase
+      .channel(`ambulante_produtos_${sessao.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'produtos', filter: `vendedor_id=eq.${sessao.id}` }, load)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${sessao.id}` }, load)
+      .subscribe()
+
+    return () => {
+      active = false
+      void supabase.removeChannel(channel)
     }
-  }
+  }, [sessao?.id])
 
-  const emojis = ['🥥', '🧉', '🍢', '🍦', '🍕', '🌽', '🐟', '🍪', '🍹', '🫐', '🍉', '🥤']
-
-  const fileRef = useRef<HTMLInputElement>(null)
-  const [enviandoFoto, setEnviandoFoto] = useState(false)
-
-  async function enviarFoto(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file || !sessao) return
-    if (file.size > 5 * 1024 * 1024) { alertDialog({ title: 'Foto muito grande', message: 'Envie uma imagem de até 5 MB.', tone: 'danger' }); return }
-    setEnviandoFoto(true)
-    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
-    const caminho = `${sessao.id}/${Date.now()}.${ext}`
-    const { error } = await supabase.storage.from('produtos').upload(caminho, file, { upsert: true, contentType: file.type })
-    if (error) {
-      setEnviandoFoto(false)
-      alertDialog({ title: 'Não deu pra enviar', message: 'Tente outra foto em instantes.', tone: 'danger' })
+  function openCreate() {
+    if (profile?.verificado !== true) {
+      void alertDialog({
+        title: 'Verificação pendente',
+        message: 'Seu cadastro precisa estar aprovado para publicar produtos.',
+        tone: 'danger',
+      })
       return
     }
-    const { data } = supabase.storage.from('produtos').getPublicUrl(caminho)
-    setNovo(n => ({ ...n, foto: data.publicUrl }))
-    setEnviandoFoto(false)
+    setForm(emptyForm())
+    setModalOpen(true)
+  }
+
+  function openEdit(product: Produto) {
+    setForm({
+      id: product.id,
+      nome: product.nome,
+      preco: String(product.preco),
+      descricao: product.descricao || '',
+      categoria: getProductCategory(product.categoria).label,
+      foto: product.foto,
+      // null vira '' (campo vazio = ilimitado); 0 tem que virar '0', nao '',
+      // senao editar um item esgotado o transformaria em ilimitado sem querer.
+      estoque: product.estoque == null ? '' : String(product.estoque),
+    })
+    setModalOpen(true)
+  }
+
+  async function uploadPhoto(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file || !sessao?.id) return
+
+    const extension = PRODUCT_IMAGE_TYPES.get(file.type.toLowerCase())
+    if (!extension) {
+      await alertDialog({ title: 'Arquivo inválido', message: 'Use uma foto JPG, PNG ou WebP.', tone: 'danger' })
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      await alertDialog({ title: 'Foto muito grande', message: 'A imagem pode ter no máximo 5 MB.', tone: 'danger' })
+      return
+    }
+
+    setUploading(true)
+    const path = `${sessao.id}/${crypto.randomUUID()}.${extension}`
+    const { error } = await supabase.storage.from('produtos').upload(path, file, {
+      contentType: file.type,
+      cacheControl: '3600',
+      upsert: false,
+    })
+
+    if (error) {
+      setUploading(false)
+      await alertDialog({ title: 'Falha no envio', message: 'Não foi possível enviar a foto. Tente novamente.', tone: 'danger' })
+      return
+    }
+
+    const { data } = supabase.storage.from('produtos').getPublicUrl(path)
+    setForm(current => ({ ...current, foto: data.publicUrl }))
+    setUploading(false)
+  }
+
+  async function saveProduct() {
+    if (!sessao?.id || saving) return
+    const price = Number(form.preco.replace(',', '.'))
+    if (!form.nome.trim()) {
+      await alertDialog({ title: 'Nome obrigatório', message: 'Informe o nome que o cliente verá.', tone: 'danger' })
+      return
+    }
+    if (!Number.isFinite(price) || price <= 0) {
+      await alertDialog({ title: 'Preço inválido', message: 'Informe um preço maior que zero.', tone: 'danger' })
+      return
+    }
+
+    const category = getProductCategory(form.categoria)
+    const payload = {
+      nome: form.nome.trim(),
+      preco: Number(price.toFixed(2)),
+      descricao: form.descricao.trim(),
+      categoria: category.label,
+      foto: form.foto,
+      emoji: '',
+      // Campo vazio grava NULO de proposito: "sem numero" quer dizer "nao
+      // controlo estoque", que e diferente de zero (zero e esgotado).
+      estoque: form.estoque.trim() === '' ? null : Math.max(0, Math.floor(Number(form.estoque) || 0)),
+    }
+
+    setSaving(true)
+    const result = form.id
+      ? await supabase.from('produtos').update(payload).eq('id', form.id).eq('vendedor_id', sessao.id).select().single()
+      : await supabase.from('produtos').insert({
+          ...payload,
+          vendedor_id: sessao.id,
+          vendedor_nome: profile?.nome || sessao.nome,
+          vendedor_categoria: profile?.categoria || 'Ambulante',
+          vendedor_emoji: profile?.emoji || '',
+          ativo: true,
+        }).select().single()
+
+    setSaving(false)
+    if (result.error) {
+      await alertDialog({ title: 'Não foi possível salvar', message: result.error.message, tone: 'danger' })
+      return
+    }
+
+    const saved = result.data as Produto
+    setProdutos(current => form.id
+      ? current.map(product => product.id === saved.id ? saved : product)
+      : [saved, ...current])
+    setModalOpen(false)
+    setForm(emptyForm())
+  }
+
+  async function toggleActive(product: Produto) {
+    const nextActive = !product.ativo
+    setProdutos(current => current.map(item => item.id === product.id ? { ...item, ativo: nextActive } : item))
+    const { error } = await supabase
+      .from('produtos')
+      .update({ ativo: nextActive })
+      .eq('id', product.id)
+      .eq('vendedor_id', sessao?.id)
+    if (error) {
+      setProdutos(current => current.map(item => item.id === product.id ? { ...item, ativo: product.ativo } : item))
+      await alertDialog({ title: 'Não foi possível atualizar', message: 'Tente novamente em alguns instantes.', tone: 'danger' })
+    }
+  }
+
+  async function removeProduct(product: Produto) {
+    const confirmed = await confirmDialog({
+      title: 'Excluir produto?',
+      message: `${product.nome} será removido do catálogo do cliente.`,
+      confirmText: 'Excluir',
+      tone: 'danger',
+    })
+    if (!confirmed) return
+
+    const { error } = await supabase
+      .from('produtos')
+      .delete()
+      .eq('id', product.id)
+      .eq('vendedor_id', sessao?.id)
+    if (error) {
+      await alertDialog({ title: 'Não foi possível excluir', message: 'Tente novamente.', tone: 'danger' })
+      return
+    }
+    setProdutos(current => current.filter(item => item.id !== product.id))
   }
 
   return (
-    <div style={{ minHeight: '100vh', paddingBottom: 40 }}>
-      {/* Header */}
-      <div style={{ padding: '24px 20px 20px', borderBottom: '1px solid rgba(0,0,0,0.05)', marginBottom: 20 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <h1 style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', letterSpacing: -0.5 }}>Cardápio</h1>
-            <p style={{ fontSize: 13, color: '#64748b', marginTop: 4, fontWeight: 500 }}>
-              Suas mudanças aparecem na hora pros clientes ⚡
-            </p>
-          </div>
-          <motion.button whileTap={{ scale: 0.95 }} onClick={() => setAdicionando(true)} style={{
-            background: 'linear-gradient(135deg, #0ea5e9, #22c55e)',
-            border: 'none', borderRadius: 20, padding: '12px 20px',
-            color: '#fff', fontSize: 14, fontWeight: 900, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 8px 25px rgba(34,197,94,0.3)'
-          }}>
-            <Plus size={18} strokeWidth={3} />
-            Add Item
-          </motion.button>
+    <div className="page-shell">
+      <div className="page-heading">
+        <div>
+          <h1>Produtos</h1>
+          <p>Organize o que os clientes encontram no PraiaGo.</p>
         </div>
+        <button type="button" className="icon-button" onClick={openCreate} disabled={profile?.verificado !== true} aria-label="Adicionar produto">
+          <Plus size={21} />
+        </button>
       </div>
 
-      <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <AnimatePresence>
-          {loading ? (
-            <div style={{ color: '#64748b', padding: 20 }}>Carregando cardápio...</div>
-          ) : produtos.map(p => (
-            <motion.div key={p.id} layout initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }} transition={{ type: 'spring', stiffness: 300, damping: 25 }} style={{
-              background: 'rgba(255,255,255,0.02)', borderRadius: 24, padding: 20,
-              border: '1px solid rgba(0,0,0,0.05)', position: 'relative'
-            }}>
-              
-              <button onClick={() => toggleAtivo(p.id)} style={{
-                position: 'absolute', top: 20, right: 20, padding: '4px 10px', borderRadius: 12, fontSize: 11, fontWeight: 800, cursor: 'pointer', border: 'none',
-                background: p.ativo ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)',
-                color: p.ativo ? '#4ade80' : '#f87171'
-              }}>
-                {p.ativo ? 'ATIVO' : 'ESGOTADO'}
-              </button>
+      {profile?.verificado === false && (
+        <div className="surface" style={{ marginBottom: 14, padding: 14, borderColor: '#f4d39f', background: '#fffaf2', boxShadow: 'none' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, color: '#b54708', fontSize: 13, fontWeight: 850 }}>
+            <CheckCircle2 size={18} />
+            Cadastro aguardando aprovação
+          </div>
+          <p style={{ margin: '6px 0 0', color: '#7b5b2e', fontSize: 12, lineHeight: 1.45, fontWeight: 600 }}>
+            A publicação será liberada assim que a verificação for aprovada.
+          </p>
+        </div>
+      )}
 
-              <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
-                <div style={{ width: 64, height: 64, borderRadius: 16, background: 'rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, overflow: 'hidden' }}>
-                  {p.foto ? <img src={p.foto} alt={p.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : p.emoji}
-                </div>
-                
-                <div style={{ flex: 1, paddingTop: 4 }}>
-                  {editando === p.id ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <input autoFocus value={editNome} onChange={e => setEditNome(e.target.value)} style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 8, padding: '6px 10px', color: '#fff', fontSize: 15, fontWeight: 700 }} />
-                      <input value={editPreco} onChange={e => setEditPreco(e.target.value)} type="number" step="0.01" style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 8, padding: '6px 10px', color: '#fff', fontSize: 15, fontWeight: 700 }} />
-                    </div>
-                  ) : (
-                    <>
-                      <h3 style={{ fontSize: 17, fontWeight: 800, color: '#0f172a', margin: '0 0 4px', maxWidth: '70%' }}>{p.nome}</h3>
-                      <div style={{ fontSize: 16, color: '#4ade80', fontWeight: 800 }}>R$ {p.preco.toFixed(2)}</div>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 16px', lineHeight: 1.5 }}>{p.descricao}</p>
-
-              <div style={{ display: 'flex', gap: 8, paddingTop: 16, borderTop: '1px solid rgba(0,0,0,0.05)' }}>
-                {editando === p.id ? (
-                  <>
-                    <button onClick={() => salvarEdicao(p.id)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: '#10b981', color: '#fff', border: 'none', padding: '10px', borderRadius: 16, fontSize: 14, fontWeight: 700 }}>
-                      <Check size={16} /> Salvar
-                    </button>
-                    <button onClick={() => setEditando(null)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(0,0,0,0.08)', color: '#fff', border: 'none', padding: '10px', borderRadius: 16, fontSize: 14, fontWeight: 700 }}>
-                      <X size={16} /> Cancela
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button onClick={() => { setEditando(p.id); setEditNome(p.nome); setEditPreco(p.preco.toString()) }} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(0,0,0,0.05)', color: '#334155', border: 'none', padding: '10px', borderRadius: 16, fontSize: 13, fontWeight: 700 }}>
-                      <Edit2 size={16} /> Editar
-                    </button>
-                    <button onClick={() => deletar(p.id)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(239,68,68,0.1)', color: '#f87171', border: 'none', padding: '10px', borderRadius: 16, fontSize: 13, fontWeight: 700 }}>
-                      <Trash2 size={16} /> Excluir
-                    </button>
-                  </>
-                )}
-              </div>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
-
-      {/* Modal Adicionar */}
-      <AnimatePresence>
-        {adicionando && (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setAdicionando(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)' }} />
-            <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 300 }} style={{ width: '100%', maxWidth: 480, background: '#ffffff', borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: '32px 24px', position: 'relative', zIndex: 101, borderTop: '1px solid rgba(0,0,0,0.08)' }}>
-              <div style={{ width: 40, height: 4, background: 'rgba(255,255,255,0.2)', borderRadius: 2, margin: '0 auto 24px' }} />
-              
-              <h2 style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', marginBottom: 24 }}>Adicionar Produto</h2>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: 13, color: '#64748b', fontWeight: 600, marginBottom: 8 }}>NOME</label>
-                  <input value={novo.nome} onChange={e => setNovo({...novo, nome: e.target.value})} placeholder="Ex: Cerveja Gelada" style={{ width: '100%', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 16, padding: '14px 16px', color: '#fff', fontSize: 16, outline: 'none' }} />
-                </div>
-                
-                <div>
-                  <label style={{ display: 'block', fontSize: 13, color: '#64748b', fontWeight: 600, marginBottom: 8 }}>PREÇO (R$)</label>
-                  <input value={novo.preco} onChange={e => setNovo({...novo, preco: e.target.value})} type="number" step="0.01" placeholder="0.00" style={{ width: '100%', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 16, padding: '14px 16px', color: '#fff', fontSize: 16, outline: 'none' }} />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: 13, color: '#64748b', fontWeight: 600, marginBottom: 8 }}>DESCRIÇÃO</label>
-                  <input value={novo.descricao} onChange={e => setNovo({...novo, descricao: e.target.value})} placeholder="350ml trincando..." style={{ width: '100%', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 16, padding: '14px 16px', color: '#fff', fontSize: 16, outline: 'none' }} />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: 13, color: '#64748b', fontWeight: 600, marginBottom: 8 }}>FOTO DO PRODUTO (opcional)</label>
-                  <input ref={fileRef} type="file" accept="image/*" onChange={enviarFoto} style={{ display: 'none' }} />
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <button
-                      onClick={() => fileRef.current?.click()}
-                      disabled={enviandoFoto}
-                      style={{ width: 84, height: 84, borderRadius: 18, border: `1.5px dashed ${novo.foto ? 'transparent' : 'rgba(14,165,233,0.4)'}`, background: novo.foto ? 'transparent' : 'rgba(14,165,233,0.06)', cursor: 'pointer', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}
-                    >
-                      {enviandoFoto
-                        ? <Loader2 size={22} color="#0ea5e9" className="animate-spin-slow" />
-                        : novo.foto
-                          ? <img src={novo.foto} alt="Produto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          : <Camera size={24} color="#0ea5e9" />}
-                    </button>
-                    <div style={{ fontSize: 12.5, color: '#64748b', fontWeight: 600, lineHeight: 1.4 }}>
-                      {novo.foto
-                        ? <>Foto pronta! <button onClick={() => setNovo(n => ({ ...n, foto: null }))} style={{ background: 'none', border: 0, color: '#ef4444', fontWeight: 800, cursor: 'pointer', padding: 0 }}>remover</button></>
-                        : 'Toque pra tirar/escolher uma foto. Sem foto, mostramos o emoji.'}
-                    </div>
+      {loading ? (
+        <div className="surface shimmer" style={{ height: 132 }} />
+      ) : produtos.length === 0 ? (
+        <div className="surface" style={{ padding: '32px 20px', textAlign: 'center', boxShadow: 'none' }}>
+          <PackageOpen size={34} color="#718096" style={{ margin: '0 auto 12px' }} />
+          <div style={{ color: '#132238', fontSize: 16, fontWeight: 900 }}>Seu catálogo está vazio</div>
+          <p style={{ margin: '6px auto 16px', maxWidth: 260, color: '#617089', fontSize: 13, lineHeight: 1.45, fontWeight: 600 }}>
+            Cadastre o primeiro produto com categoria e foto.
+          </p>
+          <button type="button" className="primary-button" onClick={openCreate} disabled={profile?.verificado !== true}>
+            <Plus size={18} />
+            Adicionar produto
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: 10 }}>
+          {produtos.map(product => {
+            const category = getProductCategory(product.categoria)
+            return (
+              <motion.article layout key={product.id} className="surface" style={{ padding: 12, boxShadow: 'none', opacity: product.ativo ? 1 : 0.68 }}>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <div style={{ width: 78, height: 78, flex: '0 0 78px', display: 'grid', placeItems: 'center', overflow: 'hidden', borderRadius: 8, background: '#f2f5f7' }}>
+                    {product.foto
+                      ? <img src={product.foto} alt={product.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      : <CategoryPhoto category={category} size={72} />}
                   </div>
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', fontSize: 13, color: '#64748b', fontWeight: 600, marginBottom: 8 }}>EMOJI {novo.foto ? '(usado só se remover a foto)' : ''}</label>
-                  <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 8 }} className="hide-scrollbar">
-                    {emojis.map(e => (
-                      <button key={e} onClick={() => setNovo({...novo, emoji: e})} style={{ minWidth: 44, height: 44, borderRadius: 12, fontSize: 20, background: novo.emoji === e ? 'rgba(14,165,233,0.2)' : 'rgba(0,0,0,0.05)', border: `1px solid ${novo.emoji === e ? '#0ea5e9' : 'rgba(0,0,0,0.08)'}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        {e}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <h2 style={{ margin: 0, color: '#132238', fontSize: 15, lineHeight: 1.25, fontWeight: 900 }}>{product.nome}</h2>
+                        {/* So aparece pra quem controla estoque: produto de
+                            estoque nulo nao deve ganhar rotulo nenhum. */}
+                        {product.estoque != null && (
+                          <span style={{
+                            display: 'inline-block', marginTop: 4, padding: '2px 8px', borderRadius: 999,
+                            fontSize: 10.5, fontWeight: 900,
+                            background: product.estoque === 0 ? '#fee2e2' : product.estoque <= 3 ? '#fef3c7' : '#dcfce7',
+                            color: product.estoque === 0 ? '#b91c1c' : product.estoque <= 3 ? '#92400e' : '#166534',
+                          }}>
+                            {product.estoque === 0 ? 'ESGOTADO' : `${product.estoque} em estoque`}
+                          </span>
+                        )}
+                        <div style={{ marginTop: 4, color: '#148447', fontSize: 15, fontWeight: 900 }}>{money(Number(product.preco) || 0)}</div>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={product.ativo}
+                        aria-label={product.ativo ? 'Marcar como esgotado' : 'Disponibilizar produto'}
+                        onClick={() => void toggleActive(product)}
+                        className="status-pill"
+                        style={{ border: 0, color: product.ativo ? '#148447' : '#617089', background: product.ativo ? '#eaf8ef' : '#edf1f5', cursor: 'pointer' }}
+                      >
+                        <span className="status-dot" style={{ background: product.ativo ? '#18a957' : '#8793a5' }} />
+                        {product.ativo ? 'Disponível' : 'Esgotado'}
                       </button>
-                    ))}
+                    </div>
+                    <div style={{ marginTop: 7, color: category.color, fontSize: 11, fontWeight: 850 }}>{category.label}</div>
                   </div>
                 </div>
 
-                <button onClick={adicionarProduto} style={{ width: '100%', padding: '16px', borderRadius: 20, background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', border: 'none', color: '#fff', fontSize: 16, fontWeight: 900, marginTop: 8, cursor: 'pointer', boxShadow: '0 8px 25px rgba(34,197,94,0.3)' }}>
-                  Salvar Produto
+                {product.descricao && (
+                  <p style={{ margin: '10px 0 0', color: '#617089', fontSize: 12, lineHeight: 1.45, fontWeight: 600 }}>{product.descricao}</p>
+                )}
+
+                <div style={{ display: 'flex', gap: 8, marginTop: 12, paddingTop: 10, borderTop: '1px solid #e7ecf1' }}>
+                  <button type="button" className="secondary-button" style={{ minHeight: 38, flex: 1 }} onClick={() => openEdit(product)}>
+                    <Edit3 size={16} />
+                    Editar
+                  </button>
+                  <button type="button" className="danger-button" style={{ minHeight: 38, width: 42, padding: 0 }} onClick={() => void removeProduct(product)} aria-label={`Excluir ${product.nome}`}>
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </motion.article>
+            )
+          })}
+        </div>
+      )}
+
+      <AnimatePresence>
+        {modalOpen && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 12000, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+            <motion.button
+              type="button"
+              aria-label="Fechar formulário"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setModalOpen(false)}
+              style={{ position: 'absolute', inset: 0, width: '100%', border: 0, background: 'rgba(15,31,48,0.56)', backdropFilter: 'blur(4px)' }}
+            />
+            <motion.section
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="product-form-title"
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+              style={{ width: '100%', maxWidth: 520, maxHeight: '92vh', overflowY: 'auto', position: 'relative', zIndex: 1, padding: '18px 18px 28px', borderRadius: '8px 8px 0 0', background: '#fff' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 18 }}>
+                <div>
+                  <h2 id="product-form-title" style={{ margin: 0, color: '#132238', fontSize: 20, fontWeight: 900 }}>
+                    {form.id ? 'Editar produto' : 'Novo produto'}
+                  </h2>
+                  <p style={{ margin: '4px 0 0', color: '#617089', fontSize: 12, fontWeight: 600 }}>Essas informações aparecem para o cliente.</p>
+                </div>
+                <button type="button" className="icon-button" onClick={() => setModalOpen(false)} aria-label="Fechar">
+                  <X size={19} />
                 </button>
               </div>
-            </motion.div>
+
+              <div style={{ display: 'grid', gap: 15 }}>
+                <div>
+                  <label className="field-label" htmlFor="product-name">Nome</label>
+                  <input id="product-name" value={form.nome} maxLength={80} onChange={event => setForm(current => ({ ...current, nome: event.target.value }))} placeholder="Ex.: Água de coco 500 ml" style={{ ...inputStyle, marginTop: 7 }} />
+                </div>
+
+                <div>
+                  <label className="field-label" htmlFor="product-price">Preço</label>
+                  <input id="product-price" inputMode="decimal" value={form.preco} onChange={event => setForm(current => ({ ...current, preco: event.target.value }))} placeholder="0,00" style={{ ...inputStyle, marginTop: 7 }} />
+                </div>
+
+                <div>
+                  <label className="field-label" htmlFor="product-stock">Estoque</label>
+                  <div className="field-help">
+                    Quantas unidades você tem hoje. <strong>Deixe vazio</strong> se não quer controlar —
+                    aí o produto nunca esgota sozinho.
+                  </div>
+                  <input
+                    id="product-stock"
+                    inputMode="numeric"
+                    value={form.estoque}
+                    onChange={event => setForm(current => ({
+                      // So digito: teclado de celular deixa passar ponto e
+                      // virgula, e "1,5 cerveja" nao existe.
+                      ...current, estoque: event.target.value.replace(/[^0-9]/g, '').slice(0, 5),
+                    }))}
+                    placeholder="Sem limite"
+                    style={{ ...inputStyle, marginTop: 7 }}
+                  />
+                  {form.estoque.trim() === '0' && (
+                    <div style={{ marginTop: 6, fontSize: 12, fontWeight: 800, color: '#b45309' }}>
+                      Com 0 o produto aparece como esgotado e o cliente não consegue pedir.
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="field-label" htmlFor="product-description">Descrição</label>
+                  <textarea id="product-description" value={form.descricao} maxLength={220} rows={3} onChange={event => setForm(current => ({ ...current, descricao: event.target.value }))} placeholder="Tamanho, sabores e o que acompanha" style={{ ...inputStyle, minHeight: 82, resize: 'vertical', marginTop: 7 }} />
+                </div>
+
+                <ProductCategoryPicker value={form.categoria} onChange={category => setForm(current => ({ ...current, categoria: category.label }))} />
+
+                <div>
+                  <div className="field-label">Foto do produto</div>
+                  <div className="field-help">Use uma foto clara e sem texto cobrindo o produto.</div>
+                  <input ref={fileRef} type="file" accept="image/*" onChange={uploadPhoto} style={{ display: 'none' }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 9 }}>
+                    <button type="button" onClick={() => fileRef.current?.click()} disabled={uploading} aria-label="Escolher foto" style={{ width: 92, height: 76, display: 'grid', placeItems: 'center', flex: '0 0 92px', overflow: 'hidden', padding: 0, border: '1px dashed #b9c8d6', borderRadius: 8, background: '#f7fafc', color: '#008fc0', cursor: 'pointer' }}>
+                      {uploading
+                        ? <Loader2 className="animate-spin-slow" size={22} />
+                        : form.foto
+                          ? <img src={form.foto} alt="Prévia do produto" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          : <ImagePlus size={24} />}
+                    </button>
+                    <div style={{ flex: 1, color: '#617089', fontSize: 12, lineHeight: 1.4, fontWeight: 600 }}>
+                      {form.foto ? 'Foto pronta para publicar.' : 'JPG, PNG ou WebP de até 5 MB.'}
+                      {form.foto && (
+                        <button type="button" className="text-command" onClick={() => setForm(current => ({ ...current, foto: null }))} style={{ display: 'flex', paddingLeft: 0, color: '#dc3c4d' }}>
+                          Remover foto
+                        </button>
+                      )}
+                    </div>
+                    <Camera size={18} color="#8793a5" />
+                  </div>
+                </div>
+
+                <button type="button" className="primary-button" onClick={() => void saveProduct()} disabled={saving || uploading} style={{ width: '100%', marginTop: 3 }}>
+                  {saving ? <Loader2 className="animate-spin-slow" size={18} /> : null}
+                  {saving ? 'Salvando' : 'Salvar produto'}
+                </button>
+              </div>
+            </motion.section>
           </div>
         )}
       </AnimatePresence>

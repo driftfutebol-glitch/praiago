@@ -5,7 +5,7 @@ import {
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useSessao, logout } from './lib/auth'
+import { useSessao, logout, getSessao } from './lib/auth'
 import { supabase } from './lib/supabase'
 import { useOrders, connectRealtime } from './store/useOrders'
 import LoginPage        from './pages/LoginPage'
@@ -16,8 +16,10 @@ import CardapioPage     from './pages/CardapioPage'
 import MapaPage         from './pages/MapaPage'
 import EntregadoresPage from './pages/EntregadoresPage'
 import PerfilPage       from './pages/PerfilPage'
+import CarteiraPage     from './pages/CarteiraPage'
 import VerificationBar  from './components/VerificationBar'
 import AiChatbot        from './components/AiChatbot'
+import ChamadoKycPanel  from './components/ChamadoKycPanel'
 import PasswordRecoveryHandler from './components/PasswordRecoveryHandler'
 import { DialogHost } from './lib/dialog'
 
@@ -34,6 +36,14 @@ const navItems = [
 const PUBLIC = ['/login']
 
 const NOTIFS: any[] = []
+
+type LocationNotice = {
+  id: string
+  status: 'aprovada' | 'rejeitada'
+  observacao_admin: string | null
+  autorizado_ate: string | null
+  updated_at: string
+}
 
 function playAvisoSound() {
   try {
@@ -60,23 +70,67 @@ function playAvisoSound() {
   }
 }
 
-function GlobalAvisoToast() {
+function GlobalAvisoToast({ locationNotice }: { locationNotice: LocationNotice | null }) {
   const [aviso, setAviso] = useState<{ id?: string; titulo?: string; mensagem?: string; cupom_codigo?: string | null } | null>(null)
 
   useEffect(() => {
+    const sessao = getSessao()
+
+    const mostrar = (row: { id?: string; titulo?: string; mensagem?: string; cupom_codigo?: string | null }) => {
+      setAviso(row)
+      playAvisoSound()
+      window.setTimeout(() => setAviso(current => current?.id === row.id ? null : current), 8000)
+    }
+
     const channel = supabase
       .channel('avisos_restaurante')
+      // Broadcast da equipe: promocao, comunicado.
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'avisos' }, payload => {
         const row = payload.new as { id?: string; titulo?: string; mensagem?: string; publico?: string; cupom_codigo?: string | null }
         if (row.publico && row.publico !== 'restaurantes' && row.publico !== 'todos') return
-        setAviso(row)
-        playAvisoSound()
-        window.setTimeout(() => setAviso(current => current?.id === row.id ? null : current), 8000)
+        mostrar(row)
       })
       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
+    // Aviso dirigido a ESTE vendedor: link de verificacao chegou, cadastro
+    // aprovado, cadastro recusado. Existia so no ambulante — o restaurante
+    // abria chamado e nunca era avisado da resposta.
+    //
+    // Canal separado porque leva filtro por vendedor_id; junto no de cima, o
+    // filtro valeria para os dois e o broadcast pararia de chegar.
+    let pessoal: ReturnType<typeof supabase.channel> | null = null
+    if (sessao?.id) {
+      pessoal = supabase
+        .channel(`notif_vendedor_${sessao.id}`)
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'notificacoes_vendedor', filter: `vendedor_id=eq.${sessao.id}` },
+          payload => mostrar(payload.new as { id?: string; titulo?: string; mensagem?: string }),
+        )
+        .subscribe()
+    }
+
+    return () => {
+      supabase.removeChannel(channel)
+      if (pessoal) supabase.removeChannel(pessoal)
+    }
   }, [])
+
+  useEffect(() => {
+    if (!locationNotice) return
+    const aprovado = locationNotice.status === 'aprovada'
+    const row = {
+      id: `local-${locationNotice.id}-${locationNotice.updated_at}`,
+      titulo: aprovado ? 'Correcao de localizacao autorizada' : 'Solicitacao de localizacao revisada',
+      mensagem: aprovado
+        ? 'Acesse Perfil, va ate o restaurante e grave o novo ponto fixo.'
+        : (locationNotice.observacao_admin || 'A solicitacao nao foi autorizada. Confira o motivo no Perfil.'),
+    }
+    setAviso(row)
+    playAvisoSound()
+    const timer = window.setTimeout(() => setAviso(current => current?.id === row.id ? null : current), 10000)
+    return () => window.clearTimeout(timer)
+  }, [locationNotice])
 
   if (!aviso) return null
 
@@ -114,6 +168,19 @@ function GlobalAvisoToast() {
   )
 }
 
+function KycLockedPanel() {
+  return (
+    <div style={{ padding: 32 }}>
+      <div style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: 18, padding: 20, maxWidth: 760, margin: '0 auto' }}>
+        <div style={{ fontSize: 20, fontWeight: 900, color: '#92400e', marginBottom: 8 }}>KYC obrigatorio do restaurante</div>
+        <p style={{ margin: 0, color: '#92400e', fontSize: 14, lineHeight: 1.55, fontWeight: 600 }}>
+          O painel operacional fica bloqueado ate a verificacao ser aprovada. Envie nome real do responsavel, CPF, CNPJ real, documento, selfie e comprovacao do local. Enquanto isso o restaurante nao aparece no mapa e nao pode criar produtos.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   const location    = useLocation()
   const navigate    = useNavigate()
@@ -121,6 +188,8 @@ export default function App() {
   const sessao      = useSessao()
   const [aberto, setAberto]       = useState(true)
   const [notifOpen, setNotifOpen] = useState(false)
+  const [kycLocked, setKycLocked] = useState(false)
+  const [locationNotice, setLocationNotice] = useState<LocationNotice | null>(null)
 
   const pedidos = useOrders(s => s.pedidos)            // referência estável
   const pedidosNovos = pedidos.filter(p => p.status === 'novo')
@@ -133,23 +202,77 @@ export default function App() {
     if (!sessao?.id || isPublic) return
 
     let ativo = true
-    const bloquearSeBanido = (perfil?: { status?: string; ban_motivo?: string | null } | null) => {
-      if (!ativo || perfil?.status !== 'banido') return
+    const bloquearAcessoInvalido = (perfil?: { status?: string; role?: string; ban_motivo?: string | null; verificado?: boolean | null } | null, userId?: string) => {
+      if (!ativo) return
+      if (perfil?.status !== 'banido' && perfil?.role === 'restaurante' && userId === sessao.id) return
       logout()
+      supabase.auth.signOut()
       navigate('/login', { replace: true })
     }
+    const atualizarGate = (perfil?: { status?: string; role?: string; ban_motivo?: string | null; verificado?: boolean | null } | null, userId = sessao.id) => {
+      if (!ativo) return
+      bloquearAcessoInvalido(perfil, userId)
+      setKycLocked(perfil?.status !== 'banido' && perfil?.verificado !== true)
+    }
 
+    const checarStatus = async () => {
+      const { data: authData } = await supabase.auth.getUser()
+      if (!authData.user) {
+        bloquearAcessoInvalido(null, undefined)
+        return
+      }
+      const { data } = await supabase
+        .from('profiles')
+        .select('status,role,ban_motivo,verificado')
+        .eq('id', sessao.id)
+        .maybeSingle()
+      atualizarGate(data, authData.user.id)
+    }
+    checarStatus()
+    const channel = supabase.channel(`restaurante_kyc_gate_${sessao.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${sessao.id}` }, payload => atualizarGate(payload.new as { status?: string; role?: string; ban_motivo?: string | null; verificado?: boolean | null }))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'verificacoes', filter: `user_id=eq.${sessao.id}` }, () => checarStatus())
+      .subscribe()
+    const timer = window.setInterval(checarStatus, 10000)
+
+    return () => {
+      ativo = false
+      supabase.removeChannel(channel)
+      window.clearInterval(timer)
+    }
+  }, [sessao?.id, isPublic, navigate])
+
+  useEffect(() => {
+    if (!sessao?.id || isPublic) {
+      setLocationNotice(null)
+      return
+    }
+
+    let ativo = true
     supabase
-      .from('profiles')
-      .select('status,ban_motivo')
-      .eq('id', sessao.id)
+      .from('solicitacoes_correcao_localizacao')
+      .select('id,status,observacao_admin,autorizado_ate,updated_at')
+      .eq('restaurante_id', sessao.id)
+      .in('status', ['aprovada', 'rejeitada'])
+      .order('updated_at', { ascending: false })
+      .limit(1)
       .maybeSingle()
-      .then(({ data }) => bloquearSeBanido(data))
+      .then(({ data }) => {
+        if (ativo) setLocationNotice((data as LocationNotice | null) ?? null)
+      })
 
     const channel = supabase
-      .channel(`restaurante_status_${sessao.id}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${sessao.id}` }, payload => {
-        bloquearSeBanido(payload.new as { status?: string; ban_motivo?: string | null })
+      .channel(`correcao_local_aviso_${sessao.id}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'solicitacoes_correcao_localizacao',
+        filter: `restaurante_id=eq.${sessao.id}`,
+      }, payload => {
+        const row = payload.new as LocationNotice & { status: string }
+        setLocationNotice(row.status === 'aprovada' || row.status === 'rejeitada'
+          ? row as LocationNotice
+          : null)
       })
       .subscribe()
 
@@ -157,10 +280,18 @@ export default function App() {
       ativo = false
       supabase.removeChannel(channel)
     }
-  }, [sessao?.id, isPublic, navigate])
+  }, [sessao?.id, isPublic])
 
   // Notificacoes: pedidos novos reais + alertas operacionais
   const notifs = [
+    ...(locationNotice ? [{
+      id: `local-${locationNotice.id}`,
+      msg: locationNotice.status === 'aprovada'
+        ? 'Correcao de localizacao autorizada. Abra o Perfil para gravar o novo ponto.'
+        : `Correcao de localizacao nao autorizada${locationNotice.observacao_admin ? `: ${locationNotice.observacao_admin}` : '.'}`,
+      time: 'instantes',
+      cor: locationNotice.status === 'aprovada' ? '#16a34a' : '#ef4444',
+    }] : []),
     ...pedidosNovos.slice(0, 3).map(p => ({ id: p.id, msg: `Novo pedido ${p.id} — ${p.cliente}`, time: p.hora, cor: '#f97316' })),
     ...NOTIFS,
   ].slice(0, 5)
@@ -171,12 +302,12 @@ export default function App() {
   function sair() { logout(); navigate('/login') }
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'system-ui,-apple-system,sans-serif' }}>
+    <div className="restaurant-shell" style={{ display: 'flex', minHeight: '100vh', fontFamily: 'system-ui,-apple-system,sans-serif' }}>
       <PasswordRecoveryHandler />
 
       {/* ══ SIDEBAR ══════════════════════════════════════════ */}
-      {!isPublic && (
-        <aside style={{
+      {!isPublic && !kycLocked && (
+        <aside className="restaurant-sidebar" style={{
           width: 256,
           background: 'rgba(255,255,255,0.92)',
           backdropFilter: 'blur(20px)',
@@ -187,27 +318,28 @@ export default function App() {
         }}>
 
           {/* Logo + status */}
-          <div style={{ padding: '24px 20px 20px', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
-              <motion.svg initial={{ scale: 0.8, rotate: -10 }} animate={{ scale: 1, rotate: 0 }} width="44" height="44" viewBox="0 0 34 34" fill="none">
-                <rect width="34" height="34" rx="12" fill="url(#app-rest-g)"/>
-                <defs>
-                  <linearGradient id="app-rest-g" x1="0" y1="0" x2="34" y2="34" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="#f97316"/><stop offset="1" stopColor="#ea580c"/>
-                  </linearGradient>
-                </defs>
-                <path d="M6 24 Q10 20 14 24 Q18 28 22 24 Q26 20 28 24" stroke="white" strokeWidth="2.2" fill="none" strokeLinecap="round"/>
-                <circle cx="23" cy="10" r="5" fill="#fbbf24"/>
-                <path d="M10 30 Q11 23 13 19" stroke="white" strokeWidth="2" strokeLinecap="round" fill="none"/>
-                <path d="M13 19 Q9 15 6 16 M13 19 Q13 14 11 12 M13 19 Q17 15 17 12" stroke="white" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
-              </motion.svg>
-              <div>
-                <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: -0.5, lineHeight: 1 }}>
-                  <span style={{ color: '#f97316', textShadow: '0 0 15px rgba(249,115,22,0.6)' }}>Praia</span><span style={{ color: '#0f172a' }}>Go</span>
-                </div>
-                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 2.5, color: '#f97316', textTransform: 'uppercase', marginTop: 4 }}>
-                  Restaurante
-                </div>
+          <div className="restaurant-sidebar-header" style={{ padding: '24px 20px 20px', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+            {/* Logo — mesma marca e mesmo recorte do app do cliente.
+                O PNG e quadrado (1600x1600) com muita margem: a caixa de
+                140x59 recorta so o brasao, por isso a imagem e maior que ela. */}
+            <div style={{ marginBottom: 18 }}>
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                aria-label="PraiaGo"
+                style={{ width: 140, height: 59, overflow: 'hidden', position: 'relative', flexShrink: 0 }}
+              >
+                <img
+                  src="/praiago-logo-transparent.png"
+                  alt="PraiaGo"
+                  style={{
+                    position: 'absolute', width: 231, height: 231, maxWidth: 'none',
+                    left: -56, top: -67, display: 'block',
+                  }}
+                />
+              </motion.div>
+              <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 2.5, color: '#f97316', textTransform: 'uppercase', marginTop: 2 }}>
+                Restaurante
               </div>
             </div>
 
@@ -246,14 +378,14 @@ export default function App() {
           </div>
 
           {/* Navegação */}
-          <nav style={{ flex: 1, padding: '20px 14px', overflowY: 'auto' }}>
+          <nav className="restaurant-sidebar-nav" style={{ flex: 1, padding: '20px 14px', overflowY: 'auto' }}>
             <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.5, color: '#64748b', textTransform: 'uppercase', marginBottom: 12, paddingLeft: 10 }}>
               Gestão
             </p>
             {navItems.map(({ to, icon: Icon, label, badge }) => {
               const badgeVal = to === '/pedidos' ? (novos > 0 ? String(novos) : null) : badge
               return (
-                <NavLink key={to} to={to} style={({ isActive }) => ({
+                <NavLink className="restaurant-nav-link" key={to} to={to} style={({ isActive }) => ({
                   display: 'flex', alignItems: 'center', gap: 14,
                   padding: '12px 16px', borderRadius: 14, marginBottom: 6,
                   textDecoration: 'none',
@@ -279,7 +411,7 @@ export default function App() {
             <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.5, color: '#64748b', textTransform: 'uppercase', margin: '24px 0 12px', paddingLeft: 10 }}>
               Radar da Praia
             </p>
-            <div className="glass-panel" style={{
+            <div className="glass-panel restaurant-radar-card" style={{
               background: 'linear-gradient(135deg, rgba(168,85,247,0.1), rgba(139,92,246,0.05))',
               border: '1px solid rgba(168,85,247,0.3)', borderRadius: 16, padding: '16px',
               position: 'relative', overflow: 'hidden'
@@ -301,7 +433,7 @@ export default function App() {
           </nav>
 
           {/* Rodapé */}
-          <div style={{ padding: '16px', borderTop: '1px solid rgba(0,0,0,0.05)', position: 'relative' }}>
+          <div className="restaurant-sidebar-footer" style={{ padding: '16px', borderTop: '1px solid rgba(0,0,0,0.05)', position: 'relative' }}>
             <button onClick={() => setNotifOpen(v => !v)} style={{
               width: '100%', display: 'flex', alignItems: 'center', gap: 12,
               padding: '12px 16px', borderRadius: 14, border: '1px solid rgba(0,0,0,0.05)',
@@ -350,10 +482,10 @@ export default function App() {
       )}
 
       {/* ══ MAIN ═════════════════════════════════════════════ */}
-      <main style={{ flex: 1, marginLeft: isPublic ? 0 : 256, overflowY: 'auto', minHeight: '100vh', position: 'relative' }}>
+      <main className="restaurant-main" style={{ flex: 1, marginLeft: isPublic || kycLocked ? 0 : 256, overflowY: 'auto', minHeight: '100vh', position: 'relative' }}>
         <AnimatePresence mode="wait">
-          {!isPublic && (
-            <motion.div initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} style={{
+          {!isPublic && !kycLocked && (
+            <motion.div className="restaurant-topbar" initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} style={{
               position: 'sticky', top: 0, zIndex: 30,
               background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(16px)',
               borderBottom: '1px solid rgba(0,0,0,0.05)', padding: '14px 32px',
@@ -373,7 +505,8 @@ export default function App() {
         </AnimatePresence>
 
         <AnimatePresence mode="wait">
-          <motion.div 
+          <motion.div
+            className="restaurant-route-frame"
             key={location.pathname}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -382,25 +515,34 @@ export default function App() {
             style={{ height: isPublic ? '100vh' : 'calc(100vh - 60px)' }}
           >
             {!isPublic && <VerificationBar />}
-            <Routes location={location}>
-              <Route path="/login"         element={<LoginPage />} />
-              <Route path="/"              element={<DashboardPage />} />
-              <Route path="/pedidos"       element={<PedidosPage />} />
-              <Route path="/vendas"        element={<VendasPage />} />
-              <Route path="/cardapio"      element={<CardapioPage />} />
-              <Route path="/entregadores"  element={<EntregadoresPage />} />
-              <Route path="/mapa"          element={<MapaPage />} />
-              <Route path="/perfil"        element={<PerfilPage />} />
-            </Routes>
+            {!isPublic && kycLocked ? (
+              <KycLockedPanel />
+            ) : (
+              <Routes location={location}>
+                <Route path="/login"         element={<LoginPage />} />
+                <Route path="/"              element={<DashboardPage />} />
+                <Route path="/pedidos"       element={<PedidosPage />} />
+                <Route path="/vendas"        element={<VendasPage />} />
+                <Route path="/cardapio"      element={<CardapioPage />} />
+                <Route path="/entregadores"  element={<EntregadoresPage />} />
+                <Route path="/mapa"          element={<MapaPage />} />
+                <Route path="/perfil"        element={<PerfilPage />} />
+                <Route path="/carteira"      element={<CarteiraPage />} />
+              </Routes>
+            )}
           </motion.div>
         </AnimatePresence>
-        {!isPublic && <AiChatbot plataforma="restaurante" />}
+        {!isPublic && !kycLocked && <AiChatbot plataforma="restaurante" />}
         {!isPublic && (
           <AnimatePresence>
-            <GlobalAvisoToast />
+            <GlobalAvisoToast locationNotice={locationNotice} />
           </AnimatePresence>
         )}
       </main>
+      {/* Fora da trava do kycLocked de proposito: o chamado de verificacao e
+          exatamente o que tira o vendedor dessa trava. Esconde-lo ali seria
+          trancar a porta e guardar a chave do lado de dentro. */}
+      {!isPublic && <ChamadoKycPanel />}
       <DialogHost />
     </div>
   )

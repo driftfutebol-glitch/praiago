@@ -46,7 +46,7 @@ O resto deste documento é como fazer isso.
 
 ### IA e APIs pagas
 
-- Chaves de IA, Mercado Pago, banco e qualquer API paga ficam em **Supabase Edge
+- Chaves de IA, Pagar.me, banco e qualquer API paga ficam em **Supabase Edge
   Function Secrets**.
 - O front chama Edge Functions autenticadas, por exemplo `ai-chat`; ele nunca envia
   `Authorization: Bearer <chave-do-provedor>` direto do app.

@@ -1,0 +1,57 @@
+-- ============================================================================
+-- SAQUE RAPIDO (antecipacao do D+N) — aplicado via Management API
+-- ============================================================================
+-- O vendedor paga uma taxa pra receber antes do prazo. So entra saldo de
+-- pedido JA ENTREGUE (status 'em_espera' = entrega confirmada, contando D+N).
+--
+-- Pedido nao entregue fica de fora de proposito: se o dinheiro sair antes e o
+-- cliente nao receber, a plataforma ja pagou o vendedor e ainda tem que
+-- devolver ao cliente — prejuizo dobrado.
+--
+-- A taxa e RECEITA, nao repasse de custo: o PIX liquida em D+1 no gateway.
+-- Quem segura o dinheiro ate o D+N e a nossa propria regra de entrega.
+--
+-- Objetos criados (ver historico das migrations no Supabase):
+--   payment_settings.saque_rapido_ativo / saque_rapido_percent
+--   financial_ledger tipo 'taxa_antecipacao'
+--   previa_saque_rapido(uuid)  -> quanto da e quanto custa
+--   antecipar_saldo(uuid)      -> libera e cobra, atomico
+--   reconciliar_carteira / carteira_espelho: descontam taxa_antecipacao
+--
+-- Duas armadilhas achadas em TESTE (nao em revisao):
+--  1. "FOR UPDATE is not allowed with aggregate functions" — nao da pra travar
+--     linhas e somar na mesma consulta. O proprio UPDATE ... RETURNING trava e
+--     mede de uma vez, e dois cliques simultaneos nao antecipam duas vezes.
+--  2. A previa fazia round(bruto - bruto*pct) e a execucao bruto - round(...):
+--     1 centavo de diferenca. Prometer R$14,54 e pagar R$14,53 destroi a
+--     confianca numa tela de dinheiro. As duas arredondam a TAXA primeiro.
+
+-- ── Taxa separada por metodo (migration antecipacao_taxa_por_metodo) ────────
+-- PIX/debito liquidam em D+1/D+2: quando o vendedor antecipa, o dinheiro JA
+-- esta no gateway. Custo zero pra plataforma — os 5% sao margem limpa.
+--
+-- Credito liquida em D+30: antecipar significa bancar do proprio bolso por um
+-- mes, ou contratar a antecipacao do gateway (1,49% a 4,5%/mes no mercado em
+-- 2026, negociada por volume). Padrao 8% = cobre o PIOR caso e deixa ~3,5%.
+-- 8% e numero DEFENSIVO, nao ideal: baixar quando o gateway informar a taxa
+-- real do contrato.
+--
+-- saque_rapido_credito_ativo nasce FALSE de proposito: liberar credito sem a
+-- antecipacao contratada no gateway faria o saque falhar la na frente, porque
+-- o dinheiro so existe no gateway em D+30 — a carteira diria "disponivel" e a
+-- transferencia quebraria.
+
+-- ── Acrescimo do credito no checkout (migration acrescimo_credito_no_checkout)
+-- Venda no credito custa mais pra plataforma (MDR do gateway + 30 dias de
+-- dinheiro preso). O acrescimo cobre isso e vai INTEIRO pra plataforma: o
+-- vendedor recebe o mesmo, tendo o cliente pago no PIX ou no credito.
+--
+-- A comissao incide sobre o valor DOS PRODUTOS, nao sobre o acrescimo — senao
+-- a plataforma cobraria comissao em cima da propria taxa.
+--
+-- Cobrar diferente por forma de pagamento e legal (Lei 13.455/2017), MAS o
+-- preco final tem que estar visivel antes de o cliente confirmar. Por isso o
+-- valor virou coluna propria (pedidos.credit_surcharge_amount) e aparece como
+-- linha separada no checkout — nunca embutido no total.
+--
+-- Config: payment_settings.taxa_credito_cliente_percent (0 = desligado).

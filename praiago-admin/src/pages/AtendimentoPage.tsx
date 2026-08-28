@@ -7,7 +7,7 @@ import { ptBR } from 'date-fns/locale'
 import {
   Headphones, ChevronDown, ChevronUp, Send, Clock,
   CheckCircle2, AlertCircle, Loader2, MessageSquare,
-  XCircle, CircleDot, Star
+  XCircle, CircleDot, Star, Bot, ShieldAlert
 } from 'lucide-react'
 
 interface Ticket {
@@ -25,6 +25,30 @@ interface Ticket {
   avaliacao_nota?: number | null
   avaliacao_comentario?: string | null
   avaliado_em?: string | null
+  // Triagem da IA: quando o assistente nao resolve, ele abre o caso ja
+  // classificado. Casos com comprovacao ficam aguardando decisao do admin.
+  origem?: string // 'humano' | 'ia'
+  ia_categoria?: string | null
+  ia_resumo?: string | null
+  ia_exige_comprovacao?: boolean | null
+  ia_triagem_status?: string | null // 'pendente' | 'aprovado' | 'negado'
+  ia_observacao_admin?: string | null
+  pedido_ref?: string | null
+}
+
+// Identificam a loja e a conta na URL do painel da Pagar.me. Nao sao segredo:
+// aparecem na barra de endereco de quem abre o dashboard.
+const PAGARME_MERCHANT = 'merch_Nv59PdnHDlc591xW'
+const PAGARME_ACCOUNT = 'acc_e60kz6Jirfxgz48B'
+
+const iaCategoriaLabel: Record<string, string> = {
+  reembolso: 'Reembolso',
+  pagamento: 'Pagamento',
+  entrega: 'Entrega',
+  produto: 'Produto',
+  conta: 'Conta',
+  fraude: 'Fraude',
+  outro: 'Outro',
 }
 
 const platformLabels: Record<string, string> = {
@@ -58,6 +82,8 @@ export default function AtendimentoPage() {
   const [sendingReply, setSendingReply] = useState<string | null>(null)
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null)
   const [mensagens, setMensagens] = useState<Record<string, { id: string; autor: string; mensagem: string; created_at: string }[]>>({})
+  const [aba, setAba] = useState<'todos' | 'triagem'>('todos')
+  const [decidindo, setDecidindo] = useState<string | null>(null)
   const fimRef = useRef<HTMLDivElement>(null)
 
   const carregarMensagens = useCallback(async (ticketId: string) => {
@@ -161,6 +187,33 @@ export default function AtendimentoPage() {
     return statusOptions.find(s => s.value === status) || statusOptions[0]
   }
 
+  async function decidirTriagem(ticketId: string, decisao: 'aprovado' | 'negado') {
+    const observacao = window.prompt(
+      decisao === 'aprovado'
+        ? 'Observacao da aprovacao (opcional) — fica registrada para auditoria:'
+        : 'Motivo da recusa (recomendado):',
+      decisao === 'aprovado' ? 'Comprovacao conferida e aprovada.' : '',
+    )
+    if (observacao === null) return
+    setDecidindo(ticketId)
+    const { error } = await supabase.rpc('decidir_triagem_ia', {
+      p_ticket_id: ticketId,
+      p_decisao: decisao,
+      p_observacao: observacao,
+    })
+    setDecidindo(null)
+    if (error) {
+      window.alert('Nao foi possivel registrar a decisao: ' + error.message)
+      return
+    }
+    setTickets(prev => prev.map(t => t.id === ticketId
+      ? { ...t, ia_triagem_status: decisao, ia_observacao_admin: observacao || null, status: decisao === 'negado' ? 'resolvido' : 'em_andamento' }
+      : t))
+  }
+
+  const triagemPendentes = tickets.filter(t => t.origem === 'ia' && t.ia_triagem_status === 'pendente')
+  const ticketsVisiveis = aba === 'triagem' ? tickets.filter(t => t.origem === 'ia') : tickets
+
   const abertos = tickets.filter(t => t.status === 'aberto' || t.status === 'em_andamento').length
   const avaliados = tickets.filter(t => typeof t.avaliacao_nota === 'number')
   const mediaAvaliacao = avaliados.length ? (avaliados.reduce((a, t) => a + (t.avaliacao_nota || 0), 0) / avaliados.length) : 0
@@ -206,6 +259,37 @@ export default function AtendimentoPage() {
         )}
       </div>
 
+      {/* Abas: todos x triagem da IA */}
+      <div className="flex items-center gap-1 glass-panel rounded-xl p-1.5 border-slate-800 w-fit">
+        <button
+          onClick={() => setAba('todos')}
+          className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+            aba === 'todos'
+              ? 'bg-purple-500/15 text-purple-400 border border-purple-500/20'
+              : 'text-slate-500 hover:text-slate-300 border border-transparent'
+          }`}
+        >
+          Todos os atendimentos
+          <span className="ml-1.5 text-[10px] opacity-60">({tickets.length})</span>
+        </button>
+        <button
+          onClick={() => setAba('triagem')}
+          className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+            aba === 'triagem'
+              ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/25'
+              : 'text-slate-500 hover:text-slate-300 border border-transparent'
+          }`}
+        >
+          <Bot size={13} />
+          Comprovação IA
+          {triagemPendentes.length > 0 && (
+            <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-cyan-500/25 text-cyan-200 text-[10px] font-black">
+              {triagemPendentes.length}
+            </span>
+          )}
+        </button>
+      </div>
+
       {/* Loading */}
       {loading && (
         <div className="flex items-center justify-center py-20">
@@ -230,7 +314,7 @@ export default function AtendimentoPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/30 text-sm">
-              {tickets.map((ticket, i) => {
+              {ticketsVisiveis.map((ticket, i) => {
                 const isExpanded = expandedTicket === ticket.id
                 const prio = prioridadeConfig[ticket.prioridade] || prioridadeConfig.baixa
                 const statusCfg = getStatusConfig(ticket.status)
@@ -269,7 +353,26 @@ export default function AtendimentoPage() {
                           {pLabel}
                         </td>
                       )}
-                      <td className="p-4 text-slate-300 max-w-[300px] truncate">{ticket.assunto}</td>
+                      <td className="p-4 text-slate-300 max-w-[300px]">
+                        <div className="truncate">{ticket.assunto}</div>
+                        {ticket.origem === 'ia' && (
+                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 text-[9px] font-black uppercase">
+                              <Bot size={9} /> IA
+                            </span>
+                            {ticket.ia_exige_comprovacao && (
+                              <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 text-[9px] font-black uppercase">
+                                Comprovação
+                              </span>
+                            )}
+                            {ticket.ia_triagem_status === 'pendente' && (
+                              <span className="px-1.5 py-0.5 rounded bg-red-500/10 text-red-300 border border-red-500/20 text-[9px] font-black uppercase">
+                                Aguarda decisão
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </td>
                       <td className="p-4">
                         <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${prio.bg} ${prio.color} ${prio.border} border`}>
                           {prio.label}
@@ -299,6 +402,101 @@ export default function AtendimentoPage() {
                             className="overflow-hidden"
                           >
                             <div className="p-6 bg-slate-900/40 border-t border-slate-800/30 space-y-4">
+                              {/* Verificação de recebedor: o atendente precisa
+                                  sair daqui, gerar o link na Pagar.me e voltar
+                                  para colar. Sem o atalho, ele procura o
+                                  recebedor na mão numa lista de ids iguais. */}
+                              {ticket.origem === 'kyc' && (
+                                <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4" onClick={e => e.stopPropagation()}>
+                                  <div className="flex items-center gap-2 flex-wrap mb-2">
+                                    <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-amber-300 uppercase tracking-wider font-mono">
+                                      <ShieldAlert size={12} /> Liberar movimentação do saldo
+                                    </span>
+                                  </div>
+                                  <p className="text-slate-300 text-sm leading-relaxed mb-3">
+                                    Abra o recebedor na Pagar.me, clique em <strong>Criar link</strong> e cole o
+                                    endereço na resposta abaixo. O vendedor recebe aviso na hora e o link
+                                    aparece como botão no app dele. <strong>Vale poucos minutos</strong> — só gere
+                                    quando ele estiver com o documento em mãos.
+                                  </p>
+                                  {(() => {
+                                    const rec = ticket.mensagem.match(/re_[a-z0-9]+/i)?.[0]
+                                    if (!rec) return null
+                                    return (
+                                      <a
+                                        href={`https://dash.pagar.me/${PAGARME_MERCHANT}/${PAGARME_ACCOUNT}/${rec}/recipient-details`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs font-bold hover:bg-amber-500/20 transition-colors font-mono"
+                                      >
+                                        Abrir {rec} na Pagar.me
+                                      </a>
+                                    )
+                                  })()}
+                                </div>
+                              )}
+
+                              {/* Triagem da IA: resumo + decisão do admin */}
+                              {ticket.origem === 'ia' && (
+                                <div className="bg-cyan-500/5 border border-cyan-500/20 rounded-xl p-4" onClick={e => e.stopPropagation()}>
+                                  <div className="flex items-center gap-2 flex-wrap mb-2">
+                                    <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-cyan-300 uppercase tracking-wider font-mono">
+                                      <Bot size={12} /> Triagem do assistente
+                                    </span>
+                                    {ticket.ia_categoria && (
+                                      <span className="px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-200 border border-cyan-500/20 text-[10px] font-black uppercase">
+                                        {iaCategoriaLabel[ticket.ia_categoria] || ticket.ia_categoria}
+                                      </span>
+                                    )}
+                                    {ticket.pedido_ref && (
+                                      <span className="px-2 py-0.5 rounded bg-slate-700/40 text-slate-300 text-[10px] font-mono font-bold">
+                                        {ticket.pedido_ref}
+                                      </span>
+                                    )}
+                                    {ticket.ia_exige_comprovacao && (
+                                      <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 text-[10px] font-black uppercase">
+                                        Exige comprovação
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {ticket.ia_resumo && (
+                                    <p className="text-sm text-slate-300 leading-relaxed">{ticket.ia_resumo}</p>
+                                  )}
+
+                                  {ticket.ia_triagem_status === 'pendente' ? (
+                                    <div className="flex items-center gap-3 mt-4">
+                                      <button
+                                        onClick={() => decidirTriagem(ticket.id, 'aprovado')}
+                                        disabled={decidindo === ticket.id}
+                                        className="px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wide border bg-green-500/10 text-green-400 border-green-500/20 hover:bg-green-500/15 disabled:opacity-50 flex items-center gap-1.5"
+                                      >
+                                        {decidindo === ticket.id ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+                                        Aprovar caso
+                                      </button>
+                                      <button
+                                        onClick={() => decidirTriagem(ticket.id, 'negado')}
+                                        disabled={decidindo === ticket.id}
+                                        className="px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wide border bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/15 disabled:opacity-50 flex items-center gap-1.5"
+                                      >
+                                        <XCircle size={13} />
+                                        Negar
+                                      </button>
+                                      <span className="text-[11px] text-slate-500">
+                                        {ticket.ia_exige_comprovacao ? 'Confira a comprovação enviada antes de decidir.' : 'Analise o caso e decida.'}
+                                      </span>
+                                    </div>
+                                  ) : ticket.ia_triagem_status ? (
+                                    <div className={`mt-3 text-xs font-bold ${ticket.ia_triagem_status === 'aprovado' ? 'text-green-400' : 'text-red-400'}`}>
+                                      {ticket.ia_triagem_status === 'aprovado' ? '✅ Caso aprovado' : '❌ Caso negado'}
+                                      {ticket.ia_observacao_admin && (
+                                        <span className="text-slate-400 font-medium"> · {ticket.ia_observacao_admin}</span>
+                                      )}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              )}
+
                               {/* Conversa (thread) */}
                               <div>
                                 <div className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-2 font-mono">

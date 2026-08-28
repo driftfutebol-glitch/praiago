@@ -146,3 +146,172 @@ input:focus, select:focus, textarea:focus {
   100% { opacity: 1; transform: scale(1); }
 }
 .animate-pop { animation: popIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+/* ============ PraiaGo · camada de animações polidas (2026-07) ============ */
+@keyframes prgFadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes prgPop { 0% { opacity: 0; transform: scale(.9); } 60% { transform: scale(1.03); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes prgFloatSoft { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes prgSheen { 0% { background-position: -180% 0; } 100% { background-position: 180% 0; } }
+
+/* entrada suave */
+.prg-fade-up { animation: prgFadeUp .5s cubic-bezier(.22,1,.36,1) both; }
+.prg-pop { animation: prgPop .45s cubic-bezier(.22,1,.36,1) both; }
+.prg-float { animation: prgFloatSoft 4s ease-in-out infinite; }
+
+/* stagger: aplica .prg-stagger no container; os filhos entram em cascata */
+.prg-stagger > * { animation: prgFadeUp .5s cubic-bezier(.22,1,.36,1) both; }
+.prg-stagger > *:nth-child(1){animation-delay:.04s}.prg-stagger > *:nth-child(2){animation-delay:.09s}
+.prg-stagger > *:nth-child(3){animation-delay:.14s}.prg-stagger > *:nth-child(4){animation-delay:.19s}
+.prg-stagger > *:nth-child(5){animation-delay:.24s}.prg-stagger > *:nth-child(6){animation-delay:.29s}
+.prg-stagger > *:nth-child(7){animation-delay:.34s}.prg-stagger > *:nth-child(8){animation-delay:.39s}
+
+/* hover com leve elevação (cards clicáveis) */
+.prg-lift { transition: transform .25s cubic-bezier(.22,1,.36,1), box-shadow .25s ease; will-change: transform; }
+.prg-lift:hover { transform: translateY(-4px); box-shadow: 0 14px 34px rgba(15,23,42,.14); }
+.prg-lift:active { transform: translateY(-1px) scale(.99); }
+
+/* brilho passando (destaques/skeleton) */
+.prg-sheen { background: linear-gradient(100deg,transparent 30%,rgba(255,255,255,.45) 50%,transparent 70%); background-size: 200% 100%; animation: prgSheen 2.4s linear infinite; }
+
+/* atalhos e categorias da tela inicial */
+@keyframes prgActionSheen {
+  0%, 56% { transform: translateX(0) skewX(-18deg); opacity: 0; }
+  62% { opacity: .8; }
+  84%, 100% { transform: translateX(470%) skewX(-18deg); opacity: 0; }
+}
+
+@keyframes prgActionIcon {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  50% { transform: translateY(-2px) rotate(-3deg); }
+}
+
+@keyframes prgCategoryBackdropIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes prgCategorySheetUp { from { transform: translateY(42px); opacity: .7; } to { transform: translateY(0); opacity: 1; } }
+
+.prg-action-card { isolation: isolate; }
+.prg-action-card:focus-visible,
+.prg-category-chip:focus-visible {
+  outline: 3px solid rgba(14, 165, 233, .25);
+  outline-offset: 3px;
+}
+.prg-action-sheen {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  bottom: 0;
+  left: -48%;
+  width: 34%;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.84), transparent);
+  animation: prgActionSheen 4.2s ease-in-out infinite;
+}
+.prg-action-card:nth-child(2) .prg-action-sheen { animation-delay: .45s; }
+.prg-action-card:nth-child(3) .prg-action-sheen { animation-delay: .9s; }
+.prg-action-card:nth-child(4) .prg-action-sheen { animation-delay: 1.35s; }
+.prg-action-arrow {
+  position: absolute;
+  z-index: 1;
+  top: 13px;
+  right: 13px;
+  padding: 4px;
+  border-radius: 9px;
+  background: rgba(255,255,255,.76);
+  box-sizing: content-box;
+}
+.prg-action-icon { position: relative; z-index: 1; }
+.prg-action-icon svg { animation: prgActionIcon 3.2s ease-in-out infinite; }
+.prg-action-card:hover .prg-action-arrow { transform: translateX(2px); }
+
+.prg-category-chip { transition: transform .22s cubic-bezier(.22,1,.36,1), box-shadow .22s ease, filter .2s ease; }
+.prg-category-chip:hover { transform: translateY(-2px); }
+.prg-category-chip:active { transform: translateY(0) scale(.98); }
+.prg-category-photo-small,
+.prg-category-photo-large {
+  position: absolute;
+  background-color: #fff;
+  transition: transform .24s cubic-bezier(.22,1,.36,1);
+}
+.prg-category-photo-small { width: 76px; height: 72px; right: -3px; bottom: -1px; }
+.prg-category-photo-large { width: 88px; height: 82px; right: 1px; bottom: 0; }
+.prg-category-chip:hover .prg-category-photo-small,
+.prg-category-tile:hover .prg-category-photo-large { transform: scale(1.05); }
+.prg-category-backdrop { animation: prgCategoryBackdropIn .2s ease both; }
+.prg-category-sheet { animation: prgCategorySheetUp .3s cubic-bezier(.22,1,.36,1) both; }
+.prg-category-tile { transition: transform .2s cubic-bezier(.22,1,.36,1), box-shadow .2s ease; }
+.prg-category-tile:hover { transform: translateY(-2px); }
+.prg-category-tile:active { transform: scale(.98); }
+
+/* acessibilidade: desliga animações pra quem pede menos movimento */
+@media (prefers-reduced-motion: reduce) {
+  .prg-fade-up,.prg-pop,.prg-float,.prg-stagger > *,.prg-lift,.prg-sheen,
+  .prg-action-sheen,.prg-action-icon svg,.prg-category-chip,.prg-category-photo-small,
+  .prg-category-photo-large,.prg-category-backdrop,.prg-category-sheet,.prg-category-tile {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* Credito do OpenStreetMap/CARTO: a licenca dos dados (ODbL) exige que ele
+   apareca. Fica discreto pra nao competir com o mapa, mas legivel. */
+.leaflet-control-attribution {
+  background: rgba(255,255,255,.72) !important;
+  color: #475569 !important;
+  font-size: 9px !important;
+  line-height: 1.5 !important;
+  padding: 1px 5px !important;
+  border-radius: 6px 0 0 0 !important;
+}
+.leaflet-control-attribution a { color: #0284c7 !important; text-decoration: none !important; }
+
+/* ── Campos de texto nunca abaixo de 16px no iOS ─────────────────────────
+ *
+ * O Safari/WKWebView AMPLIA a pagina inteira quando um campo com fonte
+ * menor que 16px recebe foco. E o zoom nao volta sozinho ao sair do campo.
+ *
+ * O estrago nao fica no campo: a pagina inteira passa a ser desenhada maior,
+ * a barra de baixo (que e `position: fixed`) sai do encaixe, e o toque
+ * seguinte cai alguns pixels fora de onde a pessoa mirou. Foi assim que a
+ * tela de avaliacao "votava sozinha" — o dedo ia no comentario, a pagina
+ * pulava, e o toque acertava uma estrela.
+ *
+ * Um `!important` aqui vence os `style={{ fontSize: 14 }}` espalhados pelas
+ * telas. E de proposito: e uma regra da plataforma, nao uma preferencia de
+ * design, e nao pode depender de alguem lembrar dela na proxima tela nova.
+ *
+ * A regra vale em TODO aparelho, e nao so no iOS atras de um @supports. Dois
+ * motivos: assim ela e testavel no navegador do computador, em vez de so
+ * aparecer no celular de alguem; e 16px num campo de texto e melhor no
+ * Android tambem, onde o dedo erra pelas mesmas razoes. */
+input:not([type='checkbox']):not([type='radio']):not([type='range']),
+textarea,
+select {
+  font-size: 16px !important;
+}
+
+/* ── Alvo de toque minimo ────────────────────────────────────────────────
+ *
+ * A Apple pede 44x44pt. As estrelas da avaliacao tinham 30px de icone com
+ * 2px de folga: 34px, e coladas uma na outra. Errar a estrela era o caminho
+ * normal, nao a excecao. */
+.alvo-toque {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── A barra de baixo nao pode balancar ──────────────────────────────────
+ *
+ * No iPhone, rolar alem do fim faz a pagina "puxar" de volta (o efeito
+ * elastico). Durante esse puxao o WebKit arrasta junto tudo que e
+ * position: fixed — a barra de Pedidos/Mapa sobe e desce com o dedo, e
+ * parece que ela esta solta.
+ *
+ * overscroll-behavior: none desliga o efeito. A barra fica presa no lugar
+ * e a rolagem termina onde o conteudo termina.
+ *
+ * Nao precisa de plugin nativo, entao entra por OTA. */
+html, body {
+  overscroll-behavior: none;
+}

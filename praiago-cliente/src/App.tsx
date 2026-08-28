@@ -1,29 +1,28 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, lazy, Suspense } from 'react'
 import { Routes, Route, NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { Bell, Home, ClipboardList, ShoppingBag, MapPin, User, Calendar, X } from 'lucide-react'
+import { Bell, Home, ClipboardList, ShoppingBag, MapPin, User, X } from 'lucide-react'
 import { iniciarCatalogo } from './store/useCatalogo'
 import { useStore } from './store/useStore'
 import { supabase } from './lib/supabase'
 import { motion, AnimatePresence } from 'framer-motion'
 import HomePage from './pages/HomePage'
-import MeusPedidosPage from './pages/MeusPedidosPage'
-import PedirPage from './pages/PedirPage'
-import EventosPage from './pages/EventosPage'
-import AmbulantesPage from './pages/AmbulantesPage'
-import PerfilPage from './pages/PerfilPage'
+// As outras telas entram por demanda. Antes tudo virava UM arquivo de 1 MB
+// (289 KB gzip) que o cliente baixava inteiro só pra abrir a Home — incluindo o
+// Leaflet, que pesa e só a tela do Radar usa. Quem abre isso está na praia, no
+// 4G: cada KB do primeiro carregamento custa.
+// A Home continua importada normalmente de propósito — ela é a rota de entrada,
+// então adiar ela só somaria uma ida ao servidor antes da primeira pintura.
+const MeusPedidosPage = lazy(() => import('./pages/MeusPedidosPage'))
+const PedirPage = lazy(() => import('./pages/PedirPage'))
+const EventosPage = lazy(() => import('./pages/EventosPage'))
+const AmbulantesPage = lazy(() => import('./pages/AmbulantesPage'))
+const PerfilPage = lazy(() => import('./pages/PerfilPage'))
 import EmailVerificationBanner from './components/EmailVerificationBanner'
 import AiChatbot from './components/AiChatbot'
 import { DialogHost } from './lib/dialog'
 import PasswordRecoveryHandler from './components/PasswordRecoveryHandler'
-
-const navItems = [
-  { to: '/',            icon: Home,          label: 'Início'    },
-  { to: '/pedidos',     icon: ClipboardList, label: 'Pedidos'   },
-  { to: '/pedir',       icon: ShoppingBag,   label: 'Pedir'     },
-  { to: '/ambulantes',  icon: MapPin,        label: 'Radar'     },
-  { to: '/eventos',     icon: Calendar,      label: 'Eventos'   },
-  { to: '/perfil',      icon: User,          label: 'Perfil'    },
-]
+import IntroSplash from './components/IntroSplash'
+import { deveMostrarIntro } from './lib/introSession'
 
 function playNotifySound() {
   try {
@@ -103,11 +102,47 @@ function NotificationToast() {
   )
 }
 
+/** Espera enquanto o pedaço da tela chega. Altura cheia pra barra inferior não
+ *  pular pra cima no meio da troca. */
+function TelaCarregando() {
+  return (
+    <div style={{ height: '100%', minHeight: 320, display: 'grid', placeItems: 'center' }}>
+      <div
+        aria-label="Carregando"
+        role="status"
+        style={{
+          width: 34, height: 34, borderRadius: '50%',
+          border: '3px solid #e0f2fe', borderTopColor: '#0284c7',
+          animation: 'spin 0.7s linear infinite',
+        }}
+      />
+    </div>
+  )
+}
+
 export default function App() {
   const location = useLocation()
   const navigate = useNavigate()
+  // Cinco destinos cabem com rótulo legível em celulares de 320 px.
+  //
+  // A quarta aba já foi camaleão: mostrava "Radar" quando o usuário estava no
+  // radar e "Eventos" no resto do app. Na prática isso trancava a porta por
+  // dentro — o mapa ao vivo só aparecia na barra para quem já estava nele, e
+  // não havia por onde chegar.
+  //
+  // Agora é fixa no mapa. Eventos não ficou órfão: a tela inicial leva para
+  // lá pelo banner e pelo atalho de eventos da região.
+  const navItems = [
+    { to: '/',            icon: Home,          label: 'Início' },
+    { to: '/pedidos',     icon: ClipboardList, label: 'Pedidos' },
+    { to: '/pedir',       icon: ShoppingBag,   label: 'Explorar' },
+    { to: '/ambulantes',  icon: MapPin,        label: 'Mapa', novo: true },
+    { to: '/perfil',      icon: User,          label: 'Perfil' },
+  ]
   const sessao = useStore(s => s.sessao)
   const limparNotificacoesTeste = useStore(s => s.limparNotificacoesTeste)
+  // Decide na montagem: assim a abertura nao reaparece a cada re-render.
+  const [mostrarIntro, setMostrarIntro] = useState(deveMostrarIntro)
 
   // Carrega o catálogo real (lojas/produtos do banco) + realtime, uma vez.
   useEffect(() => { iniciarCatalogo() }, [])
@@ -117,29 +152,43 @@ export default function App() {
     if (!sessao?.id) return
 
     let ativo = true
-    const bloquearSeBanido = (perfil?: { status?: string } | null) => {
-      if (!ativo || perfil?.status !== 'banido') return
-      useStore.getState().logout()
-      navigate('/perfil', { replace: true })
+    const validarAcesso = (
+      userId?: string,
+      perfil?: { status?: string; role?: string; conta_demo?: boolean | null } | null,
+    ) => {
+      if (!ativo) return
+      if (
+        userId !== sessao.id
+        || perfil?.role !== 'cliente'
+        || perfil?.status === 'banido'
+      ) {
+        useStore.getState().logout()
+        supabase.auth.signOut()
+        navigate('/perfil', { replace: true })
+        return
+      }
+      useStore.getState().setContaDemo(perfil?.conta_demo === true)
     }
 
-    supabase
-      .from('profiles')
-      .select('status')
-      .eq('id', sessao.id)
-      .maybeSingle()
-      .then(({ data }) => bloquearSeBanido(data))
-
-    const channel = supabase
-      .channel(`cliente_status_${sessao.id}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${sessao.id}` }, payload => {
-        bloquearSeBanido(payload.new as { status?: string })
-      })
-      .subscribe()
+    const checarStatus = async () => {
+      const { data: authData } = await supabase.auth.getUser()
+      if (!authData.user) {
+        validarAcesso(undefined, null)
+        return
+      }
+      const { data } = await supabase
+        .from('profiles')
+        .select('status,role,conta_demo')
+        .eq('id', sessao.id)
+        .maybeSingle()
+      validarAcesso(authData.user.id, data)
+    }
+    checarStatus()
+    const timer = window.setInterval(checarStatus, 30000)
 
     return () => {
       ativo = false
-      supabase.removeChannel(channel)
+      window.clearInterval(timer)
     }
   }, [sessao?.id, navigate])
 
@@ -160,7 +209,14 @@ export default function App() {
   }, [])
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'transparent' }}>
+    // `height` fixo (não só `minHeight`) porque é ele que dá altura DEFINIDA
+    // pro `main` logo abaixo — sem isso, `height: 100%` dentro das páginas não
+    // tem contra o que resolver e o mapa do Radar colapsa pra 0px.
+    // Quem rola agora é o `main`, não a janela.
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', minHeight: '100dvh', background: 'transparent' }}>
+      <AnimatePresence>
+        {mostrarIntro && <IntroSplash key="intro" onFim={() => setMostrarIntro(false)} />}
+      </AnimatePresence>
       <PasswordRecoveryHandler />
       {/* Logo bar - Glassmorphism */}
       <div className="glass-panel" style={{
@@ -168,31 +224,18 @@ export default function App() {
         padding: '12px 20px', position: 'sticky', top: 0, zIndex: 60,
         borderBottom: '1px solid rgba(0,0,0,0.05)'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{
-            background: 'linear-gradient(135deg, rgba(14,165,233,0.2), rgba(34,197,94,0.2))',
-            borderRadius: 12, padding: 6, display: 'flex'
-          }}>
-            <svg width="28" height="28" viewBox="0 0 34 34" fill="none">
-              <rect width="34" height="34" rx="9" fill="url(#cli-logo)"/>
-              <defs>
-                <linearGradient id="cli-logo" x1="0" y1="0" x2="34" y2="34" gradientUnits="userSpaceOnUse">
-                  <stop stopColor="#0ea5e9"/>
-                  <stop offset="1" stopColor="#22c55e"/>
-                </linearGradient>
-              </defs>
-              <path d="M6 24 Q10 20 14 24 Q18 28 22 24 Q26 20 28 24" stroke="white" strokeWidth="2.2" fill="none" strokeLinecap="round"/>
-              <circle cx="23" cy="10" r="5" fill="#fbbf24"/>
-              <path d="M10 30 Q11 23 13 19" stroke="white" strokeWidth="2" strokeLinecap="round" fill="none"/>
-              <path d="M13 19 Q9 15 6 16 M13 19 Q13 14 11 12 M13 19 Q17 15 17 12" stroke="white" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
-            </svg>
-          </div>
-          <div>
-            <div style={{ fontSize: 18, fontWeight: 900, letterSpacing: -0.5, lineHeight: 1 }} className="beach-gradient-text">
-              PraiaGo
-            </div>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, color: '#64748b', textTransform: 'uppercase' }}>Premium</div>
-          </div>
+        <div
+          aria-label="PraiaGo"
+          style={{ width: 140, height: 59, overflow: 'hidden', position: 'relative', flexShrink: 0 }}
+        >
+          <img
+            src="/praiago-logo-transparent.png"
+            alt="PraiaGo"
+            style={{
+              position: 'absolute', width: 231, height: 231, maxWidth: 'none',
+              left: -56, top: -67, display: 'block',
+            }}
+          />
         </div>
         <motion.div 
           animate={{ opacity: [0.5, 1, 0.5] }} 
@@ -207,24 +250,50 @@ export default function App() {
       <EmailVerificationBanner />
 
       {/* Page Content with Transitions */}
-      <main style={{ flex: 1, overflowY: 'auto', paddingBottom: '90px', position: 'relative' }}>
-        <AnimatePresence mode="wait">
+      {/* `minHeight: 0` deixa o main encolher até a sobra da coluna em vez de
+          crescer com o conteúdo — é o que torna a altura dele definida. */}
+      <main style={{ flex: 1, minHeight: 0, overflowY: 'auto', paddingBottom: '90px', position: 'relative' }}>
+        {/* Transição enxuta de propósito.
+            Antes: `mode="wait"` + 0.38s + `scale`. Com `mode="wait"` a tela nova
+            só COMEÇA a entrar depois de a antiga terminar de sair — 0.38 + 0.38
+            = ~0.76s de espera a cada toque na aba, o que dava a sensação de app
+            travado. E animar `scale` na página inteira força o navegador a
+            repintar a camada toda em todo quadro, justamente no aparelho fraco
+            onde já está apertado.
+            Agora: 0.14s de saída + 0.18s de entrada (~0.32s no total, menos da
+            metade), e só `opacity` + `y`, que o compositor resolve sozinho sem
+            repintar. Mantive `mode="wait"`: sem ele as duas telas ficam montadas
+            ao mesmo tempo no fluxo e a nova aparece EMBAIXO da antiga por um
+            instante — pra cruzar de verdade elas teriam que ser absolutas, o que
+            quebraria a rolagem (o `main` é o container que rola). */}
+        <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={location.pathname}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            style={{ minHeight: '100%' }}
+            exit={{ opacity: 0, transition: { duration: 0.14 } }}
+            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+            // `height` (e não só `minHeight`) porque telas que precisam caber
+            // exatamente numa tela — o Radar — usam `height: 100%` e flex pra
+            // o mapa ocupar a sobra. Com `minHeight` a porcentagem do filho não
+            // tem contra o que resolver e o mapa colapsava pra 0.
+            // Páginas mais altas que isso continuam rolando: o `main` é quem
+            // tem `overflowY: auto`.
+            style={{ height: '100%', minHeight: '100%' }}
           >
-            <Routes location={location}>
-              <Route path="/"            element={<HomePage />} />
-              <Route path="/pedidos"     element={<MeusPedidosPage />} />
-              <Route path="/pedir"       element={<PedirPage />} />
-              <Route path="/ambulantes"  element={<AmbulantesPage />} />
-              <Route path="/eventos"     element={<EventosPage />} />
-              <Route path="/perfil"      element={<PerfilPage />} />
-            </Routes>
+            {/* O fallback é propositalmente discreto: a troca de aba já tem a
+                própria animação, e um spinner grande piscando por 100ms entre
+                as telas chama mais atenção que a espera em si. */}
+            <Suspense fallback={<TelaCarregando />}>
+              <Routes location={location}>
+                <Route path="/"            element={<HomePage />} />
+                <Route path="/pedidos"     element={<MeusPedidosPage />} />
+                <Route path="/pedir"       element={<PedirPage />} />
+                <Route path="/ambulantes"  element={<AmbulantesPage />} />
+                <Route path="/eventos"     element={<EventosPage />} />
+                <Route path="/perfil"      element={<PerfilPage />} />
+              </Routes>
+            </Suspense>
           </motion.div>
         </AnimatePresence>
       </main>
@@ -235,52 +304,101 @@ export default function App() {
       </AnimatePresence>
       <DialogHost />
 
-      {/* Floating Bottom Nav - Glassmorphism Pill */}
+      {/* Barra inferior com cinco destinos e rótulos sempre visíveis.
+          `translateZ(0)` + `willChange` prendem a barra na própria camada de
+          composição. Sem isso ela sumia no iPhone ao rolar telas longas com
+          muitas imagens (Eventos era a pior): o WKWebView parava de repintar a
+          camada fixa e ela ficava em branco. */}
       <div style={{
-        position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)',
-        width: 'calc(100% - 40px)', maxWidth: '400px', zIndex: 100
+        position: 'fixed',
+        bottom: 'calc(14px + env(safe-area-inset-bottom))',
+        left: '50%', transform: 'translateX(-50%) translateZ(0)',
+        willChange: 'transform',
+        width: 'calc(100% - 24px)', maxWidth: 440, zIndex: 100,
       }}>
-        <nav className="glass-panel" style={{
-          display: 'flex', height: '64px', borderRadius: '32px',
-          padding: '0 8px', alignItems: 'center', justifyContent: 'space-between'
+        <nav style={{
+          display: 'flex',
+          height: 68,
+          borderRadius: 26,
+          padding: '0 4px',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          // Sem `backdrop-filter` de proposito. Ele e a metade fragil do bug
+          // acima, e com o fundo a 96% de opacidade nao se via diferenca —
+          // pagavamos o risco por um efeito que ninguem enxergava.
+          background: 'rgba(255,255,255,0.96)',
+          border: '1px solid #eef2f7',
+          boxShadow: '0 2px 6px rgba(15,23,42,0.05), 0 16px 36px -14px rgba(15,23,42,0.28)',
         }}>
-          {navItems.map(({ to, icon: Icon, label }) => {
+          {navItems.map(({ to, icon: Icon, label, novo }) => {
             const active = to === '/' ? location.pathname === '/' : location.pathname.startsWith(to)
             return (
-              <NavLink key={to} to={to} style={{
-                flex: 1, display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center', gap: '4px',
-                color: active ? '#0ea5e9' : '#64748b', textDecoration: 'none', position: 'relative',
-                height: '100%'
-              }}>
+              <NavLink
+                key={to}
+                to={to}
+                aria-label={label}
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 3,
+                  color: active ? '#0284c7' : '#94a3b8',
+                  textDecoration: 'none',
+                  position: 'relative',
+                  height: '100%',
+                }}
+              >
                 {active && (
                   <motion.div
                     layoutId="navBubble"
                     style={{
-                      position: 'absolute', inset: '4px', borderRadius: '28px',
-                      background: 'rgba(14,165,233,0.12)', zIndex: 0
+                      position: 'absolute', inset: '7px 3px', borderRadius: 18,
+                      background: '#e0f2fe', zIndex: 0,
                     }}
-                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                    transition={{ type: 'spring', stiffness: 320, damping: 30 }}
                   />
                 )}
+
+                {novo && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: 2,
+                      right: '50%',
+                      marginRight: -26,
+                      zIndex: 2,
+                      padding: '1px 5px',
+                      borderRadius: 999,
+                      fontSize: 7.5,
+                      fontWeight: 900,
+                      letterSpacing: 0,
+                      color: '#fff',
+                      background: '#16a34a',
+                      boxShadow: '0 2px 6px rgba(22,163,74,0.5)',
+                    }}
+                  >
+                    NOVO
+                  </span>
+                )}
+
                 <motion.div
-                  whileTap={{ scale: 0.9 }}
-                  style={{ zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}
+                  whileTap={{ scale: 0.88 }}
+                  style={{ zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}
                 >
-                  {to === '/pedir' ? (
-                    <div style={{
-                      width: active ? 42 : 38, height: active ? 42 : 38, borderRadius: '50%',
-                      background: 'linear-gradient(135deg, #0ea5e9, #22c55e)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      boxShadow: active ? '0 0 15px rgba(34,197,94,0.4)' : 'none',
-                      transition: 'all 0.3s'
-                    }}>
-                      <Icon size={18} color="#fff" />
-                    </div>
-                  ) : (
-                    <Icon size={20} color={active ? '#0ea5e9' : '#64748b'} />
-                  )}
-                  {active && <span style={{ fontSize: '10px', fontWeight: 700 }}>{label}</span>}
+                  <Icon size={20} color={active ? '#0284c7' : '#94a3b8'} strokeWidth={active ? 2.6 : 2.1} />
+                  <span
+                    style={{
+                      fontSize: 9.5,
+                      fontWeight: active ? 900 : 700,
+                      letterSpacing: 0,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {label}
+                  </span>
                 </motion.div>
               </NavLink>
             )

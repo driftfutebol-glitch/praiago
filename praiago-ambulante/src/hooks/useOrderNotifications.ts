@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getSessao } from '../lib/auth'
 import { supabase } from '../lib/supabase'
+import { clampNumber, parseCoordinate, sanitizePhone, sanitizeText } from '../lib/validation'
 
 export type IncomingOrder = {
   id: string
@@ -12,8 +13,8 @@ export type IncomingOrder = {
   zona: string
   reta: string
   barraca: string
-  clienteLat: number
-  clienteLng: number
+  clienteLat: number | null
+  clienteLng: number | null
   ts: number
 }
 
@@ -30,21 +31,24 @@ let sharedCtx: AudioContext | null = null
 
 function rowToOrder(row: PedidoRow): IncomingOrder {
   const createdAt = typeof row.created_at === 'string' ? row.created_at : undefined
-  const itens = Array.isArray(row.itens) ? row.itens.map(item => String(item)) : []
+  const parsedDate = createdAt ? new Date(createdAt).getTime() : Number.NaN
+  const itens = Array.isArray(row.itens)
+    ? row.itens.slice(0, 30).map(item => sanitizeText(item, 80)).filter(Boolean)
+    : []
 
   return {
-    id: String(row.id ?? ''),
-    clienteNome: String(row.cliente_nome ?? 'Cliente'),
-    clienteTel: String(row.cliente_tel ?? ''),
+    id: sanitizeText(row.id, 64),
+    clienteNome: sanitizeText(row.cliente_nome, 60) || 'Cliente',
+    clienteTel: sanitizePhone(row.cliente_telefone),
     itens,
-    total: Number(row.total) || 0,
-    pagamento: String(row.pagamento ?? 'pix'),
-    zona: String(row.zona ?? ''),
-    reta: String(row.reta ?? ''),
-    barraca: String(row.barraca ?? ''),
-    clienteLat: Number(row.lat) || -24.0228,
-    clienteLng: Number(row.lng) || -46.4305,
-    ts: createdAt ? new Date(createdAt).getTime() : Date.now(),
+    total: clampNumber(row.total, 0, 100_000, 0),
+    pagamento: sanitizeText(row.pagamento, 20) || 'pix',
+    zona: sanitizeText(row.zona, 60),
+    reta: sanitizeText(row.reta, 30),
+    barraca: sanitizeText(row.barraca, 60),
+    clienteLat: parseCoordinate(row.lat, -90, 90),
+    clienteLng: parseCoordinate(row.lng, -180, 180),
+    ts: Number.isFinite(parsedDate) ? parsedDate : Date.now(),
   }
 }
 
@@ -95,15 +99,14 @@ function playNotificationBeep() {
 }
 
 function emitOrder(row: PedidoRow) {
-  if (String(row.status ?? 'novo') !== 'novo') return
-
-  const id = String(row.id ?? '')
-  if (!id || notifiedRecently.has(id)) return
-
-  notifiedRecently.add(id)
-  window.setTimeout(() => notifiedRecently.delete(id), 8000)
+  if (sanitizeText(row.status, 24) !== 'novo') return
 
   const order = rowToOrder(row)
+  if (!order.id || notifiedRecently.has(order.id)) return
+
+  notifiedRecently.add(order.id)
+  window.setTimeout(() => notifiedRecently.delete(order.id), 8000)
+
   playNotificationBeep()
   listeners.forEach(listener => listener(order))
 }

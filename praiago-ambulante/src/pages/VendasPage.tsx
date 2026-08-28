@@ -1,337 +1,175 @@
-// Resumo de Vendas — 100% dados reais da tabela `pedidos` deste vendedor.
-// Bruto = soma dos pedidos entregues; Líquido = bruto - taxa da plataforma.
-// Carteira: saldo a receber/já repassado vem do `financial_ledger` (repasses).
-import { useState, useEffect, useMemo } from 'react'
-import { TrendingUp, ShoppingBag, Receipt, Wallet, CalendarDays, PiggyBank, KeyRound, CheckCircle2 } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ArrowLeft, BarChart3, CalendarDays, ChevronRight, Receipt, ShoppingBag, TrendingUp, Wallet } from 'lucide-react'
 import { motion } from 'framer-motion'
-import { supabase } from '../lib/supabase'
+import { useNavigate } from 'react-router-dom'
 import { getSessao } from '../lib/auth'
+import { supabase } from '../lib/supabase'
 
-const TAXA_PLATAFORMA = 0 // % — lançamento sem taxa; ajuste quando definir o modelo
+type OrderRow = {
+  id: string
+  total: number | string
+  status: string
+  pagamento: string | null
+  created_at: string
+}
 
-type PedidoRow = { total: number | string; status: string; created_at: string }
-type LedgerRow = { id: string; tipo: string; valor: number | string; status: string; descricao: string | null; created_at: string; settled_at: string | null; provider: string | null; metodo: string | null; disponivel_em: string | null }
+const money = (value: number) => value.toLocaleString('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+})
 
-const DIAS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
-const fmtBRL = (v: number) => `R$ ${v.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`
+const shortId = (id: string) => `#${id.replace(/-/g, '').slice(0, 8).toUpperCase()}`
 
 export default function VendasPage() {
-  const sessao = getSessao()
-  const [pedidos, setPedidos] = useState<PedidoRow[]>([])
-  const [carregado, setCarregado] = useState(false)
+  const navigate = useNavigate()
+  const session = getSessao()
+  const [orders, setOrders] = useState<OrderRow[]>([])
+  const [loading, setLoading] = useState(true)
 
-  // ── Carteira: repasses do financial_ledger + chave PIX pra depósito ──
-  const [repasses, setRepasses] = useState<LedgerRow[]>([])
-  const [verificado, setVerificado] = useState<boolean | null>(null)
-  const [pixChave, setPixChave] = useState('')
-  const [pixTitular, setPixTitular] = useState('')
-  const [pixSalvo, setPixSalvo] = useState(false)
-  const [pixSalvando, setPixSalvando] = useState(false)
-  const [pixErro, setPixErro] = useState('')
-  const [mpVinculado, setMpVinculado] = useState(false)
+  const load = useCallback(async () => {
+    if (!session?.id) return
+    const start = new Date()
+    start.setDate(start.getDate() - 29)
+    start.setHours(0, 0, 0, 0)
+    const { data } = await supabase
+      .from('pedidos')
+      .select('id,total,status,pagamento,created_at')
+      .eq('vendedor_id', session.id)
+      .eq('status', 'entregue')
+      .gte('created_at', start.toISOString())
+      .order('created_at', { ascending: false })
+    setOrders((data || []) as OrderRow[])
+    setLoading(false)
+  }, [session?.id])
 
   useEffect(() => {
-    if (!sessao) return
-    const inicio = new Date(); inicio.setDate(inicio.getDate() - 30); inicio.setHours(0, 0, 0, 0)
-    supabase.from('pedidos').select('total, status, created_at')
-      .eq('vendedor_id', sessao.id).gte('created_at', inicio.toISOString())
-      .then(({ data }) => { setPedidos((data as PedidoRow[]) ?? []); setCarregado(true) })
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (!sessao) return
-
-    const carregarCarteira = () => {
-      supabase.from('financial_ledger')
-        .select('id, tipo, valor, status, descricao, created_at, settled_at, provider, metodo, disponivel_em')
-        .eq('vendedor_id', sessao.id)
-        .in('tipo', ['repasse_vendedor', 'comissao_devida'])
-        .order('created_at', { ascending: false })
-        .limit(60)
-        .then(({ data }) => setRepasses((data as LedgerRow[]) ?? []))
-    }
-    carregarCarteira()
-
-    supabase.from('profiles').select('verificado').eq('id', sessao.id).maybeSingle()
-      .then(({ data }) => setVerificado(!!data?.verificado))
-
-    supabase.from('vendor_payment_accounts')
-      .select('pix_key, holder_name, mercadopago_user_id')
-      .eq('vendedor_id', sessao.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (!data) return
-        if (data.pix_key) { setPixChave(data.pix_key); setPixSalvo(true) }
-        if (data.holder_name) setPixTitular(data.holder_name)
-        setMpVinculado(!!data.mercadopago_user_id)
-      })
-
-    // saldo atualiza sozinho quando o admin paga ou entra repasse novo
-    const ch = supabase.channel(`carteira_${sessao.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'financial_ledger', filter: `vendedor_id=eq.${sessao.id}` }, carregarCarteira)
+    if (!session?.id) return
+    void load()
+    const channel = supabase
+      .channel(`ambulante_vendas_${session.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos', filter: `vendedor_id=eq.${session.id}` }, load)
       .subscribe()
-    return () => { supabase.removeChannel(ch) }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    return () => { void supabase.removeChannel(channel) }
+  }, [load, session?.id])
 
-  const carteira = useMemo(() => {
-    const agora = Date.now()
-    const soma = (filtro: (r: LedgerRow) => boolean) =>
-      repasses.filter(filtro).reduce((a, r) => a + (Number(r.valor) || 0), 0)
-    const repasse = (r: LedgerRow) => r.tipo === 'repasse_vendedor'
-    const disponivel = (r: LedgerRow) => r.disponivel_em ? new Date(r.disponivel_em).getTime() <= agora : false
-    // vendas online: em espera (janela de 7 dias) vs já liberado pra saque
-    const emEspera = soma(r => repasse(r) && r.status === 'em_espera' && !disponivel(r))
-    const disponivelSaque = soma(r => repasse(r) && r.status === 'em_espera' && disponivel(r))
-    const recebido = soma(r => repasse(r) && r.status === 'pago')
-    // vendas no dinheiro: comissão que o vendedor deve à empresa
-    const aPagarEmpresa = soma(r => r.tipo === 'comissao_devida' && r.status === 'pendente')
-    // o que sobra pra receber depois de abater a comissão do dinheiro
-    const liquidoAReceber = Math.max(0, disponivelSaque - aPagarEmpresa)
-    return { emEspera, disponivelSaque, recebido, aPagarEmpresa, liquidoAReceber }
-  }, [repasses])
-
-  async function salvarPix() {
-    if (!sessao) return
-    const chave = pixChave.trim()
-    if (chave.length < 5) { setPixErro('Digite uma chave PIX válida (CPF, celular, e-mail ou aleatória).'); return }
-    if (!pixTitular.trim()) { setPixErro('Informe o nome do titular da conta.'); return }
-    setPixErro('')
-    setPixSalvando(true)
-    const { error } = await supabase.from('vendor_payment_accounts').upsert({
-      vendedor_id: sessao.id,
-      provider: 'pix_manual',
-      pix_key: chave,
-      holder_name: pixTitular.trim(),
-      // conta só é cadastrável depois do KYC aprovado, então já nasce verificada
-      status: 'verificado',
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'vendedor_id' })
-    setPixSalvando(false)
-    if (error) {
-      setPixErro('Não deu pra salvar agora: ' + error.message)
-      return
-    }
-    setPixSalvo(true)
-  }
-
-  const resumo = useMemo(() => {
-    const entregues = pedidos.filter(p => p.status === 'entregue')
-    const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
-    const doDia = entregues.filter(p => new Date(p.created_at) >= hoje)
-    const brutoMes = entregues.reduce((a, p) => a + (Number(p.total) || 0), 0)
-    const brutoDia = doDia.reduce((a, p) => a + (Number(p.total) || 0), 0)
-    // últimos 7 dias para o gráfico
-    const dias: { label: string; valor: number; pedidos: number }[] = []
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(); d.setDate(d.getDate() - i); d.setHours(0, 0, 0, 0)
-      const fim = new Date(d); fim.setDate(fim.getDate() + 1)
-      const doD = entregues.filter(p => { const t = new Date(p.created_at); return t >= d && t < fim })
-      dias.push({ label: DIAS[d.getDay()], valor: doD.reduce((a, p) => a + (Number(p.total) || 0), 0), pedidos: doD.length })
-    }
+  const metrics = useMemo(() => {
+    const revenue = orders.reduce((sum, order) => sum + (Number(order.total) || 0), 0)
+    const today = new Date().toDateString()
+    const todayOrders = orders.filter(order => new Date(order.created_at).toDateString() === today)
     return {
-      brutoMes, brutoDia,
-      liquidoMes: brutoMes * (1 - TAXA_PLATAFORMA / 100),
-      pedidosMes: entregues.length, pedidosDia: doDia.length,
-      ticketMedio: entregues.length ? brutoMes / entregues.length : 0,
-      pendentes: pedidos.filter(p => p.status !== 'entregue').length,
-      dias,
+      revenue,
+      totalOrders: orders.length,
+      averageTicket: orders.length ? revenue / orders.length : 0,
+      todayRevenue: todayOrders.reduce((sum, order) => sum + (Number(order.total) || 0), 0),
     }
-  }, [pedidos])
+  }, [orders])
 
-  const maxDia = Math.max(...resumo.dias.map(d => d.valor), 1)
+  const dailyData = useMemo(() => {
+    return Array.from({ length: 7 }, (_, index) => {
+      const day = new Date()
+      day.setDate(day.getDate() - (6 - index))
+      day.setHours(0, 0, 0, 0)
+      const nextDay = new Date(day)
+      nextDay.setDate(nextDay.getDate() + 1)
+      const revenue = orders
+        .filter(order => {
+          const createdAt = new Date(order.created_at)
+          return createdAt >= day && createdAt < nextDay
+        })
+        .reduce((sum, order) => sum + (Number(order.total) || 0), 0)
+      return {
+        date: day,
+        label: day.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', ''),
+        revenue,
+      }
+    })
+  }, [orders])
 
-  const cards = [
-    { label: 'Vendas hoje', valor: fmtBRL(resumo.brutoDia), extra: `${resumo.pedidosDia} pedido${resumo.pedidosDia === 1 ? '' : 's'}`, icon: ShoppingBag, cor: '#16a34a' },
-    { label: 'Bruto (30 dias)', valor: fmtBRL(resumo.brutoMes), extra: `${resumo.pedidosMes} entregues`, icon: TrendingUp, cor: '#16a34a' },
-    { label: 'Líquido (30 dias)', valor: fmtBRL(resumo.liquidoMes), extra: `taxa PraiaGo ${TAXA_PLATAFORMA}%`, icon: Wallet, cor: '#0284c7' },
-    { label: 'Ticket médio', valor: fmtBRL(resumo.ticketMedio), extra: `${resumo.pendentes} em andamento`, icon: Receipt, cor: '#7c3aed' },
-  ]
+  const chartMaximum = Math.max(...dailyData.map(day => day.revenue), 1)
 
   return (
-    <div style={{ padding: '24px 20px 110px', minHeight: '100vh' }}>
-      <motion.div initial={{ opacity: 0, y: -14 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', margin: '0 0 8px', letterSpacing: -1 }}>Resumo de Vendas</h1>
-        <p style={{ fontSize: 15, color: '#64748b', margin: '0 0 32px', fontWeight: 500 }}>Seu desempenho real, direto dos pedidos entregues</p>
-      </motion.div>
-
-      {/* Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 18, marginBottom: 28 }}>
-        {cards.map(({ label, valor, extra, icon: Icon, cor }, i) => (
-          <motion.div key={label} initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }} className="glass-panel card-hover" style={{ borderRadius: 22, padding: 22 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-              <div style={{ width: 38, height: 38, borderRadius: 12, background: `${cor}18`, display: 'grid', placeItems: 'center' }}>
-                <Icon size={19} color={cor} />
-              </div>
-              <span style={{ fontSize: 12, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.8 }}>{label}</span>
-            </div>
-            <div style={{ fontSize: 26, fontWeight: 950, color: '#0f172a', letterSpacing: -0.5 }}>{valor}</div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: cor, marginTop: 4 }}>{extra}</div>
-          </motion.div>
-        ))}
+    <div className="page-shell">
+      <div className="page-heading">
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+          <button type="button" className="icon-button" onClick={() => navigate('/perfil')} aria-label="Voltar"><ArrowLeft size={19} /></button>
+          <div>
+            <h1>Vendas</h1>
+            <p>Pedidos entregues nos últimos 30 dias.</p>
+          </div>
+        </div>
       </div>
 
-      {/* ── Carteira: quanto tem pra receber e pra onde vai o dinheiro ── */}
-      <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }} className="glass-panel" style={{ borderRadius: 24, padding: 26, marginBottom: 28 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
-          <PiggyBank size={18} color="#0284c7" />
-          <span style={{ fontSize: 13, fontWeight: 900, color: '#0f172a', textTransform: 'uppercase', letterSpacing: 1 }}>Carteira · Repasses</span>
-          <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: '#64748b' }}>vendas pagas pelo app</span>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+        <div className="surface" style={{ padding: 14, boxShadow: 'none' }}>
+          <TrendingUp size={18} color="#148447" />
+          <div style={{ marginTop: 10, color: '#132238', fontSize: 20, fontWeight: 900 }}>{loading ? '-' : money(metrics.revenue)}</div>
+          <div style={{ marginTop: 3, color: '#617089', fontSize: 11, fontWeight: 700 }}>Vendas brutas</div>
         </div>
-
-        {/* Destaque: quanto tem pra sacar já, depois de abater a comissão do dinheiro */}
-        <div style={{ background: 'linear-gradient(135deg, rgba(34,197,94,0.12), rgba(14,165,233,0.10))', border: '1px solid rgba(34,197,94,0.22)', borderRadius: 18, padding: 18, marginBottom: 14 }}>
-          <div style={{ fontSize: 11, fontWeight: 800, color: '#16a34a', textTransform: 'uppercase', letterSpacing: 0.8 }}>Disponível pra sacar</div>
-          <div style={{ fontSize: 30, fontWeight: 950, color: '#0f172a', marginTop: 2 }}>{fmtBRL(carteira.liquidoAReceber)}</div>
-          {carteira.aPagarEmpresa > 0 && (
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#b45309', marginTop: 4 }}>
-              já descontamos {fmtBRL(carteira.aPagarEmpresa)} de comissão das suas vendas no dinheiro
-            </div>
-          )}
+        <div className="surface" style={{ padding: 14, boxShadow: 'none' }}>
+          <ShoppingBag size={18} color="#008fc0" />
+          <div style={{ marginTop: 10, color: '#132238', fontSize: 22, fontWeight: 900 }}>{loading ? '-' : metrics.totalOrders}</div>
+          <div style={{ marginTop: 3, color: '#617089', fontSize: 11, fontWeight: 700 }}>Pedidos entregues</div>
         </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 18 }}>
-          <div style={{ background: 'rgba(251,191,36,0.10)', border: '1px solid rgba(251,191,36,0.22)', borderRadius: 18, padding: 16 }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#b45309', textTransform: 'uppercase', letterSpacing: 0.8 }}>A liberar (7 dias)</div>
-            <div style={{ fontSize: 22, fontWeight: 950, color: '#0f172a', marginTop: 4 }}>{fmtBRL(carteira.emEspera)}</div>
-          </div>
-          <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.18)', borderRadius: 18, padding: 16 }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#dc2626', textTransform: 'uppercase', letterSpacing: 0.8 }}>Deve à empresa</div>
-            <div style={{ fontSize: 22, fontWeight: 950, color: '#0f172a', marginTop: 4 }}>{fmtBRL(carteira.aPagarEmpresa)}</div>
-          </div>
+        <div className="surface" style={{ padding: 14, boxShadow: 'none' }}>
+          <Receipt size={18} color="#8b5cf6" />
+          <div style={{ marginTop: 10, color: '#132238', fontSize: 18, fontWeight: 900 }}>{loading ? '-' : money(metrics.averageTicket)}</div>
+          <div style={{ marginTop: 3, color: '#617089', fontSize: 11, fontWeight: 700 }}>Ticket médio</div>
         </div>
-
-        <div style={{ fontSize: 12.5, color: '#64748b', fontWeight: 600, lineHeight: 1.5, marginBottom: 16 }}>
-          {mpVinculado
-            ? '✅ Conta Mercado Pago vinculada: sua parte da venda online cai direto na sua conta.'
-            : 'Vendas online são repassadas pra sua chave PIX 7 dias após o pagamento. Nas vendas no dinheiro, a comissão da PraiaGo fica registrada aqui e é descontada do seu repasse.'}
-          {carteira.recebido > 0 && <> Você já recebeu <b>{fmtBRL(carteira.recebido)}</b> no total.</>}
+        <div className="surface" style={{ padding: 14, boxShadow: 'none' }}>
+          <CalendarDays size={18} color="#b54708" />
+          <div style={{ marginTop: 10, color: '#132238', fontSize: 18, fontWeight: 900 }}>{loading ? '-' : money(metrics.todayRevenue)}</div>
+          <div style={{ marginTop: 3, color: '#617089', fontSize: 11, fontWeight: 700 }}>Hoje</div>
         </div>
+      </div>
 
-        {/* Chave PIX pra depósito — só depois da verificação */}
-        {verificado === false && (
-          <div style={{ background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.25)', borderRadius: 14, padding: '12px 14px', fontSize: 12.5, color: '#b45309', fontWeight: 700 }}>
-            Complete a verificação da sua conta (documentos) para cadastrar a chave PIX de recebimento.
-          </div>
-        )}
-        {verificado && (
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <KeyRound size={15} color="#0284c7" />
-              <span style={{ fontSize: 12, fontWeight: 900, color: '#0f172a', textTransform: 'uppercase', letterSpacing: 0.8 }}>Chave PIX pra receber</span>
-              {pixSalvo && (
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 800, color: '#16a34a' }}>
-                  <CheckCircle2 size={13} /> cadastrada
-                </span>
-              )}
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
-              <input
-                value={pixChave}
-                onChange={e => { setPixChave(e.target.value); setPixSalvo(false) }}
-                placeholder="CPF, celular, e-mail ou chave aleatória"
-                style={{ width: '100%', boxSizing: 'border-box', background: '#ffffff', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 14, padding: '13px 14px', fontSize: 14, fontWeight: 600, color: '#0f172a', outline: 'none' }}
-              />
-              <input
-                value={pixTitular}
-                onChange={e => { setPixTitular(e.target.value); setPixSalvo(false) }}
-                placeholder="Nome do titular da conta"
-                style={{ width: '100%', boxSizing: 'border-box', background: '#ffffff', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 14, padding: '13px 14px', fontSize: 14, fontWeight: 600, color: '#0f172a', outline: 'none' }}
-              />
-              <button
-                onClick={salvarPix}
-                disabled={pixSalvando}
-                style={{ border: 'none', background: 'linear-gradient(135deg,#0ea5e9,#22c55e)', color: '#fff', borderRadius: 14, padding: '13px 14px', fontSize: 14, fontWeight: 900, cursor: pixSalvando ? 'wait' : 'pointer' }}
-              >
-                {pixSalvando ? 'Salvando…' : pixSalvo ? 'Atualizar chave PIX' : 'Salvar chave PIX'}
-              </button>
-            </div>
-            {pixErro && <div style={{ marginTop: 8, fontSize: 12.5, color: '#ef4444', fontWeight: 700 }}>{pixErro}</div>}
-          </div>
-        )}
-
-        {/* Extrato de repasses */}
-        {repasses.length > 0 && (
-          <div style={{ marginTop: 20 }}>
-            <div style={{ fontSize: 12, fontWeight: 900, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 }}>Extrato</div>
-            {repasses.slice(0, 12).map(r => {
-              const deve = r.tipo === 'comissao_devida'
-              const liberado = r.disponivel_em ? new Date(r.disponivel_em).getTime() <= Date.now() : false
-              const rotulo = deve
-                ? 'Comissão'
-                : r.status === 'pago' ? 'Pago'
-                : r.status === 'cancelado' ? 'Cancelado'
-                : r.status === 'em_espera' && !liberado ? 'A liberar'
-                : r.status === 'em_espera' ? 'Disponível'
-                : 'Aguardando'
-              const cor = deve ? '#dc2626'
-                : r.status === 'pago' ? '#16a34a'
-                : r.status === 'cancelado' ? '#94a3b8'
-                : r.status === 'em_espera' && !liberado ? '#b45309'
-                : '#16a34a'
-              const bg = deve ? 'rgba(239,68,68,0.12)'
-                : r.status === 'pago' ? 'rgba(34,197,94,0.12)'
-                : r.status === 'cancelado' ? 'rgba(100,116,139,0.12)'
-                : r.status === 'em_espera' && !liberado ? 'rgba(251,191,36,0.14)'
-                : 'rgba(34,197,94,0.12)'
-              return (
-                <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {r.descricao || (deve ? 'Comissão da venda no dinheiro' : 'Repasse de venda')}
-                    </div>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8' }}>
-                      {new Date(r.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
-                      {!deve && r.status === 'em_espera' && !liberado && r.disponivel_em ? ` · libera ${new Date(r.disponivel_em).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}` : ''}
-                      {r.status === 'pago' && r.settled_at ? ` · pago em ${new Date(r.settled_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}` : ''}
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 14, fontWeight: 900, color: cor }}>
-                    {deve ? '− ' : ''}{fmtBRL(Number(r.valor) || 0)}
-                  </div>
-                  <span style={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', padding: '3px 8px', borderRadius: 8, background: bg, color: cor }}>
-                    {rotulo}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </motion.div>
-
-      {/* Gráfico últimos 7 dias */}
-      <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="glass-panel" style={{ borderRadius: 24, padding: 26 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 22 }}>
-          <CalendarDays size={18} color="#16a34a" />
-          <span style={{ fontSize: 13, fontWeight: 900, color: '#0f172a', textTransform: 'uppercase', letterSpacing: 1 }}>Últimos 7 dias</span>
-          <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: '#64748b' }}>faturamento por dia</span>
+      <section className="surface" style={{ marginBottom: 14, padding: 14, boxShadow: 'none' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <BarChart3 size={18} color="#008fc0" />
+          <div className="section-label" style={{ color: '#40506a' }}>Últimos 7 dias</div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14, height: 190 }}>
-          {resumo.dias.map((d, i) => (
-            <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, height: '100%', justifyContent: 'flex-end' }}>
-              <div style={{ fontSize: 11, fontWeight: 800, color: d.valor > 0 ? '#16a34a' : '#cbd5e1' }}>
-                {d.valor > 0 ? fmtBRL(d.valor) : '—'}
+        <div style={{ height: 150, display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', alignItems: 'end', gap: 7, marginTop: 14 }}>
+          {dailyData.map(day => {
+            const height = day.revenue > 0 ? Math.max(12, (day.revenue / chartMaximum) * 112) : 4
+            return (
+              <div key={day.date.toISOString()} style={{ minWidth: 0, textAlign: 'center' }} title={`${day.date.toLocaleDateString('pt-BR')}: ${money(day.revenue)}`}>
+                <motion.div initial={{ height: 0 }} animate={{ height }} style={{ width: '100%', maxWidth: 28, minHeight: 4, margin: '0 auto', borderRadius: '5px 5px 2px 2px', background: day.revenue > 0 ? '#18a957' : '#dfe6ed' }} />
+                <div style={{ marginTop: 7, overflow: 'hidden', color: '#718096', fontSize: 9, fontWeight: 750, textTransform: 'capitalize', textOverflow: 'clip' }}>{day.label}</div>
               </div>
-              <motion.div
-                initial={{ height: 0 }}
-                animate={{ height: `${Math.max(4, (d.valor / maxDia) * 100)}%` }}
-                transition={{ delay: 0.35 + i * 0.07, type: 'spring', stiffness: 120, damping: 16 }}
-                style={{
-                  width: '100%', maxWidth: 46, borderRadius: 10,
-                  background: d.valor > 0 ? 'linear-gradient(180deg, #4ade80, #16a34a)' : '#f1f5f9',
-                  boxShadow: d.valor > 0 ? '0 8px 20px rgba(34,197,94,0.25)' : 'none',
-                }}
-              />
-              <div style={{ fontSize: 11, fontWeight: 800, color: '#64748b' }}>{d.label}</div>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8' }}>{d.pedidos} ped.</div>
-            </div>
-          ))}
+            )
+          })}
         </div>
-        {carregado && resumo.pedidosMes === 0 && (
-          <div style={{ textAlign: 'center', color: '#64748b', fontSize: 13, fontWeight: 600, marginTop: 18 }}>
-            Nenhuma venda entregue nos últimos 30 dias — assim que os pedidos forem concluídos, tudo aparece aqui. 🌊
+      </section>
+
+      <button type="button" className="surface" onClick={() => navigate('/carteira')} style={{ width: '100%', minHeight: 68, display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, padding: '11px 13px', border: '1px solid #cce9d8', background: '#f5fbf7', color: '#132238', textAlign: 'left', cursor: 'pointer', boxShadow: 'none' }}>
+        <span style={{ width: 40, height: 40, display: 'grid', placeItems: 'center', flex: '0 0 40px', borderRadius: 8, background: '#e4f5eb', color: '#148447' }}><Wallet size={20} /></span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'block', fontSize: 13, fontWeight: 900 }}>Abrir Carteira</span>
+          <span style={{ display: 'block', marginTop: 2, color: '#617089', fontSize: 11, lineHeight: 1.35, fontWeight: 600 }}>Consulte líquido, taxas, conta de recebimento e saques.</span>
+        </span>
+        <ChevronRight size={17} color="#718096" />
+      </button>
+
+      <section>
+        <div className="section-label" style={{ marginBottom: 9 }}>Entregas recentes</div>
+        {loading ? (
+          <div className="surface shimmer" style={{ height: 120 }} />
+        ) : orders.length === 0 ? (
+          <div className="surface" style={{ padding: '24px 18px', color: '#617089', fontSize: 12, fontWeight: 650, textAlign: 'center', boxShadow: 'none' }}>Nenhum pedido entregue nos últimos 30 dias.</div>
+        ) : (
+          <div className="surface" style={{ overflow: 'hidden', boxShadow: 'none' }}>
+            {orders.slice(0, 10).map((order, index) => (
+              <div key={order.id} style={{ minHeight: 58, display: 'flex', alignItems: 'center', gap: 11, padding: '9px 12px', borderTop: index ? '1px solid #e7ecf1' : 0 }}>
+                <div style={{ width: 35, height: 35, display: 'grid', placeItems: 'center', flex: '0 0 35px', borderRadius: 8, background: '#eaf8ef', color: '#148447' }}><Receipt size={17} /></div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ color: '#132238', fontSize: 12, fontWeight: 900 }}>{shortId(order.id)}</div>
+                  <div style={{ marginTop: 2, color: '#718096', fontSize: 10, fontWeight: 650 }}>{new Date(order.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</div>
+                </div>
+                <div style={{ color: '#148447', fontSize: 13, fontWeight: 900 }}>{money(Number(order.total) || 0)}</div>
+              </div>
+            ))}
           </div>
         )}
-      </motion.div>
+      </section>
     </div>
   )
 }

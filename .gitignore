@@ -24,6 +24,8 @@ supabase/.temp/
 *.jks
 key.properties
 google-services.json
+/praiago-cliente/release/
+/praiago-ambulante/release/
 
 # Apple signing / App Store Connect secrets
 *.p8
@@ -48,3 +50,11 @@ AuthKey_*.p8
 *.log
 npm-debug.log*
 .codex/
+.vercel-token
+.vercel-token.txt
+
+# Pacote de envio da Play Store: e so a pasta PraiaGo-PlayStore-Recursos/
+# zipada. Versionar os dois guarda 17MB pra dizer a mesma coisa — a pasta e a
+# fonte, a zip se regera quando for enviar.
+PraiaGo-PlayStore-Recursos.zip
+mobile/ota-builds/

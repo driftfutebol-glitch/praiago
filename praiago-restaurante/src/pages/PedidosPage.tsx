@@ -1,8 +1,13 @@
 import { useState, useEffect } from 'react'
 import { CheckCircle2, ChevronRight, Zap, ChefHat, Bike,
-         Search, MapPin, Truck, Package, QrCode, CreditCard, Banknote } from 'lucide-react'
+         Search, MapPin, Truck, Package, QrCode, CreditCard, Banknote, Navigation, MessageCircle } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useOrders, type Status } from '../store/useOrders'
+import { useOrders, type Status, type Pedido } from '../store/useOrders'
+import { alertDialog, promptDialog, confirmDialog } from '../lib/dialog'
+import { supabase } from '../lib/supabase'
+import { getSessao } from '../lib/auth'
+import LocalizacaoClienteModal from '../components/LocalizacaoClienteModal'
+import ChatPedidoModal from '../components/ChatPedidoModal'
 
 const STATUS_CFG: Record<Status, { label: string; bg: string; cor: string; icon: any; glow: string }> = {
   novo:       { label: 'Novo',       bg: 'rgba(239,68,68,0.15)',   cor: '#f87171', icon: Zap,         glow: 'rgba(239,68,68,0.3)'   },
@@ -39,9 +44,28 @@ export default function PedidosPage() {
   const markSeen = useOrders(s => s.markSeen)
   const [tab,    setTab]     = useState<Status | 'todos'>('todos')
   const [busca,  setBusca]   = useState('')
+  const [pedidoNoMapa, setPedidoNoMapa] = useState<Pedido | null>(null)
+  const [pedidoNoChat, setPedidoNoChat] = useState<Pedido | null>(null)
+  const [posicaoLoja, setPosicaoLoja] = useState<[number, number] | null>(null)
 
   // Ao abrir a tela, zera o contador de "novos" da sidebar
   useEffect(() => { markSeen() }, [markSeen])
+
+  // A posição da loja serve só para enquadrar o mapa e desenhar o trajeto.
+  // Uma leitura por visita à tela: não muda no meio do expediente.
+  useEffect(() => {
+    const sessao = getSessao()
+    if (!sessao?.id) return
+    let vivo = true
+    supabase.from('profiles').select('lat,lng').eq('id', sessao.id).maybeSingle()
+      .then(({ data }) => {
+        if (!vivo || !data) return
+        const lat = Number(data.lat)
+        const lng = Number(data.lng)
+        if (Number.isFinite(lat) && Number.isFinite(lng)) setPosicaoLoja([lat, lng])
+      })
+    return () => { vivo = false }
+  }, [])
 
   const filtrados = pedidos.filter(p => {
     const matchTab   = tab === 'todos' || p.status === tab
@@ -54,6 +78,19 @@ export default function PedidosPage() {
 
   const count = (s: Status | 'todos') =>
     s === 'todos' ? pedidos.length : pedidos.filter(p => p.status === s).length
+
+  async function finalizarEntrega(id: string) {
+    const codigo = await promptDialog({
+      title: 'Codigo de entrega',
+      message: 'Peca ao cliente o codigo de 6 digitos exibido no app dele para finalizar a entrega.',
+      placeholder: '000000',
+    })
+    if (codigo === null) return
+    const ok = await avancar(id, codigo.trim())
+    if (!ok) {
+      await alertDialog({ title: 'Entrega nao confirmada', message: 'O codigo nao conferiu ou o pedido ainda nao esta em rota.', tone: 'danger' })
+    }
+  }
 
   return (
     <div style={{ padding: '32px 40px 48px', minHeight: '100vh', position: 'relative' }}>
@@ -203,11 +240,45 @@ export default function PedidosPage() {
                   </div>
                 )}
 
+                {/* Onde levar. Abre o mapa com a posição ao vivo do cliente
+                    quando ele está compartilhando, e com o ponto do pedido
+                    quando não está — dizendo qual das duas é. */}
+                {p.status !== 'entregue' && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 18, position: 'relative', zIndex: 1 }}>
+                    <button
+                      type="button"
+                      onClick={() => setPedidoNoMapa(p)}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                        padding: '11px 0', borderRadius: 14, cursor: 'pointer',
+                        border: '1px solid rgba(14,165,233,0.3)', background: 'rgba(14,165,233,0.08)',
+                        color: '#0284c7', fontSize: 13, fontWeight: 800,
+                      }}
+                    >
+                      <Navigation size={16} /> Localização
+                    </button>
+                    {/* O cliente fala com a loja pelo app dele; sem este botão
+                        a mensagem chegava no banco e morria sem ninguém ler. */}
+                    <button
+                      type="button"
+                      onClick={() => setPedidoNoChat(p)}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                        padding: '11px 0', borderRadius: 14, cursor: 'pointer',
+                        border: '1px solid rgba(34,197,94,0.3)', background: 'rgba(34,197,94,0.08)',
+                        color: '#15803d', fontSize: 13, fontWeight: 800,
+                      }}
+                    >
+                      <MessageCircle size={16} /> Conversar
+                    </button>
+                  </div>
+                )}
+
                 {/* Botões de ação */}
                 <div style={{ position: 'relative', zIndex: 1 }}>
                   {p.status === 'novo' && (
                     <div style={{ display: 'flex', gap: 12 }}>
-                      <motion.button whileHover={{ scale: 1.02, backgroundColor: 'rgba(239,68,68,0.1)' }} whileTap={{ scale: 0.98 }} onClick={() => recusar(p.id)} style={{
+                      <motion.button whileHover={{ scale: 1.02, backgroundColor: 'rgba(239,68,68,0.1)' }} whileTap={{ scale: 0.98 }} onClick={async () => { if (await confirmDialog({ title: 'Recusar este pedido?', message: 'O cliente será avisado que o pedido foi recusado. Não dá pra desfazer.', confirmText: 'Recusar', tone: 'danger' })) { const ok = await recusar(p.id); if (!ok) alertDialog({ title: 'Erro', message: 'Não deu pra recusar. Tente de novo.', tone: 'danger' }) } }} style={{
                         flex: 1, padding: '14px 0', borderRadius: 16,
                         border: '1px solid rgba(239,68,68,0.4)', background: 'rgba(239,68,68,0.05)',
                         color: '#f87171', fontSize: 14, fontWeight: 800, cursor: 'pointer', transition: 'all 0.2s'
@@ -237,9 +308,16 @@ export default function PedidosPage() {
                   )}
 
                   {p.status === 'entregando' && (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '12px 0', color: '#fb923c', fontSize: 14, fontWeight: 800, background: 'rgba(249,115,22,0.05)', borderRadius: 16, border: '1px solid rgba(249,115,22,0.1)' }}>
-                      <Bike size={18} className="animate-pulse-neon" /> ENTREGANDO NA PRAIA...
-                    </div>
+                    <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={() => finalizarEntrega(p.id)} style={{
+                      width: '100%', padding: '14px 0', borderRadius: 16, border: 'none',
+                      background: 'linear-gradient(135deg,#22c55e,#16a34a)',
+                      color: '#fff', fontSize: 15, fontWeight: 900, cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+                      boxShadow: '0 8px 25px rgba(34,197,94,0.35)',
+                      letterSpacing: 0.5
+                    }}>
+                      <Bike size={18} className="animate-pulse-neon" /> MARCAR ENTREGUE COM CODIGO
+                    </motion.button>
                   )}
 
                   {p.status === 'entregue' && (
@@ -253,6 +331,25 @@ export default function PedidosPage() {
           })}
         </AnimatePresence>
       </motion.div>
+
+      <AnimatePresence>
+        {pedidoNoMapa && (
+          <LocalizacaoClienteModal
+            key={pedidoNoMapa.id}
+            pedido={pedidoNoMapa}
+            posicaoLoja={posicaoLoja}
+            onClose={() => setPedidoNoMapa(null)}
+          />
+        )}
+        {pedidoNoChat && (
+          <ChatPedidoModal
+            key={`chat-${pedidoNoChat.id}`}
+            pedidoId={pedidoNoChat.id}
+            clienteNome={pedidoNoChat.cliente}
+            onClose={() => setPedidoNoChat(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

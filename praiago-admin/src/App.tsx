@@ -7,15 +7,31 @@ import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import PedidosPage from './pages/PedidosPage'
 import UsuariosPage from './pages/UsuariosPage'
+import ExclusoesPage from './pages/ExclusoesPage'
 import VerificacoesPage from './pages/VerificacoesPage'
+import LiberacaoSaquePage from './pages/LiberacaoSaquePage'
 import AtendimentoPage from './pages/AtendimentoPage'
 import ErrorsPage from './pages/ErrorsPage'
 import EventosPage from './pages/EventosPage'
 import CuponsPage from './pages/CuponsPage'
 import PromocoesPage from './pages/PromocoesPage'
 import FinanceiroPage from './pages/FinanceiroPage'
+import TrocaContaPage from './pages/TrocaContaPage'
+import TrocaNomePage from './pages/TrocaNomePage'
+import CadastrosEventoPage from './pages/CadastrosEventoPage'
+import AdminsPage from './pages/AdminsPage'
+import LocalizacoesPage from './pages/LocalizacoesPage'
 import Sidebar from './components/Sidebar'
+import PasswordRecoveryHandler from './components/PasswordRecoveryHandler'
 import { DialogHost } from './lib/dialog'
+
+export type PerfilAdmin = {
+  id: string
+  nome: string | null
+  email: string | null
+  role: string
+  permissions: string[] | null
+}
 
 function NotificationSystem() {
   const [notifications, setNotifications] = useState<any[]>([])
@@ -55,7 +71,7 @@ function NotificationSystem() {
       }, 9000)
     }
 
-    const sub = supabase.channel('tickets_inserts')
+    const sub = supabase.channel('admin_notifications')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tickets' }, (payload) => {
         const ticket = payload.new
         pushNotification({
@@ -74,8 +90,40 @@ function NotificationSystem() {
           origem: v.nome || v.email || v.user_id || 'Cadastro',
         })
       })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'payment_notifications' }, (payload) => {
+        const pagamento = payload.new
+        const mensagens: Record<string, { titulo: string; texto: string }> = {
+          pendente: {
+            titulo: 'Pagamento pendente',
+            texto: `Pedido ${String(pagamento.pedido_id || '').slice(0, 8)} aguardando ${String(pagamento.pagamento || 'pagamento').toUpperCase()} de R$ ${Number(pagamento.valor || 0).toFixed(2).replace('.', ',')}`,
+          },
+          aprovado: {
+            titulo: 'Pagamento aprovado',
+            texto: `Pedido ${String(pagamento.pedido_id || '').slice(0, 8)} confirmado no valor de R$ ${Number(pagamento.valor || 0).toFixed(2).replace('.', ',')}`,
+          },
+          recusado: {
+            titulo: 'Pagamento recusado',
+            texto: `A cobranca do pedido ${String(pagamento.pedido_id || '').slice(0, 8)} nao foi aprovada.`,
+          },
+          cancelado: {
+            titulo: 'Pagamento cancelado',
+            texto: `O pagamento do pedido ${String(pagamento.pedido_id || '').slice(0, 8)} foi cancelado.`,
+          },
+          estornado: {
+            titulo: 'Pagamento estornado',
+            texto: `O pedido ${String(pagamento.pedido_id || '').slice(0, 8)} recebeu um estorno.`,
+          },
+        }
+        const mensagem = mensagens[String(pagamento.tipo)] || mensagens.pendente
+        pushNotification({
+          id: pagamento.id,
+          ...mensagem,
+          origem: 'Financeiro',
+        })
+      })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'pedidos' }, (payload) => {
         const p = payload.new
+        if (p.payment_provider === 'pagarme') return
         pushNotification({
           id: p.id,
           titulo: 'Novo pedido recebido',
@@ -83,13 +131,13 @@ function NotificationSystem() {
           origem: p.cliente_nome || p.cliente || 'Cliente',
         })
       })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'event_ticket_notifications' }, (payload) => {
-        const n = payload.new
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'solicitacoes_correcao_localizacao' }, (payload) => {
+        const pedido = payload.new
         pushNotification({
-          id: n.id,
-          titulo: n.titulo || 'Ingresso vendido',
-          texto: n.mensagem || 'Pagamento aprovado. Entregue o ingresso pelo painel de eventos.',
-          origem: n.tipo || 'Ingressos',
+          id: pedido.id,
+          titulo: 'Correcao de localizacao',
+          texto: pedido.motivo || 'Restaurante solicitou autorizacao para corrigir o ponto fixo.',
+          origem: pedido.restaurante_id || 'Restaurante',
         })
       })
       .subscribe()
@@ -129,59 +177,128 @@ function NotificationSystem() {
 }
 
 export default function App() {
-  const [isAdmin, setIsAdmin] = useState(() => {
-    try {
-      return window.localStorage.getItem('praiago_admin_auth') === 'true'
-    } catch {
-      return false
+  const [authState, setAuthState] = useState<'loading' | 'guest' | 'admin'>('loading')
+  const [perfil, setPerfil] = useState<PerfilAdmin | null>(null)
+  const [authCheck, setAuthCheck] = useState(0)
+
+  useEffect(() => {
+    let cancelado = false
+    async function validarAdmin() {
+      const { data: authData } = await supabase.auth.getUser()
+      if (!authData.user) {
+        if (!cancelado) {
+          setPerfil(null)
+          setAuthState('guest')
+        }
+        return
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id,nome,email,role,permissions,status')
+        .eq('id', authData.user.id)
+        .maybeSingle()
+
+      const autorizado = (
+        (profile?.role === 'admin' || profile?.role === 'sysadmin')
+        && profile?.status !== 'banido'
+      )
+      if (!autorizado) {
+        await supabase.auth.signOut()
+        if (!cancelado) {
+          setPerfil(null)
+          setAuthState('guest')
+        }
+        return
+      }
+
+      if (!cancelado) {
+        setPerfil(profile as PerfilAdmin)
+        setAuthState('admin')
+      }
     }
-  })
+
+    validarAdmin()
+    const { data } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        setPerfil(null)
+        setAuthState('guest')
+      } else {
+        window.setTimeout(validarAdmin, 0)
+      }
+    })
+
+    return () => {
+      cancelado = true
+      data.subscription.unsubscribe()
+    }
+  }, [authCheck])
 
   function entrarAdmin() {
-    try {
-      window.localStorage.setItem('praiago_admin_auth', 'true')
-    } catch {
-      // Mantem a sessao em memoria quando o navegador bloqueia storage.
-    }
-    setIsAdmin(true)
+    setAuthState('loading')
+    setAuthCheck(value => value + 1)
   }
 
-  function sairAdmin() {
-    try {
-      window.localStorage.removeItem('praiago_admin_auth')
-    } catch {
-      // Sem acao extra.
-    }
-    setIsAdmin(false)
+  async function sairAdmin() {
+    await supabase.auth.signOut()
+    setPerfil(null)
+    setAuthState('guest')
   }
 
-  if (!isAdmin) {
+  if (authState === 'loading') {
+    return <div className="flex h-screen items-center justify-center bg-slate-950 text-slate-400 font-bold">Carregando painel...</div>
+  }
+
+  if (authState === 'guest') {
     return (
       <BrowserRouter>
+        <PasswordRecoveryHandler />
         <Routes>
           <Route path="*" element={<LoginPage onLogin={entrarAdmin} />} />
         </Routes>
+        <DialogHost />
       </BrowserRouter>
     )
   }
 
+  if (perfil === null) {
+    return <div className="flex h-screen items-center justify-center bg-slate-950 text-slate-400 font-bold">Carregando painel...</div>
+  }
+
+  // #4: permissão por seção também nas ROTAS (não só no menu) — bloqueia acesso por URL.
+  const isSys = perfil?.role === 'sysadmin'
+  const podeVer = (secao: string) => isSys || !perfil?.permissions || perfil.permissions.includes(secao)
+  const guard = (secao: string, el: React.ReactNode) => (podeVer(secao) ? el : <Navigate to="/" replace />)
+
   return (
     <BrowserRouter>
+      <PasswordRecoveryHandler />
       <div className="flex h-screen overflow-hidden">
-        <Sidebar onLogout={sairAdmin} />
+        <Sidebar onLogout={sairAdmin} perfil={perfil} />
         <main className="flex-1 overflow-y-auto bg-slate-950 p-8 relative">
           <NotificationSystem />
           <Routes>
-            <Route path="/" element={<DashboardPage />} />
-            <Route path="/pedidos" element={<PedidosPage />} />
-            <Route path="/usuarios" element={<UsuariosPage />} />
-            <Route path="/verificacoes" element={<VerificacoesPage />} />
-            <Route path="/atendimento/:plataforma" element={<AtendimentoPage />} />
-            <Route path="/eventos" element={<EventosPage />} />
-            <Route path="/cupons" element={<CuponsPage />} />
-            <Route path="/promocoes" element={<PromocoesPage />} />
-            <Route path="/financeiro" element={<FinanceiroPage />} />
-            <Route path="/erros" element={<ErrorsPage />} />
+            <Route path="/" element={guard('dashboard', <DashboardPage />)} />
+            <Route path="/pedidos" element={guard('pedidos', <PedidosPage />)} />
+            <Route path="/usuarios" element={guard('usuarios', <UsuariosPage />)} />
+            <Route path="/exclusoes" element={guard('usuarios', <ExclusoesPage />)} />
+            <Route path="/localizacoes" element={guard('usuarios', <LocalizacoesPage />)} />
+            {/* Troca de nome mexe no cadastro do vendedor, entao mora na mesma
+                permissao de 'usuarios' — nao vale criar secao nova so pra isso. */}
+            <Route path="/troca-nome" element={guard('usuarios', <TrocaNomePage />)} />
+            {/* Relatorio do cadastro assistido no evento: e lista de usuario,
+                entao mora na mesma permissao de 'usuarios'. */}
+            <Route path="/cadastros-evento" element={guard('usuarios', <CadastrosEventoPage />)} />
+            <Route path="/verificacoes" element={guard('verificacoes', <VerificacoesPage />)} />
+            <Route path="/liberacao-saque" element={guard('atendimento', <LiberacaoSaquePage />)} />
+            <Route path="/atendimento/:plataforma" element={guard('atendimento', <AtendimentoPage />)} />
+            <Route path="/eventos" element={guard('eventos', <EventosPage />)} />
+            <Route path="/cupons" element={guard('cupons', <CuponsPage />)} />
+            <Route path="/promocoes" element={guard('promocoes', <PromocoesPage />)} />
+            <Route path="/financeiro" element={guard('financeiro', <FinanceiroPage />)} />
+            <Route path="/troca-conta" element={guard('financeiro', <TrocaContaPage />)} />
+            <Route path="/erros" element={guard('erros', <ErrorsPage />)} />
+            <Route path="/admins" element={perfil?.role === 'sysadmin' ? <AdminsPage /> : <Navigate to="/" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

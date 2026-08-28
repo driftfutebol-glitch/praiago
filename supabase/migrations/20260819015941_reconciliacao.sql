@@ -1,0 +1,2 @@
+-- Marcador de reconciliacao. Versao ja aplicada no banco; arquivo original
+-- nunca existiu no repositorio. Nao executa nada.

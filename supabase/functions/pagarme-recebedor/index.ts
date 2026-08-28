@@ -1,0 +1,445 @@
+// Recebedor (subconta) do vendedor no gateway — base do split de pagamento.
+//
+// Por que isso existe: no split, a parte do vendedor vai DIRETO pro saldo dele
+// no gateway. O dinheiro nunca passa pela conta da PraiaGo, entao a plataforma
+// nao custodia dinheiro de terceiro (o que poderia enquadra-la como instituicao
+// de pagamento perante o Banco Central).
+//
+// O saque automatico do gateway fica DESLIGADO de proposito: quem decide a hora
+// de mandar pro banco do vendedor e a nossa regra (entrega confirmada + D+N),
+// disparando a transferencia por API. O dinheiro fica parado no saldo do
+// PROPRIO vendedor enquanto isso — nao no nosso.
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2'
+import { corsHeaders, json, readJson } from '../_shared/cors.ts'
+import { adminClient, env, gatewayConfigurado, pagarme, somenteDigitos } from '../_shared/pagarme.ts'
+
+const PROVIDER = 'pagarme'
+const PAPEIS_VENDEDOR = ['ambulante', 'restaurante']
+
+type Corpo = {
+  acao?: 'criar' | 'consultar' | 'diagnostico'
+  banco?: string
+  agencia?: string
+  agencia_dv?: string
+  conta?: string
+  conta_dv?: string
+  tipo_conta?: string
+  titular_nome?: string
+  titular_documento?: string
+  banco_nome?: string
+}
+
+type RecipientOperation = {
+  id: string
+  state: 'provisioning' | 'cleanup_pending' | 'linked' | 'cleaned'
+  recipient_id: string | null
+}
+
+function operationRow(data: unknown) {
+  const row = Array.isArray(data) ? data[0] : data
+  return (row || null) as RecipientOperation | null
+}
+
+/** Mostra a conta sem expor o numero inteiro. */
+function mascararConta(conta: string) {
+  const d = somenteDigitos(conta)
+  if (d.length <= 3) return d
+  return `${'•'.repeat(Math.max(2, d.length - 3))}${d.slice(-3)}`
+}
+
+/**
+ * The public v5 API does not document recipient deletion. Its supported
+ * compensating action is to keep automatic transfers disabled, preventing an
+ * account created during a deletion race from moving funds. The recipient id
+ * is logged for the existing manual provider-cleanup review.
+ */
+async function neutralizarRecebedorExterno(recipientId: string) {
+  try {
+    await pagarme(`/recipients/${encodeURIComponent(recipientId)}/transfer-settings`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        transfer_enabled: false,
+        transfer_interval: 'Monthly',
+        transfer_day: 1,
+      }),
+    })
+    return true
+  } catch (erro) {
+    const e = erro as { status?: number }
+    console.error('Falha ao neutralizar recebedor criado durante exclusao', {
+      recipient_id: recipientId,
+      status: e.status,
+    })
+    return false
+  }
+}
+
+Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method !== 'POST') return json({ error: 'Metodo nao permitido.' }, { status: 405 })
+
+  const authHeader = req.headers.get('Authorization') || ''
+  const apikey = req.headers.get('apikey') || env('SUPABASE_ANON_KEY')
+  if (!authHeader.startsWith('Bearer ')) return json({ error: 'Nao autorizado.' }, { status: 401 })
+
+  if (!gatewayConfigurado()) {
+    return json({ error: 'O recebimento ainda nao esta ativo. Fale com o suporte.' }, { status: 503 })
+  }
+
+  const comoUsuario = createClient(env('SUPABASE_URL'), apikey, {
+    global: { headers: { Authorization: authHeader, apikey } },
+    auth: { persistSession: false },
+  })
+
+  const { data: auth } = await comoUsuario.auth.getUser()
+  const usuarioId = auth?.user?.id
+  if (!usuarioId) return json({ error: 'Sessao invalida. Entre de novo.' }, { status: 401 })
+
+  const contaPodeGravar = async () => {
+    const { data, error } = await comoUsuario.rpc('account_can_write', { p_subject: usuarioId })
+    if (error) console.error('Falha ao validar estado da conta do recebedor', { code: error.code })
+    return !error && data === true
+  }
+
+  const admin = adminClient()
+  const recordOperation = async (operationId: string, recipientId: string) => {
+    let lastMessage = 'falha desconhecida'
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const { data, error } = await admin.rpc('record_recipient_provisioning', {
+        p_operation_id: operationId,
+        p_subject: usuarioId,
+        p_recipient_id: recipientId,
+      })
+      if (!error) {
+        const operation = operationRow(data)
+        if (operation) return operation
+        lastMessage = 'o banco nao devolveu a operacao reservada'
+      } else {
+        lastMessage = error.message
+      }
+    }
+    throw new Error(`Nao foi possivel registrar o recebedor externo: ${lastMessage}`)
+  }
+
+  const finalizeOperation = async (operationId: string) => {
+    const { data, error } = await admin.rpc('finalize_recipient_provisioning', {
+      p_operation_id: operationId,
+      p_subject: usuarioId,
+    })
+    if (error) throw new Error(`Nao foi possivel finalizar o vinculo do recebedor: ${error.message}`)
+    const operation = operationRow(data)
+    if (!operation) throw new Error('O banco nao devolveu a operacao de recebedor finalizada.')
+    return operation
+  }
+  const { data: perfil } = await admin
+    .from('profiles')
+    .select('id,role,nome,email,documento,documento_tipo,verificado')
+    .eq('id', usuarioId)
+    .maybeSingle()
+
+  if (!perfil) return json({ error: 'Perfil nao encontrado.' }, { status: 404 })
+
+  const corpo = await readJson<Corpo>(req)
+  const acao = corpo.acao || 'consultar'
+
+  // ─── Diagnostico: a conta do gateway tem marketplace/split liberado? ──────
+  // So o sysadmin roda. E leitura pura: nao cria nem altera nada la.
+  if (acao === 'diagnostico') {
+    if (perfil.role !== 'sysadmin') return json({ error: 'Nao autorizado.' }, { status: 403 })
+
+    let recebedores: Array<Record<string, unknown>> = []
+    try {
+      const lista = await pagarme<{ data?: Array<Record<string, unknown>> }>('/recipients?size=30', { method: 'GET' })
+      recebedores = Array.isArray(lista?.data) ? lista.data : []
+    } catch { /* listar falhando ja e sinal de conta sem marketplace */ }
+
+    // LISTAR recebedores nao prova nada: toda conta lista (nem que seja so o
+    // recebedor principal dela). O que importa e se a conta pode CRIAR
+    // recebedor — permissao separada, que o Pagar.me libera sob pedido.
+    // Sonda com documento invalido de proposito: nao cria nada, mas a mensagem
+    // de erro diz se o bloqueio e de permissao ou so dos dados.
+    let podeCriar = false
+    let motivo = ''
+    try {
+      await pagarme('/recipients', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'SONDAGEM PRAIAGO',
+          email: 'sondagem@praiago.com.br',
+          document: '00000000000',
+          type: 'individual',
+          default_bank_account: {
+            holder_name: 'SONDAGEM', holder_type: 'individual', holder_document: '00000000000',
+            bank: '260', branch_number: '0001', account_number: '1', account_check_digit: '1',
+            type: 'checking',
+          },
+          transfer_settings: { transfer_enabled: false, transfer_interval: 'Monthly', transfer_day: 1 },
+        }),
+      })
+      // Nao deveria passar com CPF invalido; se passou, a conta cria recebedor.
+      podeCriar = true
+      motivo = 'ATENCAO: a sondagem criou um recebedor de teste — apague no painel do gateway.'
+    } catch (erro) {
+      const msg = (erro as { message?: string }).message || ''
+      // Erro de PERMISSAO = conta sem marketplace. Erro de DADOS = tudo certo.
+      podeCriar = !/split settings/i.test(msg)
+      motivo = msg
+    }
+
+    return json({
+      ok: true,
+      pode_criar_recebedor: podeCriar,
+      recebedores_existentes: recebedores.length,
+      recebedores: recebedores.map(r => ({
+        id: r.id, nome: r.name, status: r.status,
+        documento_final: String(r.document ?? '').slice(-4),
+      })),
+      detalhe: motivo,
+    })
+  }
+
+  if (!PAPEIS_VENDEDOR.includes(String(perfil.role))) {
+    return json({ error: 'Somente vendedores tem conta de recebimento.' }, { status: 403 })
+  }
+
+  const { data: recebedor } = await admin
+    .from('seller_recipients')
+    .select('vendedor_id,provider,recipient_id,status,kyc_status,updated_at')
+    .eq('vendedor_id', usuarioId)
+    .maybeSingle()
+
+  if (acao === 'consultar') {
+    return json({
+      ok: true,
+      cadastrado: !!recebedor?.recipient_id,
+      status: recebedor?.status ?? 'pendente',
+      kyc_status: recebedor?.kyc_status ?? 'pendente',
+    })
+  }
+
+  if (!(await contaPodeGravar())) {
+    return json({ error: 'Esta conta nao pode cadastrar ou trocar o recebedor.' }, { status: 409 })
+  }
+
+  // ─── Criar / trocar o recebedor ───────────────────────────────────────────
+  // Trocar a conta que recebe o dinheiro e o golpe classico de marketplace:
+  // conta do vendedor invadida + troca livre = dinheiro desviado. Por isso o
+  // PRIMEIRO cadastro e livre, mas TROCAR exige aprovacao do admin.
+  if (recebedor?.recipient_id) {
+    const { data: liberado } = await admin.rpc('pode_trocar_conta', { p_vendedor: usuarioId })
+    if (!liberado) {
+      return json({
+        error: 'Para trocar a conta que recebe seu dinheiro, peca a liberacao no app. Nossa equipe confere os dados antes de autorizar.',
+        precisa_aprovacao: true,
+      }, { status: 409 })
+    }
+  }
+  if (!perfil.verificado) {
+    return json({ error: 'Sua conta precisa estar verificada antes de cadastrar os dados de recebimento.' }, { status: 403 })
+  }
+
+  const banco = somenteDigitos(corpo.banco)
+  const agencia = somenteDigitos(corpo.agencia)
+  const conta = somenteDigitos(corpo.conta)
+  const contaDv = somenteDigitos(corpo.conta_dv)
+  const titularNome = String(corpo.titular_nome || '').trim()
+  const documento = somenteDigitos(corpo.titular_documento || perfil.documento)
+  const tipoConta = corpo.tipo_conta === 'poupanca' ? 'savings' : 'checking'
+
+  if (banco.length !== 3) return json({ error: 'Informe o codigo do banco (3 digitos).' }, { status: 422 })
+  if (!agencia) return json({ error: 'Informe a agencia.' }, { status: 422 })
+  if (!conta) return json({ error: 'Informe o numero da conta.' }, { status: 422 })
+  if (!contaDv) return json({ error: 'Informe o digito da conta.' }, { status: 422 })
+  if (titularNome.length < 3) return json({ error: 'Informe o nome do titular da conta.' }, { status: 422 })
+  // Limite do gateway ("holder name must be lower than 30 character"). Barra
+  // aqui tambem: a tela pode ser antiga (app nao atualizado) e o erro cru do
+  // gateway em ingles nao ajudaria o vendedor a resolver.
+  if (titularNome.length > 29) {
+    return json({
+      error: 'O nome do titular precisa ter ate 29 letras. Abrevie os nomes do meio (ex: "Pedro H. F. Oliveira").',
+    }, { status: 422 })
+  }
+  if (documento.length !== 11 && documento.length !== 14) {
+    return json({ error: 'Informe o CPF ou CNPJ do titular.' }, { status: 422 })
+  }
+
+  const ehEmpresa = documento.length === 14
+
+  // Recheck at the last possible point before reserving the provider operation.
+  if (!(await contaPodeGravar())) {
+    return json({ error: 'Esta conta nao pode cadastrar ou trocar o recebedor.' }, { status: 409 })
+  }
+
+  try {
+    // This RPC takes the same advisory lock as account deletion and commits a
+    // durable blocker BEFORE PII leaves Postgres. If deletion wins the lock,
+    // this call fails and no provider request is made. If this reservation
+    // wins, deletion sees the pending operation and cannot complete.
+    const { data: beginData, error: beginError } = await admin.rpc('begin_recipient_provisioning', {
+      p_subject: usuarioId,
+    })
+    if (beginError) {
+      const status = beginError.code === '42501' ? 409 : 500
+      return json({ error: 'Esta conta nao pode iniciar um novo cadastro de recebedor.' }, { status })
+    }
+    const operation = operationRow(beginData)
+    if (!operation) throw new Error('O banco nao reservou a operacao de recebedor.')
+    if (operation.state === 'cleanup_pending') {
+      return json({
+        error: 'Existe um recebedor externo aguardando encerramento pela equipe de suporte.',
+      }, { status: 409 })
+    }
+
+    let criado: { id?: string; status?: string }
+    if (operation.recipient_id) {
+      // Recovery after a response/Edge crash: reuse the provider id that was
+      // already durably recorded instead of issuing another POST with PII.
+      criado = { id: operation.recipient_id }
+    } else {
+      criado = await pagarme<{ id?: string; status?: string }>('/recipients', {
+        method: 'POST',
+        // Idempotencia: retry da mesma operacao nao cria dois recebedores.
+        idempotencyKey: `recipient_${operation.id}`,
+        body: JSON.stringify({
+          name: titularNome,
+          email: perfil.email,
+          description: `Vendedor PraiaGo - ${perfil.nome ?? ''}`.trim(),
+          document: documento,
+          type: ehEmpresa ? 'company' : 'individual',
+          default_bank_account: {
+            holder_name: titularNome,
+            holder_type: ehEmpresa ? 'company' : 'individual',
+            holder_document: documento,
+            bank: banco,
+            branch_number: agencia,
+            branch_check_digit: somenteDigitos(corpo.agencia_dv) || undefined,
+            account_number: conta,
+            account_check_digit: contaDv,
+            type: tipoConta,
+          },
+          transfer_settings: {
+            transfer_enabled: false,
+            transfer_interval: 'Monthly',
+            transfer_day: 1,
+          },
+        }),
+      })
+    }
+
+    if (!criado?.id) {
+      console.error('Recebedor sem id na resposta do gateway')
+      return json({ error: 'Nao foi possivel criar sua conta de recebimento agora.' }, { status: 502 })
+    }
+
+    // Record the external id before any account-state recheck. The RPC is
+    // idempotent and moves the operation to cleanup_pending when deletion
+    // opened during the HTTP request.
+    const recorded = await recordOperation(operation.id, criado.id)
+    if (recorded.state === 'cleanup_pending' || !(await contaPodeGravar())) {
+      const finalState = recorded.state === 'cleanup_pending'
+        ? recorded
+        : await finalizeOperation(operation.id)
+      const neutralizado = await neutralizarRecebedorExterno(criado.id)
+      console.error('Recebedor criado durante exclusao de conta', {
+        operation_id: operation.id,
+        estado: finalState.state,
+        transferencias_desativadas: neutralizado,
+      })
+      return json({
+        error: 'A exclusao da conta foi iniciada; o suporte precisa encerrar o recebedor externo.',
+      }, { status: 409 })
+    }
+
+    const agora = new Date().toISOString()
+    const { error: erroGravar } = await admin
+      .from('seller_recipients')
+      .upsert({
+        vendedor_id: usuarioId,
+        provider: PROVIDER,
+        recipient_id: criado.id,
+        // Espelho so pra exibir ("Nubank ...123-4"). O numero completo fica no
+        // gateway. Gravado AQUI porque o vendedor nao tem (e nao deve ter)
+        // permissao de escrita nesta tabela — a tela tentava e falhava calada.
+        banco_codigo: banco,
+        banco_nome: String(corpo.banco_nome || '').slice(0, 60) || null,
+        conta_mascarada: `${banco} / ${agencia} / ${mascararConta(conta)}-${contaDv}`,
+        titular_nome: titularNome,
+        titular_documento_final: documento.slice(-4),
+        // O gateway ainda analisa os dados; o webhook/consulta atualiza depois.
+        status: criado.status === 'active' ? 'ativo' : 'pendente',
+        kyc_status: criado.status === 'active' ? 'aprovado' : 'em_analise',
+        kyc_enviado_em: agora,
+        updated_at: agora,
+      }, { onConflict: 'vendedor_id' })
+
+    if (erroGravar) {
+      // If deletion opened between record and upsert, the DB trigger rejects
+      // the local subject link. finalizeOperation then makes cleanup_pending
+      // durable; it never relies on this runtime log as the blocker.
+      try {
+        const finalState = await finalizeOperation(operation.id)
+        if (finalState.state === 'cleanup_pending') {
+          const neutralizado = await neutralizarRecebedorExterno(criado.id)
+          console.error('Recebedor local rejeitado durante exclusao de conta', {
+            operation_id: operation.id,
+            transferencias_desativadas: neutralizado,
+            code: erroGravar.code,
+          })
+          return json({
+            error: 'A exclusao da conta foi iniciada; o suporte precisa encerrar o recebedor externo.',
+          }, { status: 409 })
+        }
+      } catch (finalizeError) {
+        const neutralizado = await neutralizarRecebedorExterno(criado.id)
+        console.error('Recebedor externo ficou com operacao pendente', {
+          operation_id: operation.id,
+          transferencias_desativadas: neutralizado,
+          code: erroGravar.code,
+          finalize_error: finalizeError instanceof Error ? finalizeError.message : String(finalizeError),
+        })
+      }
+      console.error('Recebedor criado no gateway mas nao gravado', {
+        operation_id: operation.id, code: erroGravar.code,
+      })
+      return json({
+        error: 'Sua conta foi criada mas o vinculo local ficou pendente. Fale com o suporte.',
+      }, { status: 500 })
+    }
+
+    const finalState = await finalizeOperation(operation.id)
+    if (finalState.state !== 'linked') {
+      const neutralizado = await neutralizarRecebedorExterno(criado.id)
+      console.error('Exclusao iniciou antes da finalizacao do recebedor', {
+        operation_id: operation.id,
+        transferencias_desativadas: neutralizado,
+      })
+      return json({
+        error: 'A exclusao da conta foi iniciada; o suporte precisa encerrar o recebedor externo.',
+      }, { status: 409 })
+    }
+
+    return json({
+      ok: true,
+      cadastrado: true,
+      status: criado.status === 'active' ? 'ativo' : 'pendente',
+      conta_mascarada: `${banco} / ${agencia} / ${mascararConta(conta)}-${contaDv}`,
+    })
+  } catch (erro) {
+    const e = erro as { status?: number; message?: string }
+    console.error('Falha ao criar recebedor', { status: e.status })
+
+    // Conta do gateway sem marketplace liberado: e problema NOSSO, nao dos
+    // dados que o vendedor digitou. Nao adianta ele conferir a conta e tentar
+    // de novo — a mensagem tem que dizer isso, senao ele fica em loop.
+    if (/split settings/i.test(e.message || '')) {
+      return json({
+        error: 'O recebimento automatico ainda esta sendo liberado pela nossa operadora. Seus dados nao foram perdidos — nossa equipe avisa assim que estiver pronto.',
+        code: 'split_nao_habilitado',
+      }, { status: 503 })
+    }
+
+    return json({ error: e.message || 'Nao foi possivel criar sua conta de recebimento agora.' }, {
+      status: e.status && e.status < 500 ? 422 : 502,
+    })
+  }
+})
