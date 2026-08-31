@@ -1,7 +1,7 @@
 import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { LoaderCircle, LocateFixed } from 'lucide-react'
+import { LoaderCircle, LocateFixed, LogOut } from 'lucide-react'
 import { getSessao, logout, setContaDemo, useSessao } from './lib/auth'
 import { supabase } from './lib/supabase'
 import BottomNav from './components/BottomNav'
@@ -274,14 +274,55 @@ function GlobalAvisoToast() {
   )
 }
 
+// Tela de espera da verificação.
+//
+// Ela substitui TODAS as rotas e a barra de baixo some junto, então quem cai
+// aqui não tem para onde ir. Foi por isso que a Apple reprovou em 31/08/2026:
+// "There was no option to return to the login screen once the registration
+// process started" — o revisor criou conta, parou nesta tela e ficou preso.
+//
+// A saída é sair da conta. Não é um detalhe de conforto: sem ela, quem
+// registrou no aparelho errado, ou quer entrar com outra conta, precisa
+// desinstalar o app.
 function KycLockedPanel() {
+  const navigate = useNavigate()
+
+  function sair() {
+    logout()
+    supabase.auth.signOut()
+    navigate('/login', { replace: true })
+  }
+
   return (
     <div style={{ padding: 24 }}>
       <div style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: 18, padding: 18 }}>
-        <div style={{ fontSize: 18, fontWeight: 900, color: '#92400e', marginBottom: 6 }}>Verificacao obrigatoria</div>
+        <div style={{ fontSize: 18, fontWeight: 900, color: '#92400e', marginBottom: 6 }}>Verificação em análise</div>
         <p style={{ margin: 0, color: '#92400e', fontSize: 14, lineHeight: 1.5, fontWeight: 600 }}>
-          Seu acesso operacional fica bloqueado ate o KYC ser aprovado. Envie CPF real, documento, selfie e local de atuacao acima. Enquanto isso voce nao aparece no mapa e nao pode criar produtos.
+          Para vender na praia a gente precisa confirmar quem você é. Envie CPF,
+          documento com foto, selfie e o local onde você atua no bloco acima.
+          Enquanto a análise não termina, você não aparece no mapa e não
+          consegue cadastrar produtos.
         </p>
+        <p style={{ margin: '10px 0 0', color: '#92400e', fontSize: 13.5, lineHeight: 1.5, fontWeight: 600, opacity: .9 }}>
+          A resposta chega neste mesmo aparelho. Você pode fechar o app — o
+          envio não se perde.
+        </p>
+      </div>
+
+      <button
+        type="button"
+        onClick={sair}
+        style={{
+          width: '100%', marginTop: 16, padding: '13px 0', borderRadius: 14,
+          border: '1px solid #cbd5e1', background: '#fff', color: '#334155',
+          fontSize: 14.5, fontWeight: 800, cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+        }}
+      >
+        <LogOut size={17} /> Sair da conta
+      </button>
+      <div style={{ marginTop: 8, textAlign: 'center', fontSize: 12.5, color: '#64748b', fontWeight: 600 }}>
+        Quer entrar com outra conta? Saia por aqui.
       </div>
     </div>
   )

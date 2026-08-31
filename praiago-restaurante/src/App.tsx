@@ -168,14 +168,49 @@ function GlobalAvisoToast({ locationNotice }: { locationNotice: LocationNotice |
   )
 }
 
+// Tela de espera da verificação.
+//
+// Ela substitui todas as rotas e o menu lateral some junto, então quem cai
+// aqui não tem para onde ir. No app do ambulante isso rendeu reprovação da
+// Apple em 31/08/2026 — o revisor criou conta, parou nesta tela e ficou
+// preso. Aqui a parede é a mesma, então a saída também é.
 function KycLockedPanel() {
+  const navigate = useNavigate()
+
+  function sair() {
+    logout()
+    navigate('/login', { replace: true })
+  }
+
   return (
     <div style={{ padding: 32 }}>
       <div style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: 18, padding: 20, maxWidth: 760, margin: '0 auto' }}>
-        <div style={{ fontSize: 20, fontWeight: 900, color: '#92400e', marginBottom: 8 }}>KYC obrigatorio do restaurante</div>
+        <div style={{ fontSize: 20, fontWeight: 900, color: '#92400e', marginBottom: 8 }}>Verificação em análise</div>
         <p style={{ margin: 0, color: '#92400e', fontSize: 14, lineHeight: 1.55, fontWeight: 600 }}>
-          O painel operacional fica bloqueado ate a verificacao ser aprovada. Envie nome real do responsavel, CPF, CNPJ real, documento, selfie e comprovacao do local. Enquanto isso o restaurante nao aparece no mapa e nao pode criar produtos.
+          Para o restaurante vender pelo PraiaGo a gente precisa confirmar o
+          negócio. Envie o nome do responsável, CPF, CNPJ, documento com foto,
+          selfie e a comprovação do endereço no bloco acima. Enquanto a análise
+          não termina, o restaurante não aparece no mapa e não consegue
+          cadastrar produtos.
         </p>
+      </div>
+
+      <div style={{ maxWidth: 760, margin: '16px auto 0' }}>
+        <button
+          type="button"
+          onClick={sair}
+          style={{
+            width: '100%', padding: '13px 0', borderRadius: 14,
+            border: '1px solid #cbd5e1', background: '#fff', color: '#334155',
+            fontSize: 14.5, fontWeight: 800, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          }}
+        >
+          <LogOut size={17} /> Sair da conta
+        </button>
+        <div style={{ marginTop: 8, textAlign: 'center', fontSize: 12.5, color: '#64748b', fontWeight: 600 }}>
+          Quer entrar com outra conta? Saia por aqui.
+        </div>
       </div>
     </div>
   )
