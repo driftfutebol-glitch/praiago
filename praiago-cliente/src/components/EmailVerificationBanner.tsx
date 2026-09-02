@@ -4,6 +4,22 @@ import { AlertCircle, Mail } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useStore } from '../store/useStore'
 
+// O Supabase devolve o motivo em ingles e em jargao: quem le "over_email_send
+// _rate_limit" nao descobre que so precisa esperar. Sem isto o usuario aperta
+// "reenviar" cinco vezes seguidas achando que nao funcionou — e cada toque
+// gasta mais um do limite que ja estourou.
+function motivoDoErro(mensagem: string): string {
+  const m = mensagem.toLowerCase()
+  const segundos = m.match(/after (\d+) seconds?/)
+  if (segundos) return `Espere ${segundos[1]} segundos antes de pedir de novo.`
+  if (m.includes('rate limit') || m.includes('too many')) {
+    return 'Muitos e-mails pedidos agora. Espere alguns minutos e tente de novo.'
+  }
+  if (m.includes('already') && m.includes('confirm')) return 'Este e-mail ja esta confirmado.'
+  if (m.includes('network') || m.includes('fetch')) return 'Sem conexao. Verifique a internet e tente de novo.'
+  return mensagem
+}
+
 export default function EmailVerificationBanner() {
   const sessao = useStore(s => s.sessao)
   const [verificado, setVerificado] = useState<boolean | null>(null)
@@ -16,13 +32,29 @@ export default function EmailVerificationBanner() {
     }
 
     let vivo = true
+    // Duas chamadas de rede. A versao anterior nao olhava os erros: qualquer
+    // falha devolvia data nulo, o OR dava false, e o app acusava "confirme seu
+    // e-mail" na cara de quem ja tinha confirmado. E isso rodava a cada 30s,
+    // entao bastava um instante sem rede para a faixa amarela aparecer.
+    //
+    // Nao conseguir perguntar nao e a mesma coisa que a resposta ser nao: se as
+    // duas falharem, o estado fica como esta e a proxima rodada tenta de novo.
     async function checkStatus() {
-      const [{ data: authData }, { data: profile }] = await Promise.all([
+      const [auth, perfil] = await Promise.all([
         supabase.auth.getUser(),
         supabase.from('profiles').select('email_verificado').eq('id', sessao!.id).maybeSingle(),
       ])
       if (!vivo) return
-      setVerificado(Boolean(authData.user?.email_confirmed_at || profile?.email_verificado))
+
+      if (auth.data.user?.email_confirmed_at || perfil.data?.email_verificado) {
+        setVerificado(true)
+        return
+      }
+      // Chegou ate aqui sem confirmacao: so vale como "nao confirmado" se pelo
+      // menos uma das duas respondeu de verdade.
+      const auth_respondeu = !auth.error && auth.data.user !== null
+      const perfil_respondeu = !perfil.error && perfil.data !== null
+      if (auth_respondeu || perfil_respondeu) setVerificado(false)
     }
     checkStatus()
     const timer = window.setInterval(checkStatus, 30000)
@@ -52,7 +84,9 @@ export default function EmailVerificationBanner() {
 
     useStore.getState().addNotif({
       titulo: error ? 'Nao foi possivel enviar' : 'E-mail enviado',
-      texto: error ? error.message : `Mandamos a confirmacao para ${sessao.email}.`,
+      texto: error
+        ? motivoDoErro(error.message)
+        : `Mandamos a confirmacao para ${sessao.email}. Pode levar alguns minutos — veja tambem o spam.`,
     })
     setLoading(false)
   }

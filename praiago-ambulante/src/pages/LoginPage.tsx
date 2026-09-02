@@ -250,7 +250,16 @@ export default function LoginPage() {
               </button>
               <div style={{ display: 'flex', justifyContent: 'center', gap: 13, marginTop: 10 }}>
                 <button type="button" className="text-command" onClick={() => void resendCode()}>Reenviar</button>
-                <button type="button" className="text-command" onClick={() => { setVerificationEmail(null); setMessage('') }} style={{ color: '#617089' }}>Trocar e-mail</button>
+                {/* Este botao sempre voltou para a tela de login -- so nao dizia
+                    isso. Chamava-se "Trocar e-mail", que descreve o motivo mais
+                    comum de voltar, nao o destino. Foi o que a Apple nao achou:
+                    "no option to return to the login screen once the
+                    registration process started". Agora o rotulo diz o destino,
+                    e a linha abaixo cobre o motivo. */}
+                <button type="button" className="text-command" onClick={() => { setVerificationEmail(null); setMessage('') }} style={{ color: '#617089' }}>Voltar ao login</button>
+              </div>
+              <div style={{ marginTop: 8, textAlign: 'center', color: '#8494ab', fontSize: 11.5, lineHeight: 1.4, fontWeight: 650 }}>
+                Errou o e-mail? Volte ao login e cadastre de novo.
               </div>
             </div>
           ) : (

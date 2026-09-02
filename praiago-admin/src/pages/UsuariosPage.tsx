@@ -5,11 +5,43 @@ import { Ban, RotateCcw, Trash2, UserCheck, ShieldCheck, ShieldX, Search, Eye, E
 import { format } from 'date-fns'
 import { confirmDialog, alertDialog, promptDialog } from '../lib/dialog'
 
+type Protocolo = {
+  id: string
+  role: string
+  status: string
+  blockers: string[] | null
+  notification_email: string | null
+}
+
 export default function UsuariosPage() {
   const [usuarios, setUsuarios] = useState<any[]>([])
   const [busca, setBusca] = useState('')
   const [filtroRole, setFiltroRole] = useState('todos')
   const [acaoId, setAcaoId] = useState<string | null>(null)
+
+  // Protocolos de exclusão já abertos, indexados por e-mail (é o que a rota
+  // 'list' devolve — ela não expõe o subject_id de propósito).
+  //
+  // Sem isto o botão mentia: a conta já estava no protocolo, e "Solicitar
+  // exclusão" reabria o MESMO protocolo e o estacionava de novo em revisão
+  // manual. Dava para clicar a tarde inteira e o contador de tentativas só
+  // subia. Conta de vendedor nunca conclui sozinha — falta sempre a confirmação
+  // de que o recebedor foi encerrado no Pagar.me, e não havia onde dar ela.
+  const [protocolos, setProtocolos] = useState<Record<string, Protocolo>>({})
+
+  const carregarProtocolos = useCallback(async () => {
+    const { data, error } = await supabase.functions.invoke('excluir-conta', {
+      body: { action: 'list', pageSize: 100 },
+    })
+    const resp = (data || {}) as { requests?: Protocolo[]; error?: string }
+    if (error || resp.error) return
+    const porEmail: Record<string, Protocolo> = {}
+    for (const p of resp.requests || []) {
+      if (p.status === 'completed' || !p.notification_email) continue
+      porEmail[p.notification_email.toLowerCase()] = p
+    }
+    setProtocolos(porEmail)
+  }, [])
 
   const carregar = useCallback(async () => {
     // Puxa da tabela public.profiles (admin le todos via RLS is_admin).
@@ -19,13 +51,66 @@ export default function UsuariosPage() {
 
   useEffect(() => {
     carregar()
+    carregarProtocolos()
     // Atualiza em tempo real: cadastro novo, verificacao, banimento etc.
     const ch = supabase
       .channel('admin_usuarios')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => carregar())
       .subscribe()
     return () => { supabase.removeChannel(ch) }
-  }, [carregar])
+  }, [carregar, carregarProtocolos])
+
+  async function concluirExclusao(u: any, p: Protocolo) {
+    const alvo = u.email || u.nome || u.id
+    const ehVendedor = u.role !== 'cliente'
+    if (!await confirmDialog({
+      title: 'Concluir exclusão definitiva?',
+      message: ehVendedor
+        ? `A conta de ${alvo} é apagada AGORA: documentos de KYC, fotos, login. Pedidos viram anônimos. Não dá para desfazer.\n\nAo continuar você confirma que o recebedor desta conta já foi encerrado no Pagar.me — é a única coisa que o sistema não verifica sozinho.`
+        : `A conta de ${alvo} é apagada AGORA: dados pessoais, fotos e login. Não dá para desfazer.`,
+      confirmText: 'Apagar de vez',
+      tone: 'danger',
+    })) return
+
+    setAcaoId(u.id)
+    const { data, error } = await supabase.functions.invoke('excluir-conta', {
+      body: {
+        action: 'process',
+        requestId: p.id,
+        ...(ehVendedor ? { externalCleanupConfirmed: true } : {}),
+      },
+    })
+    const resp = (data || {}) as { error?: string; completed?: boolean; blockers?: string[]; message?: string }
+
+    if (error || resp.error) {
+      let msg = resp.error || 'Não foi possível concluir a exclusão.'
+      try {
+        const j = await (error as { context?: { json?: () => Promise<{ error?: string }> } })?.context?.json?.()
+        if (j?.error) msg = j.error
+      } catch { /* usa a msg padrão */ }
+      await alertDialog({ title: 'Erro', message: msg, tone: 'danger' })
+      setAcaoId(null)
+      return
+    }
+
+    if (resp.completed === false) {
+      await alertDialog({
+        title: 'Ainda não concluiu',
+        message: resp.blockers?.length
+          ? `Impedimentos: ${resp.blockers.join(', ')}.`
+          : resp.message || 'O protocolo continua em revisão.',
+      })
+      await carregarProtocolos()
+    } else {
+      await alertDialog({
+        title: 'Conta apagada',
+        message: `${alvo} foi removido. O e-mail e o CPF ficam livres para um cadastro novo.`,
+      })
+      setUsuarios(prev => prev.filter(item => item.id !== u.id))
+      await carregarProtocolos()
+    }
+    setAcaoId(null)
+  }
 
   const roleConfig: Record<string, { color: string; bg: string; border: string; bar: string }> = {
     restaurante: { color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20', bar: 'bg-orange-500' },
@@ -45,7 +130,12 @@ export default function UsuariosPage() {
       filtroRole === 'todos' ? true :
       filtroRole === 'revisao' ? !!u.conta_demo :
       u.role === filtroRole
-    return matchBusca && matchRole
+    // Busca por texto ignora a aba de papel de proposito. Quem digita um e-mail
+    // inteiro quer AQUELA conta, nao "aquela conta se ela for do papel que por
+    // acaso esta selecionado". Uma conta que virou ambulante sumia da aba
+    // Cliente e a conclusao natural era que ela tinha deixado de existir —
+    // aconteceu exatamente isso procurando a conta de um vendedor.
+    return busca ? matchBusca : (matchBusca && matchRole)
   })
 
   const roles = ['todos', ...new Set(usuarios.map(u => u.role).filter(Boolean)), 'revisao']
@@ -201,7 +291,10 @@ export default function UsuariosPage() {
       })
       // A conta continua na lista, agora banida: recarrega para mostrar o estado
       // real em vez de sumir com ela e dar a impressão de exclusão concluída.
+      // E recarrega os protocolos, para o botão já virar "Concluir exclusão"
+      // em vez de continuar oferecendo abrir o que acabou de ser aberto.
       await carregar()
+      await carregarProtocolos()
       setAcaoId(null)
       return
     }
@@ -374,15 +467,49 @@ export default function UsuariosPage() {
                   <RotateCcw size={12} />
                   Resetar
                 </button>
-                <button
-                  onClick={() => excluirConta(u)}
-                  disabled={acaoId === u.id}
-                  title="Abre o protocolo de exclusão: bloqueia a conta e entra na fila. Conta vendedora só conclui após revisão."
-                  className="px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-wide border bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/15 disabled:opacity-50 flex items-center justify-center gap-1"
-                >
-                  <Trash2 size={12} />
-                  Solicitar exclusão
-                </button>
+                {/* O botão diz o próximo passo real daquela conta. Se já existe
+                    protocolo aberto, "Solicitar exclusão" não solicitava nada —
+                    reabria o mesmo protocolo e voltava para a fila. */}
+                {(() => {
+                  const p = protocolos[String(u.email || '').toLowerCase()]
+                  const travado = !!p && (p.blockers || []).length > 0
+                  if (p && !travado) {
+                    return (
+                      <button
+                        onClick={() => concluirExclusao(u, p)}
+                        disabled={acaoId === u.id}
+                        title="Apaga a conta agora, de vez. Não dá para desfazer."
+                        className="px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-wide border bg-rose-500/20 text-rose-300 border-rose-500/40 hover:bg-rose-500/30 disabled:opacity-50 flex items-center justify-center gap-1"
+                      >
+                        <Trash2 size={12} />
+                        Concluir exclusão
+                      </button>
+                    )
+                  }
+                  if (travado) {
+                    return (
+                      <button
+                        disabled
+                        title={`Impedimentos: ${(p.blockers || []).join(', ')}`}
+                        className="px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-wide border bg-amber-500/10 text-amber-400 border-amber-500/25 cursor-not-allowed flex items-center justify-center gap-1"
+                      >
+                        <Trash2 size={12} />
+                        Exclusão travada
+                      </button>
+                    )
+                  }
+                  return (
+                    <button
+                      onClick={() => excluirConta(u)}
+                      disabled={acaoId === u.id}
+                      title="Abre o protocolo de exclusão: bloqueia a conta e entra na fila."
+                      className="px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-wide border bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/15 disabled:opacity-50 flex items-center justify-center gap-1"
+                    >
+                      <Trash2 size={12} />
+                      Solicitar exclusão
+                    </button>
+                  )
+                })()}
               </div>
             </motion.div>
           )

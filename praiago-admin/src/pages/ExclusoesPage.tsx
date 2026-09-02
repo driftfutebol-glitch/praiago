@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { supabase } from '../lib/supabase'
-import { Trash2, Check, X, Search, Clock, Mail, IdCard, UserCircle } from 'lucide-react'
+import { Trash2, Check, X, Search, Clock, Mail, IdCard, UserCircle, ShieldAlert, Loader2, AlertTriangle } from 'lucide-react'
 import { format } from 'date-fns'
-import { alertDialog, promptDialog } from '../lib/dialog'
+import { alertDialog, confirmDialog, promptDialog } from '../lib/dialog'
 
 type Solicitacao = {
   id: string
@@ -25,11 +25,67 @@ const statusConfig: Record<string, { label: string; cls: string }> = {
   recusada: { label: 'Recusada', cls: 'bg-slate-500/10 text-slate-400 border-slate-500/20' },
 }
 
+// O protocolo de verdade — o que apaga a conta — vive em account_deletion_requests
+// e é movido pela Edge Function excluir-conta. A lista de baixo (solicitacoes_exclusao)
+// é só o recado que o titular deixou pelo app; marcar aquilo como "concluída" não
+// apaga nada.
+//
+// Conta cliente sem impedimento conclui sozinha na primeira chamada. Conta de
+// vendedor NUNCA conclui sozinha: por desenho, alguém precisa confirmar que o
+// recebedor foi encerrado no Pagar.me antes do histórico de repasse perder o
+// vínculo. Sem um botão para essa confirmação, todo protocolo de vendedor ficava
+// preso em manual_review para sempre — clicar de novo em "Solicitar exclusão" na
+// aba Usuários só reabria o mesmo protocolo e reparava no mesmo lugar.
+type Protocolo = {
+  id: string
+  role: 'cliente' | 'ambulante' | 'restaurante' | 'entregador'
+  status: 'requested' | 'manual_review' | 'blocked' | 'processing' | 'completed' | 'failed'
+  phase: string
+  attempt_count: number
+  blockers: string[] | null
+  requested_at: string
+  deadline_at: string
+  completed_at: string | null
+  notification_email: string | null
+}
+
+type OperacaoRecebedor = {
+  id: string
+  deletion_request_id: string
+  state: string
+  recipient_id: string | null
+}
+
+const protocoloStatus: Record<string, { label: string; cls: string }> = {
+  requested: { label: 'Aberto', cls: 'bg-sky-500/10 text-sky-400 border-sky-500/20' },
+  processing: { label: 'Processando', cls: 'bg-sky-500/10 text-sky-400 border-sky-500/20' },
+  manual_review: { label: 'Revisão manual', cls: 'bg-amber-500/10 text-amber-400 border-amber-500/20' },
+  blocked: { label: 'Bloqueado', cls: 'bg-rose-500/10 text-rose-400 border-rose-500/20' },
+  failed: { label: 'Falhou', cls: 'bg-rose-500/10 text-rose-400 border-rose-500/20' },
+  completed: { label: 'Concluído', cls: 'bg-green-500/10 text-green-400 border-green-500/20' },
+}
+
+// Os códigos vêm de get_account_deletion_blockers. Traduzir aqui evita que quem
+// atende leia "ingresso_ou_reembolso_em_andamento" e tenha de adivinhar.
+const impedimentoLegivel: Record<string, string> = {
+  pedido_em_andamento: 'pedido em andamento',
+  reembolso_em_andamento: 'reembolso em andamento',
+  ingresso_ou_reembolso_em_andamento: 'ingresso ou reembolso em andamento',
+  saldo_a_receber: 'saldo a receber',
+  repasse_pendente: 'repasse pendente',
+  chamado_aberto: 'chamado de suporte aberto',
+  recebedor_pendente: 'recebedor pendente no gateway',
+}
+
 export default function ExclusoesPage() {
   const [itens, setItens] = useState<Solicitacao[]>([])
   const [busca, setBusca] = useState('')
   const [filtro, setFiltro] = useState<'pendente' | 'todas'>('pendente')
   const [acaoId, setAcaoId] = useState<string | null>(null)
+  const [protocolos, setProtocolos] = useState<Protocolo[]>([])
+  const [operacoes, setOperacoes] = useState<OperacaoRecebedor[]>([])
+  const [carregandoProtocolos, setCarregandoProtocolos] = useState(true)
+  const [erroProtocolos, setErroProtocolos] = useState<string | null>(null)
 
   const carregar = useCallback(async () => {
     const { data } = await supabase
@@ -39,14 +95,96 @@ export default function ExclusoesPage() {
     if (data) setItens(data as Solicitacao[])
   }, [])
 
+  const carregarProtocolos = useCallback(async () => {
+    setCarregandoProtocolos(true)
+    const { data, error } = await supabase.functions.invoke('excluir-conta', {
+      body: { action: 'list', pageSize: 100 },
+    })
+    const resp = (data || {}) as { requests?: Protocolo[]; recipientOperations?: OperacaoRecebedor[]; error?: string }
+    if (error || resp.error) {
+      setErroProtocolos(resp.error || 'Não foi possível carregar a fila de protocolos.')
+    } else {
+      setErroProtocolos(null)
+      setProtocolos(resp.requests || [])
+      setOperacoes(resp.recipientOperations || [])
+    }
+    setCarregandoProtocolos(false)
+  }, [])
+
   useEffect(() => {
     carregar()
+    carregarProtocolos()
     const ch = supabase
       .channel('admin_exclusoes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'solicitacoes_exclusao' }, () => carregar())
       .subscribe()
     return () => { supabase.removeChannel(ch) }
-  }, [carregar])
+  }, [carregar, carregarProtocolos])
+
+  async function concluirProtocolo(p: Protocolo) {
+    const ehVendedor = p.role !== 'cliente'
+    const alvo = p.notification_email || p.id
+    const pendente = operacoes.find(o => o.deletion_request_id === p.id)
+
+    if (pendente) {
+      await alertDialog({
+        title: 'Recebedor pendente',
+        message: `Existe uma operação de recebedor em "${pendente.state}" ligada a este protocolo${pendente.recipient_id ? ` (${pendente.recipient_id})` : ''}. Resolva ela antes de concluir a exclusão.`,
+        tone: 'danger',
+      })
+      return
+    }
+
+    const confirmado = await confirmDialog({
+      title: 'Concluir exclusão definitiva?',
+      message: ehVendedor
+        ? `A conta de ${alvo} será apagada agora: documentos de KYC no Storage, fotos, pedidos anonimizados e login removido. Não dá para desfazer.\n\nAo continuar você confirma que o recebedor desta conta já foi encerrado no painel do Pagar.me. É a única coisa que o sistema não consegue verificar sozinho.`
+        : `A conta de ${alvo} será apagada agora: dados pessoais, fotos e login. Pedidos e registros financeiros de obrigação legal ficam anonimizados. Não dá para desfazer.`,
+      confirmText: 'Concluir exclusão',
+      tone: 'danger',
+    })
+    if (!confirmado) return
+
+    setAcaoId(p.id)
+    const { data, error } = await supabase.functions.invoke('excluir-conta', {
+      body: {
+        action: 'process',
+        requestId: p.id,
+        // Só o vendedor precisa desta confirmação; mandá-la para cliente seria
+        // afirmar uma checagem que ninguém fez.
+        ...(ehVendedor ? { externalCleanupConfirmed: true } : {}),
+      },
+    })
+    const resp = (data || {}) as { error?: string; completed?: boolean; status?: string; blockers?: string[]; message?: string }
+
+    if (error || resp.error) {
+      let msg = resp.error || 'Não foi possível concluir a exclusão.'
+      try {
+        const p2 = await (error as { context?: { json?: () => Promise<{ error?: string }> } })?.context?.json?.()
+        if (p2?.error) msg = p2.error
+      } catch { /* usa a msg padrão */ }
+      await alertDialog({ title: 'Erro', message: msg, tone: 'danger' })
+      setAcaoId(null)
+      return
+    }
+
+    if (resp.completed === false) {
+      const lista = (resp.blockers || []).map(b => impedimentoLegivel[b] || b)
+      await alertDialog({
+        title: 'Ainda não concluiu',
+        message: lista.length
+          ? `Impedimentos: ${lista.join(', ')}.\n\nResolva na aba Pedidos ou Financeiro e tente de novo.`
+          : resp.message || 'O protocolo continua em revisão.',
+      })
+    } else {
+      await alertDialog({ title: 'Conta apagada', message: `${alvo} foi removido. O e-mail e o CPF ficam livres para um cadastro novo.` })
+    }
+    await carregarProtocolos()
+    await carregar()
+    setAcaoId(null)
+  }
+
+  const abertos = protocolos.filter(p => p.status !== 'completed')
 
   // Só muda o status do pedido. A exclusão em si continua sendo feita à mão
   // na aba Usuários, de propósito: quem aperta o botão vê antes o saldo, os
@@ -112,9 +250,106 @@ export default function ExclusoesPage() {
       <header className="mb-4">
         <h1 className="text-3xl font-black text-slate-100 tracking-tight">Pedidos de Exclusão</h1>
         <p className="text-slate-400 font-medium">
-          Solicitações abertas pelos próprios titulares dentro do aplicativo.
+          Protocolos em andamento e solicitações abertas pelos titulares no aplicativo.
         </p>
       </header>
+
+      <section className="space-y-3">
+        <div className="flex items-center gap-2">
+          <ShieldAlert size={16} className="text-purple-400" />
+          <h2 className="text-lg font-black text-slate-100">Protocolos em andamento</h2>
+          <span className="text-xs text-slate-500 font-mono">{abertos.length} aberto(s)</span>
+          {carregandoProtocolos && <Loader2 size={13} className="animate-spin text-slate-600" />}
+        </div>
+        <p className="text-xs text-slate-500 font-medium -mt-1">
+          Esta é a fila que apaga de verdade. Conta de vendedor não conclui sozinha:
+          precisa da confirmação de que o recebedor foi encerrado no Pagar.me.
+        </p>
+
+        {erroProtocolos && (
+          <div className="glass-panel p-4 rounded-xl border-rose-500/25 text-sm text-rose-300 font-bold flex items-center gap-2">
+            <AlertTriangle size={14} /> {erroProtocolos}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {abertos.map(p => {
+            const sc = protocoloStatus[p.status] || protocoloStatus.manual_review
+            const impedimentos = (p.blockers || []).map(b => impedimentoLegivel[b] || b)
+            const pendente = operacoes.find(o => o.deletion_request_id === p.id)
+            const podeConcluir = impedimentos.length === 0 && !pendente
+            return (
+              <motion.div
+                key={p.id}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="glass-panel p-5 rounded-2xl border-purple-500/25 flex flex-col"
+              >
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 text-slate-100 font-black truncate">
+                      <Mail size={13} className="text-slate-500 shrink-0" />
+                      {p.notification_email || '—'}
+                    </div>
+                    <div className="text-slate-400 text-xs font-bold uppercase tracking-wide mt-1">
+                      {p.role}
+                    </div>
+                  </div>
+                  <span className={`px-2 py-1 rounded-md border text-[10px] font-black uppercase tracking-wider shrink-0 ${sc.cls}`}>
+                    {sc.label}
+                  </span>
+                </div>
+
+                <div className="space-y-1.5 text-xs text-slate-500 font-mono">
+                  <div className="flex items-center gap-2">
+                    <Clock size={12} /> aberto em {format(new Date(p.requested_at), 'dd/MM/yyyy HH:mm')}
+                  </div>
+                  <div className="truncate" title={p.id}>id: {p.id}</div>
+                  {p.attempt_count > 1 && <div>tentativas: {p.attempt_count}</div>}
+                </div>
+
+                {impedimentos.length > 0 && (
+                  <div className="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300 font-bold">
+                    Impedimentos: {impedimentos.join(', ')}.
+                  </div>
+                )}
+
+                {pendente && (
+                  <div className="mt-3 p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-[11px] text-rose-300 font-bold">
+                    Recebedor em "{pendente.state}"{pendente.recipient_id ? ` (${pendente.recipient_id})` : ''}. Resolva antes de concluir.
+                  </div>
+                )}
+
+                <button
+                  onClick={() => concluirProtocolo(p)}
+                  disabled={acaoId === p.id || !podeConcluir}
+                  title={podeConcluir
+                    ? 'Apaga a conta agora. Não dá para desfazer.'
+                    : 'Resolva os impedimentos acima antes de concluir.'}
+                  className="mt-4 px-3 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-wide border bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/15 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+                >
+                  {acaoId === p.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                  Concluir exclusão
+                </button>
+              </motion.div>
+            )
+          })}
+
+          {!carregandoProtocolos && abertos.length === 0 && !erroProtocolos && (
+            <div className="col-span-full text-center text-slate-500 py-8 font-bold flex flex-col items-center gap-2">
+              <Check size={20} className="text-slate-700" />
+              Nenhum protocolo em aberto.
+            </div>
+          )}
+        </div>
+      </section>
+
+      <div className="pt-2 border-t border-slate-800/60">
+        <h2 className="text-lg font-black text-slate-100 mt-4 mb-1">Recados dos titulares</h2>
+        <p className="text-xs text-slate-500 font-medium mb-4">
+          Pedidos abertos pelo app. Marcar aqui só registra o atendimento — quem apaga é a fila acima.
+        </p>
+      </div>
 
       <div className="flex items-center gap-4 flex-wrap">
         <div className="relative">

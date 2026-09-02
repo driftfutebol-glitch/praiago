@@ -370,9 +370,22 @@ export default function App() {
     // Agora erro de rede não conclui nada: a sessão fica como está e a
     // próxima passagem tenta de novo. O bloqueio continua funcionando,
     // porque para bloquear o servidor precisa responder.
+    // Conta APAGADA chega como erro do Supabase ("User from sub claim in JWT
+    // does not exist"), nao como usuario nulo — entao caia no mesmo `return`
+    // da falha de rede e o aparelho ficava logado para sempre numa conta que
+    // nao existe mais. A separacao e o codigo HTTP: 4xx e o servidor dizendo
+    // que o token nao vale; sem codigo e a rede que nao chegou la.
+    const respostaNegativa = (erro: unknown) => {
+      const status = (erro as { status?: number } | null)?.status
+      return typeof status === 'number' && status >= 400 && status < 500
+    }
+
     const checarStatus = async () => {
       const { data: authData, error: erroAuth } = await supabase.auth.getUser()
-      if (erroAuth) return
+      if (erroAuth) {
+        if (respostaNegativa(erroAuth)) bloquearAcessoInvalido(null, undefined)
+        return
+      }
       if (!authData.user) {
         bloquearAcessoInvalido(null, undefined)
         return
@@ -382,7 +395,12 @@ export default function App() {
         .select('status,role,verificado,conta_demo')
         .eq('id', sessao.id)
         .maybeSingle()
-      if (erroPerfil || !data) return
+      if (erroPerfil) return
+      // Sessao valida e nenhuma linha: o perfil foi apagado.
+      if (!data) {
+        bloquearAcessoInvalido(null, undefined)
+        return
+      }
       atualizarGate(data, authData.user.id)
     }
     checarStatus()

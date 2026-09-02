@@ -123,14 +123,19 @@ function KycDocumentButton({
   return (
     <button
       type="button"
-      onClick={() => url && onPreview(url)}
-      disabled={!url}
+      onClick={() => url && !failed && onPreview(url)}
+      disabled={!url || failed}
       title={failed ? `${label}: arquivo indisponível` : label}
       className="w-16 h-16 rounded-lg bg-slate-800/50 border border-slate-700/50 flex flex-col items-center justify-center hover:border-purple-500/30 transition-all group overflow-hidden relative disabled:cursor-not-allowed"
     >
-      {url ? (
+      {url && !failed ? (
         <>
-          <img src={url} alt={label} className="w-full h-full object-cover" />
+          {/* Assinar um caminho sempre da certo: createSignedUrl nao confere se o
+              objeto existe. Quem descobre que o arquivo sumiu -- ou que a CSP
+              barrou o dominio -- e o proprio <img>. Sem este onError o painel
+              ficava com o icone de imagem quebrada do navegador, que nao diz
+              nada a quem revisa o documento. */}
+          <img src={url} alt={label} onError={() => setFailed(true)} className="w-full h-full object-cover" />
           <div className="absolute inset-x-0 bottom-0 bg-slate-950/80 text-[8px] font-bold text-slate-300 text-center py-0.5">{label}</div>
           <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
             <Eye size={14} className="text-purple-400" />

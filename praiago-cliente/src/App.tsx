@@ -162,6 +162,25 @@ export default function App() {
         || perfil?.role !== 'cliente'
         || perfil?.status === 'banido'
       ) {
+        // Sair calado era o pior jeito de fazer isso. Quem tem conta de
+        // vendedor consegue entrar aqui — o login e o mesmo Supabase — e um
+        // instante depois era jogado de volta pro Perfil sem uma palavra.
+        // Parecia bug do app, e a pessoa tentava de novo, e de novo.
+        //
+        // O caso do vendedor e o comum: ele so tem conta no app Ambulante e
+        // baixou o do Cliente achando que era o mesmo. Merece ouvir isso.
+        const ehVendedor = !!perfil?.role && perfil.role !== 'cliente' && perfil.status !== 'banido'
+        useStore.getState().addNotif(
+          ehVendedor
+            ? {
+                titulo: 'Esta conta e de vendedor',
+                texto: 'Este e o app do cliente. Entre pelo app PraiaGo Ambulante com este mesmo e-mail, ou crie uma conta de cliente com outro e-mail.',
+              }
+            : {
+                titulo: 'Sessao encerrada',
+                texto: 'Sua conta nao esta ativa neste aplicativo. Fale com o suporte se achar que e engano.',
+              },
+        )
         useStore.getState().logout()
         supabase.auth.signOut()
         navigate('/perfil', { replace: true })
@@ -183,9 +202,25 @@ export default function App() {
     // próxima passagem tenta de novo. O bloqueio de conta banida continua
     // funcionando, porque para isso o servidor precisa responder — e quando
     // responde, a decisão é tomada.
+    // Nem todo erro é a mesma coisa, e tratar os dois como "não sei" abriu um
+    // buraco: conta APAGADA continuava logada para sempre, numa tela que não
+    // fazia mais nada. É que o Supabase devolve a conta apagada como ERRO
+    // ("User from sub claim in JWT does not exist"), não como usuário nulo —
+    // então caía no mesmo `return` da falha de rede.
+    //
+    // A separação é o código HTTP: 4xx é o servidor DIZENDO que este token não
+    // vale; sem código é a rede que não chegou lá. Só o primeiro derruba.
+    const respostaNegativa = (erro: unknown) => {
+      const status = (erro as { status?: number } | null)?.status
+      return typeof status === 'number' && status >= 400 && status < 500
+    }
+
     const checarStatus = async () => {
       const { data: authData, error: erroAuth } = await supabase.auth.getUser()
-      if (erroAuth) return
+      if (erroAuth) {
+        if (respostaNegativa(erroAuth)) validarAcesso(undefined, null)
+        return
+      }
       if (!authData.user) {
         validarAcesso(undefined, null)
         return
@@ -195,7 +230,13 @@ export default function App() {
         .select('status,role,conta_demo')
         .eq('id', sessao.id)
         .maybeSingle()
-      if (erroPerfil || !data) return
+      if (erroPerfil) return
+      // Sessão válida e nenhuma linha: o perfil foi apagado. Zero linhas aqui
+      // não é ambiguidade — a política de RLS deixa qualquer um ler a própria.
+      if (!data) {
+        validarAcesso(undefined, null)
+        return
+      }
       validarAcesso(authData.user.id, data)
     }
     checarStatus()
@@ -272,7 +313,15 @@ export default function App() {
       {/* Page Content with Transitions */}
       {/* `minHeight: 0` deixa o main encolher até a sobra da coluna em vez de
           crescer com o conteúdo — é o que torna a altura dele definida. */}
-      <main style={{ flex: 1, minHeight: 0, overflowY: 'auto', paddingBottom: '90px', position: 'relative' }}>
+      {/* A barra de baixo e uma pilula flutuante: 68px de altura, apoiada em
+          `bottom: 14px + env(safe-area-inset-bottom)`. No iPhone com barra de
+          gestos esse inset e ~34px, entao ela ocupa ~116px a partir do fundo —
+          e o padding aqui era 90px fixo. A ultima linha de conteudo ficava
+          DEBAIXO da barra, que foi o que o Bruno viu.
+          Agora a conta acompanha a propria barra: altura + apoio + inset real,
+          mais 16px de folga. Em aparelho sem inset o env() vale 0 e sobram
+          98px, ainda mais do que os 90 de antes. */}
+      <main style={{ flex: 1, minHeight: 0, overflowY: 'auto', paddingBottom: 'calc(68px + 14px + env(safe-area-inset-bottom) + 16px)', position: 'relative' }}>
         {/* Transição enxuta de propósito.
             Antes: `mode="wait"` + 0.38s + `scale`. Com `mode="wait"` a tela nova
             só COMEÇA a entrar depois de a antiga terminar de sair — 0.38 + 0.38

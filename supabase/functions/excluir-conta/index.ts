@@ -1495,7 +1495,11 @@ Deno.serve(async (req: Request) => {
       const from = (page - 1) * pageSize
       const { data: requests, error, count } = await admin
         .from('account_deletion_requests')
-        .select('id,role,status,phase,attempt_count,blockers,requested_at,deadline_at,completed_at,notification_sent_at,notification_error', { count: 'exact' })
+        // notification_email entra na lista porque a fila sem ele e ilegivel:
+        // o sysadmin via um uuid e tinha de garimpar na aba Usuarios para saber
+        // de quem era o protocolo que estava prestes a concluir. E o mesmo dado
+        // que aquela aba ja mostra, atras da mesma checagem de sysadmin.
+        .select('id,role,status,phase,attempt_count,blockers,requested_at,deadline_at,completed_at,notification_email,notification_sent_at,notification_error', { count: 'exact' })
         .order('deadline_at', { ascending: true })
         .order('id', { ascending: true })
         .range(from, from + pageSize - 1)
