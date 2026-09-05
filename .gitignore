@@ -58,3 +58,6 @@ npm-debug.log*
 # fonte, a zip se regera quando for enviar.
 PraiaGo-PlayStore-Recursos.zip
 mobile/ota-builds/
+
+.vercel
+.env*

@@ -150,7 +150,11 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
             onClick={() => setIsOpen(true)}
             style={{
               position: 'fixed',
-              bottom: 80,
+              // A BottomNav tem 70px de altura sobre `max(10px, safe-area)`.
+              // No iPhone com barra de gestos isso da ~104px, e este botao
+              // estava em 80px fixos: ficava POR CIMA da barra, tapando o
+              // ultimo destino. Agora a conta acompanha a propria barra.
+              bottom: 'calc(70px + max(10px, env(safe-area-inset-bottom)) + 12px)',
               right: 24,
               width: 64,
               height: 64,
@@ -178,11 +182,14 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
             exit={{ y: 20, opacity: 0, scale: 0.95 }}
             style={{
               position: 'fixed',
-              bottom: 80,
+              bottom: 'calc(70px + max(10px, env(safe-area-inset-bottom)) + 12px)',
               right: 24,
-              width: 350,
-              height: 500,
-              maxHeight: '80vh',
+              // 350 fixos nao cabiam em tela de 375px, e a altura em vh nao
+              // encolhe com o teclado do iPhone — o campo de escrever ficava
+              // atras dele. dvh encolhe junto.
+              width: 'min(350px, calc(100vw - 24px))',
+              height: 'min(500px, 70dvh)',
+              maxHeight: '80dvh',
               borderRadius: 24,
               background: 'rgba(255,255,255,0.92)',
               backdropFilter: 'blur(20px)',

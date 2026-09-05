@@ -9,6 +9,7 @@ import {
   X, Loader2, Filter
 } from 'lucide-react'
 import { alertDialog, promptDialog } from '../lib/dialog'
+import { registrarAcaoAdmin } from '../lib/auditoriaAdmin'
 
 // Colunas REAIS da tabela `verificacoes` (as mesmas que os apps gravam).
 // Antes o admin lia `nome`/`praia`/`documento_url` — colunas que não existem —
@@ -190,6 +191,10 @@ export default function VerificacoesPage() {
         p_override_reason: null,
       })
       if (error) throw error
+      void registrarAcaoAdmin('aprovar_kyc', null, {
+        verificacao_id: verificacao.id, usuario_id: verificacao.user_id,
+        nome: verificacao.nome_completo, tipo: verificacao.tipo, override: false,
+      })
       await fetchVerificacoes()
       await alertDialog({ title: 'Verificacao aprovada', message: 'O usuario foi liberado para aparecer no mapa e criar produtos.', tone: 'success' })
     } catch (err) {
@@ -236,6 +241,9 @@ export default function VerificacoesPage() {
         p_motivo: motivoRejeicao.trim(),
       })
       if (error) throw error
+      void registrarAcaoAdmin('rejeitar_kyc', null, {
+        verificacao_id: id, motivo: motivoRejeicao.trim(),
+      })
       await fetchVerificacoes()
     } catch (err) {
       console.error('Erro ao rejeitar:', err)

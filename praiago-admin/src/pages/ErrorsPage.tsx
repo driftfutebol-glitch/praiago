@@ -26,6 +26,30 @@ const EVENT_LABELS: Record<string, string> = {
   password_changed: 'Senha alterada',
   fraud_flag_created: 'Fraude denunciada',
   suspicious_activity: 'Atividade suspeita',
+  delivery_code_mismatch: 'Código de entrega errado',
+  // Tudo que um administrador faz entra sob este tipo, e o metadata diz qual
+  // ação foi. Um tipo por ação exigiria um ALTER na constraint do banco a cada
+  // botão novo — e mudança de schema em produção aqui é cara.
+  admin_action: 'Ação de administrador',
+}
+
+// Rótulo legível para o campo `acao` do metadata de uma ação de admin.
+const ACAO_ADMIN: Record<string, string> = {
+  banir_conta: 'baniu a conta',
+  desbanir_conta: 'desbaniu a conta',
+  verificar_conta: 'liberou KYC na mão',
+  desverificar_conta: 'tirou a verificação',
+  resetar_senha: 'resetou a senha',
+  abrir_exclusao: 'abriu exclusão',
+  concluir_exclusao: 'APAGOU a conta',
+  aprovar_kyc: 'aprovou o KYC',
+  rejeitar_kyc: 'rejeitou o KYC',
+  criar_admin: 'criou um administrador',
+  excluir_admin: 'excluiu um administrador',
+  liberar_saque: 'liberou saque',
+  alterar_permissoes: 'mudou o nível de acesso',
+  marcar_tester: 'marcou como conta de teste',
+  desmarcar_tester: 'devolveu a conta aos usuários normais',
 }
 
 const SEVERITY_CLASS: Record<SecurityLog['severity'], string> = {
@@ -168,8 +192,30 @@ export default function ErrorsPage() {
                   <div className="text-xs text-slate-500">{log.email || 'sem e-mail'}</div>
                 </td>
                 <td className="p-4 max-w-md">
-                  <div className="text-slate-300 text-xs line-clamp-2">{log.route || 'sem rota'}</div>
-                  <div className="text-slate-500 text-xs line-clamp-2">{JSON.stringify(log.metadata ?? {})}</div>
+                  {/* Ação de admin ganha uma frase legível. Despejar o JSON cru
+                      aqui — que é o que acontecia — significa que ninguém lê:
+                      a informação existe e mesmo assim ninguém audita. */}
+                  {log.event_type === 'admin_action' ? (
+                    <>
+                      <div className="text-slate-200 text-xs font-bold">
+                        {String((log.metadata as Record<string, unknown>)?.por_email || 'admin desconhecido')}
+                        {' '}
+                        <span className="text-purple-300">
+                          {ACAO_ADMIN[String((log.metadata as Record<string, unknown>)?.acao)] ||
+                            String((log.metadata as Record<string, unknown>)?.acao || 'fez algo')}
+                        </span>
+                        {log.email ? <> de <span className="text-slate-300">{log.email}</span></> : null}
+                      </div>
+                      <div className="text-slate-500 text-xs font-mono">
+                        IP {String((log.metadata as Record<string, unknown>)?.ip || '—')} · {log.route || 'sem rota'}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-slate-300 text-xs line-clamp-2">{log.route || 'sem rota'}</div>
+                      <div className="text-slate-500 text-xs line-clamp-2">{JSON.stringify(log.metadata ?? {})}</div>
+                    </>
+                  )}
                 </td>
                 <td className="p-4 text-right">
                   {log.resolved_at ? (

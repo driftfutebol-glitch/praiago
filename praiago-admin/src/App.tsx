@@ -20,6 +20,8 @@ import TrocaContaPage from './pages/TrocaContaPage'
 import TrocaNomePage from './pages/TrocaNomePage'
 import CadastrosEventoPage from './pages/CadastrosEventoPage'
 import AdminsPage from './pages/AdminsPage'
+import TestersPage from './pages/TestersPage'
+import NovosUsuariosPage from './pages/NovosUsuariosPage'
 import LocalizacoesPage from './pages/LocalizacoesPage'
 import Sidebar from './components/Sidebar'
 import PasswordRecoveryHandler from './components/PasswordRecoveryHandler'
@@ -281,6 +283,8 @@ export default function App() {
             <Route path="/" element={guard('dashboard', <DashboardPage />)} />
             <Route path="/pedidos" element={guard('pedidos', <PedidosPage />)} />
             <Route path="/usuarios" element={guard('usuarios', <UsuariosPage />)} />
+            <Route path="/novos-usuarios" element={guard('usuarios', <NovosUsuariosPage />)} />
+            <Route path="/testers" element={guard('usuarios', <TestersPage />)} />
             <Route path="/exclusoes" element={guard('usuarios', <ExclusoesPage />)} />
             <Route path="/localizacoes" element={guard('usuarios', <LocalizacoesPage />)} />
             {/* Troca de nome mexe no cadastro do vendedor, entao mora na mesma

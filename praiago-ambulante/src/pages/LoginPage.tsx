@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { login } from '../lib/auth'
 import { promptDialog } from '../lib/dialog'
 import { logSecurityEvent } from '../lib/securityAudit'
+import { origemDoCadastro } from '../lib/origemCadastro'
 import { supabase } from '../lib/supabase'
 
 const fieldStyle: React.CSSProperties = {
@@ -166,6 +167,7 @@ export default function LoginPage() {
             senha: password,
             metadata: { nome: name, role: 'ambulante' },
             emailRedirectTo: `${window.location.origin}/`,
+            origem: origemDoCadastro(),
           },
         })
         if (error) {

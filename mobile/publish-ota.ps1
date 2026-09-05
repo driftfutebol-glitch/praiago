@@ -62,7 +62,20 @@ if (-not (Test-Path (Join-Path $distDir 'index.html'))) {
   throw "Build invalido: index.html nao encontrado em $distDir."
 }
 
-Compress-Archive -Path (Join-Path $distDir '*') -DestinationPath $zipPath -Force
+# NAO usar Compress-Archive aqui.
+#
+# O Compress-Archive do Windows PowerShell 5.1 grava separador do Windows
+# dentro do zip ("assets\app.js"). O Android descompacta assim mesmo; o iOS
+# nao — o SSZipArchive usado pelo @capgo/capacitor-updater le isso como UM
+# arquivo de nome esquisito na raiz, o pacote sai sem a pasta assets/, e o
+# plugin descarta a atualizacao e volta para o pacote de fabrica.
+#
+# Sintoma: Android atualiza, iPhone nunca sai da versao nativa. Foi assim com
+# todas as OTA de 02 e 03/09/2026, ate o registro em ota_checagens mostrar o
+# iPhone pedindo, recebendo a oferta e continuando a reportar "1.0".
+$ziparJs = Join-Path $PSScriptRoot 'zipar.js'
+& node $ziparJs $distDir $zipPath
+if ($LASTEXITCODE -ne 0) { throw "Falha ao compactar o pacote OTA (zipar.js)." }
 $checksum = (Get-FileHash -Algorithm SHA256 -LiteralPath $zipPath).Hash.ToLowerInvariant()
 
 $objectPath = "$App/$Version/dist.zip"
@@ -74,7 +87,14 @@ $headers = @{
   'x-upsert' = 'true'
 }
 
-Invoke-RestMethod -Method Put -Uri $uploadUrl -Headers $headers -InFile $zipPath | Out-Null
+# -UserAgent obrigatorio: sem ele o Invoke-RestMethod se anuncia como
+# "Mozilla/5.0 (Windows NT ...) WindowsPowerShell", e o Supabase recusa chave
+# secreta vinda de coisa que parece navegador — "Forbidden use of secret API key
+# in browser". O Storage passava, o PostgREST nao, e a publicacao terminava com
+# o zip no ar e nenhuma release apontando pra ele.
+$agente = 'praiago-ota-publisher/1'
+
+Invoke-RestMethod -Method Put -Uri $uploadUrl -Headers $headers -InFile $zipPath -UserAgent $agente | Out-Null
 
 $publicUrl = "$supabaseUrl/storage/v1/object/public/ota-bundles/$objectPath"
 $release = @{
@@ -95,7 +115,7 @@ $restHeaders = @{
   Prefer = 'resolution=merge-duplicates,return=representation'
 }
 $releaseUrl = "$supabaseUrl/rest/v1/ota_releases?on_conflict=app_id,platform,channel,version"
-Invoke-RestMethod -Method Post -Uri $releaseUrl -Headers $restHeaders -Body $release | Out-Null
+Invoke-RestMethod -Method Post -Uri $releaseUrl -Headers $restHeaders -Body $release -UserAgent $agente | Out-Null
 
 Write-Host "OTA publicado."
 Write-Host "App: $App"

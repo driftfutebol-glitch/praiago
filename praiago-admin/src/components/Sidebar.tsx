@@ -7,7 +7,7 @@ import {
   Activity, Package, Users, AlertOctagon, LogOut, ShieldAlert,
   ShieldCheck, Headphones, ChevronDown, CalendarDays, LayoutGrid,
   Smartphone, TabletSmartphone, UtensilsCrossed, Umbrella, UserCircle, Ticket, Megaphone, WalletCards, MapPin,
-  Landmark, Signature, UserPlus, Trash2 } from 'lucide-react'
+  Landmark, Signature, UserPlus, Trash2, FlaskConical, UserRoundPlus } from 'lucide-react'
 
 // `solicitacoes_troca_nome` ficou fora da publicacao `supabase_realtime`, entao
 // postgres_changes nunca chega. Ate entrar la, o contador vive de polling.
@@ -30,6 +30,8 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
   }`
 
 export default function Sidebar({ onLogout, perfil }: { onLogout: () => void; perfil: PerfilAdmin | null }) {
+  const [novosDaSemana, setNovosDaSemana] = useState(0)
+  const [totalTesters, setTotalTesters] = useState(0)
   const [pendingVerificacoes, setPendingVerificacoes] = useState(0)
   const [pendingLocalizacoes, setPendingLocalizacoes] = useState(0)
   const [pendingTrocaNome, setPendingTrocaNome] = useState(0)
@@ -106,6 +108,34 @@ export default function Sidebar({ onLogout, perfil }: { onLogout: () => void; pe
       if (document.visibilityState === 'visible') fetchPendingTrocaNome()
     }, INTERVALO_TROCA_NOME_MS)
     return () => { window.clearInterval(timer) }
+  }, [])
+
+  // Contadores das duas telas de cadastro. O de "novos" é dos últimos 7 dias e
+  // ignora conta de teste — um número que sobe porque alguém criou mais uma
+  // conta de revisão da Apple não diz nada sobre o app estar crescendo.
+  useEffect(() => {
+    async function contarCadastros() {
+      const semanaAtras = new Date()
+      semanaAtras.setDate(semanaAtras.getDate() - 7)
+      const { count: novos } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', semanaAtras.toISOString())
+        .neq('role', 'sysadmin')
+        .or('conta_demo.is.null,conta_demo.eq.false')
+      setNovosDaSemana(novos || 0)
+
+      const { count: testers } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('conta_demo', true)
+      setTotalTesters(testers || 0)
+    }
+    contarCadastros()
+    const ch = supabase.channel('sidebar_cadastros')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => contarCadastros())
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
   }, [])
 
   useEffect(() => {
@@ -186,6 +216,38 @@ export default function Sidebar({ onLogout, perfil }: { onLogout: () => void; pe
             {m.label}
           </NavLink>
         ))}
+
+        {/* Cadastro entra por aqui e sai em duas listas separadas. Estavam
+            todos na mesma tela de Usuários e ninguém achava nada: revisor da
+            Apple, conta da equipe e cliente de verdade lado a lado. */}
+        {podeVer('usuarios') && (
+          <NavLink to="/novos-usuarios" className={linkClass}>
+            <UserRoundPlus size={18} />
+            <span className="flex-1">Novos usuários</span>
+            {novosDaSemana > 0 && (
+              <motion.span
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                title="Cadastros dos últimos 7 dias, sem contar testadores"
+                className="min-w-[22px] h-[22px] flex items-center justify-center bg-emerald-500 text-slate-950 text-[10px] font-black rounded-full"
+              >
+                {novosDaSemana}
+              </motion.span>
+            )}
+          </NavLink>
+        )}
+
+        {podeVer('usuarios') && (
+          <NavLink to="/testers" className={linkClass}>
+            <FlaskConical size={18} />
+            <span className="flex-1">Testadores</span>
+            {totalTesters > 0 && (
+              <span className="min-w-[22px] h-[22px] flex items-center justify-center bg-violet-500/20 text-violet-300 border border-violet-500/30 text-[10px] font-black rounded-full">
+                {totalTesters}
+              </span>
+            )}
+          </NavLink>
+        )}
 
         {verLocalizacoes && (
           <NavLink to="/localizacoes" className={linkClass}>

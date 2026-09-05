@@ -158,7 +158,13 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
             onClick={() => setIsOpen(true)}
             style={{
               position: 'fixed',
-              bottom: 80, // Above nav bar
+              // A barra de baixo é uma pílula flutuante: 68px de altura apoiada
+              // em `bottom: 14px + env(safe-area-inset-bottom)`. No iPhone com
+              // barra de gestos o inset é ~34px, então ela ocupa ~116px — e este
+              // botão estava em 80px fixos, com zIndex 9999 contra os 100 dela.
+              // Resultado: o balão do chat ficava POR CIMA do "Perfil", e o dedo
+              // acertava o chat quando queria o perfil.
+              bottom: 'calc(68px + 14px + env(safe-area-inset-bottom) + 12px)',
               right: 24,
               width: 64,
               height: 64,
@@ -190,7 +196,7 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
               // `bottom` fixo e altura em vh, o painel ficava do mesmo tamanho
               // e o teclado subia por cima do campo de escrever. `dvh` encolhe
               // junto com o teclado, entao o campo continua visivel.
-              bottom: 'calc(80px + env(safe-area-inset-bottom))',
+              bottom: 'calc(68px + 14px + env(safe-area-inset-bottom) + 12px)',
               right: 12,
               // 350px + 24 de margem nao cabia em tela de 375px: o painel
               // encostava nas duas bordas e parecia cortado.

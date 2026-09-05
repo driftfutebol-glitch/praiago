@@ -1,3 +1,4 @@
+import VersaoDoApp from '../components/VersaoDoApp'
 import { useCallback, useEffect, useState } from 'react'
 import {
   CheckCircle2,
@@ -387,6 +388,10 @@ export default function PerfilPage() {
       <div style={{ marginTop: 2, textAlign: 'center', color: '#718096', fontSize: 11, lineHeight: 1.45 }}>
         Consulte os dados apagados ou preservados na <a href="https://www.praiago.com.br/excluir-conta.html" target="_blank" rel="noopener noreferrer" style={{ color: '#008fc0', fontWeight: 850 }}>página de exclusão</a>.
       </div>
+
+      {/* O número da versão do pacote, para quem testa conseguir dizer em qual
+          está. Sem isto, "já corrigi" e "continua igual" não têm árbitro. */}
+      <VersaoDoApp />
 
       <AnimatePresence>
         {supportOpen && session && (

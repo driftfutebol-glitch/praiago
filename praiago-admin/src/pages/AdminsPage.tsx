@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { ShieldAlert, ShieldCheck, Trash2, UserPlus, Crown, Loader2, Check } from 'lucide-react'
 import { format } from 'date-fns'
 import { confirmDialog, alertDialog } from '../lib/dialog'
+import { registrarAcaoAdmin } from '../lib/auditoriaAdmin'
 
 // Seções do painel que podem ser liberadas/bloqueadas por admin.
 // (a própria página de Administradores é exclusiva do sysadmin, não entra aqui)
@@ -81,6 +82,14 @@ export default function AdminsPage() {
     if (erro) {
       return alertDialog({ title: 'Não deu pra criar', message: erro, tone: 'danger' })
     }
+    // Criar conta de equipe é a ação de maior alcance do painel: entrega
+    // acesso ao sistema inteiro. Fica registrado quem criou, para quem, com
+    // qual nível e quais seções.
+    void registrarAcaoAdmin('criar_admin', email.trim().toLowerCase(), {
+      nome: nome.trim(),
+      nivel: tier,
+      secoes: tier === 'sysadmin' ? 'todas' : perms,
+    })
     await alertDialog({ title: 'Admin criado! ✅', message: `${email.trim().toLowerCase()} já pode entrar com a senha definida.`, tone: 'success' })
     setNome(''); setEmail(''); setSenha(''); setTier('admin'); setPerms(TODAS_SECOES)
     load()
@@ -114,6 +123,12 @@ export default function AdminsPage() {
     const { error } = await supabase.from('profiles').update(patch).eq('id', admin.id)
     setAcaoId(null)
     if (error) return alertDialog({ title: 'Erro', message: error.message, tone: 'danger' })
+    // Promover alguém a sysadmin dá poder de criar e apagar outros admins.
+    // Se essa mudança não aparece em lugar nenhum, ninguém audita a auditoria.
+    void registrarAcaoAdmin('alterar_permissoes', admin.email, {
+      admin_id: admin.id, nome: admin.nome,
+      de: admin.role, para: virandoSys ? 'sysadmin' : 'admin',
+    })
     load()
   }
 
@@ -132,6 +147,9 @@ export default function AdminsPage() {
     setAcaoId(null)
     const erro = (data as { error?: string })?.error || (error ? error.message : '')
     if (erro) return alertDialog({ title: 'Não deu pra excluir', message: erro, tone: 'danger' })
+    void registrarAcaoAdmin('excluir_admin', admin.email, {
+      admin_id: admin.id, nome: admin.nome, nivel: admin.role,
+    })
     setAdmins(prev => prev.filter(a => a.id !== admin.id))
   }
 

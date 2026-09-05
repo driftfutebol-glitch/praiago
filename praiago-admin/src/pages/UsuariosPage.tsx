@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { supabase } from '../lib/supabase'
-import { Ban, RotateCcw, Trash2, UserCheck, ShieldCheck, ShieldX, Search, Eye, EyeOff } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Ban, RotateCcw, Trash2, UserCheck, ShieldCheck, ShieldX, Search, Eye, EyeOff, UserRoundPlus } from 'lucide-react'
 import { format } from 'date-fns'
 import { confirmDialog, alertDialog, promptDialog } from '../lib/dialog'
+import { registrarAcaoAdmin } from '../lib/auditoriaAdmin'
 
 type Protocolo = {
   id: string
@@ -29,12 +31,26 @@ export default function UsuariosPage() {
   // de que o recebedor foi encerrado no Pagar.me, e não havia onde dar ela.
   const [protocolos, setProtocolos] = useState<Record<string, Protocolo>>({})
 
-  const carregarProtocolos = useCallback(async () => {
+  const carregarProtocolos = useCallback(async (tentativa = 1) => {
+    // Mesma corrida da página de Exclusões: a sessão do supabase-js é
+    // restaurada do localStorage depois da montagem, e `functions.invoke`
+    // manda o token que existir naquele instante. Sem esperar, a chamada saía
+    // sem Authorization, voltava 401, e o botão continuava dizendo "Solicitar
+    // exclusão" para uma conta que já tinha protocolo aberto.
+    const { data: sess } = await supabase.auth.getSession()
+    if (!sess.session) {
+      if (tentativa <= 5) setTimeout(() => void carregarProtocolos(tentativa + 1), 400 * tentativa)
+      return
+    }
     const { data, error } = await supabase.functions.invoke('excluir-conta', {
       body: { action: 'list', pageSize: 100 },
     })
     const resp = (data || {}) as { requests?: Protocolo[]; error?: string }
-    if (error || resp.error) return
+    if (error || resp.error) {
+      const status = (error as { context?: { status?: number } } | null)?.context?.status
+      if (status === 401 && tentativa <= 5) setTimeout(() => void carregarProtocolos(tentativa + 1), 400 * tentativa)
+      return
+    }
     const porEmail: Record<string, Protocolo> = {}
     for (const p of resp.requests || []) {
       if (p.status === 'completed' || !p.notification_email) continue
@@ -102,6 +118,9 @@ export default function UsuariosPage() {
       })
       await carregarProtocolos()
     } else {
+      void registrarAcaoAdmin('concluir_exclusao', u.email, {
+        usuario_id: u.id, nome: u.nome, papel: u.role, protocolo: p.id,
+      })
       await alertDialog({
         title: 'Conta apagada',
         message: `${alvo} foi removido. O e-mail e o CPF ficam livres para um cadastro novo.`,
@@ -126,9 +145,15 @@ export default function UsuariosPage() {
       (u.cnpj && String(u.cnpj).toLowerCase().includes(busca.toLowerCase())) ||
       u.id.toLowerCase().includes(busca.toLowerCase())
     // 'revisao' nao e um role: e a aba das contas de loja/teste.
+    //
+    // Fora dessa aba, conta de teste NAO aparece. Era a queixa: revisor da
+    // Apple, conta da equipe e cliente de verdade na mesma grade, sem nada que
+    // separasse — quem abria a tela para achar um vendedor tinha que garimpar.
+    // Elas continuam a um clique, na aba Revisao e na tela de Testadores.
     const matchRole =
-      filtroRole === 'todos' ? true :
       filtroRole === 'revisao' ? !!u.conta_demo :
+      u.conta_demo ? false :
+      filtroRole === 'todos' ? true :
       u.role === filtroRole
     // Busca por texto ignora a aba de papel de proposito. Quem digita um e-mail
     // inteiro quer AQUELA conta, nao "aquela conta se ela for do papel que por
@@ -156,9 +181,15 @@ export default function UsuariosPage() {
     }
 
     setAcaoId(u.id)
+    // Marcar aqui é o mesmo que marcar na tela de Testadores: se a conta vira
+    // de teste, ela ganha tipo e data para não chegar lá sem contexto — o
+    // motivo se escreve por lá, num clique no card.
+    const campos = jaDemo
+      ? { conta_demo: false, tester_tipo: null, tester_motivo: null, tester_desde: null }
+      : { conta_demo: true, tester_tipo: 'interno', tester_desde: new Date().toISOString() }
     const { error } = await supabase
       .from('profiles')
-      .update({ conta_demo: !jaDemo })
+      .update(campos)
       .eq('id', u.id)
 
     if (error) {
@@ -168,8 +199,11 @@ export default function UsuariosPage() {
         tone: 'danger',
       })
     } else {
+      void registrarAcaoAdmin(jaDemo ? 'desmarcar_tester' : 'marcar_tester', u.email, {
+        usuario_id: u.id, nome: u.nome, papel: u.role,
+      })
       setUsuarios(prev => prev.map(item =>
-        item.id === u.id ? { ...item, conta_demo: !jaDemo } : item
+        item.id === u.id ? { ...item, ...campos } : item
       ))
     }
     setAcaoId(null)
@@ -190,6 +224,9 @@ export default function UsuariosPage() {
 
     const { error } = await supabase.from('profiles').update(atualizacao).eq('id', u.id)
     if (!error) {
+      void registrarAcaoAdmin(jaBanido ? 'desbanir_conta' : 'banir_conta', u.email, {
+        usuario_id: u.id, nome: u.nome, papel: u.role, motivo: motivo ?? null,
+      })
       setUsuarios(prev => prev.map(item => item.id === u.id ? { ...item, ...atualizacao } : item))
     } else {
       alertDialog({ title: 'Erro', message: 'Não foi possível atualizar este usuário: ' + error.message, tone: 'danger' })
@@ -206,6 +243,12 @@ export default function UsuariosPage() {
     setAcaoId(u.id)
     const { error } = await supabase.rpc('admin_set_verificado', { p_user_id: u.id, p_verificado: liberar })
     if (!error) {
+      // Liberação manual de KYC é a ação mais sensível desta tela: passa por
+      // cima da conferência de documento. Sem registro, ninguém sabe depois
+      // quem liberou um vendedor que nunca enviou RG.
+      void registrarAcaoAdmin(liberar ? 'verificar_conta' : 'desverificar_conta', u.email, {
+        usuario_id: u.id, nome: u.nome, papel: u.role, sem_kyc_no_banco: true,
+      })
       setUsuarios(prev => prev.map(item => item.id === u.id ? { ...item, verificado: liberar } : item))
     } else {
       alertDialog({ title: 'Erro', message: 'Não foi possível atualizar a verificação: ' + error.message, tone: 'danger' })
@@ -281,6 +324,10 @@ export default function UsuariosPage() {
       return
     }
 
+    void registrarAcaoAdmin('abrir_exclusao', u.email, {
+      usuario_id: u.id, nome: u.nome, papel: u.role, protocolo: resp.requestId ?? null,
+    })
+
     if (resp.completed === false) {
       const impedimentos = resp.blockers?.length
         ? `\n\nImpedimentos: ${resp.blockers.join(', ')}.`
@@ -305,9 +352,29 @@ export default function UsuariosPage() {
 
   return (
     <div className="space-y-6">
-      <header className="mb-4">
-        <h1 className="text-3xl font-black text-slate-100 tracking-tight">Usuários do Sistema</h1>
-        <p className="text-slate-400 font-medium">Todos os perfis cadastrados (Clientes, Ambulantes, Restaurantes e Entregadores).</p>
+      <header className="mb-4 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-black text-slate-100 tracking-tight">Usuários do Sistema</h1>
+          <p className="text-slate-400 font-medium">
+            Gente de verdade usando o PraiaGo: clientes, ambulantes, restaurantes e entregadores.
+            {totalDemo > 0 && (
+              <>
+                {' '}
+                <Link to="/testers" className="text-violet-400 hover:text-violet-300 font-bold underline decoration-violet-500/30 underline-offset-2">
+                  {totalDemo} conta{totalDemo > 1 ? 's' : ''} de teste
+                </Link>{' '}
+                {totalDemo > 1 ? 'ficam' : 'fica'} fora desta lista.
+              </>
+            )}
+          </p>
+        </div>
+        <Link
+          to="/novos-usuarios"
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wide border bg-emerald-500/10 text-emerald-300 border-emerald-500/25 hover:bg-emerald-500/20 transition-colors"
+        >
+          <UserRoundPlus size={14} />
+          Quem entrou
+        </Link>
       </header>
 
       {/* Filters */}

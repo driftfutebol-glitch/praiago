@@ -83,7 +83,33 @@ Deno.serve(async (req) => {
     if (error) throw error
 
     const release = (data?.[0] ?? null) as OtaRelease | null
-    if (!release || release.version === currentVersion) return upToDate(currentVersion)
+
+    // Registro de quem perguntou. Existe porque "publiquei" contra "nao chegou"
+    // nao tinha arbitro: sem isto nao da para saber se o aparelho sequer chega a
+    // perguntar. Um iPhone que nunca aparece aqui tem problema no binario; um
+    // que aparece e continua na versao velha tem problema em baixar ou aplicar.
+    //
+    // Nunca derruba a resposta: se o registro falhar, a atualizacao segue.
+    const registrar = (servida: string, resposta: string) =>
+      serviceClient()
+        .from('ota_checagens')
+        .insert({
+          app_id: appId,
+          platform,
+          versao_informada: currentVersion || '(vazio)',
+          versao_servida: servida,
+          resposta,
+          user_agent: req.headers.get('user-agent'),
+          ip: (req.headers.get('x-forwarded-for') || '').split(',')[0].trim() || null,
+        })
+        .then(() => {}, () => {})
+
+    if (!release || release.version === currentVersion) {
+      void registrar(currentVersion, release ? 'ja_atualizado' : 'sem_release')
+      return upToDate(currentVersion)
+    }
+
+    void registrar(release.version, 'ofereceu_atualizacao')
 
     return json({
       version: release.version,

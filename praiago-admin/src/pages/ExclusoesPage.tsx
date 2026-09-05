@@ -95,14 +95,46 @@ export default function ExclusoesPage() {
     if (data) setItens(data as Solicitacao[])
   }, [])
 
-  const carregarProtocolos = useCallback(async () => {
+  const carregarProtocolos = useCallback(async (tentativa = 1) => {
     setCarregandoProtocolos(true)
+
+    // `functions.invoke` pega o token da sessão NO MOMENTO da chamada. Este
+    // useEffect roda na montagem, e a sessão do supabase-js é restaurada do
+    // localStorage de forma assíncrona: numa carga limpa a chamada saía antes,
+    // sem Authorization, e a função respondia "Sessao invalida ou expirada".
+    // Como não havia repetição, a fila ficava vazia até alguém trocar de aba —
+    // e recarregar com Ctrl+Shift+R só aumentava a chance de perder a corrida.
+    const { data: sess } = await supabase.auth.getSession()
+    if (!sess.session) {
+      if (tentativa <= 5) {
+        setTimeout(() => void carregarProtocolos(tentativa + 1), 400 * tentativa)
+        return
+      }
+      setErroProtocolos('Sessão não carregada. Recarregue a página.')
+      setCarregandoProtocolos(false)
+      return
+    }
+
     const { data, error } = await supabase.functions.invoke('excluir-conta', {
       body: { action: 'list', pageSize: 100 },
     })
     const resp = (data || {}) as { requests?: Protocolo[]; recipientOperations?: OperacaoRecebedor[]; error?: string }
+
     if (error || resp.error) {
-      setErroProtocolos(resp.error || 'Não foi possível carregar a fila de protocolos.')
+      // A mensagem real vem no corpo da resposta, que o invoke não devolve em
+      // erro. Sem ela a tela dizia só "não foi possível" e não dava para saber
+      // se era sessão, permissão ou a função fora do ar.
+      let msg = resp.error || ''
+      try {
+        const corpo = await (error as { context?: { json?: () => Promise<{ error?: string }> } })?.context?.json?.()
+        if (corpo?.error) msg = corpo.error
+      } catch { /* fica com o que tiver */ }
+      const status = (error as { context?: { status?: number } } | null)?.context?.status
+      if ((status === 401 || /sess/i.test(msg)) && tentativa <= 5) {
+        setTimeout(() => void carregarProtocolos(tentativa + 1), 400 * tentativa)
+        return
+      }
+      setErroProtocolos(`${msg || 'Não foi possível carregar a fila de protocolos.'}${status ? ` (HTTP ${status})` : ''}`)
     } else {
       setErroProtocolos(null)
       setProtocolos(resp.requests || [])

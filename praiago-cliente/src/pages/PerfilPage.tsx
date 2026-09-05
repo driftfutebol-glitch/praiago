@@ -1,3 +1,4 @@
+import VersaoDoApp from '../components/VersaoDoApp'
 import { useEffect, useState } from 'react'
 import { Eye, EyeOff, LogIn, LogOut, User, Package, MapPin, ChevronRight, Bell, HelpCircle, Star, Shield, Mail, CheckCircle2, AlertCircle, Edit3, Loader2, Trash2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
@@ -6,6 +7,7 @@ import { useStore } from '../store/useStore'
 import { supabase } from '../lib/supabase'
 import { alertDialog, confirmDialog, promptDialog } from '../lib/dialog'
 import { logSecurityEvent } from '../lib/securityAudit'
+import { origemDoCadastro } from '../lib/origemCadastro'
 import SuportePanel from '../components/SuportePanel'
 import FotoPerfilCliente, { AvatarPerfil } from '../components/FotoPerfilCliente'
 import { apenasDigitosCpf, cpfMascarado, formatarCpf, validarCpf } from '../lib/cpf'
@@ -320,6 +322,10 @@ function TelaLogada() {
         </div>
       </div>
 
+      {/* O número da versão do pacote, para quem testa conseguir dizer em qual
+          está. Sem isto, "já corrigi" e "continua igual" não têm árbitro. */}
+      <VersaoDoApp />
+
       <AnimatePresence>
         {suporteAberto && (
           <SuportePanel
@@ -441,6 +447,7 @@ export default function PerfilPage() {
             email: alvo, senha,
             metadata: { nome, role: 'cliente', cpf: apenasDigitosCpf(cpf) },
             emailRedirectTo: `${window.location.origin}/perfil`,
+            origem: origemDoCadastro(),
           },
         })
         if (error) {

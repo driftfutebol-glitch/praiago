@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase'
 import { login } from '../lib/auth'
 import { promptDialog } from '../lib/dialog'
 import { logSecurityEvent } from '../lib/securityAudit'
+import { origemDoCadastro } from '../lib/origemCadastro'
 import { motion } from 'framer-motion'
 import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
@@ -354,6 +355,7 @@ export default function LoginPage() {
               lat: coords?.lat ?? null, lng: coords?.lng ?? null,
             },
             emailRedirectTo: `${window.location.origin}/`,
+            origem: origemDoCadastro(),
           },
         })
         if (error) {

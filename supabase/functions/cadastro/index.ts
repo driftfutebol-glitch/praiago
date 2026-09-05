@@ -6,11 +6,48 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2'
 import { corsHeaders, json, readJson } from '../_shared/cors.ts'
 
-type Body = { email?: string; senha?: string; metadata?: Record<string, unknown>; emailRedirectTo?: string }
+type Origem = { app?: string; plataforma?: string; modelo?: string }
+type Body = {
+  email?: string
+  senha?: string
+  metadata?: Record<string, unknown>
+  emailRedirectTo?: string
+  origem?: Origem
+}
 
 function clientIp(req: Request): string {
   const xff = req.headers.get('x-forwarded-for') || ''
   return xff.split(',')[0]?.trim() || req.headers.get('x-real-ip') || 'desconhecido'
+}
+
+// De onde veio o cadastro: qual app e qual aparelho.
+//
+// O que existia era `is_mobile`, que fala da OPERADORA do IP, nao do aparelho —
+// iPhone no Wi-Fi de casa gravava `false`. Nao dava para responder "quantos
+// entraram de iPhone esta semana", que e a pergunta que se faz de verdade.
+//
+// A palavra final e do app: dentro do Capacitor, `Capacitor.getPlatform()`
+// sabe com certeza se e ios ou android. O user-agent so entra quando o app nao
+// informou nada — cadastro pelo navegador, ou versao antiga que ainda nao manda
+// `origem`. Por isso o campo continua podendo ficar nulo, e a tela mostra
+// "nao registrado" em vez de chutar.
+function detectarPlataforma(origem: Origem | undefined, userAgent: string): string | null {
+  const informada = String(origem?.plataforma || '').toLowerCase()
+  if (informada === 'ios' || informada === 'android' || informada === 'web') return informada
+
+  const ua = userAgent.toLowerCase()
+  if (!ua) return null
+  if (/\b(iphone|ipad|ipod)\b/.test(ua) || (/\bmacintosh\b/.test(ua) && /\bmobile\b/.test(ua))) return 'ios'
+  if (/\bandroid\b/.test(ua)) return 'android'
+  return 'web'
+}
+
+function detectarApp(origem: Origem | undefined, role: string): string | null {
+  const informado = String(origem?.app || '').toLowerCase()
+  if (['cliente', 'ambulante', 'restaurante', 'entregador'].includes(informado)) return informado
+  // Sem `origem`, o papel do cadastro ja diz de qual app a pessoa veio: cada
+  // app so cria conta do proprio papel.
+  return ['cliente', 'ambulante', 'restaurante', 'entregador'].includes(role) ? role : null
 }
 
 async function ipEhMovel(ip: string): Promise<boolean> {
@@ -111,7 +148,19 @@ Deno.serve(async (req: Request) => {
     }
 
     const userId = signUpData.user?.id ?? null
-    await admin.from('signup_ips').insert({ ip, user_id: userId, email, role: String(metadata.role || ''), is_mobile: isMobile })
+    const papel = String(metadata.role || '')
+    const userAgent = req.headers.get('user-agent') || ''
+    await admin.from('signup_ips').insert({
+      ip,
+      user_id: userId,
+      email,
+      role: papel,
+      is_mobile: isMobile,
+      user_agent: userAgent || null,
+      plataforma: detectarPlataforma(body.origem, userAgent),
+      app: detectarApp(body.origem, papel),
+      modelo: String(body.origem?.modelo || '').trim() || null,
+    })
 
     return json({ ok: true, needsConfirmation: !signUpData.session, user_id: userId, ip_movel: isMobile })
   } catch (e) {
