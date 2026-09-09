@@ -111,6 +111,7 @@ export default function ChamadaFinal() {
             </span>
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 10 }}>
               <BotaoDownload app="ambulante" loja="play" />
+              <BotaoDownload app="ambulante" loja="apple" />
               <motion.a
                 href={PAINEL_RESTAURANTE}
                 target="_blank"
