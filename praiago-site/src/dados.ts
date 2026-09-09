@@ -10,19 +10,18 @@
 export const LOJAS = {
   cliente: {
     play: 'https://play.google.com/store/apps/details?id=com.ferrazcode.praiago.cliente',
-    apple: '' as string,
+    apple: 'https://apps.apple.com/br/app/praiago/id6804792683',
     disponivel: true,
   },
   ambulante: {
     play: 'https://play.google.com/store/apps/details?id=com.ferrazcode.praiago.ambulante',
-    apple: '' as string,
+    apple: 'https://apps.apple.com/br/app/praiago-ambulante/id6804793330',
     disponivel: true,
   },
 }
 
-/** Painel do restaurante — roda no navegador, sem instalar nada.
- *  TROCAR pela URL nova da Vercel depois que o painel sair do dominio raiz. */
-export const PAINEL_RESTAURANTE = 'https://praiago-restaurante.vercel.app'
+/** Painel do restaurante — roda no navegador, sem instalar nada. */
+export const PAINEL_RESTAURANTE = 'https://restaurante.praiago.com.br'
 
 export const CONTATO = {
   email: 'contato@praiago.com.br',

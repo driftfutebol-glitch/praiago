@@ -76,6 +76,22 @@ export default function VideoScroll() {
       || window.matchMedia('(prefers-reduced-motion: reduce)').matches
   })
 
+  // O vídeo entra com opacity 0 e só aparece quando `pronto` vira true, o que
+  // depende do evento `loadeddata`. Só que com o vídeo em cache o navegador
+  // dispara esse evento ANTES de o React pendurar o `onLoadedData` — ninguém
+  // escuta, `pronto` fica false pra sempre e o vídeo permanece invisível.
+  //
+  // Sintoma: aparece na primeira visita (download real, evento chega depois da
+  // montagem) e some em toda recarga seguinte. Foi assim que o Pedro viu: o
+  // vídeo carregado inteiro (readyState 4, sem erro) e opacity 0.
+  //
+  // Conferir o readyState na montagem cobre o caso do cache; o evento continua
+  // valendo para o caso do download real.
+  useEffect(() => {
+    const video = videoRef.current
+    if (video && video.readyState >= 2) setPronto(true)
+  }, [])
+
   const { scrollYProgress } = useScroll({
     target: secaoRef,
     offset: ['start start', 'end end'],
