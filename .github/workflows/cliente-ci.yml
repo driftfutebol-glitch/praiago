@@ -9,7 +9,7 @@ permissions:
   contents: read
 jobs:
   cliente:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: praiago-cliente

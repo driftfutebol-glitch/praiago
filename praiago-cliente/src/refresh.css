@@ -89,6 +89,6 @@ button:disabled { cursor: not-allowed; opacity: .6; }
 .prg-action-sheen { display:none; }
 .prg-action-icon svg, .beach-gradient-text { animation:none; }
 @media (min-width:720px) { .pg-auth { padding-top:36px; } .pg-auth-intro h1 { font-size:38px; } .pg-page { padding:28px; } }
-@media (max-width:359px) { .pg-auth, .pg-page { padding-left:14px; padding-right:14px; } .pg-auth-card { padding:18px; } .pg-profile-hero { padding:20px; } .pg-topbar { padding-left:14px; padding-right:14px; } .pg-connection { font-size:10px; } }
+@media (max-width:359px) { .pg-auth, .pg-page { padding-left:14px; padding-right:14px; } .pg-auth-card { padding:18px; } .pg-profile-hero { padding:20px; } .pg-topbar { padding-left:14px; padding-right:14px; } .pg-connection { font-size:0; gap:0; } }
 @media (prefers-reduced-motion:reduce) { *, *::before, *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; scroll-behavior:auto !important; } }
 html[data-reduced-motion=true] *, html[data-reduced-motion=true] *::before, html[data-reduced-motion=true] *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }

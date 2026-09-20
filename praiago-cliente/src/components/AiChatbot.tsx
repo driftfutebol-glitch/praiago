@@ -10,8 +10,9 @@ type Message = {
   text: string
 }
 
-export default function AiChatbot({ plataforma = 'cliente', initiallyOpen = false, onClose }: { plataforma?: string; initiallyOpen?: boolean; onClose?: () => void }) {
-  const [isOpen, setIsOpen] = useState(initiallyOpen)
+export default function AiChatbot({ plataforma = 'cliente', open, onClose }: { plataforma?: string; open?: boolean; onClose?: () => void }) {
+  const [internalOpen, setIsOpen] = useState(false)
+  const isOpen = open ?? internalOpen
   const [messages, setMessages] = useState<Message[]>([
     { id: 'welcome', role: 'bot', text: 'Olá! Aqui é o atendimento do PraiaGo. Como posso ajudar você hoje na praia?' }
   ])
@@ -23,6 +24,12 @@ export default function AiChatbot({ plataforma = 'cliente', initiallyOpen = fals
   const endRef = useRef<HTMLDivElement>(null)
   
   const sessao = useStore(s => s.sessao)
+  useEffect(() => {
+    if (!isOpen) return
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') { setIsOpen(false); onClose?.() } }
+    window.addEventListener('keydown', escape)
+    return () => window.removeEventListener('keydown', escape)
+  }, [isOpen, onClose])
 
   useEffect(() => {
     if (endRef.current) {
@@ -148,7 +155,7 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
   return (
     <>
       <AnimatePresence>
-        {!isOpen && (
+        {!isOpen && !onClose && (
           <motion.button
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
@@ -188,6 +195,8 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
       <AnimatePresence>
         {isOpen && (
           <motion.div
+            role="dialog"
+            aria-label="Atendimento PraiaGo"
             initial={{ y: 20, opacity: 0, scale: 0.95 }}
             animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: 20, opacity: 0, scale: 0.95 }}
@@ -299,6 +308,7 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
               padding: 16, borderTop: '1px solid rgba(0,0,0,0.05)', display: 'flex', gap: 8
             }}>
               <input
+                aria-label="Mensagem para o atendimento"
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 placeholder={mode === 'ticket' ? "Escreva sua mensagem..." : "Escreva sua dúvida..."}
@@ -313,6 +323,7 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
               />
               <button
                 type="submit"
+                aria-label="Enviar mensagem"
                 disabled={!input.trim() || loading}
                 style={{
                   width: 44, height: 44, borderRadius: 16,

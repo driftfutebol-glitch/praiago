@@ -129,6 +129,7 @@ export default function App() {
   const online = useOnlineStatus()
   const reducedMotion = usePreferences(s => s.reducedMotion)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [helpLoaded, setHelpLoaded] = useState(false)
   const unread = useStore(s => s.notificacoes.some(n => !n.lida))
   const mainRef = useRef<HTMLElement>(null)
   useEffect(() => { document.documentElement.dataset.reducedMotion = String(reducedMotion) }, [reducedMotion])
@@ -294,7 +295,7 @@ export default function App() {
         <button className="pg-brand" onClick={() => navigate('/')} aria-label="PraiaGo · Início"><span className="pg-brand-mark" aria-hidden="true">🌴</span>PraiaGo</button>
         <div className="pg-top-actions">
           {!online && <span className="pg-connection pg-connection-off"><WifiOff size={14}/>Sem rede</span>}
-          <button className="pg-icon-button" aria-label="Abrir atendimento" aria-expanded={helpOpen} onClick={() => setHelpOpen(v => !v)}><CircleHelp size={20}/></button>
+          <button className="pg-icon-button" aria-label="Abrir atendimento" aria-expanded={helpOpen} onClick={() => { setHelpLoaded(true); setHelpOpen(v => !v) }}><CircleHelp size={20}/></button>
           <button className="pg-icon-button" aria-label={unread ? 'Notificações não lidas' : 'Abrir notificações'} onClick={() => navigate('/?painel=notificacoes')}><Bell size={19}/>{unread && <span className="pg-notification-dot"/>}</button>
         </div>
       </header>
@@ -359,7 +360,7 @@ export default function App() {
         </AnimatePresence>
       </main>
 
-      {helpOpen && <Suspense fallback={<div role="status" className="pg-offline">Abrindo atendimento…</div>}><AiChatbot plataforma="cliente" initiallyOpen onClose={() => setHelpOpen(false)} /></Suspense>}
+      {helpLoaded && <Suspense fallback={helpOpen ? <div role="status" className="pg-offline">Abrindo atendimento…</div> : null}><AiChatbot plataforma="cliente" open={helpOpen} onClose={() => setHelpOpen(false)} /></Suspense>}
       <AnimatePresence>
         <NotificationToast />
       </AnimatePresence>
