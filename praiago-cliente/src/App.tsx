@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, lazy, Suspense } from 'react'
 import { Routes, Route, NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { Bell, Home, ClipboardList, ShoppingBag, MapPin, User, X } from 'lucide-react'
+import { Bell, Home, ClipboardList, ShoppingBag, MapPin, User, X, WifiOff, CircleHelp } from 'lucide-react'
 import { iniciarCatalogo } from './store/useCatalogo'
 import { useStore } from './store/useStore'
 import { supabase } from './lib/supabase'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, MotionConfig } from 'framer-motion'
 import HomePage from './pages/HomePage'
 // As outras telas entram por demanda. Antes tudo virava UM arquivo de 1 MB
 // (289 KB gzip) que o cliente baixava inteiro só pra abrir a Home — incluindo o
@@ -18,7 +18,10 @@ const EventosPage = lazy(() => import('./pages/EventosPage'))
 const AmbulantesPage = lazy(() => import('./pages/AmbulantesPage'))
 const PerfilPage = lazy(() => import('./pages/PerfilPage'))
 import EmailVerificationBanner from './components/EmailVerificationBanner'
-import AiChatbot from './components/AiChatbot'
+const AiChatbot = lazy(() => import('./components/AiChatbot'))
+import { useOnlineStatus } from './hooks/useOnlineStatus'
+import { usePreferences } from './store/usePreferences'
+import './refresh.css'
 import { DialogHost } from './lib/dialog'
 import PasswordRecoveryHandler from './components/PasswordRecoveryHandler'
 import IntroSplash from './components/IntroSplash'
@@ -58,7 +61,7 @@ function NotificationToast() {
     if (!ultima) return
     if (ultima.id === initialNotifIdRef.current) return
     setVisivel(true)
-    playNotifySound()
+    if (usePreferences.getState().notificationSounds) playNotifySound()
     const t = window.setTimeout(() => setVisivel(false), 6500)
     return () => window.clearTimeout(t)
   }, [ultima?.id])
@@ -95,7 +98,7 @@ function NotificationToast() {
         <div style={{ fontSize: 14, color: '#0f172a', fontWeight: 900 }}>{ultima.titulo}</div>
         <div style={{ fontSize: 12, color: '#475569', fontWeight: 600, marginTop: 3, lineHeight: 1.35 }}>{ultima.texto}</div>
       </div>
-      <button onClick={() => setVisivel(false)} style={{ border: 0, background: '#f1f5f9', width: 30, height: 30, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+      <button aria-label="Fechar aviso" onClick={() => setVisivel(false)} style={{ border: 0, background: '#f1f5f9', width: 44, height: 44, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
         <X size={15} color="#64748b" />
       </button>
     </motion.div>
@@ -123,6 +126,13 @@ function TelaCarregando() {
 export default function App() {
   const location = useLocation()
   const navigate = useNavigate()
+  const online = useOnlineStatus()
+  const reducedMotion = usePreferences(s => s.reducedMotion)
+  const [helpOpen, setHelpOpen] = useState(false)
+  const unread = useStore(s => s.notificacoes.some(n => !n.lida))
+  const mainRef = useRef<HTMLElement>(null)
+  useEffect(() => { document.documentElement.dataset.reducedMotion = String(reducedMotion) }, [reducedMotion])
+  useEffect(() => { mainRef.current?.scrollTo({ top: 0 }); setHelpOpen(false) }, [location.pathname])
   // Cinco destinos cabem com rótulo legível em celulares de 320 px.
   //
   // A quarta aba já foi camaleão: mostrava "Radar" quando o usuário estava no
@@ -136,7 +146,7 @@ export default function App() {
     { to: '/',            icon: Home,          label: 'Início' },
     { to: '/pedidos',     icon: ClipboardList, label: 'Pedidos' },
     { to: '/pedir',       icon: ShoppingBag,   label: 'Explorar' },
-    { to: '/ambulantes',  icon: MapPin,        label: 'Mapa', novo: true },
+    { to: '/ambulantes',  icon: MapPin,        label: 'Mapa' },
     { to: '/perfil',      icon: User,          label: 'Perfil' },
   ]
   const sessao = useStore(s => s.sessao)
@@ -145,7 +155,7 @@ export default function App() {
   const [mostrarIntro, setMostrarIntro] = useState(deveMostrarIntro)
 
   // Carrega o catálogo real (lojas/produtos do banco) + realtime, uma vez.
-  useEffect(() => { iniciarCatalogo() }, [])
+  useEffect(() => iniciarCatalogo(), [])
   useEffect(() => { limparNotificacoesTeste() }, [limparNotificacoesTeste])
 
   useEffect(() => {
@@ -274,39 +284,21 @@ export default function App() {
     // pro `main` logo abaixo — sem isso, `height: 100%` dentro das páginas não
     // tem contra o que resolver e o mapa do Radar colapsa pra 0px.
     // Quem rola agora é o `main`, não a janela.
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', minHeight: '100dvh', background: 'transparent' }}>
+    <MotionConfig reducedMotion={reducedMotion ? 'always' : 'user'}>
+    <div className="pg-shell" style={{ display: 'flex', flexDirection: 'column', height: '100dvh', minHeight: '100dvh', background: 'var(--pg-sand)' }}>
       <AnimatePresence>
         {mostrarIntro && <IntroSplash key="intro" onFim={() => setMostrarIntro(false)} />}
       </AnimatePresence>
       <PasswordRecoveryHandler />
-      {/* Logo bar - Glassmorphism */}
-      <div className="glass-panel" style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '12px 20px', position: 'sticky', top: 0, zIndex: 60,
-        borderBottom: '1px solid rgba(0,0,0,0.05)'
-      }}>
-        <div
-          aria-label="PraiaGo"
-          style={{ width: 140, height: 59, overflow: 'hidden', position: 'relative', flexShrink: 0 }}
-        >
-          <img
-            src="/praiago-logo-transparent.png"
-            alt="PraiaGo"
-            style={{
-              position: 'absolute', width: 231, height: 231, maxWidth: 'none',
-              left: -56, top: -67, display: 'block',
-            }}
-          />
+      <header className="pg-topbar">
+        <button className="pg-brand" onClick={() => navigate('/')} aria-label="PraiaGo · Início"><span className="pg-brand-mark" aria-hidden="true">🌴</span>PraiaGo</button>
+        <div className="pg-top-actions">
+          {!online && <span className="pg-connection pg-connection-off"><WifiOff size={14}/>Sem rede</span>}
+          <button className="pg-icon-button" aria-label="Abrir atendimento" aria-expanded={helpOpen} onClick={() => setHelpOpen(v => !v)}><CircleHelp size={20}/></button>
+          <button className="pg-icon-button" aria-label={unread ? 'Notificações não lidas' : 'Abrir notificações'} onClick={() => navigate('/?painel=notificacoes')}><Bell size={19}/>{unread && <span className="pg-notification-dot"/>}</button>
         </div>
-        <motion.div 
-          animate={{ opacity: [0.5, 1, 0.5] }} 
-          transition={{ duration: 2, repeat: Infinity }}
-          style={{ fontSize: 11, color: '#22c55e', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(34,197,94,0.1)', padding: '6px 12px', borderRadius: 20 }}
-        >
-          <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 8px #22c55e' }} />
-          Online
-        </motion.div>
-      </div>
+      </header>
+      {!online && <div role="status" className="pg-offline">Você está sem conexão. Os dados podem estar desatualizados; reconecte para enviar pedidos.</div>}
 
       <EmailVerificationBanner />
 
@@ -321,7 +313,7 @@ export default function App() {
           Agora a conta acompanha a propria barra: altura + apoio + inset real,
           mais 16px de folga. Em aparelho sem inset o env() vale 0 e sobram
           98px, ainda mais do que os 90 de antes. */}
-      <main style={{ flex: 1, minHeight: 0, overflowY: 'auto', paddingBottom: 'calc(68px + 14px + env(safe-area-inset-bottom) + 16px)', position: 'relative' }}>
+      <main ref={mainRef} id="conteudo" style={{ flex: 1, minHeight: 0, overflowY: 'auto', paddingBottom: 'calc(68px + 14px + env(safe-area-inset-bottom) + 16px)', position: 'relative' }}>
         {/* Transição enxuta de propósito.
             Antes: `mode="wait"` + 0.38s + `scale`. Com `mode="wait"` a tela nova
             só COMEÇA a entrar depois de a antiga terminar de sair — 0.38 + 0.38
@@ -367,7 +359,7 @@ export default function App() {
         </AnimatePresence>
       </main>
 
-      <AiChatbot plataforma="cliente" />
+      {helpOpen && <Suspense fallback={<div role="status" className="pg-offline">Abrindo atendimento…</div>}><AiChatbot plataforma="cliente" initiallyOpen onClose={() => setHelpOpen(false)} /></Suspense>}
       <AnimatePresence>
         <NotificationToast />
       </AnimatePresence>
@@ -385,7 +377,7 @@ export default function App() {
         willChange: 'transform',
         width: 'calc(100% - 24px)', maxWidth: 440, zIndex: 100,
       }}>
-        <nav style={{
+        <nav aria-label="Navegação principal" style={{
           display: 'flex',
           height: 68,
           borderRadius: 26,
@@ -399,7 +391,7 @@ export default function App() {
           border: '1px solid #eef2f7',
           boxShadow: '0 2px 6px rgba(15,23,42,0.05), 0 16px 36px -14px rgba(15,23,42,0.28)',
         }}>
-          {navItems.map(({ to, icon: Icon, label, novo }) => {
+          {navItems.map(({ to, icon: Icon, label }) => {
             const active = to === '/' ? location.pathname === '/' : location.pathname.startsWith(to)
             return (
               <NavLink
@@ -414,7 +406,7 @@ export default function App() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: 3,
-                  color: active ? '#0284c7' : '#94a3b8',
+                  color: active ? '#05616d' : '#536b74',
                   textDecoration: 'none',
                   position: 'relative',
                   height: '100%',
@@ -425,42 +417,20 @@ export default function App() {
                     layoutId="navBubble"
                     style={{
                       position: 'absolute', inset: '7px 3px', borderRadius: 18,
-                      background: '#e0f2fe', zIndex: 0,
+                      background: '#e5f4ef', zIndex: 0,
                     }}
                     transition={{ type: 'spring', stiffness: 320, damping: 30 }}
                   />
-                )}
-
-                {novo && (
-                  <span
-                    style={{
-                      position: 'absolute',
-                      top: 2,
-                      right: '50%',
-                      marginRight: -26,
-                      zIndex: 2,
-                      padding: '1px 5px',
-                      borderRadius: 999,
-                      fontSize: 7.5,
-                      fontWeight: 900,
-                      letterSpacing: 0,
-                      color: '#fff',
-                      background: '#16a34a',
-                      boxShadow: '0 2px 6px rgba(22,163,74,0.5)',
-                    }}
-                  >
-                    NOVO
-                  </span>
                 )}
 
                 <motion.div
                   whileTap={{ scale: 0.88 }}
                   style={{ zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}
                 >
-                  <Icon size={20} color={active ? '#0284c7' : '#94a3b8'} strokeWidth={active ? 2.6 : 2.1} />
+                  <Icon size={21} color={active ? '#05616d' : '#536b74'} strokeWidth={active ? 2.5 : 1.9} />
                   <span
                     style={{
-                      fontSize: 9.5,
+                      fontSize: 10.5,
                       fontWeight: active ? 900 : 700,
                       letterSpacing: 0,
                       whiteSpace: 'nowrap',
@@ -475,5 +445,6 @@ export default function App() {
         </nav>
       </div>
     </div>
+    </MotionConfig>
   )
 }

@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Bell, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Grid2X2, Heart, MapPin, Percent, Plus,
   Search, ShoppingBag, SlidersHorizontal, Star, Ticket, Utensils, X,
 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { BannerEventos, CartaoLocal, CARTAO } from '../components/ui'
 import {
   CATEGORIAS,
@@ -22,6 +22,7 @@ import { theme } from '../lib/theme'
 import { supabase } from '../lib/supabase'
 import CuponsPanel from '../components/CuponsPanel'
 import { useCatalogoRegiao } from '../hooks/useCatalogoRegiao'
+import CatalogFeedback from '../components/CatalogFeedback'
 
 type ProdutoDestaque = Produto & { vendedorId: string; vendedorNome: string }
 /** Só o que a faixa "em destaque" da Home precisa do evento. */
@@ -247,7 +248,7 @@ function QuickAction({
       className={disabled ? 'prg-action-card' : 'prg-action-card prg-lift'}
       style={{
         ...CARTAO,
-        minHeight: 108,
+        minHeight: 88,
         padding: 12,
         textAlign: 'left',
         cursor: disabled ? 'default' : 'pointer',
@@ -310,7 +311,7 @@ function VendorCard({ v, onClick }: { v: Vendedor; onClick: () => void }) {
       padding: 0,
     }}>
       <div style={{ height: 126, position: 'relative', background: v.gradiente }}>
-        <img src={v.image} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.9 }} alt={v.nome} />
+        <img src={v.image} loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.9 }} alt={v.nome} />
         <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(15,23,42,0.62), rgba(15,23,42,0.08))' }} />
         <div style={{ position: 'absolute', top: 12, left: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ background: '#fff', color: '#0f172a', borderRadius: 999, padding: '5px 10px', fontSize: 10, fontWeight: 900 }}>
@@ -427,10 +428,13 @@ function iconButton(bg: string): React.CSSProperties {
 
 export default function HomePage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const resultsRef = useRef<HTMLDivElement>(null)
   const [busca, setBusca] = useState('')
   const [catSel, setCatSel] = useState<CategoriaId | null>(null)
   const [categoriasOpen, setCategoriasOpen] = useState(false)
-  const [soFavoritos, setSoFavoritos] = useState(false)
+  const soFavoritos = searchParams.get('filtro') === 'favoritos'
+  const setSoFavoritos = () => setSearchParams(params => { if (soFavoritos) params.delete('filtro'); else params.set('filtro', 'favoritos'); return params }, { replace: true })
   const [notifOpen, setNotifOpen] = useState(false)
   const [addedId, setAddedId] = useState<string | null>(null)
   const [cupons, setCupons] = useState<Cupom[]>([])
@@ -438,13 +442,22 @@ export default function HomePage() {
   const [eventoDestaque, setEventoDestaque] = useState<EventoDestaque | null>(null)
 
   const favoritos = useStore(s => s.favoritos)
-  const naoLidas = useStore(s => s.notificacoes.filter(n => !n.lida).length)
   const marcarTodasLidas = useStore(s => s.marcarTodasLidas)
   const addItem = useStore(s => s.addItem)
   const [regiaoAberta, setRegiaoAberta] = useState(false)
   const { cidadeAtendida, definirPosicaoManual } = useGPS()
   const catalogo = useCatalogo(s => s.vendedores)
   const loading = useCatalogo(s => s.loading)
+  const catalogError = useCatalogo(s => s.error)
+  useEffect(() => {
+    const panel = searchParams.get('painel')
+    if (!panel) return
+    if (panel === 'notificacoes') { setNotifOpen(true); marcarTodasLidas() }
+    if (panel === 'cupons') setCuponsAberto(true)
+    if (panel === 'regiao') setRegiaoAberta(true)
+    setSearchParams(params => { params.delete('painel'); return params }, { replace: true })
+  }, [searchParams, setSearchParams, marcarTodasLidas])
+  useEffect(() => { if (soFavoritos && !loading) resultsRef.current?.scrollIntoView({ block: 'start' }) }, [soFavoritos, loading])
 
   // A regiao escolhida no seletor manda na lista. Nao mostramos vendedor de
   // outra cidade fingindo estar perto: lista vazia com aviso honesto e melhor
@@ -482,7 +495,7 @@ export default function HomePage() {
         v.produtos.some(p => semAcento(p.nome).includes(termo))
       )
     })
-  }, [busca, catSel, soFavoritos, favoritos, catalogo])
+  }, [busca, catSel, soFavoritos, favoritos, catalogoDaRegiao])
 
   const produtoPromocao = useMemo(() => (
     todosProdutos
@@ -543,11 +556,6 @@ export default function HomePage() {
     return () => { supabase.removeChannel(ch) }
   }, [])
 
-  function abrirNotif() {
-    setNotifOpen(true)
-    marcarTodasLidas()
-  }
-
   function adicionar(item: ProdutoDestaque) {
     addItem(item.vendedorId, item.id, 1)
     setAddedId(item.id)
@@ -555,7 +563,7 @@ export default function HomePage() {
   }
 
   return (
-    <div style={{ minHeight: '100dvh', background: '#fff', color: '#0f172a', paddingBottom: 98 }}>
+    <div className="pg-home" style={{ minHeight: '100%', background: 'var(--pg-sand)', color: 'var(--pg-ink)', paddingBottom: 24 }}>
       {notifOpen && <NotifPanel onClose={() => setNotifOpen(false)} />}
       {categoriasOpen && (
         <CategoriasPanel
@@ -569,7 +577,7 @@ export default function HomePage() {
         />
       )}
 
-      <header style={{ position: 'relative', minHeight: 202, padding: '18px 18px 16px', overflow: 'hidden', background: '#fff' }}>
+      <header style={{ position: 'relative', minHeight: 176, padding: '20px 20px 18px', overflow: 'hidden', background: '#fff', margin: '12px 16px', borderRadius: 24, border: '1px solid var(--pg-line)' }}>
         <img
           src="/images/home-beach-v2.webp"
           alt=""
@@ -580,28 +588,25 @@ export default function HomePage() {
         <span aria-hidden="true" style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg, #ffffff 0%, rgba(255,255,255,0.96) 30%, rgba(255,255,255,0.48) 58%, rgba(255,255,255,0) 82%)', pointerEvents: 'none' }} />
 
         <div style={{ position: 'relative', zIndex: 1 }}>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginBottom: 6 }}>
-            <button aria-label="Filtrar favoritos" onClick={() => setSoFavoritos(v => !v)} style={iconButton(soFavoritos ? '#fff1f2' : '#ffffff')}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+            <span className="pg-eyebrow">SEU DIA, MAIS LEVE</span>
+            <button aria-label="Filtrar favoritos" aria-pressed={soFavoritos} onClick={setSoFavoritos} style={iconButton(soFavoritos ? '#fff1f2' : '#ffffff')}>
               <Heart size={19} color={soFavoritos ? theme.color.danger : '#64748b'} fill={soFavoritos ? theme.color.danger : 'none'} />
-            </button>
-            <button aria-label="Notificações" onClick={abrirNotif} style={{ ...iconButton('#ffffff'), position: 'relative' }}>
-              <Bell size={19} color="#64748b" />
-              {naoLidas > 0 && <div style={{ position: 'absolute', top: 9, right: 9, width: 9, height: 9, background: theme.color.danger, borderRadius: '50%', border: '2px solid #fff' }} />}
             </button>
           </div>
 
           <h1 style={{ margin: 0, fontSize: 27.5, fontWeight: 950, letterSpacing: 0, lineHeight: 1.08, color: '#0f172a', maxWidth: '76%' }}>
-            O que você quer
+            Aproveite a praia.
             <br />
             <span
               style={{
-                background: 'linear-gradient(100deg, #0284c7, #0ea5e9 45%, #16a34a)',
+                background: 'linear-gradient(100deg, #05616d, #087f8c 45%, #1a7957)',
                 WebkitBackgroundClip: 'text',
                 backgroundClip: 'text',
                 color: 'transparent',
               }}
             >
-              agora?
+              Descubra aqui.
             </span>
           </h1>
           <p style={{ margin: '9px 0 0', maxWidth: '68%', fontSize: 13.5, fontWeight: 700, color: '#64748b', lineHeight: 1.4 }}>
@@ -644,8 +649,8 @@ export default function HomePage() {
           </button>
         </div>
 
-        <BannerEventos onClick={() => navigate('/eventos')} />
       </div>
+      <CatalogFeedback/>
 
       <main style={{ padding: '16px 18px 0' }}>
         {/* Vitrine de promoção: só aparece quando existe OFERTA REAL publicada */}
@@ -692,6 +697,7 @@ export default function HomePage() {
         {/* Evento em destaque — só aparece se existir um marcado no banco.
             Nada de cartão de exemplo: praia sem evento cadastrado não mostra
             faixa nenhuma. */}
+        {!eventoDestaque && <div style={{ marginBottom: 22 }}><BannerEventos onClick={() => navigate('/eventos')}/></div>}
         {eventoDestaque && (
           <button
             type="button"
@@ -868,12 +874,12 @@ export default function HomePage() {
         </section>
 
         <section style={{ marginBottom: 26 }}>
-          <SectionHeader title={soFavoritos ? 'Seus favoritos' : catSel || busca ? 'Resultado da busca' : 'Perto de você'} action="Explorar" onAction={() => navigate('/pedir')} />
+          <div ref={resultsRef} style={{ scrollMarginTop: 16 }}><SectionHeader title={soFavoritos ? 'Seus favoritos' : catSel || busca ? 'Resultado da busca' : 'Perto de você'} action={soFavoritos ? 'Ver todos' : 'Explorar'} onAction={() => soFavoritos ? setSoFavoritos() : navigate('/pedir')} /></div>
           {loading ? (
             <div style={{ display: 'grid', gap: 12 }}>
               {[0, 1].map(i => <div key={i} className="shimmer" style={{ height: 124, borderRadius: 24 }} />)}
             </div>
-          ) : vendedores.length === 0 ? (
+          ) : catalogError && vendedores.length === 0 ? <p className="pg-caption">O catálogo estará disponível quando a conexão for restabelecida.</p> : vendedores.length === 0 ? (
             <div style={{ borderRadius: 24, border: '1px solid #e2e8f0', background: '#f8fafc', padding: 24, textAlign: 'center', color: '#64748b' }}>
               <Search size={30} color="#cbd5e1" style={{ margin: '0 auto 10px' }} />
               {/* Com filtro ativo o catalogo pode ate estar cheio: dizer "nenhum vendedor

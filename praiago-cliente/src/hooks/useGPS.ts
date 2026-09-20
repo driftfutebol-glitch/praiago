@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import { channel, TOPICS } from '../lib/realtime'
 import { encontrarCidadeAtendida, LOCAL_REVISAO } from '../lib/serviceArea'
 import { useStore } from '../store/useStore'
+import { subscribeGeolocation } from '../lib/sharedGeolocation'
 
 export type GPSData = {
   lat: number
@@ -27,6 +27,12 @@ export const CLIENTE_FALLBACK: [number, number] = LOCAL_REVISAO
 const POS_STORAGE = 'praiago:cliente:pos'
 const MANUAL_STORAGE = 'praiago:cliente:posmanual'
 const MEMORIA_FRESCA_MS = 6 * 60 * 60 * 1000 // 6h
+const MANUAL_EVENT = 'praiago:posicao-manual-alterada'
+
+function coordenadasValidas(lat: unknown, lng: unknown): lat is number {
+  return typeof lat === 'number' && Number.isFinite(lat) && lat >= -90 && lat <= 90
+    && typeof lng === 'number' && Number.isFinite(lng) && lng >= -180 && lng <= 180
+}
 
 type PontoSalvo = { lat: number; lng: number; ts: number }
 
@@ -35,8 +41,8 @@ function lerSalvo(chave: string): PontoSalvo | null {
     const raw = localStorage.getItem(chave)
     if (!raw) return null
     const p = JSON.parse(raw) as Partial<PontoSalvo>
-    if (typeof p?.lat === 'number' && typeof p?.lng === 'number') {
-      return { lat: p.lat, lng: p.lng, ts: p.ts ?? 0 }
+    if (coordenadasValidas(p?.lat, p?.lng)) {
+      return { lat: p.lat, lng: p.lng as number, ts: typeof p.ts === 'number' ? p.ts : 0 }
     }
   } catch { /* storage bloqueado ou JSON inválido — ignora */ }
   return null
@@ -56,10 +62,15 @@ export function useGPS() {
   const [manual, setManual] = useState<PontoSalvo | null>(() => lerSalvo(MANUAL_STORAGE))
   const [memoria] = useState<PontoSalvo | null>(() => lerSalvo(POS_STORAGE))
   const [ipPos, setIpPos] = useState<(PontoSalvo & { cidade?: string }) | null>(null)
-  const ch = useRef<ReturnType<typeof channel<GPSData>> | null>(null)
-  const watchId = useRef<number | null>(null)
   const buscouIp = useRef(false)
   const temFix = useRef(false)
+  useEffect(() => {
+    const sync = (event: Event) => setManual((event as CustomEvent<PontoSalvo | null>).detail)
+    const onStorage = (event: StorageEvent) => { if (event.key === MANUAL_STORAGE) setManual(lerSalvo(MANUAL_STORAGE)) }
+    window.addEventListener(MANUAL_EVENT, sync)
+    window.addEventListener('storage', onStorage)
+    return () => { window.removeEventListener(MANUAL_EVENT, sync); window.removeEventListener('storage', onStorage) }
+  }, [])
 
   // Posição aproximada pela internet — só nível de cidade, mas muito melhor
   // que um ponto fixo quando o aparelho não tem GPS (PC, por exemplo).
@@ -80,8 +91,6 @@ export function useGPS() {
   }
 
   useEffect(() => {
-    ch.current = channel<GPSData>(TOPICS.clienteGPS)
-
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       setStatus('error')
       setError('Localização não suportada neste dispositivo')
@@ -90,15 +99,6 @@ export function useGPS() {
     }
 
     setStatus('requesting')
-
-    // App NATIVO (Capacitor): pede a permissão de localização do Android antes —
-    // sem isso o navigator.geolocation do WebView falha silenciosamente.
-    const capacitor = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor
-    if (capacitor?.isNativePlatform?.()) {
-      import('@capacitor/geolocation')
-        .then(({ Geolocation }) => Geolocation.requestPermissions())
-        .catch(() => { /* plugin ausente → segue com o geolocation web */ })
-    }
 
     const onPos = (p: GeolocationPosition) => {
       const gps: GPSData = {
@@ -113,7 +113,8 @@ export function useGPS() {
       setData(gps)
       setStatus('active')
       setError(null)
-      ch.current?.publish(gps)
+      // Localização do cliente fica neste aparelho. O compartilhamento de um
+      // pedido é explícito e usa LocalizacaoAoVivoBotao, não um canal global.
       try {
         localStorage.setItem(POS_STORAGE, JSON.stringify({ lat: gps.lat, lng: gps.lng, ts: gps.ts }))
       } catch { /* storage cheio/bloqueado — sem drama */ }
@@ -132,19 +133,10 @@ export function useGPS() {
       if (!temFix.current) buscarPorIP()
     }
 
-    // 1) Fix rápido (baixa precisão, aceita posição em cache de até 1 min)
-    navigator.geolocation.getCurrentPosition(onPos, onErr, {
-      enableHighAccuracy: false, timeout: 10000, maximumAge: 60000,
-    })
-
-    // 2) Acompanhamento ao vivo (alta precisão, timeout generoso)
-    watchId.current = navigator.geolocation.watchPosition(onPos, onErr, {
-      enableHighAccuracy: true, timeout: 30000, maximumAge: 5000,
-    })
+    const pararGPS = subscribeGeolocation(onPos, onErr)
 
     return () => {
-      if (watchId.current != null) navigator.geolocation.clearWatch(watchId.current)
-      ch.current?.close()
+      pararGPS()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -152,14 +144,17 @@ export function useGPS() {
   // O usuário arrastou o pino: a posição muda o mapa até ele escolher voltar
   // ao GPS. A liberação operacional continua usando a posição objetiva.
   function definirPosicaoManual(lat: number, lng: number) {
+    if (!coordenadasValidas(lat, lng)) return
     const p: PontoSalvo = { lat, lng, ts: Date.now() }
     setManual(p)
     try { localStorage.setItem(MANUAL_STORAGE, JSON.stringify(p)) } catch { /* ok */ }
+    window.dispatchEvent(new CustomEvent(MANUAL_EVENT, { detail: p }))
   }
 
   function limparPosicaoManual() {
     setManual(null)
     try { localStorage.removeItem(MANUAL_STORAGE) } catch { /* ok */ }
+    window.dispatchEvent(new CustomEvent(MANUAL_EVENT, { detail: null }))
   }
 
   const memoriaFresca = memoria && Date.now() - memoria.ts < MEMORIA_FRESCA_MS ? memoria : null

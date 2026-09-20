@@ -11,7 +11,8 @@ import { useRoute } from '../hooks/useRoute'
 import { CLIENTE_FALLBACK, useGPS, type GPSFonte, type GPSStatus } from '../hooks/useGPS'
 import { criarMonitorSentido, type SentidoStatus } from '../lib/trafego'
 import { broadcastOrder } from '../hooks/useOrderBroadcast'
-import { pertenceACategoria, type Vendedor } from '../lib/catalogo'
+import { pertenceACategoria, semAcento, type Vendedor } from '../lib/catalogo'
+import CatalogFeedback from '../components/CatalogFeedback'
 import { checarPedido, RAIO_PEDIDO_KM } from '../lib/serviceArea'
 import { criarPix, isPagamentoOnline, pagarComCartao, mensagemRecusaCartao, type PixCobranca } from '../lib/pagamento'
 import { aguardarPagamento } from '../lib/aguardarPagamento'
@@ -1746,13 +1747,15 @@ function LojasList({ vendedores, loading, tipoInicial, foraDaArea, modoRevisao, 
   )
   const [atalho, setAtalho] = useState<'todos' | 'abertas' | 'cupom' | 'rapidas' | 'avaliadas'>('todos')
   const [busca, setBusca] = useState('')
+  const catalogError = useCatalogo(s => s.error)
 
   const filtrados = useMemo(() => {
-    const q = busca.trim().toLowerCase()
+    const q = semAcento(busca.trim())
     const base = vendedores
       .filter(v => filtro === 'todos' || v.tipo === filtro)
-      .filter(v => !q || v.nome.toLowerCase().includes(q) || v.categoria.toLowerCase().includes(q) || v.produtos.some(p => p.nome.toLowerCase().includes(q)))
+      .filter(v => !q || semAcento(v.nome).includes(q) || semAcento(v.categoria).includes(q) || v.produtos.some(p => semAcento(p.nome).includes(q)))
       .filter(v => atalho !== 'abertas' || v.aberto)
+      .filter(v => atalho !== 'cupom' || v.produtos.some(p => !!p.promocao))
       .filter(v => atalho !== 'rapidas' || tempoMinutos(v.tempo) <= 35)
     return base.sort((a, b) => {
       if (atalho === 'avaliadas') return b.avaliacao - a.avaliacao || Number(b.aberto) - Number(a.aberto)
@@ -1770,22 +1773,22 @@ function LojasList({ vendedores, loading, tipoInicial, foraDaArea, modoRevisao, 
   const atalhos: Array<{ key: typeof atalho; label: string; icon: React.ReactNode }> = [
     { key: 'todos', label: 'Relevância', icon: <SlidersHorizontal size={13} /> },
     { key: 'abertas', label: 'Aberto agora', icon: <Clock size={13} /> },
-    { key: 'cupom', label: 'Com cupom', icon: <TicketPercent size={13} /> },
-    { key: 'rapidas', label: 'Mais rápidas', icon: <Zap size={13} /> },
+    { key: 'cupom', label: 'Com ofertas', icon: <TicketPercent size={13} /> },
     { key: 'avaliadas', label: 'Melhor nota', icon: <Star size={13} /> },
   ]
 
   return (
-    <div style={{ minHeight: '100dvh', background: '#f8fafc', paddingBottom: 120 }}>
+    <div className="pg-explore" style={{ minHeight: '100%', background: 'var(--pg-sand)', paddingBottom: 28 }}>
       {/* Header */}
-      <div style={{ background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', padding: '26px 20px 56px', borderBottomLeftRadius: 34, borderBottomRightRadius: 34, position: 'relative', overflow: 'hidden' }}>
+      <div style={{ background: 'linear-gradient(120deg,#094f5b,#0b7f87)', padding: '24px 20px 48px', borderBottomLeftRadius: 28, borderBottomRightRadius: 28, position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', top: -60, right: -40, width: 190, height: 190, borderRadius: '50%', background: 'rgba(255,255,255,0.14)', filter: 'blur(2px)' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button aria-label="Voltar" onClick={() => navigate('/')} style={{ width: 42, height: 42, borderRadius: 14, background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
             <ArrowLeft size={19} color="#fff" />
           </button>
           <div>
-            <motion.h1 initial={{ opacity: 0, x: -14 }} animate={{ opacity: 1, x: 0 }} style={{ fontSize: 24, fontWeight: 900, color: '#fff', letterSpacing: -0.5, margin: 0 }}>Onde vamos pedir? 🏖️</motion.h1>
+            <span className="pg-eyebrow" style={{ color: '#c3e8df' }}>SABORES DA PRAIA</span>
+            <motion.h1 initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ fontSize: 27, fontWeight: 850, color: '#fff', letterSpacing: -0.8, margin: '3px 0 0' }}>O que vai ser hoje?</motion.h1>
             <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }} style={{ fontSize: 13, color: 'rgba(255,255,255,0.9)', fontWeight: 600, margin: '4px 0 0' }}>
               {loading ? 'Procurando lojas na areia…' : `${abertas} loja${abertas === 1 ? '' : 's'} aberta${abertas === 1 ? '' : 's'} agora`}
             </motion.p>
@@ -1801,7 +1804,8 @@ function LojasList({ vendedores, loading, tipoInicial, foraDaArea, modoRevisao, 
             value={busca}
             onChange={e => setBusca(e.target.value)}
             placeholder="Buscar loja, comida, bebida…"
-            style={{ flex: 1, border: 'none', outline: 'none', fontSize: 15, fontWeight: 600, color: '#0f172a', background: 'transparent' }}
+            aria-label="Buscar loja, comida ou bebida"
+            style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', fontSize: 15, fontWeight: 600, color: '#0f172a', background: 'transparent' }}
           />
           {busca && <button aria-label="Limpar" onClick={() => setBusca('')} style={{ border: 'none', background: '#f1f5f9', borderRadius: 10, width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={14} color="#64748b" /></button>}
         </div>
@@ -1811,7 +1815,7 @@ function LojasList({ vendedores, loading, tipoInicial, foraDaArea, modoRevisao, 
         <div role="status" style={{ margin: '14px 20px 0', padding: 14, borderRadius: 18, border: '1px solid #bae6fd', background: '#f0f9ff', color: '#075985' }}>
           <div style={{ fontSize: 13, fontWeight: 900 }}>Ainda não atendemos {cidade}</div>
           <div style={{ marginTop: 4, fontSize: 12, lineHeight: 1.45, fontWeight: 650 }}>
-            Estamos começando pela Baixada Santista. Praia Grande já tem vendedores ativos agora.
+            Estamos começando pela Baixada Santista. Você pode explorar também as outras regiões.
           </div>
           <button type="button" onClick={onExplorarArea} style={{ marginTop: 10, width: '100%', border: 0, borderRadius: 13, padding: '10px 12px', background: '#0ea5e9', color: '#fff', fontSize: 12, fontWeight: 900, cursor: 'pointer' }}>
             Ver Praia Grande
@@ -1843,10 +1847,10 @@ function LojasList({ vendedores, loading, tipoInicial, foraDaArea, modoRevisao, 
       <div style={{ padding: '14px 20px 0' }}>
         <motion.button
           whileTap={{ scale: 0.98 }}
-          onClick={() => setAtalho('cupom')}
-          style={{ width: '100%', textAlign: 'left', border: 'none', cursor: 'pointer', borderRadius: 24, padding: 0, background: 'linear-gradient(135deg,#0ea5e9,#22c55e)', overflow: 'hidden', boxShadow: '0 14px 34px rgba(14,165,233,0.22)' }}
+          onClick={() => navigate('/?painel=cupons')}
+          style={{ width: '100%', textAlign: 'left', border: '1px solid #cde5db', cursor: 'pointer', borderRadius: 18, padding: 0, background: '#eaf5ef', overflow: 'hidden' }}
         >
-          <div style={{ padding: 18, display: 'flex', alignItems: 'center', gap: 14, color: '#fff', position: 'relative' }}>
+          <div style={{ padding: 14, display: 'flex', alignItems: 'center', gap: 12, color: '#155e52', position: 'relative' }}>
             <div style={{ width: 46, height: 46, borderRadius: 16, background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.26)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <TicketPercent size={23} />
             </div>
@@ -1860,9 +1864,10 @@ function LojasList({ vendedores, loading, tipoInicial, foraDaArea, modoRevisao, 
       </div>
 
       {/* Chips de filtro */}
+      <CatalogFeedback/>
       <div style={{ display: 'flex', gap: 8, padding: '16px 20px 6px', overflowX: 'auto' }}>
         {chips.map(c => (
-          <motion.button key={c.key} whileTap={{ scale: 0.94 }} onClick={() => setFiltro(c.key)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 999, fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap', cursor: 'pointer', border: filtro === c.key ? '1px solid rgba(14,165,233,0.4)' : '1px solid rgba(0,0,0,0.08)', background: filtro === c.key ? 'linear-gradient(135deg, rgba(14,165,233,0.14), rgba(34,197,94,0.14))' : '#ffffff', color: filtro === c.key ? '#0284c7' : '#64748b' }}>
+          <motion.button key={c.key} aria-pressed={filtro === c.key} whileTap={{ scale: 0.98 }} onClick={() => setFiltro(c.key)} className="pg-chip">
             {c.icon} {c.label}
           </motion.button>
         ))}
@@ -1870,7 +1875,7 @@ function LojasList({ vendedores, loading, tipoInicial, foraDaArea, modoRevisao, 
 
       <div style={{ display: 'flex', gap: 8, padding: '6px 20px 4px', overflowX: 'auto' }}>
         {atalhos.map(c => (
-          <motion.button key={c.key} whileTap={{ scale: 0.94 }} onClick={() => setAtalho(c.key)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 999, fontSize: 12.5, fontWeight: 850, whiteSpace: 'nowrap', cursor: 'pointer', border: atalho === c.key ? '1px solid rgba(14,165,233,0.42)' : '1px solid rgba(0,0,0,0.08)', background: atalho === c.key ? '#e0f2fe' : '#ffffff', color: atalho === c.key ? '#0284c7' : '#64748b' }}>
+          <motion.button key={c.key} aria-pressed={atalho === c.key} whileTap={{ scale: 0.98 }} onClick={() => setAtalho(c.key)} className="pg-chip">
             {c.icon} {c.label}
           </motion.button>
         ))}
@@ -1881,7 +1886,7 @@ function LojasList({ vendedores, loading, tipoInicial, foraDaArea, modoRevisao, 
         {loading && vendedores.length === 0 && [0, 1, 2].map(i => (
           <div key={i} style={{ height: 210, borderRadius: 26, background: 'linear-gradient(100deg, #f1f5f9 40%, #ffffff 50%, #f1f5f9 60%)', backgroundSize: '200% 100%', animation: 'shimmer 1.4s linear infinite' }} />
         ))}
-        {!loading && filtrados.length === 0 && (
+        {!loading && !catalogError && filtrados.length === 0 && (
           <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} style={{ textAlign: 'center', padding: '56px 24px', background: '#ffffff', borderRadius: 26, border: '1px dashed rgba(0,0,0,0.12)' }}>
             <div style={{ fontSize: 52, marginBottom: 12 }}>🏖️</div>
             <div style={{ fontSize: 17, fontWeight: 900, color: '#0f172a' }}>{busca ? 'Nada com esse nome por aqui' : 'Nenhuma loja disponível agora'}</div>
@@ -1999,7 +2004,7 @@ export default function PedirPage() {
   }
 
   return (
-    <div style={{ minHeight: '100dvh', background: '#ffffff', color: '#0f172a' }}>
+    <div style={{ minHeight: '100%', background: 'var(--pg-sand)', color: 'var(--pg-ink)', paddingBottom: 24 }}>
       <AnimatePresence>
         {step === 'checkout' && <CheckoutModal vendedor={vendedor} clientePos={clientePos} gpsStatus={gpsStatus} gpsFonte={gpsFonte} onConfirm={(e, pid) => { setEntrega(e); setPedidoId(pid); setStep('rastreando') }} onClose={() => setStep('menu')} />}
         {step === 'rastreando' && <RastreamentoModal vendedor={vendedor} clientePos={clientePos} entrega={entrega} pedidoId={pedidoId} onClose={() => { setStep('menu'); navigate('/') }} />}

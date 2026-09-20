@@ -23,6 +23,8 @@ import { TEXTO_AREA_ATENDIDA, RAIO_PEDIDO_KM } from '../lib/serviceArea'
 import 'leaflet/dist/leaflet.css'
 import { useCatalogoRegiao } from '../hooks/useCatalogoRegiao'
 import { MAPA_TILES, MAPA_ATRIBUICAO, MAPA_ZOOM_MAX } from '../lib/mapa'
+import { usePreferences } from '../store/usePreferences'
+import CatalogFeedback from '../components/CatalogFeedback'
 
 // ── Custom Marker Icons ──────────────────────────────────────
 
@@ -390,6 +392,7 @@ export default function AmbulantesPage() {
   }
   const {
     pos,
+    data: gpsData,
     status: gpsStatus,
     fonte,
     cidadeAproximada,
@@ -398,10 +401,13 @@ export default function AmbulantesPage() {
     definirPosicaoManual,
     limparPosicaoManual,
   } = useGPS()
-  const { ambulantes, total } = useNearbyAmbulantes(pos)
+  const { ambulantes: todosAmbulantes, total } = useNearbyAmbulantes(pos)
   // Fonte unica: ver useCatalogoRegiao. Nao voltar a ler o catalogo cru aqui.
   const { vendedores } = useCatalogoRegiao()
   const [viewMode, setViewMode] = useState<'map' | 'list'>('map')
+  const [tipo, setTipo] = useState<'todos' | 'ambulante' | 'restaurante'>('todos')
+  const [soAbertos, setSoAbertos] = useState(false)
+  const ambulantes = useMemo(() => tipo === 'restaurante' ? [] : todosAmbulantes.filter(a => !soAbertos || a.aberto), [todosAmbulantes, tipo, soAbertos])
 
   // Lojas de ponto fixo pro mapa.
   //
@@ -411,8 +417,8 @@ export default function AmbulantesPage() {
   // sem `localizacaoConfirmada` o `pos` cai no centro de Praia Grande (padrão
   // do catálogo) e o pino apontaria pra um lugar onde não existe loja nenhuma.
   const restaurantesNoMapa = useMemo(
-    () => vendedores.filter(v => v.tipo === 'restaurante' && v.localizacaoConfirmada),
-    [vendedores],
+    () => tipo === 'ambulante' ? [] : vendedores.filter(v => v.tipo === 'restaurante' && v.localizacaoConfirmada && (!soAbertos || v.aberto)),
+    [vendedores, tipo, soAbertos],
   )
 
   // Zona atual do cliente
@@ -438,12 +444,12 @@ export default function AmbulantesPage() {
     // e cartão do mais próximo têm altura própria, e o mapa engole a sobra.
     // Antes o mapa tinha altura mínima fixa, a soma passava da tela e o cartão
     // só aparecia se a pessoa rolasse.
-    <div style={{ height: '100%', overflow: 'hidden', background: '#ffffff', color: '#0f172a', display: 'flex', flexDirection: 'column' }}>
+    <div className="pg-map-page" style={{ height: '100%', overflowY: 'auto', background: 'var(--pg-sand)', color: 'var(--pg-ink)', display: 'flex', flexDirection: 'column' }}>
       {/* ── Header ──────────────────────────────────────── */}
-      <div className="glass-panel" style={{
-        padding: '16px 20px 12px',
-        borderBottom: '1px solid rgba(0,0,0,0.05)',
-        position: 'sticky', top: 0, zIndex: 50
+      <div style={{
+        padding: '14px 16px 12px',
+        flexShrink: 0,
+        position: 'relative', zIndex: 50
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
           {/* Voltar. O Radar ocupa a tela inteira e engole o gesto de arrastar
@@ -472,19 +478,18 @@ export default function AmbulantesPage() {
             <h1 style={{
               margin: 0, fontSize: 20, fontWeight: 900,
               display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
-            }} className="beach-gradient-text">
-              <MapPin size={19} style={{ color: '#22c55e', flexShrink: 0 }} />
-              Radar
+            }}>
+              Na praia
             </h1>
             <p style={{ margin: '4px 0 0', fontSize: 12, color: '#64748b', fontWeight: 600 }}>
-              Ambulantes ao vivo perto de você
+              Descubra o que está perto
               {zonaCliente && <span style={{ color: '#38bdf8' }}> · {zonaCliente.emoji} {zonaCliente.nome}</span>}
             </p>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             {/* Badge ao vivo */}
-            <motion.div animate={total > 0 ? { opacity: [0.7, 1, 0.7] } : {}} transition={{ repeat: Infinity, duration: 2 }} style={{
+            <motion.div style={{
               display: 'flex', alignItems: 'center', gap: 6,
               padding: '6px 12px', borderRadius: 20,
               background: total > 0 ? 'rgba(34,197,94,0.15)' : 'rgba(100,116,139,0.15)',
@@ -495,7 +500,7 @@ export default function AmbulantesPage() {
                 background: total > 0 ? '#22c55e' : '#64748b',
                 boxShadow: total > 0 ? '0 0 10px #22c55e' : 'none',
               }} />
-              <span style={{ fontSize: 12, fontWeight: 800, color: total > 0 ? '#22c55e' : '#94a3b8' }}>
+              <span style={{ fontSize: 11, fontWeight: 800, color: total > 0 ? '#15803d' : '#536b74' }}>
                 {total} online
               </span>
             </motion.div>
@@ -546,7 +551,7 @@ export default function AmbulantesPage() {
             background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.2)',
             fontSize: 12, fontWeight: 600, color: '#d97706', display: 'flex', alignItems: 'center', gap: 8,
           }}>
-            <RefreshCw size={14} style={{ animation: 'spin 1s linear infinite' }} />
+            <RefreshCw size={14} style={{ flexShrink: 0, animation: gpsStatus === 'requesting' ? 'spin 1s linear infinite' : undefined }} />
             {gpsStatus === 'requesting'
               ? 'Obtendo radar...'
               : fonte === 'ip'
@@ -575,7 +580,7 @@ export default function AmbulantesPage() {
             <span style={{ flex: 1, minWidth: 190 }}>
               {modoRevisao
                 ? 'Cenário de revisão ativo em Praia Grande. Esta conta não aparece para usuários reais.'
-                : `Você vê todos os vendedores de qualquer lugar. Para fechar pedido, é preciso estar a até ${RAIO_PEDIDO_KM} km da loja — hoje entregamos em ${TEXTO_AREA_ATENDIDA}.`}
+                : `Exploração livre. Pedidos a até ${RAIO_PEDIDO_KM} km da loja em ${TEXTO_AREA_ATENDIDA}.`}
             </span>
             {foraDaArea && fonte !== 'manual' && (
               <button
@@ -588,11 +593,16 @@ export default function AmbulantesPage() {
             )}
           </motion.div>
         )}
+        <div className="pg-map-filters" aria-label="Filtrar vendedores no mapa">
+          {([{ id: 'todos', label: 'Todos' }, { id: 'ambulante', label: 'Ambulantes' }, { id: 'restaurante', label: 'Restaurantes' }] as const).map(item => <button key={item.id} className="pg-chip" aria-pressed={tipo === item.id} onClick={() => setTipo(item.id)}>{item.label}</button>)}
+          <button className="pg-chip" aria-pressed={soAbertos} onClick={() => setSoAbertos(v => !v)}>Abertos agora</button>
+        </div>
       </div>
+      <CatalogFeedback/>
 
       {/* ── Destaque: ambulante mais próximo ────────────── */}
       <AnimatePresence>
-        {nearest && (
+        {nearest && viewMode === 'list' && (
           <motion.div
             key={nearest.id}
             initial={{ opacity: 0, y: -10 }}
@@ -667,12 +677,13 @@ export default function AmbulantesPage() {
       {/* ── Conteúdo ── o mapa ocupa exatamente o que sobrou da tela.
           `minHeight: 0` é obrigatório: sem ele o item flex se recusa a encolher
           abaixo do conteúdo e volta a empurrar o cartão pra fora da dobra. */}
-      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+      <div style={{ flex: 1, minHeight: 300, position: 'relative' }}>
         <AnimatePresence mode="wait">
           {viewMode === 'map' ? (
             <motion.div key="map" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} style={{ height: '100%', width: '100%', position: 'absolute', inset: 0 }}>
               <MapView
                 clientePos={pos}
+                accuracy={fonte === 'gps' ? gpsData?.accuracy : undefined}
                 ambulantes={ambulantes}
                 restaurantes={restaurantesNoMapa}
                 onPedir={handlePedir}
@@ -687,6 +698,8 @@ export default function AmbulantesPage() {
               <ListView
                 ambulantes={ambulantes}
                 onPedir={handlePedir}
+                restaurantes={restaurantesNoMapa}
+                onAbrirVendedor={v => navigate(`/pedir?v=${v.id}`)}
               />
             </motion.div>
           )}
@@ -721,6 +734,7 @@ export default function AmbulantesPage() {
 
 function MapView({
   clientePos,
+  accuracy,
   ambulantes,
   restaurantes,
   onPedir,
@@ -730,6 +744,7 @@ function MapView({
   onTrocarVisao,
 }: {
   clientePos: [number, number]
+  accuracy?: number
   ambulantes: AmbulanteLive[]
   /** Lojas de ponto FIXO. O ambulante anda e vem por GPS ao vivo; o
    *  restaurante fica parado, então entra no mapa pela coordenada do cadastro. */
@@ -747,6 +762,8 @@ function MapView({
   // Instância do Leaflet guardada aqui pra o aviso, que mora fora do mapa,
   // conseguir mandar o mapa enquadrar.
   const [mapa, setMapa] = useState<LeafletMap | null>(null)
+  const mapStyle = usePreferences(s => s.mapStyle)
+  const setMapStyle = usePreferences(s => s.setMapStyle)
   const alvosDoMapa = useMemo<[number, number][]>(
     () => [
       ...ambulantes.map(a => [a.lat, a.lng] as [number, number]),
@@ -759,7 +776,7 @@ function MapView({
     ],
   )
   return (
-    <div style={{
+    <div className={mapStyle === 'ruas' ? 'pg-map-standard' : 'pg-map-beach'} style={{
       position: 'relative', height: '100%',
       // Cartão arredondado como no visual novo, em vez do mapa sangrando de
       // ponta a ponta.
@@ -776,7 +793,7 @@ function MapView({
         ref={setMapa}
       >
         <TileLayer
-          attribution={MAPA_ATRIBUICAO} url={MAPA_TILES} maxZoom={MAPA_ZOOM_MAX} // O Voyager já traz areia bege e parque verde (mesmos dados do OSM).
+          attribution={MAPA_ATRIBUICAO} url={MAPA_TILES} maxZoom={MAPA_ZOOM_MAX}
           // Este filtro só aquece e satura um pouco pra faixa de praia puxar
           // mais pro amarelo do visual novo, sem trocar de provedor nem
           // depender de chave de API.
@@ -785,7 +802,7 @@ function MapView({
 
         {/* Areia amarela + coqueiros desenhados sobre os tiles. Vem antes dos
             marcadores pra ficar por baixo deles. */}
-        <CamadaPraia />
+        {mapStyle === 'praia' && <CamadaPraia />}
 
         {/* Enquadra cliente + lojas: ambulante (GPS ao vivo) e restaurante
             (ponto fixo) entram juntos, porque pro cliente os dois são "quem
@@ -797,6 +814,7 @@ function MapView({
         {/* Cliente — pino ARRASTÁVEL: sem GPS, o usuário posiciona onde está */}
         <Marker
           position={clientePos}
+          title="Ponto explorado · arraste para ajustar"
           icon={clienteIcon()}
           draggable
           eventHandlers={{
@@ -821,31 +839,17 @@ function MapView({
           </Popup>
         </Marker>
 
-        {/* Círculo de área (raio de cobertura — 2km) */}
-        <Circle
+        {/* Precisão medida pelo aparelho; nunca representar 30m fictícios. */}
+        {typeof accuracy === 'number' && Number.isFinite(accuracy) && accuracy > 0 && <Circle
           center={clientePos}
-          radius={2000}
-          pathOptions={{
-            color: '#0ea5e9',
-            fillColor: '#0ea5e9',
-            fillOpacity: 0.05,
-            weight: 1,
-            dashArray: '6,4',
-          }}
-        />
-
-        {/* Precisão GPS */}
-        <Circle
-          center={clientePos}
-          radius={30}
+          radius={accuracy}
           pathOptions={{
             color: '#22c55e',
             fillColor: '#22c55e',
             fillOpacity: 0.1,
             weight: 1,
-            className: 'animate-pulse-neon'
           }}
-        />
+        />}
 
         {/* Ambulantes */}
         {/* Lojas de ponto fixo. Ficam ANTES dos ambulantes pra o ambulante, que
@@ -853,6 +857,7 @@ function MapView({
         {restaurantes.map((v) => (
           <Marker
             key={`fixo-${v.id}`}
+            title={`${v.nome} · Restaurante · ${v.aberto ? 'Aberto' : 'Fechado'}`}
             position={v.pos}
             icon={restauranteIcon(v.aberto)}
           >
@@ -894,6 +899,7 @@ function MapView({
         {ambulantes.map((a) => (
           <Marker
             key={a.id}
+            title={`${a.nome} · Ambulante · ${a.aberto ? 'Aberto' : 'Fechado'}`}
             position={[a.lat, a.lng]}
             icon={ambulanteIcon(a.emoji, a.aberto, a.fotoPerfil)}
           >
@@ -951,7 +957,7 @@ function MapView({
         ))}
 
         {/* Zonas da praia (contorno sutil) */}
-        {BEACH_ZONES.map(z => {
+        {mapStyle === 'praia' && BEACH_ZONES.map(z => {
           const positions = z.poligono as [number, number][]
           return (
             <Circle
@@ -994,13 +1000,13 @@ function MapView({
             width: 8, height: 8, borderRadius: 999,
             background: totalOnline > 0 ? '#22c55e' : '#94a3b8',
           }} />
-          Ao vivo
+          {totalOnline > 0 ? `${totalOnline} no radar` : 'Explorar a região'}
         </span>
 
         <button
           type="button"
-          onClick={onTrocarVisao}
-          aria-label="Ver em lista"
+          onClick={() => setMapStyle(mapStyle === 'praia' ? 'ruas' : 'praia')}
+          aria-label={mapStyle === 'praia' ? 'Usar mapa de ruas' : 'Usar mapa com estilo praia'}
           style={{
             pointerEvents: 'auto',
             display: 'inline-flex', alignItems: 'center', gap: 7,
@@ -1011,7 +1017,7 @@ function MapView({
           }}
         >
           <MapIcon size={16} color="#0284c7" strokeWidth={2.4} />
-          Mapa
+          {mapStyle === 'praia' ? 'Praia' : 'Ruas'}
           <ChevronDown size={15} color="#64748b" strokeWidth={2.6} />
         </button>
       </div>
@@ -1019,18 +1025,19 @@ function MapView({
       {/* Mini-lista sobreposta no mapa (3 mais próximos) */}
       {ambulantes.length > 0 && (
         <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} style={{
-          position: 'absolute', bottom: 16, left: 16, right: 80, zIndex: 1000,
+          position: 'absolute', bottom: 40, left: 12, right: 72, zIndex: 1000,
           background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(16px)',
           borderRadius: 20, padding: '12px',
           border: '1px solid rgba(0,0,0,0.08)',
-          maxHeight: 180, overflowY: 'auto', boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
+          maxHeight: 130, overflowY: 'auto', boxShadow: 'var(--pg-shadow)'
         }}>
           {ambulantes.slice(0, 3).map((a, i) => (
-            <motion.div
+            <motion.button
               whileTap={{ scale: 0.98 }}
               key={a.id}
               onClick={() => onPedir(a)}
               style={{
+                width: '100%', background: 'transparent', border: 0, textAlign: 'left',
                 display: 'flex', alignItems: 'center', gap: 12,
                 padding: '10px 8px',
                 borderBottom: i < 2 && ambulantes.length > 1 ? '1px solid rgba(0,0,0,0.05)' : 'none',
@@ -1045,26 +1052,27 @@ function MapView({
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>{a.nome}</div>
                 <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
-                  {a.zona} · {a.aberto ? <span style={{ color: '#4ade80' }}>Online</span> : 'Offline'}
+                  {a.zona} · {a.aberto ? <span style={{ color: '#15803d' }}>Aberto</span> : 'Fechado'}
                 </div>
               </div>
               <div style={{
                 fontSize: 13, fontWeight: 900,
-                color: '#38bdf8',
+                color: '#05616d',
                 display: 'flex', alignItems: 'center', gap: 4,
               }}>
                 {formatDist(a.distancia)}
                 <ChevronRight size={16} />
               </div>
-            </motion.div>
+            </motion.button>
           ))}
           {ambulantes.length > 3 && (
-            <div style={{
+            <button onClick={onTrocarVisao} style={{
+              border: 0, background: 'transparent', width: '100%', cursor: 'pointer', minHeight: 36,
               textAlign: 'center', fontSize: 11, color: '#64748b',
               padding: '8px 0 4px', fontWeight: 700,
             }}>
               +{ambulantes.length - 3} mais no radar
-            </div>
+            </button>
           )}
         </motion.div>
       )}
@@ -1079,26 +1087,31 @@ function MapView({
 function ListView({
   ambulantes,
   onPedir,
+  restaurantes,
+  onAbrirVendedor,
 }: {
   ambulantes: AmbulanteLive[]
   onPedir: (a: AmbulanteLive) => void
+  restaurantes: Vendedor[]
+  onAbrirVendedor: (v: Vendedor) => void
 }) {
-  if (ambulantes.length === 0) {
+  const navigate = useNavigate()
+  if (ambulantes.length === 0 && restaurantes.length === 0) {
     return (
       <div style={{
         padding: '80px 32px', textAlign: 'center',
       }}>
-        <motion.div animate={{ y: [0, -10, 0] }} transition={{ repeat: Infinity, duration: 2 }} style={{ fontSize: 70, marginBottom: 20 }}>🏖️</motion.div>
+        <div style={{ fontSize: 52, marginBottom: 16 }}>🏖️</div>
         <h2 style={{ margin: '0 0 12px', fontSize: 22, fontWeight: 900, color: '#0f172a' }}>
-          Nenhum ambulante no radar
+          Nada por aqui com estes filtros
         </h2>
         <p style={{ margin: '0 0 32px', fontSize: 15, color: '#64748b', lineHeight: 1.5, fontWeight: 500 }}>
           A praia parece tranquila agora.
-          <br />Que tal pedir de um restaurante local?
+          <br />Experimente outros filtros ou veja o catálogo.
         </p>
         <motion.button
           whileTap={{ scale: 0.95 }}
-          onClick={() => window.location.href = '/'}
+          onClick={() => navigate('/pedir')}
           style={{
             padding: '16px 36px', borderRadius: 20, border: 'none',
             background: 'linear-gradient(135deg, #0ea5e9, #22c55e)',
@@ -1106,14 +1119,15 @@ function ListView({
             boxShadow: '0 10px 25px rgba(34,197,94,0.4)'
           }}
         >
-          Ver Restaurantes →
+          Explorar lojas →
         </motion.button>
       </div>
     )
   }
 
   return (
-    <div style={{ padding: '20px 20px 80px' }}>
+    <div style={{ padding: '16px 16px 32px' }}>
+      {restaurantes.map(v => <button key={v.id} onClick={() => onAbrirVendedor(v)} className="pg-card pg-map-store"><span className="pg-menu-icon">{v.emoji}</span><span className="pg-menu-copy">{v.nome}<small>Restaurante · {v.aberto ? 'Aberto agora' : 'Fechado'}<br/>{v.endereco || v.zona}</small></span><ChevronRight size={18}/></button>)}
       {/* Stats bar */}
       <div style={{
         display: 'flex', gap: 10, marginBottom: 24, overflowX: 'auto',

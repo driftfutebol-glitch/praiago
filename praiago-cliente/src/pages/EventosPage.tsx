@@ -352,17 +352,19 @@ const modalInput: CSSProperties = {
 export default function EventosPage() {
   const [eventos, setEventos] = useState<Evento[]>([])
   const [loading, setLoading] = useState(true)
+  const [erroLista, setErroLista] = useState(false)
   const [filtro, setFiltro] = useState<Periodo | 'todos'>('todos')
   const [comprando, setComprando] = useState<Evento | null>(null)
   const sessao = useStore(s => s.sessao)
 
   const carregar = useCallback(async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('eventos')
       .select('*, event_ticket_lots(id,nome,preco_origem,preco_venda,preco_venda_credito,estoque_disponivel,status,fonte_url)')
       .eq('status', 'ativo')
       .order('data', { ascending: true, nullsFirst: false })
-    setEventos(((data as Evento[]) ?? []).filter(eventoNaAreaAtendida))
+    setErroLista(Boolean(error))
+    if (!error) setEventos(((data as Evento[]) ?? []).filter(eventoNaAreaAtendida))
     setLoading(false)
   }, [])
 
@@ -379,21 +381,22 @@ export default function EventosPage() {
   const outros = lista.filter(e => !e.destaque)
 
   return (
-    <div style={{ minHeight: '100dvh', background: '#ffffff', paddingBottom: 100 }}>
+    <div className="pg-events" style={{ minHeight: '100%', background: 'var(--pg-sand)', paddingBottom: 28 }}>
       <AnimatePresence>
         {comprando && <ComprarIngressoModal evento={comprando} sessao={sessao} onClose={() => setComprando(null)} />}
       </AnimatePresence>
 
       {/* Cabeçalho com a cena de praia atrás, igual ao da Home — é o que
           amarra as duas telas como sendo do mesmo app. */}
-      <header style={{ position: 'relative', overflow: 'hidden', padding: '20px 20px 14px', background: '#fff' }}>
+      <header style={{ position: 'relative', overflow: 'hidden', padding: '24px 20px', margin: '12px 16px 20px', border: '1px solid var(--pg-line)', borderRadius: 24, background: '#fff' }}>
         <img src="/images/home-beach-v2.webp" alt="" aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', opacity: 0.62, pointerEvents: 'none' }} />
         <span aria-hidden="true" style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg, #fff 0%, rgba(255,255,255,0.94) 44%, rgba(255,255,255,0.18) 100%)', pointerEvents: 'none' }} />
         <div style={{ position: 'relative', zIndex: 1 }}>
-          <h1 style={{ margin: 0, fontSize: 27, fontWeight: 950, color: '#0f172a', letterSpacing: 0, lineHeight: 1.1, maxWidth: '78%' }}>
-            Eventos na
+          <span className="pg-eyebrow">ALÉM DA AREIA</span>
+          <h1 style={{ margin: '8px 0 0', fontSize: 28, fontWeight: 850, color: 'var(--pg-ink)', letterSpacing: -.8, lineHeight: 1.1, maxWidth: '90%' }}>
+            Viva a
             <br />
-            Baixada Santista 🎉
+            Baixada Santista.
           </h1>
           <p style={{ margin: '7px 0 0', maxWidth: '76%', fontSize: 12.5, color: '#64748b', fontWeight: 700, lineHeight: 1.45 }}>
             {CIDADES.join(' · ')}
@@ -406,22 +409,17 @@ export default function EventosPage() {
         {PERIODOS.map(p => {
           const sel = filtro === p.id
           return (
-            <button key={p.id} onClick={() => setFiltro(p.id)} style={{
-              background: sel ? 'linear-gradient(135deg, #0ea5e9, #22c55e)' : 'rgba(0,0,0,0.05)',
-              border: `1px solid ${sel ? 'transparent' : 'rgba(0,0,0,0.08)'}`,
-              borderRadius: 20, padding: '8px 16px', color: sel ? '#fff' : '#94a3b8',
-              fontSize: 13, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap',
-              boxShadow: sel ? '0 4px 15px rgba(34,197,94,0.3)' : 'none',
-            }}>{p.emoji} {p.label}</button>
+            <button key={p.id} onClick={() => setFiltro(p.id)} className="pg-chip" aria-pressed={sel}>{p.emoji} {p.label}</button>
           )
         })}
       </div>
 
+      {erroLista && <div role="status" className="pg-catalog-error"><div>Não foi possível atualizar os eventos. Confira sua conexão.</div><button onClick={() => void carregar()}>Tentar de novo</button></div>}
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: '60px 0' }}>
           <Loader2 size={30} color="#22c55e" style={{ animation: 'spin 1s linear infinite' }} />
         </div>
-      ) : lista.length === 0 ? (
+      ) : lista.length === 0 && !erroLista ? (
         <div style={{ textAlign: 'center', padding: '64px 32px', color: '#64748b' }}>
           <div style={{ width: 72, height: 72, borderRadius: 24, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
             <CalendarX size={32} color="#475569" />
@@ -431,7 +429,7 @@ export default function EventosPage() {
         </div>
       ) : (
         <>
-          <div style={{ padding: '0 20px 90px' }}>
+          <div style={{ padding: '0 20px 16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
               <h2 style={{ fontSize: 19, fontWeight: 950, color: '#0f172a', margin: 0, letterSpacing: 0 }}>Próximos eventos</h2>
               <span style={{ fontSize: 12.5, fontWeight: 900, color: '#16a34a' }}>{lista.length} {lista.length === 1 ? 'evento' : 'eventos'}</span>
@@ -448,6 +446,7 @@ export default function EventosPage() {
                   const temIngresso = lotesDisponiveis(ev).length > 0
                   return (
                     <motion.article
+                      className="pg-event-card"
                       key={ev.id}
                       initial={{ opacity: 0, y: 12 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -463,10 +462,12 @@ export default function EventosPage() {
                     >
                       {/* Capa: usa a imagem do evento quando existe; senão um
                           azulejo com o emoji — nada de foto genérica. */}
-                      <div style={{ position: 'relative', width: 124, flexShrink: 0, background: 'linear-gradient(150deg,#e0f2fe,#dcfce7)' }}>
+                      <div className="pg-event-cover" style={{ position: 'relative', flexShrink: 0, background: 'linear-gradient(150deg,#e0f2fe,#dcfce7)' }}>
                         {ev.imagem_url ? (
                           <img
                             src={ev.imagem_url}
+                            loading="lazy"
+                            decoding="async"
                             alt=""
                             aria-hidden
                             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}

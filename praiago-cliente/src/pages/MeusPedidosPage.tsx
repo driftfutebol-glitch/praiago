@@ -40,6 +40,9 @@ function fmtData(ts: number) {
 export default function MeusPedidosPage() {
   const navigate = useNavigate()
   const pedidos = useStore(s => s.pedidos)
+  const sessao = useStore(s => s.sessao)
+  const [filtro, setFiltro] = useState<'todos' | 'ativos' | 'historico'>('todos')
+  const pedidosVisiveis = pedidos.filter(p => filtro === 'todos' || (filtro === 'historico' ? ['entregue', 'cancelado'].includes(p.status) : !['entregue', 'cancelado'].includes(p.status)))
   const sincronizarPedidos = useStore(s => s.sincronizarPedidos)
   const cancelarPedido = useStore(s => s.cancelarPedido)
   // Codigo de entrega fica so em memoria: sai da tela quando o app fecha.
@@ -188,28 +191,31 @@ export default function MeusPedidosPage() {
   }
 
   return (
-    <div style={{ minHeight: '100dvh', background: theme.color.bg, paddingBottom: 90 }}>
+    <div style={{ minHeight: '100%', background: 'var(--pg-sand)', paddingBottom: 28 }}>
       <header style={{ padding: '20px 20px 8px' }}>
-        <h1 style={{ fontSize: 24, fontWeight: 900, color: theme.color.text }}>Meus Pedidos</h1>
+        <span className="pg-eyebrow">DO PEDIDO AO PRIMEIRO GOLE</span>
+        <h1 className="pg-heading">Meus pedidos</h1>
         <p style={{ fontSize: 13, color: theme.color.textMuted, marginTop: 2 }}>
-          {pedidos.length === 0 ? 'Nenhum pedido ainda' : `${pedidos.length} pedido${pedidos.length === 1 ? '' : 's'}`}
+          {pedidos.length === 0 ? 'Seu dia de praia, acompanhado por aqui.' : `${pedidos.length} pedido${pedidos.length === 1 ? '' : 's'} · acompanhe cada etapa`}
         </p>
       </header>
+      {pedidos.length > 0 && <div style={{ display: 'flex', gap: 8, padding: '12px 20px' }} aria-label="Filtrar pedidos">{([{ id: 'todos', label: 'Todos' }, { id: 'ativos', label: 'Em andamento' }, { id: 'historico', label: 'Histórico' }] as const).map(item => <button key={item.id} className="pg-chip" aria-pressed={filtro === item.id} onClick={() => setFiltro(item.id)}>{item.label}</button>)}</div>}
 
       {pedidos.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '64px 24px', color: theme.color.textMuted }}>
           <div style={{ width: 72, height: 72, borderRadius: 24, background: theme.color.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
             <ShoppingBag size={32} color={theme.color.textFaint} />
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: theme.color.text }}>Você ainda não pediu nada</div>
-          <div style={{ fontSize: 13, marginTop: 6 }}>Que tal uma água de coco geladinha? 🥥</div>
-          <button onClick={() => navigate('/pedir')} style={{ marginTop: 20, background: theme.gradient.brand, border: 'none', borderRadius: 16, padding: '14px 28px', color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer' }}>
-            Fazer um pedido
+          <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--pg-ink)' }}>{sessao ? 'Seu primeiro pedido vem aí' : 'Seus pedidos, num só lugar'}</div>
+          <div style={{ fontSize: 13, marginTop: 8, lineHeight: 1.6 }}>{sessao ? 'Explore os sabores da praia e escolha seu favorito.' : 'Entre na sua conta para acompanhar pedidos e consultar seu histórico.'}</div>
+          <button onClick={() => navigate(sessao ? '/pedir' : '/perfil')} className="pg-button pg-button-primary" style={{ marginTop: 20 }}>
+            {sessao ? 'Explorar lojas' : 'Entrar na minha conta'}
           </button>
         </div>
       ) : (
         <div style={{ padding: '8px 16px' }}>
-          {pedidos.map(p => {
+          {pedidosVisiveis.length === 0 && <div className="pg-card" style={{ textAlign: 'center', padding: 32 }}><p className="pg-section-title">{filtro === 'ativos' ? 'Tudo tranquilo por aqui' : 'Seu histórico está começando'}</p><p className="pg-caption">{filtro === 'ativos' ? 'Você não tem pedidos em andamento.' : 'Pedidos finalizados aparecerão nesta aba.'}</p></div>}
+          {pedidosVisiveis.map(p => {
             const cfg = STATUS_CFG[p.status]
             const Icon = cfg.icon
             const emAndamento = (EM_ANDAMENTO as readonly string[]).includes(p.status)

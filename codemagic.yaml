@@ -122,13 +122,13 @@ workflows:
       - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
       - /tmp/xcodebuild_logs/*.log
 
-  ios-cliente-testflight:
+  ios-cliente-testflight: &ios_cliente_testflight
     name: iOS Cliente - TestFlight
     max_build_duration: 120
     instance_type: mac_mini_m2
     integrations:
       app_store_connect: "Codemagic PraiaGo"
-    environment:
+    environment: &cliente_ios_environment
       groups:
         - praiago_public_env
         - praiago_ios_appstore
@@ -137,7 +137,7 @@ workflows:
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.ferrazcode.praiago.cliente
-      vars:
+      vars: &cliente_ios_vars
         APP_DIR: praiago-cliente
         XCODE_PROJECT: ios/App/App.xcodeproj
         XCODE_SCHEME: App
@@ -158,6 +158,31 @@ workflows:
         auth: integration
         # Upload first. External TestFlight beta review is submitted only after
         # the required test contact/review metadata is completed in App Store Connect.
+  # Candidata isolada: não publica OTA de produção nem envia para revisão pública.
+  ios-cliente-outubro-candidate:
+    <<: *ios_cliente_testflight
+    name: iOS Cliente - candidata Outubro 2026
+    environment:
+      <<: *cliente_ios_environment
+      vars:
+        <<: *cliente_ios_vars
+        CAPACITOR_OTA_CHANNEL: candidate-outubro-2026
+        CAPACITOR_OTA_UPDATE_URL: https://kfxpzjqktbcsxlqapkyv.supabase.co/functions/v1/ota-update?channel=candidate-outubro-2026
+    scripts:
+      - *validate_public_env
+      - *prepare_capacitor_ios
+      - name: Validate Cliente release candidate
+        script: |
+          cd "$APP_DIR"
+          npm test
+          npm run lint
+          cd ios/App
+          agvtool new-marketing-version 1.1
+      - *configure_ios_signing
+      - *resolve_apple_app_id
+      - *increment_ios_build_number
+      - *build_testflight_ipa
+
   ios-ambulante-testflight:
     name: iOS Ambulante - TestFlight
     max_build_duration: 120

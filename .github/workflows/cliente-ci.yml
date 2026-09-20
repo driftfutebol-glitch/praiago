@@ -1,0 +1,27 @@
+name: PraiaGo Cliente checks
+on:
+  push:
+    branches: ['feat/cliente-outubro-2026']
+    paths: ['praiago-cliente/**', '.github/workflows/cliente-ci.yml']
+  pull_request:
+    paths: ['praiago-cliente/**', '.github/workflows/cliente-ci.yml']
+permissions:
+  contents: read
+jobs:
+  cliente:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: praiago-cliente
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.14.0'
+          cache: npm
+          cache-dependency-path: praiago-cliente/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run lint
+      - run: npm run build
+      - run: npm audit --omit=dev --audit-level=high

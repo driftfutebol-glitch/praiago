@@ -10,8 +10,8 @@ type Message = {
   text: string
 }
 
-export default function AiChatbot({ plataforma = 'cliente' }: { plataforma?: string }) {
-  const [isOpen, setIsOpen] = useState(false)
+export default function AiChatbot({ plataforma = 'cliente', initiallyOpen = false, onClose }: { plataforma?: string; initiallyOpen?: boolean; onClose?: () => void }) {
+  const [isOpen, setIsOpen] = useState(initiallyOpen)
   const [messages, setMessages] = useState<Message[]>([
     { id: 'welcome', role: 'bot', text: 'Olá! Aqui é o atendimento do PraiaGo. Como posso ajudar você hoje na praia?' }
   ])
@@ -155,6 +155,7 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
             exit={{ scale: 0, opacity: 0 }}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
+            aria-label="Abrir atendimento PraiaGo"
             onClick={() => setIsOpen(true)}
             style={{
               position: 'fixed',
@@ -238,7 +239,8 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
                 </div>
               </div>
               <button
-                onClick={() => setIsOpen(false)}
+                aria-label="Fechar atendimento"
+                onClick={() => { setIsOpen(false); onClose?.() }}
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4 }}
               >
                 <X size={24} color="#94a3b8" />
