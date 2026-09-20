@@ -29,7 +29,9 @@ npm audit
 
 Os testes usam [Vitest](https://vitest.dev/guide/) e [React Testing Library](https://testing-library.com/docs/react-testing-library/intro/), com Supabase substituído por um dublê local e `fetch` bloqueado. Não criam contas, pedidos, pagamentos, exclusões ou alterações em produção.
 
-Cobertura funcional: login e isolamento de papéis; conta banida; cadastro/CPF/aceite; passagem para OTP sem liberar sessão antes da confirmação; edição restrita de perfil e falha de gravação; destinos de menu; persistência das preferências; catálogo/estoque/promoção/paginação/erro/realtime; compartilhamento do sensor e integridade da localização objetiva.
+Cobertura funcional: login e isolamento de papéis; conta banida; cadastro/CPF/aceite; passagem para OTP sem liberar sessão antes da confirmação; edição restrita de perfil e falha de gravação; destinos de menu; persistência das preferências; catálogo/estoque/promoção/paginação/erro/realtime; compartilhamento do sensor e integridade da localização objetiva; preservação da conversa e do rascunho ao reabrir a ajuda.
+
+Resultado em 20/09/2026: **33 testes aprovados em quatro arquivos**, build web/TypeScript aprovado e `npm audit` sem vulnerabilidades. O mesmo commit passou pelos testes, lint e build web no macOS do Codemagic, além da compilação nativa assinada.
 
 O lint do projeto tem avisos preexistentes de dependências de hooks e Fast Refresh. Avisos não devem ser confundidos com erros nem com revisão completa de todo o legado.
 
@@ -50,13 +52,24 @@ O aplicativo normal continua em `http://127.0.0.1:5173/`.
 - [x] Auditoria npm sem vulnerabilidades após atualização compatível de `@xmldom/xmldom` transitivo.
 - [x] Fluxos de exclusão, checkout, pagamento e CPF sem relaxamento de autorização.
 - [x] Nenhuma migration ou atualização de edge function aplicada.
-- [ ] GitHub CI do commit final aprovado.
-- [ ] Build nativo assinado da candidata concluído no Codemagic.
-- [ ] Processamento da candidata concluído no App Store Connect/TestFlight.
+- [ ] GitHub Actions do commit final aprovado — bloqueado pela cobrança da conta antes de iniciar o job; não é um resultado dos testes.
+- [x] Build nativo assinado da candidata concluído no Codemagic.
+- [x] Upload da candidata para App Store Connect concluído sem erros.
+- [x] Processamento da candidata concluído no App Store Connect/TestFlight.
 - [ ] Teste em iPhone real: teclado, safe areas, permissões, GPS, foto, retomada do app e abertura sem rede.
 - [ ] Fluxo integrado com conta de teste autorizada: login, verificação, pedido, pagamento em sandbox e suporte.
 - [ ] Homologação do visual e definição do dia de lançamento em outubro.
 - [ ] Preparação da versão pública, metadados e revisão Apple quando a candidata for aprovada.
+
+### Evidências da candidata
+
+- Branch `feat/cliente-outubro-2026`; código da candidata no commit `c0aab0fe18527218ec1a2eb362386b4c968ac64d`.
+- [PR #3 em rascunho](https://github.com/driftfutebol-glitch/praiago/pull/3). Sem merge para `main` e sem publicação pública.
+- Codemagic: build `6ab017885ddfe5cccf8e35fa`, workflow `ios-cliente-outubro-candidate`, todas as etapas concluídas com sucesso em 20/09/2026. Artefato `App.ipa`, versão **1.1 (17)**, iOS mínimo 15.0. O log do envio confirmou `UPLOAD SUCCEEDED with no errors`.
+- App Store Connect: app Cliente `6804792683`, build `9b35b3fc-2b50-4cf7-bd99-54da0ab395b3`, versão **1.1 (17)**. API confirmou `processingState: VALID` e `internalBuildState: IN_BETA_TESTING`. `externalBuildState: READY_FOR_BETA_SUBMISSION`: não foi submetida revisão externa/pública nesta entrega. Nenhum testador foi adicionado.
+- [Execução do GitHub Actions](https://github.com/driftfutebol-glitch/praiago/actions/runs/35525707398): a anotação informa que o job não iniciou porque a conta está bloqueada por um problema de cobrança. Nenhuma configuração financeira foi alterada. O check nativo do Codemagic está aprovado no mesmo commit.
+- Revisão visual web: início, login, exploração, pedidos sem sessão, eventos, mapa, filtros, estilo cartográfico e ajuda em 390 × 844; perfil autenticado e editor com dados fictícios também em 320 × 700. Sem transações reais e sem tratar a prévia fictícia como teste integrado.
+- A primeira execução da candidata (`6ab0159d39b55bcdfcdfb1b8`) foi cancelada para incluir o ajuste final de preservação da ajuda. A evidência válida é a execução posterior acima.
 
 ### Canal da candidata
 
