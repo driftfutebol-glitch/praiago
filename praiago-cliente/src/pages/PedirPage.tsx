@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { renderToStaticMarkup } from 'react-dom/server'
-import { ArrowLeft, MapPin, X, WifiOff, Star, Check, Zap, Send, Heart, Shield, Navigation, CreditCard, Banknote, QrCode, Trash2, Clock, Search, UtensilsCrossed, Umbrella, Store, TicketPercent, SlidersHorizontal, Sparkles, FileText, ShoppingCart, UserRound } from 'lucide-react'
+import { ArrowLeft, MapPin, X, WifiOff, Star, Check, Zap, Send, Heart, Shield, Navigation, CreditCard, Banknote, QrCode, Trash2, Clock, Search, UtensilsCrossed, Umbrella, Store, TicketPercent, SlidersHorizontal, Sparkles, FileText } from 'lucide-react'
+import { customerMarkup, cartMarkup, storeMarkup } from '../lib/mapMarkerArtwork'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, Polyline, Circle, useMap } from 'react-leaflet'
 import L from 'leaflet'
@@ -34,9 +34,6 @@ import { MAPA_TILES, MAPA_ATRIBUICAO, MAPA_ZOOM_MAX } from '../lib/mapa'
 function makeIcon(html: string) {
   return L.divIcon({ className: '', html, iconSize: [44, 44], iconAnchor: [22, 22] })
 }
-const cartMarkup = renderToStaticMarkup(<ShoppingCart size={22} strokeWidth={2.6} />)
-const storeMarkup = renderToStaticMarkup(<Store size={22} strokeWidth={2.6} />)
-const customerMarkup = renderToStaticMarkup(<UserRound size={22} strokeWidth={2.6} />)
 const ambulanteIcon = makeIcon(`<div style="width:44px;height:44px;border-radius:15px;background:linear-gradient(135deg,#0ea5e9,#22c55e);color:#fff;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 8px 20px rgba(22,163,74,0.35)">${cartMarkup}</div>`)
 const restauranteIcon = makeIcon(`<div style="width:44px;height:44px;border-radius:15px;background:linear-gradient(135deg,#f97316,#ea580c);color:#fff;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 8px 20px rgba(234,88,12,0.35)">${storeMarkup}</div>`)
 const clienteIcon = makeIcon(`<div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#38bdf8,#0284c7);color:#fff;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 8px 20px rgba(2,132,199,0.35)">${customerMarkup}</div>`)

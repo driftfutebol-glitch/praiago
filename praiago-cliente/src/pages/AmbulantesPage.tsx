@@ -5,17 +5,16 @@
 //  ambulantes na areia via GPS ao vivo.
 // ==========================================================
 
-import { useState, useMemo, useEffect, useRef } from 'react'
-import { renderToStaticMarkup } from 'react-dom/server'
+import { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet'
 import L, { type Map as LeafletMap } from 'leaflet'
-import { ArrowLeft, MapPin, List, Map as MapIcon, Navigation, ChevronRight, ChevronDown, Wifi, Eye, Clock, RefreshCw, ShoppingCart, LocateFixed, UserRound } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { ArrowLeft, MapPin, List, Map as MapIcon, ChevronRight, LocateFixed, Search, X, Maximize2, Minimize2, Plus, Minus, Waves, Building2 } from 'lucide-react'
+import { useReducedMotion } from 'framer-motion'
 import { CLIENTE_FALLBACK, useGPS } from '../hooks/useGPS'
-import { useNearbyAmbulantes, type AmbulanteLive } from '../hooks/useNearbyAmbulantes'
-import type { Vendedor } from '../lib/catalogo'
+import { useNearbyAmbulantes } from '../hooks/useNearbyAmbulantes'
 import { getZone, BEACH_ZONES } from '../lib/praiagoZones'
+import { BEACH_MAP_BOUNDS, BEACH_SHAPES, beachAtPoint, beachNearCamera, initialBeach } from '../lib/beachMap'
 import CamadaPraia from '../components/CamadaPraia'
 import { alertDialog } from '../lib/dialog'
 import { TEXTO_AREA_ATENDIDA, RAIO_PEDIDO_KM } from '../lib/serviceArea'
@@ -25,6 +24,10 @@ import { useCatalogoRegiao } from '../hooks/useCatalogoRegiao'
 import { MAPA_TILES, MAPA_ATRIBUICAO, MAPA_ZOOM_MAX } from '../lib/mapa'
 import { usePreferences } from '../store/usePreferences'
 import CatalogFeedback from '../components/CatalogFeedback'
+import MapResults from '../components/MapResults'
+import { useCatalogo } from '../store/useCatalogo'
+import { selectMapSellers, mapResults, formatMapDistance, type MapResult, type MapSellerType } from '../lib/mapDiscovery'
+import { customerMarkup, cartMarkup } from '../lib/mapMarkerArtwork'
 
 // ── Custom Marker Icons ──────────────────────────────────────
 
@@ -33,33 +36,12 @@ import CatalogFeedback from '../components/CatalogFeedback'
 // novo: pessoa azul com halo para o cliente e carrinho verde para os
 // ambulantes.
 
-const customerMarkup = renderToStaticMarkup(<UserRound size={22} strokeWidth={2.6} />)
-const cartMarkup = renderToStaticMarkup(<ShoppingCart size={20} strokeWidth={2.5} />)
-
 function clienteIcon() {
   return L.divIcon({
-    className: '',
-    // Alto o bastante pro halo caber sem ser cortado pelo Leaflet.
-    iconSize: [86, 86],
-    iconAnchor: [43, 62],
-    html: `<div style="position:relative;width:86px;height:86px;">
-      <div style="
-        position:absolute; left:50%; top:50%; width:76px; height:76px;
-        margin:-38px 0 0 -38px; border-radius:50%;
-        background: rgba(56,189,248,0.22); border:1px solid rgba(56,189,248,0.4);
-        animation: clientePulse 2.4s ease-in-out infinite;
-      "></div>
-      <div style="
-        position:absolute; left:50%; top:50%; margin:-21px 0 0 -21px;
-        width:42px; height:42px; border-radius:50%;
-        background: linear-gradient(140deg,#38bdf8,#0284c7);
-        box-shadow: 0 6px 14px rgba(2,132,199,0.5);
-        border: 3px solid #ffffff; color:#ffffff;
-        display:flex; align-items:center; justify-content:center;
-      ">
-        ${customerMarkup}
-      </div>
-    </div>`,
+    className: 'pg-customer-marker',
+    iconSize: [64, 64],
+    iconAnchor: [32, 32],
+    html: `<div class="pg-customer-halo"><span>${customerMarkup}</span></div>`,
   })
 }
 
@@ -176,7 +158,7 @@ const RAIO_ENQUADRAMENTO = 0.045
 // Praia Grande, o app anunciava "1,9 km" no cartão e o mapa não mostrava loja
 // nenhuma — os pinos caíam a ~2000px fora de uma tela de 341px. Um radar que
 // esconde justamente o que ele diz estar perto não serve pra nada.
-function FlyToCliente({ pos, alvos }: { pos: [number, number]; alvos: [number, number][] }) {
+function FlyToCliente({ pos, alvos, animate }: { pos: [number, number]; alvos: [number, number][]; animate: boolean }) {
   const map = useMap()
   // Comeca vazio de proposito: o mapa nasce centrado no CLIENTE_FALLBACK e a
   // posicao de verdade (GPS/IP) chega depois, entao o primeiro enquadramento
@@ -205,8 +187,8 @@ function FlyToCliente({ pos, alvos }: { pos: [number, number]; alvos: [number, n
       if (perto.length) {
         // maxZoom 16 evita o oposto do bug: com a loja a 20 m, o `fitBounds`
         // aproximaria tanto que sumiria a rua e o cliente perderia a referência.
-        map.fitBounds([pos, ...perto], { padding: [42, 42], maxZoom: 16, animate: delta <= 0.05 })
-      } else if (delta > 0.05) {
+        map.fitBounds([pos, ...perto], { padding: [42, 42], maxZoom: 16, animate: animate && delta <= 0.05 })
+      } else if (delta > 0.05 || !animate) {
         // Salto grande (fallback -> cidade real, quilômetros) não rende
         // animação: vai direto, senão o mapa desliza por 1s à toa.
         map.setView(pos, Math.max(map.getZoom(), 14))
@@ -219,7 +201,7 @@ function FlyToCliente({ pos, alvos }: { pos: [number, number]; alvos: [number, n
     // `alvos` entra na dependência porque as lojas costumam chegar DEPOIS da
     // posição: sem isso o enquadramento rodaria com a lista ainda vazia e nunca
     // mais seria refeito.
-  }, [map, pos, alvos])
+  }, [map, pos, alvos, animate])
   return null
 }
 
@@ -236,9 +218,14 @@ function AjustaAoRedimensionar() {
     // guarda a altura de antes (medido: cache 411px x container real 208px).
     // Essa primeira medida e justamente a que corrige o desalinhamento; o
     // proprio `invalidateSize` nao faz nada quando os tamanhos ja batem.
-    const ro = new ResizeObserver(() => map.invalidateSize({ animate: false }))
+    let frame = 0
+    const ro = new ResizeObserver(entries => {
+      if (!entries[0]?.contentRect.width || !entries[0]?.contentRect.height) return
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => map.invalidateSize({ animate: false, debounceMoveend: true }))
+    })
     ro.observe(map.getContainer())
-    return () => ro.disconnect()
+    return () => { ro.disconnect(); cancelAnimationFrame(frame) }
   }, [map])
   return null
 }
@@ -265,65 +252,9 @@ function kmEntre(a: [number, number], b: [number, number]) {
 //  pegar com `useMap()`.
 function AvisoLojaLonge({ mapa, pos, alvos }: { mapa: LeafletMap | null; pos: [number, number]; alvos: [number, number][] }) {
   if (!mapa || !alvos.length) return null
-  const perto = alvos.some(([la, ln]) =>
-    Math.abs(la - pos[0]) <= RAIO_ENQUADRAMENTO && Math.abs(ln - pos[1]) <= RAIO_ENQUADRAMENTO)
-  if (perto) return null
-
-  const maisProxima = alvos.reduce((melhor, atual) =>
-    kmEntre(pos, atual) < kmEntre(pos, melhor) ? atual : melhor)
-  const km = kmEntre(pos, maisProxima)
-
-  return (
-    <div style={{
-      position: 'absolute', left: 10, right: 10, top: 10, zIndex: 1000,
-      display: 'flex', alignItems: 'center', gap: 9,
-      padding: '9px 11px', borderRadius: 14,
-      background: 'rgba(255,255,255,0.97)', border: '1px solid #fde68a',
-      boxShadow: '0 8px 22px -12px rgba(15,23,42,0.45)',
-    }}>
-      <span style={{ flex: 1, fontSize: 12, fontWeight: 800, color: '#92400e', lineHeight: 1.35 }}>
-        Nada aberto pertinho de você. A loja mais próxima está a{' '}
-        {km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`}.
-      </span>
-      <button
-        type="button"
-        onClick={() => mapa.fitBounds([pos, maisProxima], { padding: [42, 42], maxZoom: 16 })}
-        style={{
-          flexShrink: 0, border: 'none', borderRadius: 999, cursor: 'pointer',
-          padding: '7px 12px', background: '#0f172a', color: '#fff',
-          fontSize: 11.5, fontWeight: 900,
-        }}
-      >
-        Mostrar
-      </button>
-    </div>
-  )
-}
-
-function RecenterMap({ pos }: { pos: [number, number] }) {
-  const map = useMap()
-  const handleRecenter = () => {
-    map.flyTo(pos, 15, { duration: 0.8 })
-  }
-  return (
-    <motion.button
-      whileTap={{ scale: 0.9 }}
-      onClick={handleRecenter}
-      aria-label="Centralizar no meu local"
-      style={{
-        // Botão branco com a mira, como no visual novo — antes era um círculo
-        // com gradiente da marca, que competia com o botão do chat logo abaixo.
-        // Sobe pra 76px porque o chat flutuante ocupa o canto.
-        position: 'absolute', bottom: 76, right: 14, zIndex: 1000,
-        width: 44, height: 44, borderRadius: '50%',
-        background: '#ffffff', border: '1px solid #e8eef5', cursor: 'pointer',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        boxShadow: '0 2px 4px rgba(15,23,42,0.08), 0 10px 22px -10px rgba(15,23,42,0.4)',
-      }}
-    >
-      <LocateFixed size={21} color="#0284c7" strokeWidth={2.4} />
-    </motion.button>
-  )
+  if (alvos.some(([lat, lng]) => Math.abs(lat - pos[0]) <= RAIO_ENQUADRAMENTO && Math.abs(lng - pos[1]) <= RAIO_ENQUADRAMENTO)) return null
+  const nearest = alvos.reduce((best, point) => kmEntre(pos, point) < kmEntre(pos, best) ? point : best)
+  return <div className="pg-map-distance-note"><MapPin size={16}/><span>A loja mais próxima deste ponto está a {formatMapDistance(kmEntre(pos, nearest) * 1000)}.</span><button onClick={() => mapa.fitBounds([pos, nearest], { padding: [42, 42], maxZoom: 16, animate: false })}>Mostrar</button></div>
 }
 
 /** Barra de escala do canto inferior esquerdo — recalcula ao dar zoom. */
@@ -370,869 +301,148 @@ function EscalaMapa() {
   )
 }
 
-// ── Formatar distância ───────────────────────────────────────
-
-function formatDist(m: number): string {
-  if (m < 1000) return `${m}m`
-  return `${(m / 1000).toFixed(1)}km`
-}
-
-// ── Componente principal ─────────────────────────────────────
+// ── Descoberta: mapa compacto e lojas no fluxo da página ───────
 
 export default function AmbulantesPage() {
   const navigate = useNavigate()
-
-  // Volta pra tela anterior quando existe uma; senao vai pro inicio. Sem essa
-  // checagem, quem abriu o Radar direto por link sairia do app no primeiro
-  // toque, que e pior do que nao ter botao.
-  function voltar() {
+  const { pos, data: gpsData, status: gpsStatus, fonte, cidadeAproximada, foraDaArea, modoRevisao, definirPosicaoManual, limparPosicaoManual } = useGPS()
+  const { ambulantes: todosAmbulantes } = useNearbyAmbulantes(pos)
+  const { vendedores, loading } = useCatalogoRegiao()
+  const failed = useCatalogo(s => !!s.error)
+  const mapStyle = usePreferences(s => s.mapStyle)
+  const setMapStyle = usePreferences(s => s.setMapStyle)
+  const [viewMode, setViewMode] = useState<'map' | 'list'>('map')
+  const [expanded, setExpanded] = useState(false)
+  const [tipo, setTipo] = useState<MapSellerType>('todos')
+  const [soAbertos, setSoAbertos] = useState(false)
+  const [busca, setBusca] = useState('')
+  const { ambulantes, restaurantes } = useMemo(() => selectMapSellers(todosAmbulantes, vendedores, tipo, soAbertos, busca), [todosAmbulantes, vendedores, tipo, soAbertos, busca])
+  const items = useMemo(() => mapResults(ambulantes, restaurantes, pos), [ambulantes, restaurantes, pos])
+  const zonaCliente = useMemo(() => getZone(pos[0], pos[1]), [pos])
+  const filtered = !!busca.trim() || tipo !== 'todos' || soAbertos
+  const resetFilters = () => { setBusca(''); setTipo('todos'); setSoAbertos(false) }
+  const openSeller = useCallback((item: MapResult) => {
+    if (item.tipo === 'restaurante' || vendedores.some(v => v.id === item.id)) {
+      navigate(`/pedir?v=${encodeURIComponent(item.id)}`)
+    } else {
+      alertDialog({ title: 'Cardápio a caminho', message: 'Esse vendedor ainda não publicou o cardápio dele. Volte já já!' })
+    }
+  }, [navigate, vendedores])
+  const back = () => {
     const idx = (window.history.state as { idx?: number } | null)?.idx
     if (typeof idx === 'number' && idx > 0) navigate(-1)
     else navigate('/')
   }
-  const {
-    pos,
-    data: gpsData,
-    status: gpsStatus,
-    fonte,
-    cidadeAproximada,
-    foraDaArea,
-    modoRevisao,
-    definirPosicaoManual,
-    limparPosicaoManual,
-  } = useGPS()
-  const { ambulantes: todosAmbulantes, total } = useNearbyAmbulantes(pos)
-  // Fonte unica: ver useCatalogoRegiao. Nao voltar a ler o catalogo cru aqui.
-  const { vendedores } = useCatalogoRegiao()
-  const [viewMode, setViewMode] = useState<'map' | 'list'>('map')
-  const [tipo, setTipo] = useState<'todos' | 'ambulante' | 'restaurante'>('todos')
-  const [soAbertos, setSoAbertos] = useState(false)
-  const ambulantes = useMemo(() => tipo === 'restaurante' ? [] : todosAmbulantes.filter(a => !soAbertos || a.aberto), [todosAmbulantes, tipo, soAbertos])
+  const locationAction = mapStyle === 'praia' && zonaCliente?.tipo !== 'praia' ? 'Veja seu ponto no estilo Cidade.' : 'Arraste o pino para ajustar.'
+  const locationText = fonte === 'manual' ? `Ponto escolhido por você. ${locationAction}`
+    : gpsStatus === 'active' ? `GPS ativo. ${locationAction}`
+    : gpsStatus === 'requesting' ? 'Buscando sua localização…'
+    : fonte === 'ip' ? `Localização aproximada${cidadeAproximada ? ` · ${cidadeAproximada}` : ''}. ${locationAction}`
+    : fonte === 'memoria' ? `Última localização conhecida. ${locationAction}`
+    : `Sem GPS. ${locationAction}`
 
-  // Lojas de ponto fixo pro mapa.
-  //
-  // O Radar sempre desenhou só os ambulantes, que vêm do GPS ao vivo — o
-  // restaurante tinha coordenada no cadastro e nunca era desenhado, então o
-  // cliente não via onde a loja fica. Aqui entram os que têm ponto confirmado;
-  // sem `localizacaoConfirmada` o `pos` cai no centro de Praia Grande (padrão
-  // do catálogo) e o pino apontaria pra um lugar onde não existe loja nenhuma.
-  const restaurantesNoMapa = useMemo(
-    () => tipo === 'ambulante' ? [] : vendedores.filter(v => v.tipo === 'restaurante' && v.localizacaoConfirmada && (!soAbertos || v.aberto)),
-    [vendedores, tipo, soAbertos],
-  )
-
-  // Zona atual do cliente
-  const zonaCliente = useMemo(() => getZone(pos[0], pos[1]), [pos])
-
-  // Ambulante MAIS PRÓXIMO (a lista já vem ordenada por distância)
-  const nearest = ambulantes[0]
-  const walkMin = nearest ? Math.max(1, Math.round(nearest.distancia / 75)) : 0
-
-  // Navegar para pedir de um ambulante (vincula ao catálogo se existir)
-  const handlePedir = (amb: AmbulanteLive) => {
-    // Casa SÓ por id exato — casar por primeiro nome abria a loja errada (ex: "Ana Silva" -> "Ana Coco").
-    const vendedor = vendedores.find(v => v.id === amb.id)
-    if (vendedor) {
-      navigate(`/pedir?v=${vendedor.id}`)
-    } else {
-      alertDialog({ title: 'Cardápio a caminho', message: 'Esse vendedor ainda não publicou o cardápio dele. Volte já já! 🏖️' })
-    }
-  }
-
-  return (
-    // Esta tela cabe SEMPRE numa tela só, sem rolagem: cabeçalho, aviso de GPS
-    // e cartão do mais próximo têm altura própria, e o mapa engole a sobra.
-    // Antes o mapa tinha altura mínima fixa, a soma passava da tela e o cartão
-    // só aparecia se a pessoa rolasse.
-    <div className="pg-map-page" style={{ height: '100%', overflowY: 'auto', background: 'var(--pg-sand)', color: 'var(--pg-ink)', display: 'flex', flexDirection: 'column' }}>
-      {/* ── Header ──────────────────────────────────────── */}
-      <div style={{
-        padding: '14px 16px 12px',
-        flexShrink: 0,
-        position: 'relative', zIndex: 50
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-          {/* Voltar. O Radar ocupa a tela inteira e engole o gesto de arrastar
-              da borda (o mapa captura o toque), entao sem este botao a unica
-              saida era a barra de baixo — e quem entrou por um link nem isso
-              tinha. */}
-          <button
-            type="button"
-            aria-label="Voltar"
-            onClick={voltar}
-            style={{
-              flexShrink: 0, width: 40, height: 40, borderRadius: 14,
-              background: '#f8fafc', border: '1px solid rgba(0,0,0,0.08)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer', color: '#0f172a',
-            }}
-          >
-            <ArrowLeft size={20} />
-          </button>
-
-          <div style={{ flex: 1, minWidth: 0 }}>
-            {/* So "Radar": com o botao de voltar de um lado e o contador de
-                online do outro, "Radar PraiaGo" ou quebrava em duas linhas ou
-                saia cortado no meio da palavra. A marca ja esta na barra do
-                topo do app — repetir aqui custava a legibilidade do resto. */}
-            <h1 style={{
-              margin: 0, fontSize: 20, fontWeight: 900,
-              display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
-            }}>
-              Na praia
-            </h1>
-            <p style={{ margin: '4px 0 0', fontSize: 12, color: '#64748b', fontWeight: 600 }}>
-              Descubra o que está perto
-              {zonaCliente && <span style={{ color: '#38bdf8' }}> · {zonaCliente.emoji} {zonaCliente.nome}</span>}
-            </p>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {/* Badge ao vivo */}
-            <motion.div style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '6px 12px', borderRadius: 20,
-              background: total > 0 ? 'rgba(34,197,94,0.15)' : 'rgba(100,116,139,0.15)',
-              border: `1px solid ${total > 0 ? 'rgba(34,197,94,0.3)' : 'rgba(100,116,139,0.3)'}`,
-            }}>
-              <div style={{
-                width: 8, height: 8, borderRadius: '50%',
-                background: total > 0 ? '#22c55e' : '#64748b',
-                boxShadow: total > 0 ? '0 0 10px #22c55e' : 'none',
-              }} />
-              <span style={{ fontSize: 11, fontWeight: 800, color: total > 0 ? '#15803d' : '#536b74' }}>
-                {total} online
-              </span>
-            </motion.div>
-
-            {/* Toggle mapa/lista */}
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              onClick={() => setViewMode(v => v === 'map' ? 'list' : 'map')}
-              aria-label={viewMode === 'map' ? 'Ver em lista' : 'Ver no mapa'}
-              title={viewMode === 'map' ? 'Ver em lista' : 'Ver no mapa'}
-              style={{
-                width: 42, height: 42, borderRadius: 14,
-                background: '#f8fafc', border: '1px solid rgba(0,0,0,0.08)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                // O icone herda `color`: com #fff em cima do fundo #f8fafc ele
-                // sumia e o botao parecia morto/vazio.
-                cursor: 'pointer', color: '#0f172a',
-              }}
-            >
-              <AnimatePresence mode="wait">
-                <motion.div key={viewMode} initial={{ rotate: -90, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: 90, opacity: 0 }} transition={{ duration: 0.15 }}>
-                  {viewMode === 'map' ? <List size={20} /> : <MapIcon size={20} />}
-                </motion.div>
-              </AnimatePresence>
-            </motion.button>
-          </div>
-        </div>
-
-        {/* GPS status / fonte da posição */}
-        {fonte === 'manual' ? (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} style={{
-            marginTop: 12, padding: '8px 14px', borderRadius: 12,
-            background: 'rgba(14,165,233,0.08)', border: '1px solid rgba(14,165,233,0.2)',
-            fontSize: 12, fontWeight: 600, color: '#0284c7', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-          }}>
-            <MapPin size={14} />
-            <span style={{ flex: 1, minWidth: 180 }}>Posição ajustada por você — arraste o pino azul para mudar.</span>
-            <button onClick={limparPosicaoManual} style={{
-              border: '1px solid rgba(14,165,233,0.35)', background: '#fff', color: '#0284c7',
-              borderRadius: 10, padding: '4px 10px', fontSize: 11, fontWeight: 800, cursor: 'pointer',
-            }}>
-              Voltar pro GPS
-            </button>
-          </motion.div>
-        ) : gpsStatus !== 'active' && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} style={{
-            marginTop: 12, padding: '8px 14px', borderRadius: 12,
-            background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.2)',
-            fontSize: 12, fontWeight: 600, color: '#d97706', display: 'flex', alignItems: 'center', gap: 8,
-          }}>
-            <RefreshCw size={14} style={{ flexShrink: 0, animation: gpsStatus === 'requesting' ? 'spin 1s linear infinite' : undefined }} />
-            {gpsStatus === 'requesting'
-              ? 'Obtendo radar...'
-              : fonte === 'ip'
-                ? `Sem GPS — posição aproximada pela internet${cidadeAproximada ? ` (${cidadeAproximada})` : ''}. Arraste o pino azul até onde você está.`
-                : fonte === 'memoria'
-                  ? 'Sem GPS — usando sua última posição conhecida. Arraste o pino azul para ajustar.'
-                  : 'GPS indisponível — arraste o pino azul no mapa até onde você está.'}
-          </motion.div>
-        )}
-
-        {(foraDaArea || modoRevisao) && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            role="status"
-            style={{
-              marginTop: 10, padding: '9px 12px', borderRadius: 12,
-              background: modoRevisao ? '#f5f3ff' : '#fffbeb',
-              border: `1px solid ${modoRevisao ? '#c4b5fd' : '#fde68a'}`,
-              color: modoRevisao ? '#6d28d9' : '#92400e',
-              fontSize: 12, fontWeight: 650, lineHeight: 1.4,
-              display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-            }}
-          >
-            <LocateFixed size={15} style={{ flexShrink: 0 }} />
-            <span style={{ flex: 1, minWidth: 190 }}>
-              {modoRevisao
-                ? 'Cenário de revisão ativo em Praia Grande. Esta conta não aparece para usuários reais.'
-                : `Exploração livre. Pedidos a até ${RAIO_PEDIDO_KM} km da loja em ${TEXTO_AREA_ATENDIDA}.`}
-            </span>
-            {foraDaArea && fonte !== 'manual' && (
-              <button
-                type="button"
-                onClick={() => definirPosicaoManual(CLIENTE_FALLBACK[0], CLIENTE_FALLBACK[1])}
-                style={{ border: 0, borderRadius: 10, padding: '6px 10px', background: '#0ea5e9', color: '#fff', fontSize: 11, fontWeight: 850, cursor: 'pointer' }}
-              >
-                Explorar Praia Grande
-              </button>
-            )}
-          </motion.div>
-        )}
-        <div className="pg-map-filters" aria-label="Filtrar vendedores no mapa">
-          {([{ id: 'todos', label: 'Todos' }, { id: 'ambulante', label: 'Ambulantes' }, { id: 'restaurante', label: 'Restaurantes' }] as const).map(item => <button key={item.id} className="pg-chip" aria-pressed={tipo === item.id} onClick={() => setTipo(item.id)}>{item.label}</button>)}
-          <button className="pg-chip" aria-pressed={soAbertos} onClick={() => setSoAbertos(v => !v)}>Abertos agora</button>
-        </div>
-      </div>
-      <CatalogFeedback/>
-
-      {/* ── Destaque: ambulante mais próximo ────────────── */}
-      <AnimatePresence>
-        {nearest && viewMode === 'list' && (
-          <motion.div
-            key={nearest.id}
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            style={{
-              // Cartão claro, como no visual novo. Antes o fundo era um
-              // gradiente verde/azul forte e o rótulo verde-claro (#4ade80)
-              // ficava quase ilegível em cima dele.
-              margin: '12px 16px 0', borderRadius: 20, padding: 14,
-              background: 'linear-gradient(150deg, #f0fdf4 0%, #ffffff 55%)',
-              border: '1px solid #bbf7d0',
-              boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 12px 28px -16px rgba(22,163,74,0.5)',
-              position: 'relative', overflow: 'hidden',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 11 }}>
-              <motion.span animate={{ scale: [1, 1.2, 1] }} transition={{ repeat: Infinity, duration: 1.6 }} style={{ fontSize: 13, lineHeight: 1 }}>⚡</motion.span>
-              <span style={{ fontSize: 10, fontWeight: 900, letterSpacing: 0.9, color: '#15803d', textTransform: 'uppercase' }}>
-                Ambulante mais próximo de você
-              </span>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-              <div style={{ width: 66, height: 66, borderRadius: 18, background: 'linear-gradient(150deg, #e0f2fe, #dcfce7)', display: 'grid', placeItems: 'center', overflow: 'hidden', fontSize: 33, border: '1px solid #d1fae5', flexShrink: 0 }}>
-                {nearest.fotoPerfil
-                  ? <img src={nearest.fotoPerfil} alt={nearest.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  : nearest.emoji}
-              </div>
-
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                  <div style={{ flex: 1, minWidth: 0, fontSize: 18, fontWeight: 950, color: '#0f172a', letterSpacing: -0.4, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {nearest.nome}
-                  </div>
-                  <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, fontWeight: 900, color: nearest.aberto ? '#15803d' : '#64748b', background: nearest.aberto ? '#dcfce7' : '#f1f5f9', padding: '4px 9px', borderRadius: 999 }}>
-                    <span style={{ width: 5, height: 5, borderRadius: 999, background: nearest.aberto ? '#22c55e' : '#94a3b8' }} />
-                    {nearest.aberto ? 'Aberto' : 'Fechado'}
-                  </span>
-                </div>
-
-                <div style={{ fontSize: 12.5, color: '#64748b', fontWeight: 700, marginTop: 1 }}>
-                  {['Ambulante', nearest.categoria, nearest.zona].filter(Boolean).join(' · ')}
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 7, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 17, fontWeight: 950, color: '#0284c7', letterSpacing: -0.3 }}>{formatDist(nearest.distancia)}</span>
-                  <span style={{ width: 1, height: 13, background: '#e2e8f0' }} />
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#64748b', fontWeight: 700 }}>
-                    🚶 ~{walkMin} min a pé
-                  </span>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: '#16a34a', fontWeight: 800 }}>
-                    <span style={{ width: 6, height: 6, borderRadius: 999, background: '#22c55e' }} />
-                    Ao vivo
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: 9, marginTop: 13 }}>
-              <motion.button whileTap={{ scale: 0.97 }} onClick={() => setViewMode('map')} style={{ flex: 1, padding: '12px 10px', borderRadius: 14, border: '1px solid #e2e8f0', background: '#ffffff', color: '#0f172a', fontWeight: 800, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                <MapPin size={15} strokeWidth={2.4} /> No mapa
-              </motion.button>
-              <motion.button whileTap={{ scale: 0.97 }} onClick={() => handlePedir(nearest)} disabled={!nearest.aberto} style={{ flex: 1.6, padding: '12px 10px', borderRadius: 14, border: 'none', background: nearest.aberto ? 'linear-gradient(100deg,#0284c7,#16a34a)' : '#94a3b8', color: '#fff', fontWeight: 900, fontSize: 14, cursor: nearest.aberto ? 'pointer' : 'not-allowed', boxShadow: nearest.aberto ? '0 10px 22px -10px rgba(22,163,74,0.9)' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
-                <ShoppingCart size={16} strokeWidth={2.5} /> {nearest.aberto ? 'Pedir agora' : 'Fechado'}
-              </motion.button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── Conteúdo ── o mapa ocupa exatamente o que sobrou da tela.
-          `minHeight: 0` é obrigatório: sem ele o item flex se recusa a encolher
-          abaixo do conteúdo e volta a empurrar o cartão pra fora da dobra. */}
-      <div style={{ flex: 1, minHeight: 300, position: 'relative' }}>
-        <AnimatePresence mode="wait">
-          {viewMode === 'map' ? (
-            <motion.div key="map" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} style={{ height: '100%', width: '100%', position: 'absolute', inset: 0 }}>
-              <MapView
-                clientePos={pos}
-                accuracy={fonte === 'gps' ? gpsData?.accuracy : undefined}
-                ambulantes={ambulantes}
-                restaurantes={restaurantesNoMapa}
-                onPedir={handlePedir}
-                onAbrirVendedor={v => navigate(`/pedir?v=${v.id}`)}
-                onAjustarPos={definirPosicaoManual}
-                totalOnline={total}
-                onTrocarVisao={() => setViewMode('list')}
-              />
-            </motion.div>
-          ) : (
-            <motion.div key="list" initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -20, opacity: 0 }} transition={{ duration: 0.2 }} style={{ height: '100%', width: '100%', position: 'absolute', inset: 0, overflowY: 'auto' }}>
-              <ListView
-                ambulantes={ambulantes}
-                onPedir={handlePedir}
-                restaurantes={restaurantesNoMapa}
-                onAbrirVendedor={v => navigate(`/pedir?v=${v.id}`)}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
-      {/* ── Inline styles (keyframes) ───────────────────── */}
-      <style>{`
-        /* O halo agora é um círculo de verdade (não box-shadow), então pulsa
-           por escala — mais barato de animar e não estoura o tile ao lado. */
-        @keyframes clientePulse {
-          0%, 100% { transform: scale(1);    opacity: 0.85; }
-          50%      { transform: scale(1.18); opacity: 0.5;  }
-        }
-        /* Aquece os tiles: a faixa de areia do Voyager é bege e com isso puxa
-           pro amarelo do visual novo. Vai leve de propósito — passar disso
-           deixa as ruas creme e o texto do mapa some. */
-        .prg-tiles-praia {
-          filter: saturate(1.18) contrast(1.02) sepia(0.06) hue-rotate(-4deg) brightness(1.02);
-        }
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-      `}</style>
+  return <div className="pg-map-page">
+    <div className="pg-map-heading">
+      <button className="pg-icon-button" aria-label="Voltar" onClick={back}><ArrowLeft size={19}/></button>
+      <div><span className="pg-eyebrow">SEU DIA TEM MAIS SABOR</span><h1>Na praia</h1><p>{zonaCliente ? 'Seu ponto · ' + zonaCliente.nome : 'Ambulantes e restaurantes por perto'}</p></div>
     </div>
-  )
+    <div className="pg-map-search"><Search size={19}/><input aria-label="Buscar no mapa" placeholder="Busque uma loja ou um sabor" value={busca} onChange={e => setBusca(e.target.value)} type="search"/>{busca && <button aria-label="Limpar busca" onClick={() => setBusca('')}><X size={17}/></button>}</div>
+    <div className="pg-map-filters" aria-label="Filtrar vendedores no mapa">
+      {([{ id: 'todos', label: 'Todos' }, { id: 'ambulante', label: 'Ambulantes' }, { id: 'restaurante', label: 'Restaurantes' }] as const).map(item => <button key={item.id} className="pg-chip" aria-pressed={tipo === item.id} onClick={() => setTipo(item.id)}>{item.label}</button>)}
+      <button className="pg-chip" aria-pressed={soAbertos} onClick={() => setSoAbertos(v => !v)}>Abertos agora</button>
+    </div>
+    <div className="pg-map-toolbar">
+      <div className="pg-map-segment" aria-label="Modo de visualização"><button aria-pressed={viewMode === 'map'} onClick={() => setViewMode('map')}><MapIcon size={15}/>Mapa</button><button aria-pressed={viewMode === 'list'} onClick={() => setViewMode('list')}><List size={15}/>Lista</button></div>
+      {viewMode === 'map' && <button className="pg-map-expand" aria-controls="map-region" aria-expanded={expanded} onClick={() => setExpanded(v => !v)}>{expanded ? <Minimize2 size={15}/> : <Maximize2 size={15}/>}<span>{expanded ? 'Reduzir mapa' : 'Ampliar mapa'}</span></button>}
+    </div>
+    {/* Continua montado ao alternar a lista: preserva zoom, pinos e tiles já carregados. */}
+    <section id="map-region" className="pg-map-stage" aria-label="Mapa da região" hidden={viewMode !== 'map'} data-expanded={expanded}>
+      <MapView clientePos={pos} accuracy={fonte === 'gps' ? gpsData?.accuracy : undefined} items={items} onOpen={openSeller} onAjustarPos={definirPosicaoManual}/>
+      <div className="pg-map-style-switch" role="group" aria-label="Estilo do mapa">
+        <button aria-label="Estilo Praia" aria-pressed={mapStyle === 'praia'} onClick={() => setMapStyle('praia')}><Waves size={17}/><span>Praia<small>Areia e zonas</small></span></button>
+        <button aria-label="Estilo Cidade" aria-pressed={mapStyle === 'ruas'} onClick={() => setMapStyle('ruas')}><Building2 size={17}/><span>Cidade<small>Ruas e endereços</small></span></button>
+      </div>
+    </section>
+    <div className="pg-map-location" role="status" aria-label="Status da localização"><LocateFixed size={15}/><span>{locationText}</span>{fonte === 'manual' && <button onClick={limparPosicaoManual}>Voltar ao GPS</button>}</div>
+    {(foraDaArea || modoRevisao) && <div className="pg-map-area-note"><span>{modoRevisao ? 'Cenário de revisão em Praia Grande. Esta conta não aparece para usuários reais.' : `Exploração livre. Pedidos a até ${RAIO_PEDIDO_KM} km da loja em ${TEXTO_AREA_ATENDIDA}.`}</span>{foraDaArea && fonte !== 'manual' && <button onClick={() => definirPosicaoManual(CLIENTE_FALLBACK[0], CLIENTE_FALLBACK[1])}>Explorar Praia Grande</button>}</div>}
+    <CatalogFeedback/>
+    <MapResults items={items} loading={loading} failed={failed} onOpen={openSeller} onExplore={() => navigate('/pedir')} onReset={resetFilters} filtered={filtered}/>
+  </div>
 }
 
-// ══════════════════════════════════════════════════════════════
-//  MapView — Leaflet com ambulantes + cliente
-// ══════════════════════════════════════════════════════════════
+// Ícone/posição estáveis: uma atualização do catálogo não reconstrói cada pino.
+const StoreMarker = memo(function StoreMarker({ item, onOpen }: { item: MapResult; onOpen: (item: MapResult) => void }) {
+  const lat = item.tipo === 'ambulante' ? item.source.lat : item.source.pos[0]
+  const lng = item.tipo === 'ambulante' ? item.source.lng : item.source.pos[1]
+  const position = useMemo<[number, number]>(() => [lat, lng], [lat, lng])
+  const icon = useMemo(() => item.tipo === 'restaurante' ? restauranteIcon(item.aberto) : ambulanteIcon('', item.aberto, item.foto), [item.tipo, item.aberto, item.foto])
+  return <Marker position={position} icon={icon} title={`${item.nome} · ${item.tipo === 'restaurante' ? 'Restaurante' : 'Ambulante'} · ${item.aberto ? 'Aberto' : 'Fechado'}`}>
+    <Popup><div className="pg-map-popup"><strong>{item.nome}</strong><p>{item.categoria}</p><span className={item.aberto ? 'pg-store-open' : 'pg-store-closed'}>{item.aberto ? 'Aberto agora' : 'Fechado'}</span><p>{formatMapDistance(item.distancia)} do pino</p><button className="pg-button pg-button-primary" onClick={() => onOpen(item)}>Ver cardápio<ChevronRight size={15}/></button></div></Popup>
+  </Marker>
+})
 
-function MapView({
-  clientePos,
-  accuracy,
-  ambulantes,
-  restaurantes,
-  onPedir,
-  onAbrirVendedor,
-  onAjustarPos,
-  totalOnline,
-  onTrocarVisao,
-}: {
-  clientePos: [number, number]
-  accuracy?: number
-  ambulantes: AmbulanteLive[]
-  /** Lojas de ponto FIXO. O ambulante anda e vem por GPS ao vivo; o
-   *  restaurante fica parado, então entra no mapa pela coordenada do cadastro. */
-  restaurantes: Vendedor[]
-  onPedir: (a: AmbulanteLive) => void
-  onAbrirVendedor: (v: Vendedor) => void
-  onAjustarPos: (lat: number, lng: number) => void
-  totalOnline: number
-  onTrocarVisao: () => void
+function MapView({ clientePos, accuracy, items, onOpen, onAjustarPos }: {
+  clientePos: [number, number]; accuracy?: number; items: MapResult[]
+  onOpen: (item: MapResult) => void; onAjustarPos: (lat: number, lng: number) => void
 }) {
-  // Lista única de "quem está perto" pro enquadramento inicial. `useMemo` com
-  // dependência nas COORDENADAS, não nos arrays: o GPS do ambulante republica
-  // de segundo em segundo criando array novo com os mesmos números, e sem isto
-  // o mapa se reenquadraria sozinho o tempo todo, brigando com o usuário.
-  // Instância do Leaflet guardada aqui pra o aviso, que mora fora do mapa,
-  // conseguir mandar o mapa enquadrar.
   const [mapa, setMapa] = useState<LeafletMap | null>(null)
   const mapStyle = usePreferences(s => s.mapStyle)
   const setMapStyle = usePreferences(s => s.setMapStyle)
-  const alvosDoMapa = useMemo<[number, number][]>(
-    () => [
-      ...ambulantes.map(a => [a.lat, a.lng] as [number, number]),
-      ...restaurantes.filter(r => r.pos).map(r => r.pos as [number, number]),
-    ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [
-      ambulantes.map(a => `${a.lat},${a.lng}`).join('|'),
-      restaurantes.map(r => r.pos?.join(',')).join('|'),
-    ],
-  )
-  return (
-    <div className={mapStyle === 'ruas' ? 'pg-map-standard' : 'pg-map-beach'} style={{
-      position: 'relative', height: '100%',
-      // Cartão arredondado como no visual novo, em vez do mapa sangrando de
-      // ponta a ponta.
-      margin: '0 16px 12px', width: 'calc(100% - 32px)',
-      borderRadius: 20, overflow: 'hidden', background: '#eef2f7',
-      border: '1px solid #e8eef5',
-      boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 14px 30px -18px rgba(15,23,42,0.28)',
-    }}>
-      <MapContainer
-        center={clientePos}
-        zoom={15}
-        style={{ height: '100%', width: '100%' }}
-        zoomControl={false}
-        ref={setMapa}
-      >
-        <TileLayer
-          attribution={MAPA_ATRIBUICAO} url={MAPA_TILES} maxZoom={MAPA_ZOOM_MAX}
-          // Este filtro só aquece e satura um pouco pra faixa de praia puxar
-          // mais pro amarelo do visual novo, sem trocar de provedor nem
-          // depender de chave de API.
-          className="prg-tiles-praia"
-        />
-
-        {/* Areia amarela + coqueiros desenhados sobre os tiles. Vem antes dos
-            marcadores pra ficar por baixo deles. */}
-        {mapStyle === 'praia' && <CamadaPraia />}
-
-        {/* Enquadra cliente + lojas: ambulante (GPS ao vivo) e restaurante
-            (ponto fixo) entram juntos, porque pro cliente os dois são "quem
-            está perto de mim" — a diferença de como a posição chega é problema
-            nosso, não dele. */}
-        <FlyToCliente pos={clientePos} alvos={alvosDoMapa} />
-        <AjustaAoRedimensionar />
-
-        {/* Cliente — pino ARRASTÁVEL: sem GPS, o usuário posiciona onde está */}
-        <Marker
-          position={clientePos}
-          title="Ponto explorado · arraste para ajustar"
-          icon={clienteIcon()}
-          draggable
-          eventHandlers={{
-            dragend: (e) => {
-              const p = (e.target as L.Marker).getLatLng()
-              onAjustarPos(p.lat, p.lng)
-            },
-          }}
-        >
-          <Popup>
-            <div style={{ textAlign: 'center', fontFamily: 'Inter, sans-serif' }}>
-              <strong style={{ color: '#0f172a' }}>📍 Radar Central</strong>
-              <br />
-              <span style={{ fontSize: 11, color: '#64748b' }}>
-                {clientePos[0].toFixed(4)}, {clientePos[1].toFixed(4)}
-              </span>
-              <br />
-              <span style={{ fontSize: 10.5, color: '#0284c7', fontWeight: 700 }}>
-                Arraste o pino para ajustar sua posição
-              </span>
-            </div>
-          </Popup>
-        </Marker>
-
-        {/* Precisão medida pelo aparelho; nunca representar 30m fictícios. */}
-        {typeof accuracy === 'number' && Number.isFinite(accuracy) && accuracy > 0 && <Circle
-          center={clientePos}
-          radius={accuracy}
-          pathOptions={{
-            color: '#22c55e',
-            fillColor: '#22c55e',
-            fillOpacity: 0.1,
-            weight: 1,
-          }}
-        />}
-
-        {/* Ambulantes */}
-        {/* Lojas de ponto fixo. Ficam ANTES dos ambulantes pra o ambulante, que
-            é quem se move e quem a pessoa está caçando, desenhar por cima. */}
-        {restaurantes.map((v) => (
-          <Marker
-            key={`fixo-${v.id}`}
-            title={`${v.nome} · Restaurante · ${v.aberto ? 'Aberto' : 'Fechado'}`}
-            position={v.pos}
-            icon={restauranteIcon(v.aberto)}
-          >
-            <Popup>
-              <div style={{ minWidth: 190, fontFamily: 'Inter, sans-serif' }}>
-                <div style={{ fontWeight: 900, fontSize: 15, color: '#0f172a' }}>{v.nome}</div>
-                <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600, marginTop: 2 }}>
-                  {v.categoria}
-                </div>
-                {v.endereco && (
-                  <div style={{ fontSize: 11.5, color: '#64748b', fontWeight: 600, marginTop: 6, lineHeight: 1.35 }}>
-                    📍 {v.endereco}
-                  </div>
-                )}
-                <div style={{ marginTop: 8, marginBottom: 10 }}>
-                  <span style={{
-                    padding: '4px 10px', borderRadius: 999, fontSize: 11, fontWeight: 900,
-                    background: v.aberto ? '#dcfce7' : '#f1f5f9',
-                    color: v.aberto ? '#15803d' : '#64748b',
-                  }}>
-                    {v.aberto ? 'Aberto agora' : 'Fechado'}
-                  </span>
-                </div>
-                <button
-                  onClick={() => onAbrirVendedor(v)}
-                  style={{
-                    width: '100%', padding: '10px 0', border: 'none', borderRadius: 12,
-                    background: 'linear-gradient(100deg,#0284c7,#16a34a)', color: '#fff',
-                    fontWeight: 900, fontSize: 13.5, cursor: 'pointer',
-                  }}
-                >
-                  Ver cardápio
-                </button>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
-
-        {ambulantes.map((a) => (
-          <Marker
-            key={a.id}
-            title={`${a.nome} · Ambulante · ${a.aberto ? 'Aberto' : 'Fechado'}`}
-            position={[a.lat, a.lng]}
-            icon={ambulanteIcon(a.emoji, a.aberto, a.fotoPerfil)}
-          >
-            <Popup>
-              <div style={{ minWidth: 180, fontFamily: 'Inter, sans-serif' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                  <span style={{ width: 42, height: 42, display: 'grid', placeItems: 'center', overflow: 'hidden', borderRadius: 12, background: '#f0fdf4', fontSize: 26 }}>
-                    {a.fotoPerfil
-                      ? <img src={a.fotoPerfil} alt={a.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      : a.emoji}
-                  </span>
-                  <div>
-                    <div style={{ fontWeight: 900, fontSize: 15, color: '#0f172a' }}>{a.nome}</div>
-                    <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>{a.categoria}</div>
-                  </div>
-                </div>
-                <div style={{
-                  display: 'flex', gap: 8, marginBottom: 12, fontSize: 12,
-                }}>
-                  <span style={{
-                    padding: '4px 10px', borderRadius: 10,
-                    background: a.aberto ? '#dcfce7' : '#f1f5f9',
-                    color: a.aberto ? '#16a34a' : '#64748b',
-                    fontWeight: 800,
-                  }}>
-                    {a.aberto ? '🟢 Aberto' : '⚫ Fechado'}
-                  </span>
-                  <span style={{
-                    padding: '4px 10px', borderRadius: 10,
-                    background: '#f0f9ff', color: '#0ea5e9', fontWeight: 800,
-                  }}>
-                    📏 {formatDist(a.distancia)}
-                  </span>
-                </div>
-                {a.zona && (
-                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12, fontWeight: 600 }}>
-                    📍 {a.zona}
-                  </div>
-                )}
-                <button
-                  onClick={() => onPedir(a)}
-                  style={{
-                    width: '100%', padding: '10px 0', border: 'none', borderRadius: 12,
-                    background: a.aberto ? 'linear-gradient(135deg, #0ea5e9, #22c55e)' : '#94a3b8',
-                    color: '#fff', fontWeight: 900, fontSize: 14, cursor: a.aberto ? 'pointer' : 'not-allowed',
-                    boxShadow: a.aberto ? '0 4px 15px rgba(34,197,94,0.3)' : 'none'
-                  }}
-                  disabled={!a.aberto}
-                >
-                  {a.aberto ? '🛒 Ver Cardápio' : 'Fechado agora'}
-                </button>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
-
-        {/* Zonas da praia (contorno sutil) */}
-        {mapStyle === 'praia' && BEACH_ZONES.map(z => {
-          const positions = z.poligono as [number, number][]
-          return (
-            <Circle
-              key={z.id}
-              center={[
-                positions.reduce((s, p) => s + p[0], 0) / positions.length,
-                positions.reduce((s, p) => s + p[1], 0) / positions.length,
-              ]}
-              radius={500}
-              pathOptions={{
-                color: z.cor,
-                fillColor: z.cor,
-                fillOpacity: 0.05,
-                weight: 1,
-                dashArray: '3,6',
-              }}
-            />
-          )
-        })}
-
-        <RecenterMap pos={clientePos} />
-        <EscalaMapa />
-      </MapContainer>
-
-      {/* Irmão do mapa, não filho: dentro do MapContainer o Leaflet come o clique. */}
-      <AvisoLojaLonge mapa={mapa} pos={clientePos} alvos={alvosDoMapa} />
-
-      {/* ── Chrome sobre o mapa ──────────────────────────────
-          zIndex acima de 400 (padrão dos panes do Leaflet), senão os tiles
-          passam por cima. */}
-      <div style={{ position: 'absolute', top: 12, left: 12, right: 12, zIndex: 1000, display: 'flex', justifyContent: 'space-between', gap: 10, pointerEvents: 'none' }}>
-        <span style={{
-          display: 'inline-flex', alignItems: 'center', gap: 7,
-          padding: '8px 14px', borderRadius: 999,
-          background: 'rgba(255,255,255,0.96)', border: '1px solid #e8eef5',
-          boxShadow: '0 2px 4px rgba(15,23,42,0.06), 0 8px 20px -10px rgba(15,23,42,0.35)',
-          fontSize: 12.5, fontWeight: 900, color: '#0f172a',
-        }}>
-          <span style={{
-            width: 8, height: 8, borderRadius: 999,
-            background: totalOnline > 0 ? '#22c55e' : '#94a3b8',
-          }} />
-          {totalOnline > 0 ? `${totalOnline} no radar` : 'Explorar a região'}
-        </span>
-
-        <button
-          type="button"
-          onClick={() => setMapStyle(mapStyle === 'praia' ? 'ruas' : 'praia')}
-          aria-label={mapStyle === 'praia' ? 'Usar mapa de ruas' : 'Usar mapa com estilo praia'}
-          style={{
-            pointerEvents: 'auto',
-            display: 'inline-flex', alignItems: 'center', gap: 7,
-            padding: '8px 12px 8px 14px', borderRadius: 999, cursor: 'pointer',
-            background: 'rgba(255,255,255,0.96)', border: '1px solid #e8eef5',
-            boxShadow: '0 2px 4px rgba(15,23,42,0.06), 0 8px 20px -10px rgba(15,23,42,0.35)',
-            fontSize: 12.5, fontWeight: 900, color: '#0f172a',
-          }}
-        >
-          <MapIcon size={16} color="#0284c7" strokeWidth={2.4} />
-          {mapStyle === 'praia' ? 'Praia' : 'Ruas'}
-          <ChevronDown size={15} color="#64748b" strokeWidth={2.6} />
-        </button>
-      </div>
-
-      {/* Mini-lista sobreposta no mapa (3 mais próximos) */}
-      {ambulantes.length > 0 && (
-        <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} style={{
-          position: 'absolute', bottom: 40, left: 12, right: 72, zIndex: 1000,
-          background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(16px)',
-          borderRadius: 20, padding: '12px',
-          border: '1px solid rgba(0,0,0,0.08)',
-          maxHeight: 130, overflowY: 'auto', boxShadow: 'var(--pg-shadow)'
-        }}>
-          {ambulantes.slice(0, 3).map((a, i) => (
-            <motion.button
-              whileTap={{ scale: 0.98 }}
-              key={a.id}
-              onClick={() => onPedir(a)}
-              style={{
-                width: '100%', background: 'transparent', border: 0, textAlign: 'left',
-                display: 'flex', alignItems: 'center', gap: 12,
-                padding: '10px 8px',
-                borderBottom: i < 2 && ambulantes.length > 1 ? '1px solid rgba(0,0,0,0.05)' : 'none',
-                cursor: 'pointer',
-              }}
-            >
-              <div style={{ width: 36, height: 36, overflow: 'hidden', borderRadius: 12, background: 'rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>
-                {a.fotoPerfil
-                  ? <img src={a.fotoPerfil} alt={a.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  : a.emoji}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>{a.nome}</div>
-                <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
-                  {a.zona} · {a.aberto ? <span style={{ color: '#15803d' }}>Aberto</span> : 'Fechado'}
-                </div>
-              </div>
-              <div style={{
-                fontSize: 13, fontWeight: 900,
-                color: '#05616d',
-                display: 'flex', alignItems: 'center', gap: 4,
-              }}>
-                {formatDist(a.distancia)}
-                <ChevronRight size={16} />
-              </div>
-            </motion.button>
-          ))}
-          {ambulantes.length > 3 && (
-            <button onClick={onTrocarVisao} style={{
-              border: 0, background: 'transparent', width: '100%', cursor: 'pointer', minHeight: 36,
-              textAlign: 'center', fontSize: 11, color: '#64748b',
-              padding: '8px 0 4px', fontWeight: 700,
-            }}>
-              +{ambulantes.length - 3} mais no radar
-            </button>
-          )}
-        </motion.div>
-      )}
+  const [beachRequest, setBeachRequest] = useState(() => ({ id: initialBeach(clientePos).id, revision: 0 }))
+  const [viewedBeach, setViewedBeach] = useState(() => initialBeach(clientePos).id)
+  const isBeach = mapStyle === 'praia'
+  const onBeachViewed = useCallback((id: string) => setViewedBeach(id), [])
+  const chooseBeach = (id: string) => { setBeachRequest(value => ({ id, revision: value.revision + 1 })); setViewedBeach(id) }
+  const deviceReduced = useReducedMotion()
+  const reduceMotion = usePreferences(s => s.reducedMotion) || !!deviceReduced
+  const clientIcon = useMemo(clienteIcon, [])
+  const alvos = useMemo<[number, number][]>(() => items.map(item => item.tipo === 'ambulante' ? [item.source.lat, item.source.lng] : item.source.pos), [items])
+  const dragHandlers = useMemo(() => ({ dragend: (e: L.LeafletEvent) => { const point = (e.target as L.Marker).getLatLng(); onAjustarPos(point.lat, point.lng) } }), [onAjustarPos])
+  const recenter = () => {
+    const beach = beachAtPoint(clientePos)
+    if (isBeach && !beach) { setMapStyle('ruas'); return }
+    mapa?.setView(clientePos, isBeach ? 16 : 15, { animate: !reduceMotion })
+  }
+  return <div className={mapStyle === 'ruas' ? 'pg-map-surface pg-map-standard' : 'pg-map-surface pg-map-beach'}>
+    <div className="pg-beach-context">
+      {isBeach ? <><Waves size={20}/><label><span>EXPLORANDO A PRAIA</span><select aria-label="Praia em exibição" value={viewedBeach} onChange={e => chooseBeach(e.target.value)}>{BEACH_ZONES.map(zone => <option key={zone.id} value={zone.id}>{zone.nome}</option>)}</select></label><span className="pg-beach-city">Praia Grande</span></> : <><Building2 size={20}/><div><span>ESTILO CIDADE</span><strong>Ruas e endereços</strong></div></>}
     </div>
-  )
+    <div className="pg-map-canvas">
+      <MapContainer center={clientePos} zoom={15} style={{ height: '100%', width: '100%' }} zoomControl={false} scrollWheelZoom={false} zoomAnimation={!reduceMotion} fadeAnimation={!reduceMotion} maxBoundsViscosity={1} ref={setMapa}>
+        {isBeach ? <><CamadaPraia activeZone={viewedBeach}/><BeachCamera request={beachRequest} onViewed={onBeachViewed}/></> : <><TileLayer attribution={MAPA_ATRIBUICAO} url={MAPA_TILES} maxZoom={MAPA_ZOOM_MAX} className="prg-tiles-praia" updateWhenIdle updateWhenZooming={false} keepBuffer={1}/><FlyToCliente pos={clientePos} alvos={alvos} animate={!reduceMotion}/></>}
+        <AjustaAoRedimensionar/>
+        <Marker position={clientePos} title="Ponto explorado · arraste para ajustar" icon={clientIcon} draggable eventHandlers={dragHandlers}><Popup><div className="pg-map-popup"><strong>Seu ponto no mapa</strong><p>Arraste o pino para explorar outra área. Isso não altera o GPS usado na autorização dos pedidos.</p></div></Popup></Marker>
+        {typeof accuracy === 'number' && Number.isFinite(accuracy) && accuracy > 0 && <Circle center={clientePos} radius={accuracy} pathOptions={{ color: '#087f8c', fillColor: '#087f8c', fillOpacity: .08, weight: 1 }}/>}
+        {items.map(item => <StoreMarker key={`${item.tipo}-${item.id}`} item={item} onOpen={onOpen}/>)}
+        <EscalaMapa/>
+      </MapContainer>
+      <div className="pg-map-zoom"><button aria-label="Aproximar mapa" onClick={() => mapa?.zoomIn()}><Plus size={18}/></button><button aria-label="Afastar mapa" onClick={() => mapa?.zoomOut()}><Minus size={18}/></button></div>
+      <button className="pg-map-recenter" aria-label={isBeach && !beachAtPoint(clientePos) ? 'Ver meu ponto na cidade' : 'Centralizar no meu local'} onClick={recenter}><LocateFixed size={20}/></button>
+    </div>
+    {isBeach ? <p className="pg-beach-disclaimer">Zonas aproximadas · palmeiras ilustrativas</p> : <AvisoLojaLonge mapa={mapa} pos={clientePos} alvos={alvos}/>}
+  </div>
 }
 
-// ══════════════════════════════════════════════════════════════
-//  ListView — Cards de ambulantes (modo lista)
-// ══════════════════════════════════════════════════════════════
-
-function ListView({
-  ambulantes,
-  onPedir,
-  restaurantes,
-  onAbrirVendedor,
-}: {
-  ambulantes: AmbulanteLive[]
-  onPedir: (a: AmbulanteLive) => void
-  restaurantes: Vendedor[]
-  onAbrirVendedor: (v: Vendedor) => void
-}) {
-  const navigate = useNavigate()
-  if (ambulantes.length === 0 && restaurantes.length === 0) {
-    return (
-      <div style={{
-        padding: '80px 32px', textAlign: 'center',
-      }}>
-        <div style={{ fontSize: 52, marginBottom: 16 }}>🏖️</div>
-        <h2 style={{ margin: '0 0 12px', fontSize: 22, fontWeight: 900, color: '#0f172a' }}>
-          Nada por aqui com estes filtros
-        </h2>
-        <p style={{ margin: '0 0 32px', fontSize: 15, color: '#64748b', lineHeight: 1.5, fontWeight: 500 }}>
-          A praia parece tranquila agora.
-          <br />Experimente outros filtros ou veja o catálogo.
-        </p>
-        <motion.button
-          whileTap={{ scale: 0.95 }}
-          onClick={() => navigate('/pedir')}
-          style={{
-            padding: '16px 36px', borderRadius: 20, border: 'none',
-            background: 'linear-gradient(135deg, #0ea5e9, #22c55e)',
-            color: '#fff', fontWeight: 900, fontSize: 15, cursor: 'pointer',
-            boxShadow: '0 10px 25px rgba(34,197,94,0.4)'
-          }}
-        >
-          Explorar lojas →
-        </motion.button>
-      </div>
-    )
-  }
-
-  return (
-    <div style={{ padding: '16px 16px 32px' }}>
-      {restaurantes.map(v => <button key={v.id} onClick={() => onAbrirVendedor(v)} className="pg-card pg-map-store"><span className="pg-menu-icon">{v.emoji}</span><span className="pg-menu-copy">{v.nome}<small>Restaurante · {v.aberto ? 'Aberto agora' : 'Fechado'}<br/>{v.endereco || v.zona}</small></span><ChevronRight size={18}/></button>)}
-      {/* Stats bar */}
-      <div style={{
-        display: 'flex', gap: 10, marginBottom: 24, overflowX: 'auto',
-        scrollbarWidth: 'none', paddingBottom: 4
-      }}>
-        {[
-          { label: 'Próximos', value: ambulantes.length, icon: <Eye size={16} />, color: '#0ea5e9' },
-          { label: 'Abertos', value: ambulantes.filter(a => a.aberto).length, icon: <Wifi size={16} />, color: '#22c55e' },
-          { label: 'Mais perto', value: ambulantes[0] ? formatDist(ambulantes[0].distancia) : '—', icon: <Navigation size={16} />, color: '#fbbf24' },
-        ].map((s, i) => (
-          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.1 }} key={i} style={{
-            flex: '0 0 auto', padding: '12px 20px', borderRadius: 16,
-            background: '#f8fafc', border: '1px solid rgba(0,0,0,0.05)',
-            display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
-          }}>
-            <div style={{ color: s.color, background: 'rgba(0,0,0,0.05)', padding: 8, borderRadius: 10 }}>{s.icon}</div>
-            <div>
-              <div style={{ fontSize: 18, fontWeight: 900, color: '#0f172a' }}>{s.value}</div>
-              <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>{s.label}</div>
-            </div>
-          </motion.div>
-        ))}
-      </div>
-
-      {/* Cards */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {ambulantes.map((a, i) => (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.05 }}
-            whileTap={{ scale: 0.98 }}
-            key={a.id}
-            onClick={() => onPedir(a)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 16,
-              padding: 16, borderRadius: 20,
-              background: '#f8fafc', border: '1px solid rgba(0,0,0,0.05)',
-              cursor: 'pointer', boxShadow: '0 4px 15px rgba(0,0,0,0.15)'
-            }}
-          >
-            {/* Foto pública do vendedor, com fallback do cadastro antigo. */}
-            <div style={{
-              width: 56, height: 56, borderRadius: 18,
-              background: a.aberto
-                ? 'linear-gradient(135deg, rgba(34,197,94,0.15), rgba(14,165,233,0.15))'
-                : 'rgba(71,85,105,0.15)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              overflow: 'hidden', fontSize: 28, flexShrink: 0,
-              border: `1px solid ${a.aberto ? 'rgba(34,197,94,0.2)' : 'rgba(71,85,105,0.2)'}`,
-            }}>
-              {a.fotoPerfil
-                ? <img src={a.fotoPerfil} alt={a.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                : a.emoji}
-            </div>
-
-            {/* Info */}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                marginBottom: 4,
-              }}>
-                <span style={{ fontSize: 16, fontWeight: 900, color: '#0f172a' }}>{a.nome}</span>
-                {a.aberto && (
-                  <span style={{
-                    fontSize: 9, fontWeight: 900, color: '#4ade80',
-                    padding: '3px 8px', borderRadius: 8,
-                    background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)',
-                    textTransform: 'uppercase', letterSpacing: 0.5,
-                  }}>
-                    Aberto
-                  </span>
-                )}
-              </div>
-              <div style={{ fontSize: 13, color: '#64748b', marginBottom: 6, fontWeight: 500 }}>
-                {a.categoria}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, fontWeight: 600 }}>
-                {a.zona && (
-                  <span style={{ color: '#38bdf8', display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <MapPin size={12} /> {a.zona}
-                  </span>
-                )}
-                <span style={{ color: '#fbbf24', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <Clock size={12} /> Online
-                </span>
-              </div>
-            </div>
-
-            {/* Distância */}
-            <div style={{ textAlign: 'right', flexShrink: 0 }}>
-              <div style={{
-                fontSize: 20, fontWeight: 900,
-                background: 'linear-gradient(135deg, #0ea5e9, #22c55e)',
-                WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-              }}>
-                {formatDist(a.distancia)}
-              </div>
-              <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Radar</div>
-            </div>
-
-            <ChevronRight size={20} color="#475569" style={{ marginLeft: -4 }} />
-          </motion.div>
-        ))}
-      </div>
-    </div>
-  )
+/** Mover a câmera não muda o pino, o GPS nem a autorização de compra. */
+function BeachCamera({ request, onViewed }: { request: { id: string; revision: number }; onViewed: (id: string) => void }) {
+  const map = useMap()
+  useEffect(() => {
+    map.setMinZoom(14)
+    map.setMaxZoom(MAPA_ZOOM_MAX)
+    const update = () => { const center = map.getCenter(); onViewed(beachNearCamera([center.lat, center.lng]).id) }
+    map.on('moveend', update)
+    return () => { map.off('moveend', update); map.setMaxBounds([]); map.setMinZoom(0) }
+  }, [map, onViewed])
+  useEffect(() => {
+    const shape = BEACH_SHAPES.find(item => item.zone.id === request.id)
+    if (shape) map.whenReady(() => {
+      // Enquadrar antes de restringir evita um desvio temporário quando o GPS
+      // está em outra cidade; trocar de praia não anima quilômetros de costa.
+      map.stop()
+      map.setMaxBounds([])
+      map.setView(shape.center, 16, { animate: false })
+      map.setMaxBounds(BEACH_MAP_BOUNDS)
+    })
+  }, [map, request])
+  return null
 }

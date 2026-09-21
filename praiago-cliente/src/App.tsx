@@ -26,6 +26,7 @@ import { DialogHost } from './lib/dialog'
 import PasswordRecoveryHandler from './components/PasswordRecoveryHandler'
 import IntroSplash from './components/IntroSplash'
 import { deveMostrarIntro } from './lib/introSession'
+import BrandLogo from './components/BrandLogo'
 
 function playNotifySound() {
   try {
@@ -292,7 +293,7 @@ export default function App() {
       </AnimatePresence>
       <PasswordRecoveryHandler />
       <header className="pg-topbar">
-        <button className="pg-brand" onClick={() => navigate('/')} aria-label="PraiaGo · Início"><span className="pg-brand-mark" aria-hidden="true">🌴</span>PraiaGo</button>
+        <button className="pg-brand" onClick={() => navigate('/')} aria-label="PraiaGo · Início"><BrandLogo /></button>
         <div className="pg-top-actions">
           {!online && <span className="pg-connection pg-connection-off"><WifiOff size={14}/>Sem rede</span>}
           <button className="pg-icon-button" aria-label="Abrir atendimento" aria-expanded={helpOpen} onClick={() => { setHelpLoaded(true); setHelpOpen(v => !v) }}><CircleHelp size={20}/></button>

@@ -171,9 +171,10 @@ workflows:
     scripts:
       - *validate_public_env
       - *prepare_capacitor_ios
-      - name: Validate Cliente release candidate
-        script: |
-          cd "$APP_DIR"
+        - name: Validate Cliente release candidate
+          script: |
+            set -euo pipefail
+            cd "$APP_DIR"
           npm test
           npm run lint
           cd ios/App
