@@ -73,6 +73,15 @@ Abra `http://127.0.0.1:5173/ambulantes`. É o aplicativo normal, com o catálogo
 - [ ] Homologação do visual e definição do dia de lançamento em outubro.
 - [ ] Preparação da versão pública, metadados e revisão Apple quando a candidata for aprovada.
 
+### Candidata atual · 21/09/2026
+
+- Código: `b6b9536ce3f689e50e32d290555a15b384bf8ee3`, branch `feat/cliente-outubro-2026`; aplicação no commit `aa961621ddd49b9ea51fe15a4f8937530c3c1bf2` e correção de YAML no commit seguinte.
+- [Codemagic](https://codemagic.io/app/6a74a80b532034dc3f9b1a5d/build/6ab0a17aa02981cef2c6b5d2), workflow `ios-cliente-outubro-candidate`: todas as etapas concluídas com sucesso; testes **45/45**, lint sem erros, compilação IPA assinada e upload aprovados. Artefato `App.ipa`, versão **1.1 (18)**; log confirmou `UPLOAD SUCCEEDED with no errors`.
+- App Store Connect: build `757decc2-102e-42f4-912d-fca9c24d45f8`, versão **1.1 (18)**. API confirmou `processingState: VALID`, `internalBuildState: IN_BETA_TESTING` e `externalBuildState: READY_FOR_BETA_SUBMISSION`. Disponível para testes internos, sem submeter revisão externa/pública e sem adicionar testadores.
+- A execução `6ab0a0f80df2e20da6311891` falhou antes da compilação por indentação do workflow. Correção validada com parser YAML e publicada antes da execução atual; não houve upload nessa tentativa.
+- [GitHub Actions](https://github.com/driftfutebol-glitch/praiago/actions/runs/35556950313): job não iniciado por bloqueio de cobrança da conta, confirmado pela anotação do check. Nenhuma alteração financeira.
+- Revisão visual do refinamento em 320 × 700 e 390 × 844: logo, mapa compacto/ampliado, Boqueirão/Ocian/Canto do Forte, palmeiras, alternância Praia/Cidade, zoom e créditos cartográficos. Pacote de produção verificado sem entrada de prévia, lojas de exemplo ou `react-dom/server`.
+
 ### Evidências da candidata anterior · 1.1 (17)
 
 - Branch `feat/cliente-outubro-2026`; código da candidata no commit `c0aab0fe18527218ec1a2eb362386b4c968ac64d`.
