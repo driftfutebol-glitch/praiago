@@ -85,6 +85,14 @@ Abra `http://127.0.0.1:5173/ambulantes`. É o aplicativo normal, com o catálogo
 - [ ] Homologação do visual e definição do dia de lançamento em outubro.
 - [ ] Preparação da versão pública, metadados e revisão Apple quando a candidata for aprovada.
 
+### Candidata atual · 23/09/2026 · 1.1 (19)
+
+- Código: `2f0dd54fd4f7f12da315c73171b1513b6cd836fe`, branch `feat/cliente-outubro-2026`, [PR #3 em rascunho](https://github.com/driftfutebol-glitch/praiago/pull/3).
+- [Codemagic](https://codemagic.io/app/6a74a80b532034dc3f9b1a5d/build/6ab34e52c8f5d2bf623edd4f): todas as etapas concluídas com sucesso, **56/56 testes**, build web/iOS, assinatura e upload. Log confirmou versão **1.1 (19)** e `UPLOAD SUCCEEDED with no errors`; check nativo no GitHub também aprovado.
+- App Store Connect confirmou a build `4ca196c8-f591-449a-9f15-1f231e1b7818`, versão **1.1 (19)**, com `processingState: VALID`, `internalBuildState: IN_BETA_TESTING` e `externalBuildState: READY_FOR_BETA_SUBMISSION`. Disponível para testes internos; não foi submetida revisão externa/pública nem adicionado testador.
+- [GitHub Actions](https://github.com/driftfutebol-glitch/praiago/actions/runs/35816412965): job não iniciado por bloqueio de cobrança da conta, confirmado pela anotação do check; nenhuma alteração financeira.
+- Sem merge para `main`, submissão externa/pública, novo testador ou OTA de produção. Homologação física no iPhone continua pendente.
+
 ### Candidata anterior · 21/09/2026 · 1.1 (18)
 
 - Código: `b6b9536ce3f689e50e32d290555a15b384bf8ee3`, branch `feat/cliente-outubro-2026`; aplicação no commit `aa961621ddd49b9ea51fe15a4f8937530c3c1bf2` e correção de YAML no commit seguinte.
