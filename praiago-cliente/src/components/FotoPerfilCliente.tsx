@@ -118,8 +118,8 @@ export default function FotoPerfilCliente({ userId, path, onChange }: Props) {
       />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-        <Camera size={18} color="#0284c7" strokeWidth={2.4} />
-        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 950, color: '#0f172a' }}>Foto de perfil</h3>
+        <Camera size={18} color="var(--pg-ocean)" strokeWidth={2.4} />
+        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 950, color: 'var(--pg-ink)' }}>Foto de perfil</h3>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -138,9 +138,9 @@ export default function FotoPerfilCliente({ userId, path, onChange }: Props) {
             placeItems: 'center',
             overflow: 'hidden',
             borderRadius: '50%',
-            border: url ? '2px solid #eef2f7' : '2px dashed #cbd5e1',
-            background: url ? '#eef2f7' : 'linear-gradient(140deg, #e0f2fe, #dcfce7)',
-            color: '#0284c7',
+            border: url ? '2px solid var(--pg-line)' : '2px dashed var(--pg-line)',
+            background: url ? 'var(--pg-line)' : 'var(--pg-brand-soft)',
+            color: 'var(--pg-ocean)',
             cursor: ocupado ? 'wait' : 'pointer',
           }}
         >
@@ -152,7 +152,7 @@ export default function FotoPerfilCliente({ userId, path, onChange }: Props) {
         </button>
 
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: '#64748b', lineHeight: 1.45 }}>
+          <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: 'var(--pg-muted)', lineHeight: 1.45 }}>
             {path
               ? 'É assim que você aparece nos seus pedidos.'
               : 'Escolha uma foto pra aparecer no seu perfil e nos pedidos.'}
@@ -169,8 +169,8 @@ export default function FotoPerfilCliente({ userId, path, onChange }: Props) {
                 padding: '9px 14px',
                 borderRadius: 999,
                 border: 0,
-                background: '#0284c7',
-                color: '#ffffff',
+                background: 'var(--pg-action)',
+                color: 'var(--pg-action-ink)',
                 fontSize: 12.5,
                 fontWeight: 900,
                 cursor: ocupado ? 'wait' : 'pointer',
@@ -191,9 +191,9 @@ export default function FotoPerfilCliente({ userId, path, onChange }: Props) {
                   gap: 6,
                   padding: '9px 14px',
                   borderRadius: 999,
-                  border: '1px solid #fecaca',
-                  background: '#ffffff',
-                  color: '#b91c1c',
+                  border: '1px solid var(--pg-danger)',
+                  background: 'var(--pg-surface)',
+                  color: 'var(--pg-danger)',
                   fontSize: 12.5,
                   fontWeight: 900,
                   cursor: ocupado ? 'wait' : 'pointer',
@@ -209,7 +209,7 @@ export default function FotoPerfilCliente({ userId, path, onChange }: Props) {
       </div>
 
       {aviso && (
-        <div style={{ marginTop: 12, fontSize: 12, fontWeight: 800, color: aviso.erro ? '#b91c1c' : '#16a34a' }}>
+        <div style={{ marginTop: 12, fontSize: 12, fontWeight: 800, color: aviso.erro ? 'var(--pg-danger)' : 'var(--pg-success)' }}>
           {aviso.texto}
         </div>
       )}
@@ -241,7 +241,7 @@ export function AvatarPerfil({ path, tamanho = 64 }: { path: string | null; tama
     >
       {url
         ? <img src={url} alt="Sua foto de perfil" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        : <User size={tamanho * 0.5} color="#ffffff" strokeWidth={2.2} />}
+        : <User size={tamanho * 0.5} color="var(--pg-on-brand)" strokeWidth={2.2} />}
     </div>
   )
 }

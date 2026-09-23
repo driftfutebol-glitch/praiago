@@ -120,7 +120,7 @@ describe('Marca e descoberta no mapa', () => {
     expect(screen.getByRole('option', { name: 'Canto do Forte' })).toBeTruthy()
     await userEvent.selectOptions(selector, 'praia_ocian')
     expect((selector as HTMLSelectElement).value).toBe('praia_ocian')
-    expect(screen.getAllByTestId('map-polygon').some(node => node.getAttribute('data-fill') === '#ffcf4f')).toBe(true)
+    expect(screen.getAllByTestId('map-polygon').filter(node => node.getAttribute('data-fill') === 'var(--pg-map-sand-active)')).toHaveLength(1)
     expect(model.setManual).not.toHaveBeenCalled()
   })
   it('não confunde uma praia explorada com o GPS de quem está fora da orla', async () => {

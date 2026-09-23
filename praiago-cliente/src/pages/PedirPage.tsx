@@ -88,39 +88,39 @@ function ChatModal({ vendedor, pedidoId, onClose }: { vendedor: Vendedor; pedido
         initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 25, stiffness: 200 }}
         style={{
-          width: '100%', background: '#ffffff',
+          width: '100%', background: 'var(--pg-surface)',
           borderTopLeftRadius: 32, borderTopRightRadius: 32,
           // dvh acompanha o teclado do iOS; vh não, e o campo de escrever
           // ficava embaixo do teclado.
           height: 'min(75dvh, 640px)',
-          display: 'flex', flexDirection: 'column', border: '1px solid rgba(0,0,0,0.08)',
+          display: 'flex', flexDirection: 'column', border: '1px solid var(--pg-line)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '20px', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '20px', borderBottom: '1px solid var(--pg-line)' }}>
           <div style={{ width: 44, height: 44, overflow: 'hidden', borderRadius: 16, background: vendedor.gradiente, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
             {vendedor.avatar ? <img src={vendedor.avatar} alt={vendedor.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : vendedor.emoji}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>{vendedor.nome}</div>
-            <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--pg-ink)' }}>{vendedor.nome}</div>
+            <div style={{ fontSize: 12, color: 'var(--pg-muted)', fontWeight: 600 }}>
               {pedidoId ? 'Mensagens sobre o seu pedido' : 'Faça um pedido para conversar'}
             </div>
           </div>
-          <button aria-label="Fechar chat" onClick={onClose} style={{ background: '#f8fafc', border: 'none', borderRadius: 14, padding: 10, cursor: 'pointer' }}><X size={20} color="#94a3b8" /></button>
+          <button aria-label="Fechar chat" onClick={onClose} style={{ background: 'var(--pg-surface-alt)', border: 'none', borderRadius: 14, padding: 10, cursor: 'pointer' }}><X size={20} color="var(--pg-faint)" /></button>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
           {!pedidoId && (
-            <div style={{ margin: 'auto', textAlign: 'center', color: '#64748b', fontSize: 13.5, fontWeight: 600, lineHeight: 1.5, maxWidth: 280 }}>
+            <div style={{ margin: 'auto', textAlign: 'center', color: 'var(--pg-muted)', fontSize: 13.5, fontWeight: 600, lineHeight: 1.5, maxWidth: 280 }}>
               A conversa abre junto com o pedido. Faça o pedido e você fala
               direto com {vendedor.nome} aqui.
             </div>
           )}
           {pedidoId && carregando && (
-            <div style={{ margin: 'auto', color: '#94a3b8', fontSize: 13, fontWeight: 700 }}>Abrindo conversa…</div>
+            <div style={{ margin: 'auto', color: 'var(--pg-faint)', fontSize: 13, fontWeight: 700 }}>Abrindo conversa…</div>
           )}
           {pedidoId && !carregando && mensagens.length === 0 && (
-            <div style={{ margin: 'auto', textAlign: 'center', color: '#64748b', fontSize: 13.5, fontWeight: 600, lineHeight: 1.5, maxWidth: 280 }}>
+            <div style={{ margin: 'auto', textAlign: 'center', color: 'var(--pg-muted)', fontSize: 13.5, fontWeight: 600, lineHeight: 1.5, maxWidth: 280 }}>
               Nenhuma mensagem ainda. Escreva algo — vai chegar no aparelho
               de {vendedor.nome}.
             </div>
@@ -133,8 +133,8 @@ function ChatModal({ vendedor, pedidoId, onClose }: { vendedor: Vendedor; pedido
                 initial={{ opacity: 0, scale: 0.95, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} key={m.id}
                 style={{
                   alignSelf: meu ? 'flex-end' : 'flex-start', maxWidth: '78%',
-                  background: meu ? 'linear-gradient(135deg,#0ea5e9,#22c55e)' : '#f1f5f9',
-                  color: meu ? '#fff' : '#0f172a',
+                  background: meu ? 'linear-gradient(135deg,#0ea5e9,#22c55e)' : 'var(--pg-surface-alt)',
+                  color: meu ? 'var(--pg-on-brand)' : 'var(--pg-ink)',
                   padding: '11px 15px', borderRadius: 20,
                   borderBottomRightRadius: meu ? 4 : 20, borderBottomLeftRadius: meu ? 20 : 4,
                   fontSize: 14, lineHeight: 1.45, wordBreak: 'break-word',
@@ -151,10 +151,10 @@ function ChatModal({ vendedor, pedidoId, onClose }: { vendedor: Vendedor; pedido
         </div>
 
         {erro && (
-          <div style={{ padding: '0 20px 8px', fontSize: 12, fontWeight: 700, color: '#dc2626' }}>{erro}</div>
+          <div style={{ padding: '0 20px 8px', fontSize: 12, fontWeight: 700, color: 'var(--pg-danger)' }}>{erro}</div>
         )}
 
-        <div style={{ display: 'flex', gap: 10, padding: '16px 20px calc(16px + env(safe-area-inset-bottom))', borderTop: '1px solid rgba(0,0,0,0.05)', background: '#ffffff' }}>
+        <div style={{ display: 'flex', gap: 10, padding: '16px 20px calc(16px + env(safe-area-inset-bottom))', borderTop: '1px solid var(--pg-line)', background: 'var(--pg-surface)' }}>
           <input
             value={texto}
             onChange={e => setTexto(e.target.value)}
@@ -164,10 +164,10 @@ function ChatModal({ vendedor, pedidoId, onClose }: { vendedor: Vendedor; pedido
             disabled={!pedidoId}
             maxLength={1000}
             style={{
-              flex: 1, minWidth: 0, background: '#f8fafc',
+              flex: 1, minWidth: 0, background: 'var(--pg-surface-alt)',
               // Era #fff sobre #f8fafc: o cliente digitava e não via o texto.
-              color: '#0f172a',
-              border: '1px solid rgba(0,0,0,0.08)', borderRadius: 16,
+              color: 'var(--pg-ink)',
+              border: '1px solid var(--pg-line)', borderRadius: 16,
               padding: '14px 18px', fontSize: 16, outline: 'none',
             }}
           />
@@ -177,13 +177,13 @@ function ChatModal({ vendedor, pedidoId, onClose }: { vendedor: Vendedor; pedido
             disabled={!pedidoId || !texto.trim() || enviando}
             style={{
               width: 50, flexShrink: 0,
-              background: (!pedidoId || !texto.trim() || enviando) ? '#e2e8f0' : 'linear-gradient(135deg,#0ea5e9,#22c55e)',
-              border: 'none', borderRadius: 16, color: '#fff',
+              background: (!pedidoId || !texto.trim() || enviando) ? 'var(--pg-line)' : 'linear-gradient(135deg,#0ea5e9,#22c55e)',
+              border: 'none', borderRadius: 16, color: 'var(--pg-on-brand)',
               cursor: (!pedidoId || !texto.trim() || enviando) ? 'default' : 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
           >
-            <Send size={20} color={(!pedidoId || !texto.trim() || enviando) ? '#94a3b8' : '#fff'} />
+            <Send size={20} color={(!pedidoId || !texto.trim() || enviando) ? 'var(--pg-faint)' : 'var(--pg-on-brand)'} />
           </button>
         </div>
       </motion.div>
@@ -302,18 +302,18 @@ function RastreamentoModal({ vendedor, clientePos, pedidoId, onClose }: { vended
   useEffect(() => { if (segundos > limiteSeg && status !== 'chegou') setAtrasado(true) }, [segundos, limiteSeg, status])
 
   const statusColors: Record<StatusPedido, { bg: string; text: string; border: string; label: string }> = {
-    aguardando: { bg: 'rgba(251,191,36,0.15)', text: '#b45309', border: '#d97706', label: 'AGUARDANDO PAGAMENTO' },
-    enviado:    { bg: 'rgba(148,163,184,0.15)', text: '#64748b', border: '#94a3b8', label: 'PEDIDO ENVIADO' },
-    preparando: { bg: 'rgba(251,191,36,0.15)', text: '#d97706', border: '#b45309', label: 'PREPARANDO' },
-    a_caminho:  { bg: 'rgba(14,165,233,0.15)', text: '#0284c7', border: '#0284c7', label: 'SAIU PRA ENTREGA' },
-    chegou:     { bg: 'rgba(34,197,94,0.15)',  text: '#16a34a', border: '#15803d', label: 'ENTREGUE! 🎉' },
+    aguardando: { bg: 'rgba(var(--pg-warning-rgb), 0.15)', text: 'var(--pg-warning)', border: '#d97706', label: 'AGUARDANDO PAGAMENTO' },
+    enviado:    { bg: 'rgba(var(--pg-muted-rgb), 0.15)', text: 'var(--pg-muted)', border: 'var(--pg-faint)', label: 'PEDIDO ENVIADO' },
+    preparando: { bg: 'rgba(var(--pg-warning-rgb), 0.15)', text: 'var(--pg-warning)', border: '#b45309', label: 'PREPARANDO' },
+    a_caminho:  { bg: 'rgba(var(--pg-ocean-rgb), 0.15)', text: 'var(--pg-ocean-dark)', border: '#0284c7', label: 'SAIU PRA ENTREGA' },
+    chegou:     { bg: 'rgba(var(--pg-success-rgb), 0.15)',  text: 'var(--pg-success)', border: '#15803d', label: 'ENTREGUE! 🎉' },
   }
   const sc = statusColors[status]
   const ETAPAS: StatusPedido[] = ['enviado', 'preparando', 'a_caminho', 'chegou']
   const etapaAtual = ETAPAS.indexOf(status)
 
   return (
-    <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 20 }} style={{ position: 'fixed', inset: 0, zIndex: 10000, background: '#ffffff', display: 'flex', flexDirection: 'column' }}>
+    <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 20 }} style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'var(--pg-surface)', display: 'flex', flexDirection: 'column' }}>
       <AnimatePresence>{chatOpen && <ChatModal vendedor={vendedor} pedidoId={pedidoId} onClose={() => setChatOpen(false)} />}</AnimatePresence>
       
       {/* Barra flutuante: fica FORA do fluxo, por cima do mapa. Por isso o
@@ -321,23 +321,23 @@ function RastreamentoModal({ vendedor, clientePos, pedidoId, onClose }: { vended
           respiro no topo — sem ele o codigo nascia debaixo do botao de fechar
           e do selo de status, os dois brigando pelo mesmo lugar. */}
       <div style={{ position: 'absolute', top: 'calc(20px + env(safe-area-inset-top))', left: 20, right: 20, zIndex: 1000, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, pointerEvents: 'none' }}>
-        <button aria-label="Voltar" onClick={onClose} style={{ pointerEvents: 'auto', flexShrink: 0, width: 46, height: 46, background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(10px)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#0f172a' }}>
+        <button aria-label="Voltar" onClick={onClose} style={{ pointerEvents: 'auto', flexShrink: 0, width: 46, height: 46, background: 'rgba(var(--pg-surface-rgb), 0.85)', backdropFilter: 'blur(10px)', border: '1px solid var(--pg-line)', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--pg-ink)' }}>
           <X size={22} />
         </button>
         {atrasado && (
-          <div className="glass-panel" style={{ padding: '10px 18px', borderRadius: 24, fontSize: 13, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8, color: '#fff' }}>
-            {isRealGPS ? <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 10px #22c55e' }} className="animate-pulse-neon" /> : <WifiOff size={14} color="#f97316" />}
+          <div className="glass-panel" style={{ padding: '10px 18px', borderRadius: 24, fontSize: 13, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8, color: 'var(--pg-ink)' }}>
+            {isRealGPS ? <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 10px #22c55e' }} className="animate-pulse-neon" /> : <WifiOff size={14} color="var(--pg-warning)" />}
             {isRealGPS ? 'Radar Ativo' : 'Buscando sinal…'}
           </div>
         )}
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {sentido === 'contramao' && (
-            <div className="animate-pulse-neon" style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.4)', padding: '10px 14px', borderRadius: 24, fontSize: 12, fontWeight: 900 }}>
+            <div className="animate-pulse-neon" style={{ background: 'rgba(var(--pg-danger-rgb), 0.15)', color: 'var(--pg-danger)', border: '1px solid rgba(var(--pg-danger-rgb), 0.4)', padding: '10px 14px', borderRadius: 24, fontSize: 12, fontWeight: 900 }}>
               ⚠️ CONTRAMÃO
             </div>
           )}
           {sentido === 'fora_da_rota' && (
-            <div style={{ background: 'rgba(245,158,11,0.15)', color: '#d97706', border: '1px solid rgba(245,158,11,0.4)', padding: '10px 14px', borderRadius: 24, fontSize: 12, fontWeight: 900 }}>
+            <div style={{ background: 'rgba(var(--pg-warning-rgb), 0.15)', color: 'var(--pg-warning)', border: '1px solid rgba(var(--pg-warning-rgb), 0.4)', padding: '10px 14px', borderRadius: 24, fontSize: 12, fontWeight: 900 }}>
               🧭 Fora da rota
             </div>
           )}
@@ -354,26 +354,26 @@ function RastreamentoModal({ vendedor, clientePos, pedidoId, onClose }: { vended
 
       {/* Código de entrega + denúncia (anti-má-fé) */}
       {codigoEntrega && status !== 'chegou' && (
-        <div style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 12, background: 'linear-gradient(135deg,rgba(14,165,233,0.08),rgba(34,197,94,0.06))', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+        <div style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 12, background: 'linear-gradient(135deg,rgba(var(--pg-ocean-rgb), 0.08),rgba(var(--pg-success-rgb), 0.06))', borderBottom: '1px solid var(--pg-line)' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#0284c7', textTransform: 'uppercase', letterSpacing: 0.6 }}>Código de entrega</div>
-            <div style={{ fontSize: 11.5, color: '#64748b', fontWeight: 600, lineHeight: 1.35 }}>Passe pro vendedor só na hora que receber. Pague sempre pelo app.</div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--pg-ocean-dark)', textTransform: 'uppercase', letterSpacing: 0.6 }}>Código de entrega</div>
+            <div style={{ fontSize: 11.5, color: 'var(--pg-muted)', fontWeight: 600, lineHeight: 1.35 }}>Passe pro vendedor só na hora que receber. Pague sempre pelo app.</div>
           </div>
-          <div style={{ flexShrink: 0, fontSize: 24, fontWeight: 950, letterSpacing: 3, color: '#0f172a', background: '#fff', border: '1px solid rgba(0,0,0,0.08)', borderRadius: 12, padding: '6px 12px' }}>{codigoEntrega}</div>
+          <div style={{ flexShrink: 0, fontSize: 24, fontWeight: 950, letterSpacing: 3, color: 'var(--pg-ink)', background: 'var(--pg-surface)', border: '1px solid var(--pg-line)', borderRadius: 12, padding: '6px 12px' }}>{codigoEntrega}</div>
         </div>
       )}
       {!denunciado ? (
-        <button onClick={denunciar} style={{ width: '100%', border: 0, borderBottom: '1px solid rgba(0,0,0,0.05)', background: '#fff', color: '#dc2626', fontSize: 12.5, fontWeight: 800, padding: '10px', cursor: 'pointer' }}>
+        <button onClick={denunciar} style={{ width: '100%', border: 0, borderBottom: '1px solid var(--pg-line)', background: 'var(--pg-surface)', color: 'var(--pg-danger)', fontSize: 12.5, fontWeight: 800, padding: '10px', cursor: 'pointer' }}>
           🚩 O vendedor pediu pra pagar por fora do app? Denuncie
         </button>
       ) : (
-        <div style={{ width: '100%', background: 'rgba(34,197,94,0.08)', color: '#16a34a', fontSize: 12.5, fontWeight: 800, padding: '10px', textAlign: 'center', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+        <div style={{ width: '100%', background: 'rgba(var(--pg-success-rgb), 0.08)', color: 'var(--pg-success)', fontSize: 12.5, fontWeight: 800, padding: '10px', textAlign: 'center', borderBottom: '1px solid var(--pg-line)' }}>
           ✓ Denúncia registrada — obrigado por proteger a comunidade
         </div>
       )}
 
       {/* Área superior: MAPA DARK MODE */}
-      <div style={{ flex: 1, position: 'relative', background: '#eef2f7' }}>
+      <div style={{ flex: 1, position: 'relative', background: 'var(--pg-line)' }}>
         {atrasado ? (
           <MapContainer center={pos} zoom={16} style={{ height: '100%', width: '100%' }} zoomControl={false}>
             {/* Mapa estilo Dark/Tático */}
@@ -381,13 +381,13 @@ function RastreamentoModal({ vendedor, clientePos, pedidoId, onClose }: { vended
             <RecenterMap a={pos} b={clientePos} />
             <Marker position={pos} icon={vendedor.tipo === 'restaurante' ? restauranteIcon : ambulanteIcon} />
             <Marker position={clientePos} icon={clienteIcon} />
-            {isRealGPS && <Circle center={pos} radius={accuracy} pathOptions={{ color: '#22c55e', fillColor: '#22c55e', fillOpacity: 0.1, weight: 1, className: 'animate-pulse-neon' }} />}
+            {isRealGPS && <Circle center={pos} radius={accuracy} pathOptions={{ color: 'var(--pg-success)', fillColor: '#22c55e', fillOpacity: 0.1, weight: 1, className: 'animate-pulse-neon' }} />}
             {route
-              ? <Polyline positions={route.coords} pathOptions={{ color: '#0ea5e9', weight: 6, opacity: 0.8, lineCap: 'round', className: 'neon-polyline' }} />
-              : <Polyline positions={[pos, clientePos]} pathOptions={{ color: '#0ea5e9', weight: 3, dashArray: '8 6', opacity: 0.4 }} />}
+              ? <Polyline positions={route.coords} pathOptions={{ color: 'var(--pg-ocean-dark)', weight: 6, opacity: 0.8, lineCap: 'round', className: 'neon-polyline' }} />
+              : <Polyline positions={[pos, clientePos]} pathOptions={{ color: 'var(--pg-ocean-dark)', weight: 3, dashArray: '8 6', opacity: 0.4 }} />}
           </MapContainer>
         ) : (
-          <div style={{ height: '100%', background: 'linear-gradient(160deg,#0ea5e9,#22c55e)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff', textAlign: 'center', padding: '0 32px' }}>
+          <div style={{ height: '100%', background: 'linear-gradient(160deg,#0ea5e9,#22c55e)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--pg-on-brand)', textAlign: 'center', padding: '0 32px' }}>
             <motion.div animate={{ y: [0, -10, 0] }} transition={{ repeat: Infinity, duration: 2 }} style={{ fontSize: 72, marginBottom: 16, filter: 'drop-shadow(0 10px 15px rgba(0,0,0,0.2))' }}>
               {status === 'chegou' ? '🎉' : status === 'a_caminho' ? '🛵' : status === 'preparando' ? '👨‍🍳' : '📨'}
             </motion.div>
@@ -402,54 +402,54 @@ function RastreamentoModal({ vendedor, clientePos, pedidoId, onClose }: { vended
       </div>
 
       {/* Bottom sheet - Dark Premium */}
-      <div style={{ background: '#f8fafc', borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: '24px 24px 36px', position: 'relative', marginTop: -30, zIndex: 5, boxShadow: '0 -15px 40px rgba(0,0,0,0.3)' }}>
-        <div style={{ width: 48, height: 6, background: '#e2e8f0', borderRadius: 10, margin: '-8px auto 24px' }} />
+      <div style={{ background: 'var(--pg-surface-alt)', borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: '24px 24px 36px', position: 'relative', marginTop: -30, zIndex: 5, boxShadow: '0 -15px 40px rgba(0,0,0,0.3)' }}>
+        <div style={{ width: 48, height: 6, background: 'var(--pg-line)', borderRadius: 10, margin: '-8px auto 24px' }} />
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
           <div>
-            <div style={{ fontSize: 12, fontWeight: 800, color: '#0284c7', letterSpacing: 1, marginBottom: 6, textTransform: 'uppercase' }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--pg-ocean-dark)', letterSpacing: 1, marginBottom: 6, textTransform: 'uppercase' }}>
               {status === 'enviado' ? 'Aguardando a loja' : status === 'preparando' ? 'Confirmado' : status === 'a_caminho' ? 'Em rota' : 'Entregue'}
             </div>
-            <h2 style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', letterSpacing: -0.5 }}>
+            <h2 style={{ fontSize: 24, fontWeight: 900, color: 'var(--pg-ink)', letterSpacing: -0.5 }}>
               {status === 'enviado' ? 'Pedido enviado!' : status === 'preparando' ? 'Preparando pedido…' : status === 'a_caminho' ? 'Saiu pra entrega! 🛵' : 'Aproveite! 🌊'}
             </h2>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 28, fontWeight: 900, color: '#0f172a' }}>{status === 'chegou' ? '🎉' : tempoLabel}</div>
-            <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>{status === 'chegou' ? 'Finalizado' : (atrasado ? distLabel : 'Estimativa')}</div>
+            <div style={{ fontSize: 28, fontWeight: 900, color: 'var(--pg-ink)' }}>{status === 'chegou' ? '🎉' : tempoLabel}</div>
+            <div style={{ fontSize: 11, color: 'var(--pg-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>{status === 'chegou' ? 'Finalizado' : (atrasado ? distLabel : 'Estimativa')}</div>
           </div>
         </div>
 
         {/* Linha do tempo (4 etapas, estilo iFood) */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
           {ETAPAS.map((s, i) => (
-            <div key={s} style={{ flex: 1, height: 6, borderRadius: 10, background: i <= etapaAtual ? '#22c55e' : '#e2e8f0', transition: 'background 0.5s ease', boxShadow: i <= etapaAtual ? '0 0 10px rgba(34,197,94,0.4)' : 'none' }} />
+            <div key={s} style={{ flex: 1, height: 6, borderRadius: 10, background: i <= etapaAtual ? '#22c55e' : 'var(--pg-line)', transition: 'background 0.5s ease', boxShadow: i <= etapaAtual ? '0 0 10px rgba(var(--pg-success-rgb), 0.4)' : 'none' }} />
           ))}
         </div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
           {['Enviado', 'Preparando', 'Em rota', 'Entregue'].map((lbl, i) => (
-            <div key={lbl} style={{ flex: 1, fontSize: 9, fontWeight: 800, textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.3, color: i <= etapaAtual ? '#16a34a' : '#94a3b8', transition: 'color 0.5s ease' }}>{lbl}</div>
+            <div key={lbl} style={{ flex: 1, fontSize: 9, fontWeight: 800, textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.3, color: i <= etapaAtual ? 'var(--pg-success)' : 'var(--pg-faint)', transition: 'color 0.5s ease' }}>{lbl}</div>
           ))}
         </div>
 
         {!atrasado && status !== 'chegou' && (
-          <motion.button whileTap={{ scale: 0.98 }} onClick={() => setAtrasado(true)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, background: 'rgba(14,165,233,0.1)', border: '1px solid rgba(14,165,233,0.2)', borderRadius: 16, padding: '16px', color: '#38bdf8', fontSize: 14, fontWeight: 700, cursor: 'pointer', marginBottom: 20 }}>
+          <motion.button whileTap={{ scale: 0.98 }} onClick={() => setAtrasado(true)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, background: 'rgba(var(--pg-ocean-rgb), 0.1)', border: '1px solid rgba(var(--pg-ocean-rgb), 0.2)', borderRadius: 16, padding: '16px', color: 'var(--pg-ocean-dark)', fontSize: 14, fontWeight: 700, cursor: 'pointer', marginBottom: 20 }}>
             <Navigation size={18} /> Ativar Radar Tático
           </motion.button>
         )}
 
         {/* Entregue → avaliação · senão → card do vendedor + chat */}
         {status === 'chegou' ? (
-          <div style={{ padding: '18px', background: '#ffffff', borderRadius: 24, border: '1px solid rgba(0,0,0,0.05)', textAlign: 'center' }}>
+          <div style={{ padding: '18px', background: 'var(--pg-surface)', borderRadius: 24, border: '1px solid var(--pg-line)', textAlign: 'center' }}>
             {avaliado ? (
               <div className="animate-pop" style={{ padding: '10px 0' }}>
                 <div style={{ fontSize: 34 }}>💚</div>
-                <div style={{ fontSize: 16, fontWeight: 900, color: '#16a34a', marginTop: 6 }}>Avaliação enviada. Valeu!</div>
+                <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--pg-success)', marginTop: 6 }}>Avaliação enviada. Valeu!</div>
               </div>
             ) : (
               <>
-                <div style={{ fontSize: 15, fontWeight: 900, color: '#0f172a', marginBottom: 4 }}>Como foi com {vendedor.nome}?</div>
-                <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>Sua avaliação ajuda a praia inteira 🏖️</div>
+                <div style={{ fontSize: 15, fontWeight: 900, color: 'var(--pg-ink)', marginBottom: 4 }}>Como foi com {vendedor.nome}?</div>
+                <div style={{ fontSize: 12, color: 'var(--pg-muted)', marginBottom: 12 }}>Sua avaliação ajuda a praia inteira 🏖️</div>
                 <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 14 }}>
                   {[1, 2, 3, 4, 5].map(n => (
                     <motion.button key={n} whileTap={{ scale: 0.85 }} onClick={() => setNota(n)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}>
@@ -457,23 +457,23 @@ function RastreamentoModal({ vendedor, clientePos, pedidoId, onClose }: { vended
                     </motion.button>
                   ))}
                 </div>
-                <input value={comentario} onChange={e => setComentario(e.target.value)} placeholder="Deixe um comentário (opcional)" style={{ width: '100%', padding: '12px 14px', borderRadius: 14, border: '1px solid rgba(0,0,0,0.1)', background: '#f8fafc', color: '#0f172a', fontSize: 14, outline: 'none', marginBottom: 12, boxSizing: 'border-box' }} />
-                <motion.button whileTap={{ scale: 0.97 }} onClick={enviarAvaliacao} disabled={nota === 0} style={{ width: '100%', background: nota === 0 ? '#e2e8f0' : 'linear-gradient(135deg, #0ea5e9, #22c55e)', color: nota === 0 ? '#94a3b8' : '#fff', border: 'none', padding: '14px 0', borderRadius: 16, fontWeight: 900, fontSize: 15, cursor: nota === 0 ? 'default' : 'pointer' }}>
+                <input value={comentario} onChange={e => setComentario(e.target.value)} placeholder="Deixe um comentário (opcional)" style={{ width: '100%', padding: '12px 14px', borderRadius: 14, border: '1px solid var(--pg-line)', background: 'var(--pg-surface-alt)', color: 'var(--pg-ink)', fontSize: 14, outline: 'none', marginBottom: 12, boxSizing: 'border-box' }} />
+                <motion.button whileTap={{ scale: 0.97 }} onClick={enviarAvaliacao} disabled={nota === 0} style={{ width: '100%', background: nota === 0 ? 'var(--pg-line)' : 'linear-gradient(135deg, #0ea5e9, #22c55e)', color: nota === 0 ? 'var(--pg-faint)' : 'var(--pg-on-brand)', border: 'none', padding: '14px 0', borderRadius: 16, fontWeight: 900, fontSize: 15, cursor: nota === 0 ? 'default' : 'pointer' }}>
                   ENVIAR AVALIAÇÃO
                 </motion.button>
               </>
             )}
           </div>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px', background: '#ffffff', borderRadius: 24, border: '1px solid rgba(0,0,0,0.05)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px', background: 'var(--pg-surface)', borderRadius: 24, border: '1px solid var(--pg-line)' }}>
             <div style={{ width: 54, height: 54, overflow: 'hidden', borderRadius: 18, background: vendedor.gradiente, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, boxShadow: '0 4px 15px rgba(0,0,0,0.2)' }}>
               {vendedor.avatar ? <img src={vendedor.avatar} alt={vendedor.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : vendedor.emoji}
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>{vendedor.nome}</div>
-              <div style={{ fontSize: 12, color: '#64748b' }}>Vendedor oficial PraiaGo</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--pg-ink)' }}>{vendedor.nome}</div>
+              <div style={{ fontSize: 12, color: 'var(--pg-muted)' }}>Vendedor oficial PraiaGo</div>
             </div>
-            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setChatOpen(true)} style={{ background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', color: '#fff', border: 'none', padding: '12px 20px', borderRadius: 16, fontWeight: 800, fontSize: 14, cursor: 'pointer', boxShadow: '0 4px 15px rgba(34,197,94,0.3)' }}>
+            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setChatOpen(true)} style={{ background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', color: 'var(--pg-on-brand)', border: 'none', padding: '12px 20px', borderRadius: 16, fontWeight: 800, fontSize: 14, cursor: 'pointer', boxShadow: '0 4px 15px rgba(var(--pg-success-rgb), 0.3)' }}>
               Chat
             </motion.button>
           </div>
@@ -583,29 +583,29 @@ function PixPagamentoModal({ cobranca, pedidoId, total, onPago, onClose }: {
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'flex-end' }}>
-      <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} transition={{ type: 'spring', damping: 26, stiffness: 240 }} style={{ width: '100%', background: '#ffffff', borderTopLeftRadius: 36, borderTopRightRadius: 36, padding: '22px 24px 34px', maxHeight: '94vh', overflowY: 'auto' }}>
-        <div style={{ width: 48, height: 6, background: '#e2e8f0', borderRadius: 10, margin: '0 auto 18px' }} />
+      <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} transition={{ type: 'spring', damping: 26, stiffness: 240 }} style={{ width: '100%', background: 'var(--pg-surface)', borderTopLeftRadius: 36, borderTopRightRadius: 36, padding: '22px 24px 34px', maxHeight: '94vh', overflowY: 'auto' }}>
+        <div style={{ width: 48, height: 6, background: 'var(--pg-line)', borderRadius: 10, margin: '0 auto 18px' }} />
 
         <AnimatePresence mode="wait">
           {pago ? (
             <motion.div key="pago" initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} style={{ textAlign: 'center', padding: '34px 10px 40px' }}>
               <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', damping: 12, stiffness: 200, delay: 0.1 }} style={{ width: 92, height: 92, borderRadius: '50%', background: 'linear-gradient(135deg, #22c55e, #16a34a)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', boxShadow: '0 18px 44px rgba(34,197,94,0.45)' }}>
-                <Check size={46} color="#fff" strokeWidth={3.5} />
+                <Check size={46} color="var(--pg-on-brand)" strokeWidth={3.5} />
               </motion.div>
-              <div style={{ fontSize: 24, fontWeight: 900, color: '#0f172a' }}>Pagamento aprovado! 🎉</div>
-              <p style={{ fontSize: 14.5, color: '#64748b', fontWeight: 600, marginTop: 8 }}>Enviando seu pedido pro vendedor…</p>
+              <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--pg-ink)' }}>Pagamento aprovado! 🎉</div>
+              <p style={{ fontSize: 14.5, color: 'var(--pg-muted)', fontWeight: 600, marginTop: 8 }}>Enviando seu pedido pro vendedor…</p>
             </motion.div>
           ) : (
             <motion.div key="aguardando" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                <h2 style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8 }}><QrCode size={22} color="#0ea5e9" /> Pague com PIX</h2>
-                <button aria-label="Fechar" onClick={fechar} style={{ background: '#f8fafc', border: 'none', borderRadius: 14, padding: 10, cursor: 'pointer' }}><X size={18} color="#94a3b8" /></button>
+                <h2 style={{ fontSize: 22, fontWeight: 900, color: 'var(--pg-ink)', display: 'flex', alignItems: 'center', gap: 8 }}><QrCode size={22} color="var(--pg-ocean-dark)" /> Pague com PIX</h2>
+                <button aria-label="Fechar" onClick={fechar} style={{ background: 'var(--pg-surface-alt)', border: 'none', borderRadius: 14, padding: 10, cursor: 'pointer' }}><X size={18} color="var(--pg-faint)" /></button>
               </div>
-              <p style={{ fontSize: 13.5, color: '#64748b', fontWeight: 600, margin: '0 0 18px' }}>Escaneia o QR ou copia o código pra pagar 👇</p>
+              <p style={{ fontSize: 13.5, color: 'var(--pg-muted)', fontWeight: 600, margin: '0 0 18px' }}>Escaneia o QR ou copia o código pra pagar 👇</p>
 
-              <div style={{ textAlign: 'center', background: '#f8fafc', borderRadius: 24, border: '1px solid rgba(0,0,0,0.06)', padding: '18px 16px', marginBottom: 14 }}>
-                <div style={{ fontSize: 12, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1 }}>Total a pagar</div>
-                <div style={{ fontSize: 32, fontWeight: 900, color: '#16a34a', margin: '2px 0 12px' }}>R$ {total.toFixed(2).replace('.', ',')}</div>
+              <div style={{ textAlign: 'center', background: 'var(--pg-surface-alt)', borderRadius: 24, border: '1px solid var(--pg-line)', padding: '18px 16px', marginBottom: 14 }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--pg-muted)', textTransform: 'uppercase', letterSpacing: 1 }}>Total a pagar</div>
+                <div style={{ fontSize: 32, fontWeight: 900, color: 'var(--pg-success)', margin: '2px 0 12px' }}>R$ {total.toFixed(2).replace('.', ',')}</div>
                 {/* base64 do gateway quando vier; senao o QR que desenhamos
                     aqui. A URL de imagem do gateway nao entra: o CSP bloqueia. */}
                 {cobranca.qr_code_base64 || qrImagem ? (
@@ -614,23 +614,23 @@ function PixPagamentoModal({ cobranca, pedidoId, total, onPago, onClose }: {
                     animate={{ opacity: 1, scale: 1 }}
                     src={cobranca.qr_code_base64 ? `data:image/png;base64,${cobranca.qr_code_base64}` : qrImagem}
                     alt="QR Code PIX"
-                    style={{ width: 210, height: 210, display: 'block', margin: '0 auto', borderRadius: 20, border: '1px solid rgba(0,0,0,0.08)', background: '#fff', padding: 8 }}
+                    style={{ width: 210, height: 210, display: 'block', margin: '0 auto', borderRadius: 20, border: '1px solid var(--pg-line)', background: '#fff', padding: 8 }}
                   />
                 ) : (
-                  <div style={{ fontSize: 13, color: '#64748b', padding: 20 }}>Use o código copia-e-cola abaixo 👇</div>
+                  <div style={{ fontSize: 13, color: 'var(--pg-muted)', padding: 20 }}>Use o código copia-e-cola abaixo 👇</div>
                 )}
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 12, background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)', color: '#b45309', borderRadius: 999, padding: '6px 14px', fontSize: 12, fontWeight: 900 }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 12, background: 'rgba(var(--pg-warning-rgb), 0.12)', border: '1px solid rgba(var(--pg-warning-rgb), 0.3)', color: 'var(--pg-warning)', borderRadius: 999, padding: '6px 14px', fontSize: 12, fontWeight: 900 }}>
                   <Clock size={13} /> Expira em {restante}
                 </div>
               </div>
 
-              <motion.button whileTap={{ scale: 0.97 }} onClick={copiar} style={{ width: '100%', border: 'none', borderRadius: 20, padding: '17px 20px', fontSize: 15, fontWeight: 900, cursor: 'pointer', color: '#fff', background: copiado ? 'linear-gradient(135deg, #16a34a, #15803d)' : 'linear-gradient(135deg, #0ea5e9, #22c55e)', boxShadow: '0 14px 30px rgba(14,165,233,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+              <motion.button whileTap={{ scale: 0.97 }} onClick={copiar} style={{ width: '100%', border: 'none', borderRadius: 20, padding: '17px 20px', fontSize: 15, fontWeight: 900, cursor: 'pointer', color: 'var(--pg-on-brand)', background: copiado ? 'linear-gradient(135deg, #16a34a, #15803d)' : 'linear-gradient(135deg, #0ea5e9, #22c55e)', boxShadow: '0 14px 30px rgba(var(--pg-ocean-rgb), 0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
                 {copiado ? <><Check size={19} /> Código copiado! Cola no app do banco</> : <>📋 Copiar código PIX</>}
               </motion.button>
 
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 18 }}>
                 <motion.div animate={{ scale: [1, 1.25, 1], opacity: [1, 0.55, 1] }} transition={{ repeat: Infinity, duration: 1.6 }} style={{ width: 10, height: 10, borderRadius: '50%', background: '#0ea5e9' }} />
-                <span style={{ fontSize: 13.5, fontWeight: 800, color: '#0284c7' }}>Aguardando pagamento… confirmamos na hora ⚡</span>
+                <span style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--pg-ocean-dark)' }}>Aguardando pagamento… confirmamos na hora ⚡</span>
               </div>
             </motion.div>
           )}
@@ -742,74 +742,74 @@ function CartaoPagamentoModal({ tipo, pedidoId, total, emailCliente, onPago, onC
     if (sair) onClose()
   }
 
-  const inputCartao: React.CSSProperties = { width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 14, padding: '14px 14px', fontSize: 16, fontWeight: 700, color: '#0f172a', background: '#f8fafc', outline: 'none' }
+  const inputCartao: React.CSSProperties = { width: '100%', border: '1px solid var(--pg-line)', borderRadius: 14, padding: '14px 14px', fontSize: 16, fontWeight: 700, color: 'var(--pg-ink)', background: 'var(--pg-surface-alt)', outline: 'none' }
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'flex-end' }}>
-      <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} transition={{ type: 'spring', damping: 26, stiffness: 240 }} style={{ width: '100%', background: '#ffffff', borderTopLeftRadius: 36, borderTopRightRadius: 36, padding: '22px 24px 34px', maxHeight: '94vh', overflowY: 'auto' }}>
-        <div style={{ width: 48, height: 6, background: '#e2e8f0', borderRadius: 10, margin: '0 auto 18px' }} />
+      <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} transition={{ type: 'spring', damping: 26, stiffness: 240 }} style={{ width: '100%', background: 'var(--pg-surface)', borderTopLeftRadius: 36, borderTopRightRadius: 36, padding: '22px 24px 34px', maxHeight: '94vh', overflowY: 'auto' }}>
+        <div style={{ width: 48, height: 6, background: 'var(--pg-line)', borderRadius: 10, margin: '0 auto 18px' }} />
 
         {aprovado ? (
           <motion.div initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} style={{ textAlign: 'center', padding: '34px 10px 40px' }}>
             <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', damping: 12, stiffness: 200, delay: 0.1 }} style={{ width: 92, height: 92, borderRadius: '50%', background: 'linear-gradient(135deg, #22c55e, #16a34a)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', boxShadow: '0 18px 44px rgba(34,197,94,0.45)' }}>
-              <Check size={46} color="#fff" strokeWidth={3.5} />
+              <Check size={46} color="var(--pg-on-brand)" strokeWidth={3.5} />
             </motion.div>
-            <div style={{ fontSize: 24, fontWeight: 900, color: '#0f172a' }}>Pagamento aprovado! 🎉</div>
-            <p style={{ fontSize: 14.5, color: '#64748b', fontWeight: 600, marginTop: 8 }}>Enviando seu pedido pro vendedor…</p>
+            <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--pg-ink)' }}>Pagamento aprovado! 🎉</div>
+            <p style={{ fontSize: 14.5, color: 'var(--pg-muted)', fontWeight: 600, marginTop: 8 }}>Enviando seu pedido pro vendedor…</p>
           </motion.div>
         ) : emAnalise ? (
           <div style={{ textAlign: 'center', padding: '30px 10px 36px' }}>
-            <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.6, ease: 'linear' }} style={{ width: 64, height: 64, borderRadius: '50%', border: '5px solid rgba(14,165,233,0.15)', borderTopColor: '#0ea5e9', margin: '0 auto 18px' }} />
-            <div style={{ fontSize: 20, fontWeight: 900, color: '#0f172a' }}>Pagamento em análise ⏳</div>
-            <p style={{ fontSize: 14, color: '#64748b', fontWeight: 600, marginTop: 8 }}>O banco tá conferindo. Assim que aprovar, seu pedido vai sozinho pro vendedor — pode deixar essa tela aberta.</p>
+            <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.6, ease: 'linear' }} style={{ width: 64, height: 64, borderRadius: '50%', border: '5px solid rgba(var(--pg-ocean-rgb), 0.15)', borderTopColor: '#0ea5e9', margin: '0 auto 18px' }} />
+            <div style={{ fontSize: 20, fontWeight: 900, color: 'var(--pg-ink)' }}>Pagamento em análise ⏳</div>
+            <p style={{ fontSize: 14, color: 'var(--pg-muted)', fontWeight: 600, marginTop: 8 }}>O banco tá conferindo. Assim que aprovar, seu pedido vai sozinho pro vendedor — pode deixar essa tela aberta.</p>
           </div>
         ) : (
           <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-              <h2 style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <CreditCard size={22} color="#0ea5e9" /> {tipo === 'debit' ? 'Cartão de Débito' : 'Cartão de Crédito'}
+              <h2 style={{ fontSize: 22, fontWeight: 900, color: 'var(--pg-ink)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <CreditCard size={22} color="var(--pg-ocean-dark)" /> {tipo === 'debit' ? 'Cartão de Débito' : 'Cartão de Crédito'}
               </h2>
-              <button aria-label="Fechar" onClick={fechar} style={{ background: '#f8fafc', border: 'none', borderRadius: 14, padding: 10, cursor: 'pointer' }}><X size={18} color="#94a3b8" /></button>
+              <button aria-label="Fechar" onClick={fechar} style={{ background: 'var(--pg-surface-alt)', border: 'none', borderRadius: 14, padding: 10, cursor: 'pointer' }}><X size={18} color="var(--pg-faint)" /></button>
             </div>
-            <p style={{ fontSize: 13, color: '#64748b', fontWeight: 600, margin: '0 0 16px' }}>
-              Pagamento 100% seguro e criptografado 🔒 · Total <strong style={{ color: '#16a34a' }}>R$ {total.toFixed(2).replace('.', ',')}</strong>
+            <p style={{ fontSize: 13, color: 'var(--pg-muted)', fontWeight: 600, margin: '0 0 16px' }}>
+              Pagamento 100% seguro e criptografado 🔒 · Total <strong style={{ color: 'var(--pg-success)' }}>R$ {total.toFixed(2).replace('.', ',')}</strong>
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div>
-                <label style={{ fontSize: 11, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 6 }}>NÚMERO DO CARTÃO</label>
+                <label style={{ fontSize: 11, fontWeight: 800, color: 'var(--pg-muted)', display: 'block', marginBottom: 6 }}>NÚMERO DO CARTÃO</label>
                 <input inputMode="numeric" autoComplete="cc-number" placeholder="0000 0000 0000 0000" value={numero} onChange={e => setNumero(formatarNumeroCartao(e.target.value))} style={inputCartao} />
               </div>
               <div>
-                <label style={{ fontSize: 11, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 6 }}>NOME (como está no cartão)</label>
+                <label style={{ fontSize: 11, fontWeight: 800, color: 'var(--pg-muted)', display: 'block', marginBottom: 6 }}>NOME (como está no cartão)</label>
                 <input autoComplete="cc-name" placeholder="MARIA A SILVA" value={nome} onChange={e => setNome(e.target.value.toUpperCase())} style={inputCartao} />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
-                  <label style={{ fontSize: 11, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 6 }}>VALIDADE</label>
+                  <label style={{ fontSize: 11, fontWeight: 800, color: 'var(--pg-muted)', display: 'block', marginBottom: 6 }}>VALIDADE</label>
                   <input inputMode="numeric" autoComplete="cc-exp" placeholder="MM/AA" value={validade} onChange={e => setValidade(formatarValidade(e.target.value))} style={inputCartao} />
                 </div>
                 <div>
-                  <label style={{ fontSize: 11, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 6 }}>CVV</label>
+                  <label style={{ fontSize: 11, fontWeight: 800, color: 'var(--pg-muted)', display: 'block', marginBottom: 6 }}>CVV</label>
                   <input inputMode="numeric" autoComplete="cc-csc" placeholder="123" value={cvv} onChange={e => setCvv(e.target.value.replace(/\D/g, '').slice(0, 4))} style={inputCartao} />
                 </div>
               </div>
               <div>
-                <label style={{ fontSize: 11, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 6 }}>CPF DO TITULAR</label>
+                <label style={{ fontSize: 11, fontWeight: 800, color: 'var(--pg-muted)', display: 'block', marginBottom: 6 }}>CPF DO TITULAR</label>
                 <input inputMode="numeric" placeholder="000.000.000-00" value={cpf} onChange={e => setCpf(formatarCpf(e.target.value))} style={inputCartao} />
               </div>
             </div>
 
             {erro && (
-              <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} style={{ marginTop: 14, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', color: '#dc2626', borderRadius: 14, padding: '12px 14px', fontSize: 13.5, fontWeight: 800, textAlign: 'center' }}>
+              <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} style={{ marginTop: 14, background: 'rgba(var(--pg-danger-rgb), 0.08)', border: '1px solid rgba(var(--pg-danger-rgb), 0.25)', color: 'var(--pg-danger)', borderRadius: 14, padding: '12px 14px', fontSize: 13.5, fontWeight: 800, textAlign: 'center' }}>
                 {erro}
               </motion.div>
             )}
 
-            <motion.button whileTap={{ scale: processando ? 1 : 0.97 }} disabled={processando} onClick={pagar} style={{ width: '100%', marginTop: 16, border: 'none', borderRadius: 20, padding: '17px 20px', fontSize: 15.5, fontWeight: 900, cursor: processando ? 'wait' : 'pointer', color: '#fff', background: processando ? '#94a3b8' : 'linear-gradient(135deg, #0ea5e9, #22c55e)', boxShadow: processando ? 'none' : '0 14px 30px rgba(14,165,233,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+            <motion.button whileTap={{ scale: processando ? 1 : 0.97 }} disabled={processando} onClick={pagar} style={{ width: '100%', marginTop: 16, border: 'none', borderRadius: 20, padding: '17px 20px', fontSize: 15.5, fontWeight: 900, cursor: processando ? 'wait' : 'pointer', color: 'var(--pg-on-brand)', background: processando ? 'var(--pg-faint)' : 'linear-gradient(135deg, #0ea5e9, #22c55e)', boxShadow: processando ? 'none' : '0 14px 30px rgba(var(--pg-ocean-rgb), 0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
               {processando ? 'Processando…' : `Pagar R$ ${total.toFixed(2).replace('.', ',')} 🔒`}
             </motion.button>
-            <p style={{ fontSize: 11.5, color: '#94a3b8', fontWeight: 600, textAlign: 'center', marginTop: 10 }}>
+            <p style={{ fontSize: 11.5, color: 'var(--pg-faint)', fontWeight: 600, textAlign: 'center', marginTop: 10 }}>
               🔒 Seus dados são criptografados e protegidos. Não guardamos o número do seu cartão.
             </p>
           </>
@@ -1285,27 +1285,27 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'flex-end' }}>
-      <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }} style={{ width: '100%', background: '#ffffff', borderTopLeftRadius: 36, borderTopRightRadius: 36, padding: '24px 24px 36px', maxHeight: '92vh', overflowY: 'auto', border: '1px solid rgba(0,0,0,0.08)' }}>
-        <div style={{ width: 48, height: 6, background: '#e2e8f0', borderRadius: 10, margin: '0 auto 24px' }} />
+      <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }} style={{ width: '100%', background: 'var(--pg-surface)', borderTopLeftRadius: 36, borderTopRightRadius: 36, padding: '24px 24px 36px', maxHeight: '92vh', overflowY: 'auto', border: '1px solid var(--pg-line)' }}>
+        <div style={{ width: 48, height: 6, background: 'var(--pg-line)', borderRadius: 10, margin: '0 auto 24px' }} />
         
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-          <h2 style={{ fontSize: 24, fontWeight: 900, color: '#0f172a' }}>Checkout</h2>
-          <button aria-label="Fechar" onClick={onClose} style={{ background: '#f8fafc', border: 'none', borderRadius: 14, padding: 10, cursor: 'pointer' }}><X size={20} color="#94a3b8" /></button>
+          <h2 style={{ fontSize: 24, fontWeight: 900, color: 'var(--pg-ink)' }}>Checkout</h2>
+          <button aria-label="Fechar" onClick={onClose} style={{ background: 'var(--pg-surface-alt)', border: 'none', borderRadius: 14, padding: 10, cursor: 'pointer' }}><X size={20} color="var(--pg-faint)" /></button>
         </div>
 
         {/* Conta e CPF */}
-        <div style={{ background: sessao ? '#f8fafc' : '#fff7ed', border: `1px solid ${sessao ? 'rgba(0,0,0,0.06)' : '#fed7aa'}`, borderRadius: 22, padding: 16, marginBottom: 16 }}>
+        <div style={{ background: sessao ? 'var(--pg-surface-alt)' : 'var(--pg-warning-bg)', border: `1px solid ${sessao ? 'var(--pg-line)' : 'var(--pg-warning-bg)'}`, borderRadius: 22, padding: 16, marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 900, color: '#0f172a' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 900, color: 'var(--pg-ink)' }}>
                 <Shield size={16} color={sessao ? '#16a34a' : '#ea580c'} /> Pedido seguro PraiaGo
               </div>
-              <div style={{ fontSize: 12.5, color: '#64748b', fontWeight: 700, marginTop: 4 }}>
+              <div style={{ fontSize: 12.5, color: 'var(--pg-muted)', fontWeight: 700, marginTop: 4 }}>
                 {sessao ? `${sessao.nome || 'Cliente'} · ${emailConfirmado ? 'e-mail confirmado' : 'confirme seu e-mail'}` : 'Entre ou crie sua conta para fechar pedido.'}
               </div>
             </div>
             {!sessao && (
-              <button type="button" onClick={() => navigate('/perfil')} style={{ border: 'none', background: 'linear-gradient(135deg,#0ea5e9,#22c55e)', color: '#fff', borderRadius: 14, padding: '10px 12px', fontSize: 12, fontWeight: 900, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              <button type="button" onClick={() => navigate('/perfil')} style={{ border: 'none', background: 'linear-gradient(135deg,#0ea5e9,#22c55e)', color: 'var(--pg-on-brand)', borderRadius: 14, padding: '10px 12px', fontSize: 12, fontWeight: 900, cursor: 'pointer', whiteSpace: 'nowrap' }}>
                 Entrar
               </button>
             )}
@@ -1313,10 +1313,10 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
           {sessao && (
             <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'end' }}>
               <div>
-                <label style={{ fontSize: 10.5, fontWeight: 900, color: '#64748b', display: 'block', marginBottom: 6, letterSpacing: 0.6 }}>CPF DO CLIENTE</label>
+                <label style={{ fontSize: 10.5, fontWeight: 900, color: 'var(--pg-muted)', display: 'block', marginBottom: 6, letterSpacing: 0.6 }}>CPF DO CLIENTE</label>
                 <input inputMode="numeric" value={cpfCliente} onChange={e => setCpfCliente(formatarCpfCliente(e.target.value))} readOnly={cpfOk} placeholder="000.000.000-00" style={{ ...darkInput, cursor: cpfOk ? 'default' : 'text', opacity: cpfOk ? 0.82 : 1 }} />
               </div>
-              <button type="button" disabled={salvandoCpf || cpfOk} onClick={salvarCpfCliente} style={{ height: 48, border: 'none', background: cpfOk ? '#dcfce7' : '#0ea5e9', color: cpfOk ? '#15803d' : '#fff', borderRadius: 15, padding: '0 14px', fontSize: 12, fontWeight: 900, cursor: cpfOk ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
+              <button type="button" disabled={salvandoCpf || cpfOk} onClick={salvarCpfCliente} style={{ height: 48, border: 'none', background: cpfOk ? 'var(--pg-success-bg)' : '#0ea5e9', color: cpfOk ? 'var(--pg-success)' : 'var(--pg-on-brand)', borderRadius: 15, padding: '0 14px', fontSize: 12, fontWeight: 900, cursor: cpfOk ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
                 {cpfOk ? 'Validado' : salvandoCpf ? 'Salvando' : 'Validar'}
               </button>
             </div>
@@ -1325,53 +1325,53 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
           {sessao && (
             <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'end' }}>
               <div>
-                <label style={{ fontSize: 10.5, fontWeight: 900, color: '#64748b', display: 'block', marginBottom: 6, letterSpacing: 0.6 }}>TELEFONE (COM DDD)</label>
+                <label style={{ fontSize: 10.5, fontWeight: 900, color: 'var(--pg-muted)', display: 'block', marginBottom: 6, letterSpacing: 0.6 }}>TELEFONE (COM DDD)</label>
                 <input inputMode="numeric" value={telefoneCliente} onChange={e => setTelefoneCliente(formatarTelefone(e.target.value))} placeholder="(13) 99999-8888" style={darkInput} />
               </div>
-              <button type="button" disabled={salvandoTel || telefoneSalvo} onClick={salvarTelefone} style={{ height: 48, border: 'none', background: telefoneSalvo ? '#dcfce7' : '#0ea5e9', color: telefoneSalvo ? '#15803d' : '#fff', borderRadius: 15, padding: '0 14px', fontSize: 12, fontWeight: 900, cursor: telefoneSalvo ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
+              <button type="button" disabled={salvandoTel || telefoneSalvo} onClick={salvarTelefone} style={{ height: 48, border: 'none', background: telefoneSalvo ? 'var(--pg-success-bg)' : '#0ea5e9', color: telefoneSalvo ? 'var(--pg-success)' : 'var(--pg-on-brand)', borderRadius: 15, padding: '0 14px', fontSize: 12, fontWeight: 900, cursor: telefoneSalvo ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
                 {salvandoTel ? 'Salvando' : telefoneSalvo ? 'Salvo' : 'Salvar'}
               </button>
             </div>
           )}
           {sessao && (
-            <div style={{ marginTop: 10, fontSize: 11.5, color: beneficioElegivel ? '#15803d' : '#64748b', fontWeight: 800 }}>
+            <div style={{ marginTop: 10, fontSize: 11.5, color: beneficioElegivel ? 'var(--pg-success)' : 'var(--pg-muted)', fontWeight: 800 }}>
               {carregandoBeneficio ? 'Conferindo beneficio...' : beneficioElegivel ? '20% de boas-vindas liberado para este pedido.' : 'Primeira compra tem 20% com e-mail confirmado e CPF valido.'}
             </div>
           )}
         </div>
 
         {/* Resumo */}
-        <div style={{ background: '#f8fafc', borderRadius: 24, padding: '20px', marginBottom: 20, border: '1px solid rgba(0,0,0,0.05)' }}>
+        <div style={{ background: 'var(--pg-surface-alt)', borderRadius: 24, padding: '20px', marginBottom: 20, border: '1px solid var(--pg-line)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 800, color: '#64748b', letterSpacing: 1, textTransform: 'uppercase' }}>Resumo · {vendedor.nome}</div>
-            <button type="button" onClick={excluirPedido} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid rgba(239,68,68,0.18)', background: '#fff1f2', color: '#e11d48', borderRadius: 999, padding: '8px 11px', fontSize: 12, fontWeight: 900, cursor: 'pointer' }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--pg-muted)', letterSpacing: 1, textTransform: 'uppercase' }}>Resumo · {vendedor.nome}</div>
+            <button type="button" onClick={excluirPedido} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid rgba(var(--pg-danger-rgb), 0.18)', background: 'var(--pg-danger-bg)', color: '#e11d48', borderRadius: 999, padding: '8px 11px', fontSize: 12, fontWeight: 900, cursor: 'pointer' }}>
               <Trash2 size={14} /> Excluir pedido
             </button>
           </div>
           {itensList.map(p => (
             <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span style={{ fontSize: 24, background: '#ffffff', padding: p.foto ? 0 : 8, borderRadius: 12, width: p.foto ? 40 : undefined, height: p.foto ? 40 : undefined, overflow: 'hidden', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{p.foto ? <img src={p.foto} alt={p.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : p.emoji}</span>
+                <span style={{ fontSize: 24, background: 'var(--pg-surface)', padding: p.foto ? 0 : 8, borderRadius: 12, width: p.foto ? 40 : undefined, height: p.foto ? 40 : undefined, overflow: 'hidden', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{p.foto ? <img src={p.foto} alt={p.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : p.emoji}</span>
                 <div>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>{p.nome}</div>
-                  <div style={{ fontSize: 13, color: '#64748b' }}>{carrinho[p.id]}x · R$ {p.preco.toFixed(2)}</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--pg-ink)' }}>{p.nome}</div>
+                  <div style={{ fontSize: 13, color: 'var(--pg-muted)' }}>{carrinho[p.id]}x · R$ {p.preco.toFixed(2)}</div>
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>R$ {(p.preco * carrinho[p.id]).toFixed(2)}</div>
-                <button type="button" aria-label={`Remover ${p.nome}`} onClick={() => removerItem(p.id)} style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(239,68,68,0.16)', background: '#ffffff', color: '#ef4444', borderRadius: 12, cursor: 'pointer' }}>
+                <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--pg-ink)' }}>R$ {(p.preco * carrinho[p.id]).toFixed(2)}</div>
+                <button type="button" aria-label={`Remover ${p.nome}`} onClick={() => removerItem(p.id)} style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(var(--pg-danger-rgb), 0.16)', background: 'var(--pg-surface)', color: 'var(--pg-danger)', borderRadius: 12, cursor: 'pointer' }}>
                   <Trash2 size={16} />
                 </button>
               </div>
             </div>
           ))}
-          <div style={{ borderTop: '1px solid rgba(0,0,0,0.08)', paddingTop: 16, marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ borderTop: '1px solid var(--pg-line)', paddingTop: 16, marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 13, fontWeight: 800, color: '#64748b' }}>Subtotal</span>
-              <span style={{ fontSize: 14, fontWeight: 900, color: '#0f172a' }}>R$ {dinheiro(subtotal)}</span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--pg-muted)' }}>Subtotal</span>
+              <span style={{ fontSize: 14, fontWeight: 900, color: 'var(--pg-ink)' }}>R$ {dinheiro(subtotal)}</span>
             </div>
             {desconto > 0 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#16a34a' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--pg-success)' }}>
                 <span style={{ fontSize: 13, fontWeight: 900 }}>{cupomAplicado?.codigo}</span>
                 <span style={{ fontSize: 14, fontWeight: 900 }}>- R$ {dinheiro(desconto)}</span>
               </div>
@@ -1379,27 +1379,27 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
             {/* A lei permite preco diferente por forma de pagamento, mas exige
                 que o cliente veja a diferenca ANTES de confirmar. */}
             {acrescimoCredito > 0 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#b45309' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--pg-warning)' }}>
                 <span style={{ fontSize: 13, fontWeight: 800 }}>Acréscimo do cartão de crédito</span>
                 <span style={{ fontSize: 14, fontWeight: 900 }}>+ R$ {dinheiro(acrescimoCredito)}</span>
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8 }}>
-              <span style={{ fontSize: 16, fontWeight: 900, color: '#64748b' }}>Total</span>
-              <span style={{ fontSize: 22, fontWeight: 900, color: '#22c55e', textShadow: '0 0 10px rgba(34,197,94,0.4)' }}>R$ {dinheiro(total)}</span>
+              <span style={{ fontSize: 16, fontWeight: 900, color: 'var(--pg-muted)' }}>Total</span>
+              <span style={{ fontSize: 22, fontWeight: 900, color: 'var(--pg-success)', textShadow: '0 0 10px rgba(var(--pg-success-rgb), 0.4)' }}>R$ {dinheiro(total)}</span>
             </div>
           </div>
         </div>
 
         {/* Cupom */}
-        <div style={{ background: 'linear-gradient(135deg, rgba(14,165,233,0.08), rgba(34,197,94,0.08))', border: '1px solid rgba(14,165,233,0.14)', borderRadius: 22, padding: 16, marginBottom: 20 }}>
+        <div style={{ background: 'linear-gradient(135deg, rgba(var(--pg-ocean-rgb), 0.08), rgba(var(--pg-success-rgb), 0.08))', border: '1px solid rgba(var(--pg-ocean-rgb), 0.14)', borderRadius: 22, padding: 16, marginBottom: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 10 }}>
             <div>
-              <div style={{ fontSize: 14, fontWeight: 900, color: '#0f172a' }}>Cupom PraiaGo</div>
-              <div style={{ fontSize: 11.5, color: '#64748b', fontWeight: 700 }}>{cupomAplicado ? `${cupomAplicado.titulo} aplicado.` : 'Escolha um cupom disponivel ou digite codigo de sorteio.'}</div>
+              <div style={{ fontSize: 14, fontWeight: 900, color: 'var(--pg-ink)' }}>Cupom PraiaGo</div>
+              <div style={{ fontSize: 11.5, color: 'var(--pg-muted)', fontWeight: 700 }}>{cupomAplicado ? `${cupomAplicado.titulo} aplicado.` : 'Escolha um cupom disponivel ou digite codigo de sorteio.'}</div>
             </div>
             {cupomAplicado && (
-              <button type="button" onClick={() => setCupomAplicado(null)} style={{ border: 'none', background: '#ffffff', color: '#ef4444', borderRadius: 12, padding: '8px 10px', fontSize: 11.5, fontWeight: 900, cursor: 'pointer' }}>
+              <button type="button" onClick={() => setCupomAplicado(null)} style={{ border: 'none', background: 'var(--pg-surface)', color: 'var(--pg-danger)', borderRadius: 12, padding: '8px 10px', fontSize: 11.5, fontWeight: 900, cursor: 'pointer' }}>
                 Remover
               </button>
             )}
@@ -1407,11 +1407,11 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
 
           <div style={{ display: 'grid', gap: 10 }}>
             {carregandoCupons ? (
-              <div style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 16, padding: 14, fontSize: 12.5, fontWeight: 800, color: '#64748b' }}>
+              <div style={{ background: 'var(--pg-surface)', border: '1px solid var(--pg-line)', borderRadius: 16, padding: 14, fontSize: 12.5, fontWeight: 800, color: 'var(--pg-muted)' }}>
                 Buscando cupons pra voce...
               </div>
             ) : cuponsParaMostrar.length === 0 ? (
-              <div style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 16, padding: 14, fontSize: 12.5, fontWeight: 800, color: '#64748b' }}>
+              <div style={{ background: 'var(--pg-surface)', border: '1px solid var(--pg-line)', borderRadius: 16, padding: 14, fontSize: 12.5, fontWeight: 800, color: 'var(--pg-muted)' }}>
                 Nenhum cupom automatico disponivel agora.
               </div>
             ) : cuponsParaMostrar.map(c => {
@@ -1429,44 +1429,44 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
                     display: 'flex',
                     alignItems: 'center',
                     gap: 12,
-                    border: `1.5px solid ${selecionado ? '#16a34a' : c.bloqueado ? 'rgba(100,116,139,0.16)' : 'rgba(14,165,233,0.24)'}`,
-                    background: selecionado ? '#ecfdf5' : c.bloqueado ? '#f8fafc' : '#ffffff',
+                    border: `1.5px solid ${selecionado ? '#16a34a' : c.bloqueado ? 'rgba(var(--pg-muted-rgb), 0.16)' : 'rgba(var(--pg-ocean-rgb), 0.24)'}`,
+                    background: selecionado ? 'var(--pg-success-bg)' : c.bloqueado ? 'var(--pg-surface-alt)' : 'var(--pg-surface)',
                     opacity: c.bloqueado ? 0.68 : 1,
                     borderRadius: 18,
                     padding: 13,
                     cursor: c.bloqueado ? 'not-allowed' : 'pointer',
                   }}
                 >
-                  <div style={{ width: 42, height: 42, borderRadius: 15, background: c.bloqueado ? '#e2e8f0' : 'linear-gradient(135deg,#0ea5e9,#22c55e)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <div style={{ width: 42, height: 42, borderRadius: 15, background: c.bloqueado ? 'var(--pg-line)' : 'linear-gradient(135deg,#0ea5e9,#22c55e)', color: 'var(--pg-on-brand)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     {selecionado ? <Check size={18} /> : <TicketPercent size={18} />}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 13.5, fontWeight: 950, color: '#0f172a' }}>{c.codigo}</span>
-                      <span style={{ fontSize: 10.5, fontWeight: 950, color: c.bloqueado ? '#64748b' : '#15803d', background: c.bloqueado ? '#e2e8f0' : '#dcfce7', borderRadius: 999, padding: '3px 7px' }}>{valorTexto}</span>
+                      <span style={{ fontSize: 13.5, fontWeight: 950, color: 'var(--pg-ink)' }}>{c.codigo}</span>
+                      <span style={{ fontSize: 10.5, fontWeight: 950, color: c.bloqueado ? 'var(--pg-muted)' : 'var(--pg-success)', background: c.bloqueado ? 'var(--pg-line)' : 'var(--pg-success-bg)', borderRadius: 999, padding: '3px 7px' }}>{valorTexto}</span>
                     </div>
-                    <div style={{ fontSize: 12, fontWeight: 800, color: '#475569', marginTop: 3 }}>{c.titulo}</div>
-                    <div style={{ fontSize: 11, fontWeight: 750, color: c.bloqueado ? '#94a3b8' : '#0ea5e9', marginTop: 3 }}>{selecionado ? `Aplicado: economia de R$ ${dinheiro(desconto)}` : c.motivo}</div>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--pg-muted)', marginTop: 3 }}>{c.titulo}</div>
+                    <div style={{ fontSize: 11, fontWeight: 750, color: c.bloqueado ? 'var(--pg-faint)' : 'var(--pg-ocean-dark)', marginTop: 3 }}>{selecionado ? `Aplicado: economia de R$ ${dinheiro(desconto)}` : c.motivo}</div>
                   </div>
                 </button>
               )
             })}
 
-            <button type="button" onClick={() => setMostrarCodigoManual(v => !v)} style={{ border: '1px dashed rgba(14,165,233,0.35)', background: '#ffffff', color: '#0284c7', borderRadius: 15, padding: '12px 14px', fontSize: 12.5, fontWeight: 900, cursor: 'pointer' }}>
+            <button type="button" onClick={() => setMostrarCodigoManual(v => !v)} style={{ border: '1px dashed rgba(var(--pg-ocean-rgb), 0.35)', background: 'var(--pg-surface)', color: 'var(--pg-ocean-dark)', borderRadius: 15, padding: '12px 14px', fontSize: 12.5, fontWeight: 900, cursor: 'pointer' }}>
               {mostrarCodigoManual ? 'Ocultar codigo manual' : 'Tenho um codigo de cupom'}
             </button>
 
             {mostrarCodigoManual && (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10 }}>
                 <input value={cupomTexto} onChange={e => setCupomTexto(e.target.value.toUpperCase())} placeholder="Digite seu codigo" style={darkInput} />
-                <button type="button" onClick={() => aplicarCupom()} style={{ border: 'none', background: '#0ea5e9', color: '#fff', borderRadius: 15, padding: '0 14px', fontSize: 12, fontWeight: 900, cursor: 'pointer' }}>
+                <button type="button" onClick={() => aplicarCupom()} style={{ border: 'none', background: '#0ea5e9', color: 'var(--pg-on-brand)', borderRadius: 15, padding: '0 14px', fontSize: 12, fontWeight: 900, cursor: 'pointer' }}>
                   Aplicar
                 </button>
               </div>
             )}
           </div>
           {(cupomErro || cupomAplicado) && (
-            <div style={{ marginTop: 10, fontSize: 12, fontWeight: 800, color: cupomErro ? '#dc2626' : '#15803d' }}>
+            <div style={{ marginTop: 10, fontSize: 12, fontWeight: 800, color: cupomErro ? 'var(--pg-danger)' : 'var(--pg-success)' }}>
               {cupomErro || `${cupomAplicado?.codigo}: economia de R$ ${dinheiro(desconto)}.`}
             </div>
           )}
@@ -1474,7 +1474,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
 
         {/* Pagamento — estilo lista, com a marca PraiaGo Pay */}
         <div style={{ marginBottom: 24 }}>
-          <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--pg-ink)', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
             <CreditCard size={18} color="#2a22de" /> Como você quer pagar?
           </div>
 
@@ -1488,7 +1488,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
               ],
             },
             {
-              id: 'entrega', cor: '#16a34a', corBg: 'rgba(22,163,94,0.06)',
+              id: 'entrega', cor: 'var(--pg-success)', corBg: 'rgba(22,163,94,0.06)',
               opcoes: [
                 { key: 'dinheiro', Icon: Banknote, label: 'Dinheiro', sub: 'Pague ao receber o pedido', tag: '' },
                 { key: 'cartao_fisico', Icon: CreditCard, label: 'Maquininha', sub: 'Crédito ou débito na entrega', tag: '' },
@@ -1499,11 +1499,11 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
               <div style={{ marginBottom: 10 }}>
                 {grupo.id === 'app' ? (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span style={{ background: 'linear-gradient(135deg,#2a22de,#4f46e5)', color: '#fff', fontSize: 11, fontWeight: 950, letterSpacing: 0.3, padding: '5px 11px', borderRadius: 999, boxShadow: '0 4px 12px rgba(42,34,222,0.35)' }}>🏖️ PraiaGo Pay</span>
-                    <span style={{ fontSize: 11.5, fontWeight: 800, color: '#64748b' }}>aprovação na hora ⚡</span>
+                    <span style={{ background: 'linear-gradient(135deg,#2a22de,#4f46e5)', color: 'var(--pg-on-brand)', fontSize: 11, fontWeight: 950, letterSpacing: 0.3, padding: '5px 11px', borderRadius: 999, boxShadow: '0 4px 12px rgba(42,34,222,0.35)' }}>🏖️ PraiaGo Pay</span>
+                    <span style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--pg-muted)' }}>aprovação na hora ⚡</span>
                   </span>
                 ) : (
-                  <span style={{ fontSize: 11.5, fontWeight: 950, color: '#94a3b8', letterSpacing: 0.6, textTransform: 'uppercase' }}>Pagar na entrega</span>
+                  <span style={{ fontSize: 11.5, fontWeight: 950, color: 'var(--pg-faint)', letterSpacing: 0.6, textTransform: 'uppercase' }}>Pagar na entrega</span>
                 )}
               </div>
               <div style={{ display: 'grid', gap: 10 }}>
@@ -1520,24 +1520,24 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
                       whileTap={{ scale: 0.985 }}
                       style={{
                         width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 14,
-                        background: sel ? grupo.corBg : '#ffffff',
+                        background: sel ? grupo.corBg : 'var(--pg-surface)',
                         border: `2px solid ${sel ? grupo.cor : 'rgba(15,23,42,0.08)'}`,
                         borderRadius: 18, padding: '15px 16px', cursor: 'pointer',
                         boxShadow: sel ? `0 10px 24px ${grupo.cor}22` : '0 2px 8px rgba(15,23,42,0.04)',
                         transition: 'border-color .2s, box-shadow .2s, background .2s',
                       }}
                     >
-                      <div style={{ width: 46, height: 46, borderRadius: 14, background: sel ? grupo.cor : '#f1f5f9', color: sel ? '#fff' : '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background .2s, color .2s' }}>
+                      <div style={{ width: 46, height: 46, borderRadius: 14, background: sel ? grupo.cor : 'var(--pg-surface-alt)', color: sel ? 'var(--pg-on-brand)' : 'var(--pg-faint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background .2s, color .2s' }}>
                         <o.Icon size={22} />
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: 15, fontWeight: 900, color: '#0f172a' }}>{o.label}</span>
-                          {o.tag && <span style={{ fontSize: 10, fontWeight: 950, color: '#15803d', background: '#dcfce7', borderRadius: 999, padding: '2px 8px' }}>{o.tag}</span>}
+                          <span style={{ fontSize: 15, fontWeight: 900, color: 'var(--pg-ink)' }}>{o.label}</span>
+                          {o.tag && <span style={{ fontSize: 10, fontWeight: 950, color: 'var(--pg-success)', background: 'var(--pg-success-bg)', borderRadius: 999, padding: '2px 8px' }}>{o.tag}</span>}
                         </div>
-                        <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginTop: 2 }}>{o.sub}</div>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--pg-muted)', marginTop: 2 }}>{o.sub}</div>
                       </div>
-                      <div style={{ width: 24, height: 24, borderRadius: '50%', border: `2px solid ${sel ? grupo.cor : '#cbd5e1'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'border-color .2s' }}>
+                      <div style={{ width: 24, height: 24, borderRadius: '50%', border: `2px solid ${sel ? grupo.cor : 'var(--pg-line)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'border-color .2s' }}>
                         {sel && <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', damping: 15, stiffness: 320 }} style={{ width: 12, height: 12, borderRadius: '50%', background: grupo.cor }} />}
                       </div>
                     </motion.button>
@@ -1558,16 +1558,16 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
               // Pré-preenche com o CPF do perfil, se já tiver
               if (abrindo && !cpfNota && perfilCliente?.cpf) setCpfNota(formatarCpf(perfilCliente.cpf))
             }}
-            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: querCpfNota ? 'rgba(14,165,233,0.08)' : '#f8fafc', border: `1.5px solid ${querCpfNota ? '#0ea5e9' : 'rgba(0,0,0,0.06)'}`, borderRadius: 16, padding: '14px 16px', cursor: 'pointer', textAlign: 'left' }}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: querCpfNota ? 'rgba(var(--pg-ocean-rgb), 0.08)' : 'var(--pg-surface-alt)', border: `1.5px solid ${querCpfNota ? '#0ea5e9' : 'var(--pg-line)'}`, borderRadius: 16, padding: '14px 16px', cursor: 'pointer', textAlign: 'left' }}
           >
-            <div style={{ width: 22, height: 22, borderRadius: 7, border: `2px solid ${querCpfNota ? '#0ea5e9' : '#cbd5e1'}`, background: querCpfNota ? '#0ea5e9' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              {querCpfNota && <Check size={14} color="#fff" strokeWidth={3.5} />}
+            <div style={{ width: 22, height: 22, borderRadius: 7, border: `2px solid ${querCpfNota ? '#0ea5e9' : 'var(--pg-line)'}`, background: querCpfNota ? '#0ea5e9' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              {querCpfNota && <Check size={14} color="var(--pg-on-brand)" strokeWidth={3.5} />}
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>Adicionar CPF na nota</div>
-              <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Quer o CPF no comprovante do pedido? (opcional)</div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--pg-ink)' }}>Adicionar CPF na nota</div>
+              <div style={{ fontSize: 12, color: 'var(--pg-muted)', fontWeight: 600 }}>Quer o CPF no comprovante do pedido? (opcional)</div>
             </div>
-            <FileText size={20} color={querCpfNota ? '#0ea5e9' : '#94a3b8'} />
+            <FileText size={20} color={querCpfNota ? '#0ea5e9' : 'var(--pg-faint)'} />
           </button>
           <AnimatePresence>
             {querCpfNota && (
@@ -1577,7 +1577,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
                   placeholder="000.000.000-00"
                   value={cpfNota}
                   onChange={e => setCpfNota(formatarCpf(e.target.value))}
-                  style={{ width: '100%', marginTop: 10, border: '1px solid rgba(0,0,0,0.1)', borderRadius: 14, padding: '14px', fontSize: 16, fontWeight: 700, color: '#0f172a', background: '#f8fafc', outline: 'none' }}
+                  style={{ width: '100%', marginTop: 10, border: '1px solid var(--pg-line)', borderRadius: 14, padding: '14px', fontSize: 16, fontWeight: 700, color: 'var(--pg-ink)', background: 'var(--pg-surface-alt)', outline: 'none' }}
                 />
               </motion.div>
             )}
@@ -1586,23 +1586,23 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
 
         {/* Localização */}
         <div style={{ marginBottom: 24 }}>
-          <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <MapPin size={18} color="#f43f5e" /> Onde te encontrar
+          <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--pg-ink)', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <MapPin size={18} color="var(--pg-danger)" /> Onde te encontrar
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 18, padding: '12px 14px', marginBottom: 14 }}>
-            <Navigation size={18} color="#ea580c" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--pg-warning-bg)', border: '1px solid var(--pg-warning-bg)', borderRadius: 18, padding: '12px 14px', marginBottom: 14 }}>
+            <Navigation size={18} color="var(--pg-warning)" />
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 12, fontWeight: 900, color: '#9a3412' }}>Entrega na praia</div>
-              <div style={{ fontSize: 11.5, fontWeight: 700, color: '#64748b' }}>Use reta/barraca ou Radar GPS para o vendedor te achar rapido.</div>
+              <div style={{ fontSize: 12, fontWeight: 900, color: 'var(--pg-warning)' }}>Entrega na praia</div>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--pg-muted)' }}>Use reta/barraca ou Radar GPS para o vendedor te achar rapido.</div>
             </div>
           </div>
           <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
             <div style={{ flex: 1 }}>
-              <label style={{ fontSize: 11, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 6 }}>RETA / RUA</label>
+              <label style={{ fontSize: 11, fontWeight: 800, color: 'var(--pg-muted)', display: 'block', marginBottom: 6 }}>RETA / RUA</label>
               <input value={reta} onChange={e => setReta(e.target.value)} placeholder="Ex: 10" style={darkInput} />
             </div>
             <div style={{ flex: 1 }}>
-              <label style={{ fontSize: 11, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 6 }}>BARRACA</label>
+              <label style={{ fontSize: 11, fontWeight: 800, color: 'var(--pg-muted)', display: 'block', marginBottom: 6 }}>BARRACA</label>
               <input value={barraca} onChange={e => setBarraca(e.target.value)} placeholder="Ex: 42" style={darkInput} />
             </div>
           </div>
@@ -1612,9 +1612,9 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
               return (
                 <button key={key} onClick={() => setModo(key)} style={{
                   flex: 1, padding: '14px', borderRadius: 16, cursor: 'pointer',
-                  border: `1.5px solid ${sel ? '#22c55e' : 'rgba(0,0,0,0.06)'}`,
-                  background: sel ? 'rgba(34,197,94,0.1)' : '#f1f5f9', opacity: 1,
-                  color: sel ? '#22c55e' : '#64748b', fontSize: 13, fontWeight: 800, transition: 'all 0.2s'
+                  border: `1.5px solid ${sel ? '#22c55e' : 'var(--pg-line)'}`,
+                  background: sel ? 'rgba(var(--pg-success-rgb), 0.1)' : 'var(--pg-surface-alt)', opacity: 1,
+                  color: sel ? 'var(--pg-success)' : 'var(--pg-muted)', fontSize: 13, fontWeight: 800, transition: 'all 0.2s'
                 }}>
                   {titulo}
                 </button>
@@ -1622,7 +1622,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
             })}
           </div>
           {modo === 'tempo_real' && (
-            <div style={{ marginTop: 10, fontSize: 12, lineHeight: 1.45, color: radarReal ? '#15803d' : '#b45309', background: radarReal ? '#ecfdf5' : '#fffbeb', border: `1px solid ${radarReal ? '#bbf7d0' : '#fde68a'}`, borderRadius: 14, padding: '10px 12px', fontWeight: 700 }}>
+            <div style={{ marginTop: 10, fontSize: 12, lineHeight: 1.45, color: radarReal ? 'var(--pg-success)' : 'var(--pg-warning)', background: radarReal ? 'var(--pg-success-bg)' : 'var(--pg-warning-bg)', border: `1px solid ${radarReal ? 'var(--pg-success)' : 'var(--pg-warning)'}`, borderRadius: 14, padding: '10px 12px', fontWeight: 700 }}>
               {radarReal
                 ? `Radar pronto: sua posicao ${gpsFonte === 'gps' ? 'GPS' : 'salva'} vai para o vendedor e continua atualizando em Meus Pedidos ate a entrega. Voce pode desligar quando quiser.`
                 : `Buscando permissao de localizacao (${gpsStatus}). Ative o GPS do celular para fechar pelo Radar.`}
@@ -1630,10 +1630,10 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
           )}
         </div>
 
-        {erro && <div style={{ fontSize: 13, color: '#ef4444', fontWeight: 800, marginBottom: 16, textAlign: 'center', background: 'rgba(239,68,68,0.1)', padding: 12, borderRadius: 12 }}>{erro}</div>}
+        {erro && <div style={{ fontSize: 13, color: 'var(--pg-danger)', fontWeight: 800, marginBottom: 16, textAlign: 'center', background: 'rgba(var(--pg-danger-rgb), 0.1)', padding: 12, borderRadius: 12 }}>{erro}</div>}
 
         {longeDaLoja && (
-          <div role="status" style={{ marginBottom: 12, padding: 14, borderRadius: 16, border: '1px solid #fca5a5', background: '#fef2f2', color: '#991b1b' }}>
+          <div role="status" style={{ marginBottom: 12, padding: 14, borderRadius: 16, border: '1px solid var(--pg-danger)', background: 'var(--pg-danger-bg)', color: 'var(--pg-danger)' }}>
             <div style={{ fontSize: 13, fontWeight: 900 }}>Muito longe para pedir aqui</div>
             <div style={{ marginTop: 4, fontSize: 12, lineHeight: 1.45, fontWeight: 650 }}>
               Você está a {checagemAntecipada.distanciaKm!.toFixed(1)} km desta loja.
@@ -1642,7 +1642,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
             </div>
           </div>
         )}
-        <motion.button whileTap={{ scale: 0.96 }} onClick={handleConfirm} disabled={confirming || longeDaLoja} style={{ width: '100%', background: confirming ? '#22c55e' : 'linear-gradient(135deg, #0ea5e9, #22c55e)', border: 'none', borderRadius: 20, padding: '20px', color: '#fff', fontSize: 18, fontWeight: 900, cursor: confirming ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, boxShadow: confirming ? '0 0 20px rgba(34,197,94,0.6)' : '0 10px 30px rgba(14,165,233,0.4)', transition: 'all 0.3s' }}>
+        <motion.button whileTap={{ scale: 0.96 }} onClick={handleConfirm} disabled={confirming || longeDaLoja} style={{ width: '100%', background: confirming ? '#22c55e' : 'linear-gradient(135deg, #0ea5e9, #22c55e)', border: 'none', borderRadius: 20, padding: '20px', color: 'var(--pg-on-brand)', fontSize: 18, fontWeight: 900, cursor: confirming ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, boxShadow: confirming ? '0 0 20px rgba(34,197,94,0.6)' : '0 10px 30px rgba(var(--pg-ocean-rgb), 0.4)', transition: 'all 0.3s' }}>
           {confirming ? <><Check size={24} /> {isPagamentoOnline(pagamento) ? 'Preparando pagamento...' : 'Pedido Enviado!'}</> : <><Send size={20} /> Fechar Pedido · R$ {dinheiro(total)}</>}
         </motion.button>
       </motion.div>
@@ -1652,8 +1652,8 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
 
 const darkInput: React.CSSProperties = {
   width: '100%', padding: '14px 16px', borderRadius: 16,
-  border: '1px solid rgba(0,0,0,0.08)', fontSize: 16, outline: 'none',
-  color: '#0f172a', background: '#ffffff', boxSizing: 'border-box',
+  border: '1px solid var(--pg-line)', fontSize: 16, outline: 'none',
+  color: 'var(--pg-ink)', background: 'var(--pg-surface)', boxSizing: 'border-box',
 }
 
 /* ─── PÁGINA PRINCIPAL ──────────────────────────────────── */
@@ -1675,50 +1675,50 @@ function LojaCard({ v, index, onOpen }: { v: Vendedor; index: number; onOpen: ()
       transition={{ delay: Math.min(index * 0.06, 0.4), type: 'spring', damping: 22, stiffness: 260 }}
       whileTap={{ scale: 0.97 }}
       onClick={onOpen}
-      style={{ width: '100%', textAlign: 'left', background: '#ffffff', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 26, overflow: 'hidden', cursor: 'pointer', padding: 0, boxShadow: '0 10px 30px rgba(15,23,42,0.07)' }}
+      style={{ width: '100%', textAlign: 'left', background: 'var(--pg-surface)', border: '1px solid var(--pg-line)', borderRadius: 26, overflow: 'hidden', cursor: 'pointer', padding: 0, boxShadow: '0 10px 30px rgba(15,23,42,0.07)' }}
     >
       <div style={{ position: 'relative', height: 132 }}>
         <img src={v.image} alt={v.nome} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: v.aberto ? 'none' : 'grayscale(0.9) brightness(0.9)' }} />
-        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(255,255,255,0.95), transparent 55%)' }} />
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(var(--pg-surface-rgb), 0.95), transparent 55%)' }} />
         {/* Badge aberto/fechado com horário */}
-        <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', alignItems: 'center', gap: 6, background: !v.localizacaoConfirmada ? 'rgba(245,158,11,0.96)' : v.aberto ? 'rgba(34,197,94,0.95)' : 'rgba(100,116,139,0.95)', color: '#fff', borderRadius: 999, padding: '6px 12px', fontSize: 11, fontWeight: 900, boxShadow: '0 6px 16px rgba(0,0,0,0.18)' }}>
+        <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', alignItems: 'center', gap: 6, background: !v.localizacaoConfirmada ? 'rgba(245,158,11,0.96)' : v.aberto ? 'rgba(34,197,94,0.95)' : 'rgba(100,116,139,0.95)', color: 'var(--pg-on-brand)', borderRadius: 999, padding: '6px 12px', fontSize: 11, fontWeight: 900, boxShadow: '0 6px 16px rgba(0,0,0,0.18)' }}>
           {!v.localizacaoConfirmada ? <MapPin size={12} /> : <Clock size={12} />}
           {!v.localizacaoConfirmada ? 'Local em ajuste' : labelHorario(v.aberto, v.horarioAbre, v.horarioFecha)}
         </div>
         {(temPromocao || rapido) && (
-          <div style={{ position: 'absolute', top: 12, left: 12, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.96)', color: temPromocao ? '#16a34a' : '#0284c7', borderRadius: 999, padding: '6px 11px', fontSize: 11, fontWeight: 900, boxShadow: '0 6px 16px rgba(0,0,0,0.12)' }}>
+          <div style={{ position: 'absolute', top: 12, left: 12, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(var(--pg-surface-rgb), 0.96)', color: temPromocao ? 'var(--pg-success)' : 'var(--pg-ocean-dark)', borderRadius: 999, padding: '6px 11px', fontSize: 11, fontWeight: 900, boxShadow: 'var(--pg-shadow)' }}>
             {temPromocao ? <TicketPercent size={12} /> : <Zap size={12} />} {temPromocao ? 'Promo ativa' : 'Rápida'}
           </div>
         )}
-        <div style={{ position: 'absolute', left: 16, bottom: -22, width: 56, height: 56, overflow: 'hidden', borderRadius: 18, background: v.gradiente, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, border: '3px solid #ffffff', boxShadow: '0 8px 20px rgba(14,165,233,0.35)' }}>
+        <div style={{ position: 'absolute', left: 16, bottom: -22, width: 56, height: 56, overflow: 'hidden', borderRadius: 18, background: v.gradiente, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, border: '3px solid var(--pg-surface)', boxShadow: '0 8px 20px rgba(var(--pg-ocean-rgb), 0.35)' }}>
           {v.avatar ? <img src={v.avatar} alt={v.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : v.emoji}
         </div>
       </div>
       <div style={{ padding: '30px 16px 16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-          <div style={{ fontSize: 17, fontWeight: 900, color: '#0f172a', letterSpacing: -0.3 }}>{v.nome}</div>
+          <div style={{ fontSize: 17, fontWeight: 900, color: 'var(--pg-ink)', letterSpacing: -0.3 }}>{v.nome}</div>
           {v.tipo === 'restaurante'
-            ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 900, color: '#ea580c', background: 'rgba(249,115,22,0.1)', border: '1px solid rgba(249,115,22,0.25)', borderRadius: 999, padding: '4px 10px', textTransform: 'uppercase', letterSpacing: 0.5 }}><UtensilsCrossed size={11} /> Restaurante</span>
-            : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 900, color: '#16a34a', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)', borderRadius: 999, padding: '4px 10px', textTransform: 'uppercase', letterSpacing: 0.5 }}><Umbrella size={11} /> Ambulante</span>}
+            ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 900, color: 'var(--pg-warning)', background: 'rgba(var(--pg-warning-rgb), 0.1)', border: '1px solid rgba(var(--pg-warning-rgb), 0.25)', borderRadius: 999, padding: '4px 10px', textTransform: 'uppercase', letterSpacing: 0.5 }}><UtensilsCrossed size={11} /> Restaurante</span>
+            : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 900, color: 'var(--pg-success)', background: 'rgba(var(--pg-success-rgb), 0.1)', border: '1px solid rgba(var(--pg-success-rgb), 0.25)', borderRadius: 999, padding: '4px 10px', textTransform: 'uppercase', letterSpacing: 0.5 }}><Umbrella size={11} /> Ambulante</span>}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 12.5, color: '#64748b', fontWeight: 600 }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#b45309', fontWeight: 800 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 12.5, color: 'var(--pg-muted)', fontWeight: 600 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--pg-warning)', fontWeight: 800 }}>
             <Star size={13} fill="#fbbf24" color="#fbbf24" /> {v.avaliacao > 0 ? v.avaliacao.toFixed(1) : 'Novo'}
           </span>
-          <span style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />
+          <span style={{ width: 3, height: 3, borderRadius: '50%', background: 'var(--pg-line)' }} />
           <span>{v.categoria}</span>
-          <span style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }} />
+          <span style={{ width: 3, height: 3, borderRadius: '50%', background: 'var(--pg-line)' }} />
           <span>{v.tempo}</span>
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 12 }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#ecfdf5', color: '#15803d', border: '1px solid #bbf7d0', borderRadius: 999, padding: '5px 9px', fontSize: 11, fontWeight: 900 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--pg-success-bg)', color: 'var(--pg-success)', border: '1px solid var(--pg-success)', borderRadius: 999, padding: '5px 9px', fontSize: 11, fontWeight: 900 }}>
             <CreditCard size={11} /> Pix/cartão no app
           </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#eff6ff', color: '#0284c7', border: '1px solid #bfdbfe', borderRadius: 999, padding: '5px 9px', fontSize: 11, fontWeight: 900 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--pg-brand-soft)', color: 'var(--pg-ocean-dark)', border: '1px solid var(--pg-line)', borderRadius: 999, padding: '5px 9px', fontSize: 11, fontWeight: 900 }}>
             <TicketPercent size={11} /> BEMVINDO20
           </span>
         </div>
-        <div style={{ marginTop: 10, fontSize: 12, fontWeight: 800, color: !v.localizacaoConfirmada ? '#d97706' : v.aberto ? '#0ea5e9' : '#94a3b8' }}>
+        <div style={{ marginTop: 10, fontSize: 12, fontWeight: 800, color: !v.localizacaoConfirmada ? 'var(--pg-warning)' : v.aberto ? 'var(--pg-ocean-dark)' : 'var(--pg-faint)' }}>
           {!v.localizacaoConfirmada
             ? 'Localizacao sendo configurada - cardapio disponivel'
             : v.aberto ? `Ver cardápio · ${v.produtos.length} ite${v.produtos.length === 1 ? 'm' : 'ns'} →` : 'Loja fechada — toque pra espiar o cardápio'}
@@ -1781,12 +1781,12 @@ function LojasList({ vendedores, loading, tipoInicial, foraDaArea, modoRevisao, 
         <div style={{ position: 'absolute', top: -60, right: -40, width: 190, height: 190, borderRadius: '50%', background: 'rgba(255,255,255,0.14)', filter: 'blur(2px)' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button aria-label="Voltar" onClick={() => navigate('/')} style={{ width: 42, height: 42, borderRadius: 14, background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-            <ArrowLeft size={19} color="#fff" />
+            <ArrowLeft size={19} color="var(--pg-on-brand)" />
           </button>
           <div>
             <span className="pg-eyebrow" style={{ color: '#c3e8df' }}>SABORES DA PRAIA</span>
-            <motion.h1 initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ fontSize: 27, fontWeight: 850, color: '#fff', letterSpacing: -0.8, margin: '3px 0 0' }}>O que vai ser hoje?</motion.h1>
-            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }} style={{ fontSize: 13, color: 'rgba(255,255,255,0.9)', fontWeight: 600, margin: '4px 0 0' }}>
+            <motion.h1 initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ fontSize: 27, fontWeight: 850, color: 'var(--pg-on-brand)', letterSpacing: -0.8, margin: '3px 0 0' }}>O que vai ser hoje?</motion.h1>
+            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }} style={{ fontSize: 13, color: 'rgba(var(--pg-on-brand-rgb), 0.9)', fontWeight: 600, margin: '4px 0 0' }}>
               {loading ? 'Procurando lojas na areia…' : `${abertas} loja${abertas === 1 ? '' : 's'} aberta${abertas === 1 ? '' : 's'} agora`}
             </motion.p>
           </div>
@@ -1795,32 +1795,32 @@ function LojasList({ vendedores, loading, tipoInicial, foraDaArea, modoRevisao, 
 
       {/* Busca flutuante */}
       <div style={{ padding: '0 20px', marginTop: -26, position: 'relative', zIndex: 5 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#ffffff', borderRadius: 18, padding: '14px 16px', border: '1px solid rgba(0,0,0,0.06)', boxShadow: '0 14px 34px rgba(15,23,42,0.12)' }}>
-          <Search size={18} color="#94a3b8" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--pg-surface)', borderRadius: 18, padding: '14px 16px', border: '1px solid var(--pg-line)', boxShadow: '0 14px 34px rgba(15,23,42,0.12)' }}>
+          <Search size={18} color="var(--pg-faint)" />
           <input
             value={busca}
             onChange={e => setBusca(e.target.value)}
             placeholder="Buscar loja, comida, bebida…"
             aria-label="Buscar loja, comida ou bebida"
-            style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', fontSize: 15, fontWeight: 600, color: '#0f172a', background: 'transparent' }}
+            style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', fontSize: 15, fontWeight: 600, color: 'var(--pg-ink)', background: 'transparent' }}
           />
-          {busca && <button aria-label="Limpar" onClick={() => setBusca('')} style={{ border: 'none', background: '#f1f5f9', borderRadius: 10, width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={14} color="#64748b" /></button>}
+          {busca && <button aria-label="Limpar" onClick={() => setBusca('')} style={{ border: 'none', background: 'var(--pg-surface-alt)', borderRadius: 10, width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={14} color="var(--pg-muted)" /></button>}
         </div>
       </div>
 
       {regiaoSemVendedor && (
-        <div role="status" style={{ margin: '14px 20px 0', padding: 14, borderRadius: 18, border: '1px solid #bae6fd', background: '#f0f9ff', color: '#075985' }}>
+        <div role="status" style={{ margin: '14px 20px 0', padding: 14, borderRadius: 18, border: '1px solid var(--pg-line)', background: 'var(--pg-brand-soft)', color: 'var(--pg-ocean-dark)' }}>
           <div style={{ fontSize: 13, fontWeight: 900 }}>Ainda não atendemos {cidade}</div>
           <div style={{ marginTop: 4, fontSize: 12, lineHeight: 1.45, fontWeight: 650 }}>
             Estamos começando pela Baixada Santista. Você pode explorar também as outras regiões.
           </div>
-          <button type="button" onClick={onExplorarArea} style={{ marginTop: 10, width: '100%', border: 0, borderRadius: 13, padding: '10px 12px', background: '#0ea5e9', color: '#fff', fontSize: 12, fontWeight: 900, cursor: 'pointer' }}>
+          <button type="button" onClick={onExplorarArea} style={{ marginTop: 10, width: '100%', border: 0, borderRadius: 13, padding: '10px 12px', background: '#0ea5e9', color: 'var(--pg-on-brand)', fontSize: 12, fontWeight: 900, cursor: 'pointer' }}>
             Ver Praia Grande
           </button>
         </div>
       )}
       {(foraDaArea || modoRevisao) && (
-        <div role="status" style={{ margin: '14px 20px 0', padding: 14, borderRadius: 18, border: `1px solid ${modoRevisao ? '#c4b5fd' : '#fde68a'}`, background: modoRevisao ? '#f5f3ff' : '#fffbeb', color: modoRevisao ? '#6d28d9' : '#92400e' }}>
+        <div role="status" style={{ margin: '14px 20px 0', padding: 14, borderRadius: 18, border: `1px solid ${modoRevisao ? 'var(--pg-line)' : 'var(--pg-warning)'}`, background: modoRevisao ? 'var(--pg-brand-soft)' : 'var(--pg-warning-bg)', color: modoRevisao ? 'var(--pg-ocean-dark)' : 'var(--pg-warning)' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
             <MapPin size={18} style={{ flexShrink: 0, marginTop: 1 }} />
             <div style={{ flex: 1 }}>
@@ -1833,7 +1833,7 @@ function LojasList({ vendedores, loading, tipoInicial, foraDaArea, modoRevisao, 
             </div>
           </div>
           {foraDaArea && (
-            <button type="button" onClick={onExplorarArea} style={{ marginTop: 10, width: '100%', border: 0, borderRadius: 13, padding: '10px 12px', background: '#0ea5e9', color: '#fff', fontSize: 12, fontWeight: 900, cursor: 'pointer' }}>
+            <button type="button" onClick={onExplorarArea} style={{ marginTop: 10, width: '100%', border: 0, borderRadius: 13, padding: '10px 12px', background: '#0ea5e9', color: 'var(--pg-on-brand)', fontSize: 12, fontWeight: 900, cursor: 'pointer' }}>
               Explorar Praia Grande
             </button>
           )}
@@ -1845,9 +1845,9 @@ function LojasList({ vendedores, loading, tipoInicial, foraDaArea, modoRevisao, 
         <motion.button
           whileTap={{ scale: 0.98 }}
           onClick={() => navigate('/?painel=cupons')}
-          style={{ width: '100%', textAlign: 'left', border: '1px solid #cde5db', cursor: 'pointer', borderRadius: 18, padding: 0, background: '#eaf5ef', overflow: 'hidden' }}
+          style={{ width: '100%', textAlign: 'left', border: '1px solid var(--pg-line)', cursor: 'pointer', borderRadius: 18, padding: 0, background: 'var(--pg-brand-soft)', overflow: 'hidden' }}
         >
-          <div style={{ padding: 14, display: 'flex', alignItems: 'center', gap: 12, color: '#155e52', position: 'relative' }}>
+          <div style={{ padding: 14, display: 'flex', alignItems: 'center', gap: 12, color: 'var(--pg-ocean-dark)', position: 'relative' }}>
             <div style={{ width: 46, height: 46, borderRadius: 16, background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.26)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <TicketPercent size={23} />
             </div>
@@ -1881,13 +1881,13 @@ function LojasList({ vendedores, loading, tipoInicial, foraDaArea, modoRevisao, 
       {/* Lista */}
       <div style={{ padding: '12px 20px 0', display: 'flex', flexDirection: 'column', gap: 16 }}>
         {loading && vendedores.length === 0 && [0, 1, 2].map(i => (
-          <div key={i} style={{ height: 210, borderRadius: 26, background: 'linear-gradient(100deg, #f1f5f9 40%, #ffffff 50%, #f1f5f9 60%)', backgroundSize: '200% 100%', animation: 'shimmer 1.4s linear infinite' }} />
+          <div key={i} style={{ height: 210, borderRadius: 26, background: 'linear-gradient(100deg, var(--pg-surface-alt) 40%, var(--pg-surface) 50%, var(--pg-surface-alt) 60%)', backgroundSize: '200% 100%', animation: 'shimmer 1.4s linear infinite' }} />
         ))}
         {!loading && !catalogError && filtrados.length === 0 && (
-          <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} style={{ textAlign: 'center', padding: '56px 24px', background: '#ffffff', borderRadius: 26, border: '1px dashed rgba(0,0,0,0.12)' }}>
+          <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} style={{ textAlign: 'center', padding: '56px 24px', background: 'var(--pg-surface)', borderRadius: 26, border: '1px dashed var(--pg-line)' }}>
             <div style={{ fontSize: 52, marginBottom: 12 }}>🏖️</div>
-            <div style={{ fontSize: 17, fontWeight: 900, color: '#0f172a' }}>{busca ? 'Nada com esse nome por aqui' : 'Nenhuma loja disponível agora'}</div>
-            <p style={{ fontSize: 13.5, color: '#64748b', marginTop: 8, fontWeight: 500 }}>
+            <div style={{ fontSize: 17, fontWeight: 900, color: 'var(--pg-ink)' }}>{busca ? 'Nada com esse nome por aqui' : 'Nenhuma loja disponível agora'}</div>
+            <p style={{ fontSize: 13.5, color: 'var(--pg-muted)', marginTop: 8, fontWeight: 500 }}>
               {busca ? 'Tenta buscar outra coisa gostosa 😋' : 'Assim que um ambulante ou restaurante abrir, ele aparece aqui.'}
             </p>
           </motion.div>
@@ -2009,20 +2009,20 @@ export default function PedirPage() {
 
       <div style={{ position: 'relative', height: 260 }}>
         <img src={vendedor.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={vendedor.nome} />
-        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(255,255,255,0.4), transparent 40%, rgba(255,255,255,1) 98%)' }} />
-        <button aria-label="Voltar" onClick={() => navigate('/pedir')} style={{ position: 'absolute', top: 20, left: 20, width: 44, height: 44, borderRadius: 16, background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(10px)', border: '1px solid rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-          <ArrowLeft size={20} color="#0f172a" />
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(var(--pg-surface-rgb), 0.4), transparent 40%, rgba(var(--pg-surface-rgb), 1) 98%)' }} />
+        <button aria-label="Voltar" onClick={() => navigate('/pedir')} style={{ position: 'absolute', top: 20, left: 20, width: 44, height: 44, borderRadius: 16, background: 'rgba(var(--pg-surface-rgb), 0.92)', backdropFilter: 'blur(10px)', border: '1px solid var(--pg-line)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          <ArrowLeft size={20} color="var(--pg-ink)" />
         </button>
-        <button aria-label="Favoritar" onClick={() => toggleFavorito(vendedor.id)} style={{ position: 'absolute', top: 20, right: 20, width: 44, height: 44, borderRadius: 16, background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(10px)', border: '1px solid rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-          <Heart size={20} color={isFav ? '#f43f5e' : '#94a3b8'} fill={isFav ? '#f43f5e' : 'none'} />
+        <button aria-label="Favoritar" onClick={() => toggleFavorito(vendedor.id)} style={{ position: 'absolute', top: 20, right: 20, width: 44, height: 44, borderRadius: 16, background: 'rgba(var(--pg-surface-rgb), 0.92)', backdropFilter: 'blur(10px)', border: '1px solid var(--pg-line)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          <Heart size={20} color={isFav ? '#f43f5e' : 'var(--pg-faint)'} fill={isFav ? '#f43f5e' : 'none'} />
         </button>
       </div>
 
       <div style={{ padding: '0 24px', marginTop: -80, position: 'relative', zIndex: 10 }}>
-        <div style={{ background: '#f8fafc', borderRadius: 32, padding: '24px', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 20px 40px rgba(0,0,0,0.4)' }}>
+        <div style={{ background: 'var(--pg-surface-alt)', borderRadius: 32, padding: '24px', border: '1px solid var(--pg-line)', boxShadow: '0 20px 40px rgba(0,0,0,0.4)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <h1 style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', letterSpacing: -0.5 }}>{vendedor.nome}</h1>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: !vendedor.localizacaoConfirmada ? '#fffbeb' : vendedor.aberto ? 'rgba(34,197,94,0.15)' : 'rgba(100,116,139,0.14)', color: !vendedor.localizacaoConfirmada ? '#b45309' : vendedor.aberto ? '#16a34a' : '#64748b', padding: '6px 14px', borderRadius: 14, fontSize: 11.5, fontWeight: 900, border: `1px solid ${!vendedor.localizacaoConfirmada ? '#fde68a' : vendedor.aberto ? 'rgba(34,197,94,0.3)' : 'rgba(100,116,139,0.25)'}`, whiteSpace: 'nowrap' }}>
+            <h1 style={{ fontSize: 28, fontWeight: 900, color: 'var(--pg-ink)', letterSpacing: -0.5 }}>{vendedor.nome}</h1>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: !vendedor.localizacaoConfirmada ? 'var(--pg-warning-bg)' : vendedor.aberto ? 'rgba(var(--pg-success-rgb), 0.15)' : 'rgba(var(--pg-muted-rgb), 0.14)', color: !vendedor.localizacaoConfirmada ? 'var(--pg-warning)' : vendedor.aberto ? 'var(--pg-success)' : 'var(--pg-muted)', padding: '6px 14px', borderRadius: 14, fontSize: 11.5, fontWeight: 900, border: `1px solid ${!vendedor.localizacaoConfirmada ? 'var(--pg-warning)' : vendedor.aberto ? 'rgba(var(--pg-success-rgb), 0.3)' : 'rgba(var(--pg-muted-rgb), 0.25)'}`, whiteSpace: 'nowrap' }}>
               {!vendedor.localizacaoConfirmada ? <MapPin size={13} /> : <Clock size={13} />}
               {!vendedor.localizacaoConfirmada ? 'Local em ajuste' : labelHorario(vendedor.aberto, vendedor.horarioAbre, vendedor.horarioFecha)}
             </div>
@@ -2031,41 +2031,41 @@ export default function PedirPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 800 }}>
               <Star size={16} fill="#fbbf24" color="#fbbf24" style={{ filter: 'drop-shadow(0 0 4px rgba(251,191,36,0.6))' }} /> {vendedor.avaliacao > 0 ? vendedor.avaliacao.toFixed(1) : 'Novo'}
             </div>
-            <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#475569' }} />
-            <div style={{ fontSize: 14, color: '#64748b', fontWeight: 600 }}>{vendedor.categoria}</div>
-            <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#475569' }} />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, color: '#38bdf8', fontWeight: 700 }}>
+            <div style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--pg-muted)' }} />
+            <div style={{ fontSize: 14, color: 'var(--pg-muted)', fontWeight: 600 }}>{vendedor.categoria}</div>
+            <div style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--pg-muted)' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, color: 'var(--pg-ocean-dark)', fontWeight: 700 }}>
               <MapPin size={14} /> {vendedor.distancia}
             </div>
           </div>
           {/* Endereço da loja — é aqui que o cliente decide se vale pedir, então
               precisa saber ONDE fica, não só "Perto de você". */}
           {vendedor.endereco && (
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginTop: 10, fontSize: 13, color: '#64748b', fontWeight: 700, lineHeight: 1.4 }}>
-              <MapPin size={14} color="#16a34a" strokeWidth={2.5} style={{ flexShrink: 0, marginTop: 1 }} />
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginTop: 10, fontSize: 13, color: 'var(--pg-muted)', fontWeight: 700, lineHeight: 1.4 }}>
+              <MapPin size={14} color="var(--pg-success)" strokeWidth={2.5} style={{ flexShrink: 0, marginTop: 1 }} />
               <span>{vendedor.endereco}</span>
             </div>
           )}
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 16, background: 'rgba(14,165,233,0.12)', border: '1px solid rgba(14,165,233,0.24)', borderRadius: 14, padding: '8px 16px' }}>
-            <Zap size={14} color="#0ea5e9" className="animate-pulse-neon" style={{ boxShadow: 'none' }} />
-            <span style={{ fontSize: 12, fontWeight: 800, color: '#0284c7' }}>Cupom BEMVINDO20 · 1 uso por conta</span>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 16, background: 'rgba(var(--pg-ocean-rgb), 0.12)', border: '1px solid rgba(var(--pg-ocean-rgb), 0.24)', borderRadius: 14, padding: '8px 16px' }}>
+            <Zap size={14} color="var(--pg-ocean-dark)" className="animate-pulse-neon" style={{ boxShadow: 'none' }} />
+            <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--pg-ocean-dark)' }}>Cupom BEMVINDO20 · 1 uso por conta</span>
           </div>
           {!vendedor.localizacaoConfirmada && (
-            <div role="status" style={{ display: 'flex', alignItems: 'flex-start', gap: 9, marginTop: 14, padding: '11px 13px', borderRadius: 14, border: '1px solid #fde68a', background: '#fffbeb', color: '#92400e' }}>
+            <div role="status" style={{ display: 'flex', alignItems: 'flex-start', gap: 9, marginTop: 14, padding: '11px 13px', borderRadius: 14, border: '1px solid var(--pg-warning)', background: 'var(--pg-warning-bg)', color: 'var(--pg-warning)' }}>
               <MapPin size={17} style={{ flexShrink: 0, marginTop: 1 }} />
               <span style={{ fontSize: 12, lineHeight: 1.45, fontWeight: 750 }}>Este restaurante esta confirmando o ponto fixo. O cardapio fica visivel, mas pedidos e rotas permanecem bloqueados por seguranca.</span>
             </div>
           )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 18 }}>
             {[
-              { icon: <Navigation size={16} color="#0ea5e9" />, title: 'Radar PraiaGo', text: 'GPS, reta ou barraca' },
-              { icon: <Shield size={16} color="#16a34a" />, title: 'Pagamento seguro', text: 'Pix e cartão no app' },
+              { icon: <Navigation size={16} color="var(--pg-ocean-dark)" />, title: 'Radar PraiaGo', text: 'GPS, reta ou barraca' },
+              { icon: <Shield size={16} color="var(--pg-success)" />, title: 'Pagamento seguro', text: 'Pix e cartão no app' },
             ].map(item => (
-              <div key={item.title} style={{ background: '#ffffff', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 18, padding: 12, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                <div style={{ width: 34, height: 34, borderRadius: 12, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{item.icon}</div>
+              <div key={item.title} style={{ background: 'var(--pg-surface)', border: '1px solid var(--pg-line)', borderRadius: 18, padding: 12, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                <div style={{ width: 34, height: 34, borderRadius: 12, background: 'var(--pg-surface-alt)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{item.icon}</div>
                 <div>
-                  <div style={{ fontSize: 12.5, fontWeight: 900, color: '#0f172a' }}>{item.title}</div>
-                  <div style={{ fontSize: 11, fontWeight: 650, color: '#64748b', marginTop: 2, lineHeight: 1.25 }}>{item.text}</div>
+                  <div style={{ fontSize: 12.5, fontWeight: 900, color: 'var(--pg-ink)' }}>{item.title}</div>
+                  <div style={{ fontSize: 11, fontWeight: 650, color: 'var(--pg-muted)', marginTop: 2, lineHeight: 1.25 }}>{item.text}</div>
                 </div>
               </div>
             ))}
@@ -2074,7 +2074,7 @@ export default function PedirPage() {
       </div>
 
       <div style={{ padding: '32px 24px 140px' }}>
-        <h3 style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 10 }}>Cardápio <span style={{ fontSize: 24 }}>🔥</span></h3>
+        <h3 style={{ fontSize: 20, fontWeight: 900, color: 'var(--pg-ink)', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 10 }}>Cardápio <span style={{ fontSize: 24 }}>🔥</span></h3>
         {vendedor.produtos.map(p => {
           const qtd = meuCarrinho[p.id] ?? 0
           const exigeMaioridade = pertenceACategoria(p.categoria, 'bebidas_alcoolicas')
@@ -2090,62 +2090,62 @@ export default function PedirPage() {
             <div key={p.id} style={{ display: 'flex', gap: 20, marginBottom: 32, alignItems: 'center' }}>
               <div style={{ flex: 1 }}>
                 {exigeMaioridade && (
-                  <div style={{ display: 'inline-flex', alignItems: 'center', marginBottom: 8, padding: '4px 8px', borderRadius: 999, background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412', fontSize: 10.5, fontWeight: 950 }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', marginBottom: 8, padding: '4px 8px', borderRadius: 999, background: 'var(--pg-warning-bg)', border: '1px solid var(--pg-warning-bg)', color: 'var(--pg-warning)', fontSize: 10.5, fontWeight: 950 }}>
                     Venda 18+
                   </div>
                 )}
                 {promocaoLabel && (
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#fff7ed', color: '#ea580c', border: '1px solid #fed7aa', borderRadius: 999, padding: '4px 9px', fontSize: 10.5, fontWeight: 950, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.35 }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'var(--pg-warning-bg)', color: 'var(--pg-warning)', border: '1px solid var(--pg-warning-bg)', borderRadius: 999, padding: '4px 9px', fontSize: 10.5, fontWeight: 950, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.35 }}>
                     <TicketPercent size={11} /> {promocaoLabel}
                   </div>
                 )}
                 {esgotado && (
-                  <div style={{ display: 'inline-flex', alignItems: 'center', marginBottom: 8, marginLeft: 6, padding: '4px 9px', borderRadius: 999, background: '#f1f5f9', border: '1px solid #e2e8f0', color: '#64748b', fontSize: 10.5, fontWeight: 950, textTransform: 'uppercase', letterSpacing: 0.35 }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', marginBottom: 8, marginLeft: 6, padding: '4px 9px', borderRadius: 999, background: 'var(--pg-surface-alt)', border: '1px solid var(--pg-line)', color: 'var(--pg-muted)', fontSize: 10.5, fontWeight: 950, textTransform: 'uppercase', letterSpacing: 0.35 }}>
                     Esgotado
                   </div>
                 )}
                 {ultimas && (
-                  <div style={{ display: 'inline-flex', alignItems: 'center', marginBottom: 8, marginLeft: 6, padding: '4px 9px', borderRadius: 999, background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', fontSize: 10.5, fontWeight: 950 }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', marginBottom: 8, marginLeft: 6, padding: '4px 9px', borderRadius: 999, background: 'var(--pg-danger-bg)', border: '1px solid var(--pg-danger)', color: 'var(--pg-danger)', fontSize: 10.5, fontWeight: 950 }}>
                     {p.estoque === 1 ? 'Última unidade' : `Últimas ${p.estoque} unidades`}
                   </div>
                 )}
-                <h4 style={{ fontSize: 17, fontWeight: 800, color: '#0f172a' }}>{p.nome}</h4>
-                <p style={{ fontSize: 14, color: '#64748b', marginTop: 6, lineHeight: 1.5 }}>{p.desc}</p>
+                <h4 style={{ fontSize: 17, fontWeight: 800, color: 'var(--pg-ink)' }}>{p.nome}</h4>
+                <p style={{ fontSize: 14, color: 'var(--pg-muted)', marginTop: 6, lineHeight: 1.5 }}>{p.desc}</p>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 10 }}>
-                  <div style={{ fontSize: 18, fontWeight: 900, color: '#16a34a', textShadow: '0 0 10px rgba(74,222,128,0.16)' }}>R$ {p.preco.toFixed(2).replace('.', ',')}</div>
-                  {precoOriginal && <div style={{ fontSize: 12, fontWeight: 800, color: '#94a3b8', textDecoration: 'line-through' }}>R$ {precoOriginal.toFixed(2).replace('.', ',')}</div>}
+                  <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--pg-success)', textShadow: '0 0 10px rgba(74,222,128,0.16)' }}>R$ {p.preco.toFixed(2).replace('.', ',')}</div>
+                  {precoOriginal && <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--pg-faint)', textDecoration: 'line-through' }}>R$ {precoOriginal.toFixed(2).replace('.', ',')}</div>}
                 </div>
               </div>
               <div style={{ position: 'relative', flexShrink: 0 }}>
-                <div style={{ width: 100, height: 100, borderRadius: 24, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 44, border: '1px solid rgba(0,0,0,0.05)', boxShadow: 'inset 0 4px 20px rgba(0,0,0,0.2)', overflow: 'hidden' }}>{p.foto ? <img src={p.foto} alt={p.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : p.emoji}</div>
-                {promocaoLabel && <div style={{ position: 'absolute', top: -8, right: -8, background: '#ea580c', color: '#fff', borderRadius: 999, padding: '5px 8px', fontSize: 10, fontWeight: 950, boxShadow: '0 8px 18px rgba(234,88,12,0.35)' }}>OFF</div>}
-                <div style={{ position: 'absolute', bottom: -14, left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', background: esgotado ? '#94a3b8' : '#0ea5e9', borderRadius: 16, boxShadow: esgotado ? 'none' : '0 8px 20px rgba(14,165,233,0.4)' }}>
+                <div style={{ width: 100, height: 100, borderRadius: 24, background: 'var(--pg-surface-alt)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 44, border: '1px solid var(--pg-line)', boxShadow: 'inset 0 4px 20px rgba(0,0,0,0.2)', overflow: 'hidden' }}>{p.foto ? <img src={p.foto} alt={p.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : p.emoji}</div>
+                {promocaoLabel && <div style={{ position: 'absolute', top: -8, right: -8, background: '#ea580c', color: 'var(--pg-on-brand)', borderRadius: 999, padding: '5px 8px', fontSize: 10, fontWeight: 950, boxShadow: '0 8px 18px rgba(234,88,12,0.35)' }}>OFF</div>}
+                <div style={{ position: 'absolute', bottom: -14, left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', background: esgotado ? 'var(--pg-faint)' : '#0ea5e9', borderRadius: 16, boxShadow: esgotado ? 'none' : '0 8px 20px rgba(var(--pg-ocean-rgb), 0.4)' }}>
                   {esgotado && qtd === 0 ? (
                     // Sem onClick de proposito: o produto esgotou, o botao vira rotulo.
-                    <span style={{ padding: '8px 16px', color: '#fff', fontWeight: 900, fontSize: 12.5 }}>Esgotado</span>
+                    <span style={{ padding: '8px 16px', color: 'var(--pg-on-brand)', fontWeight: 900, fontSize: 12.5 }}>Esgotado</span>
                   ) : esgotado ? (
                     // Esgotou com o item JA no carrinho: o servidor manda "tire do
                     // carrinho pra fechar o pedido", entao tem que dar pra tirar aqui.
                     // Fica so o "-", sem o "+".
                     <>
-                      <motion.button whileTap={{ scale: 0.9 }} onClick={() => void alterarQuantidade(p, -1)} aria-label={`Tirar um ${p.nome} do carrinho`} style={{ padding: '6px 12px', border: 'none', background: 'none', cursor: 'pointer', color: '#fff', fontWeight: 900, fontSize: 20, lineHeight: 1 }}>−</motion.button>
-                      <span style={{ fontSize: 15, fontWeight: 900, color: '#fff', minWidth: 24, textAlign: 'center' }}>{qtd}</span>
-                      <span style={{ padding: '6px 12px', color: '#fff', fontWeight: 900, fontSize: 12 }}>Esgotado</span>
+                      <motion.button whileTap={{ scale: 0.9 }} onClick={() => void alterarQuantidade(p, -1)} aria-label={`Tirar um ${p.nome} do carrinho`} style={{ padding: '6px 12px', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--pg-on-brand)', fontWeight: 900, fontSize: 20, lineHeight: 1 }}>−</motion.button>
+                      <span style={{ fontSize: 15, fontWeight: 900, color: 'var(--pg-on-brand)', minWidth: 24, textAlign: 'center' }}>{qtd}</span>
+                      <span style={{ padding: '6px 12px', color: 'var(--pg-on-brand)', fontWeight: 900, fontSize: 12 }}>Esgotado</span>
                     </>
                   ) : qtd > 0 ? (
                     <>
-                      <motion.button whileTap={{ scale: 0.9 }} onClick={() => void alterarQuantidade(p, -1)} style={{ padding: '6px 12px', border: 'none', background: 'none', cursor: 'pointer', color: '#fff', fontWeight: 900, fontSize: 20, lineHeight: 1 }}>−</motion.button>
-                      <span style={{ fontSize: 15, fontWeight: 900, color: '#fff', minWidth: 24, textAlign: 'center' }}>{qtd}</span>
+                      <motion.button whileTap={{ scale: 0.9 }} onClick={() => void alterarQuantidade(p, -1)} style={{ padding: '6px 12px', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--pg-on-brand)', fontWeight: 900, fontSize: 20, lineHeight: 1 }}>−</motion.button>
+                      <span style={{ fontSize: 15, fontWeight: 900, color: 'var(--pg-on-brand)', minWidth: 24, textAlign: 'center' }}>{qtd}</span>
                       <motion.button
                         whileTap={{ scale: noLimite ? 1 : 0.9 }}
                         onClick={() => void alterarQuantidade(p, 1)}
                         disabled={noLimite}
                         aria-label={noLimite ? `Sem mais estoque de ${p.nome}` : `Adicionar mais um ${p.nome}`}
-                        style={{ padding: '6px 12px', border: 'none', background: 'none', cursor: noLimite ? 'not-allowed' : 'pointer', color: '#fff', opacity: noLimite ? 0.45 : 1, fontWeight: 900, fontSize: 20, lineHeight: 1 }}
+                        style={{ padding: '6px 12px', border: 'none', background: 'none', cursor: noLimite ? 'not-allowed' : 'pointer', color: 'var(--pg-on-brand)', opacity: noLimite ? 0.45 : 1, fontWeight: 900, fontSize: 20, lineHeight: 1 }}
                       >+</motion.button>
                     </>
                   ) : (
-                    <motion.button whileTap={{ scale: 0.95 }} onClick={() => void alterarQuantidade(p, 1)} style={{ padding: '8px 20px', border: 'none', background: 'none', cursor: 'pointer', color: '#fff', fontWeight: 800, fontSize: 14 }}>Add</motion.button>
+                    <motion.button whileTap={{ scale: 0.95 }} onClick={() => void alterarQuantidade(p, 1)} style={{ padding: '8px 20px', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--pg-on-brand)', fontWeight: 800, fontSize: 14 }}>Add</motion.button>
                   )}
                 </div>
               </div>
@@ -2157,7 +2157,7 @@ export default function PedirPage() {
       <AnimatePresence>
         {totalItens > 0 && (
           <motion.div initial={{ y: 100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 100, opacity: 0 }} style={{ position: 'fixed', bottom: 100, left: 24, right: 24, maxWidth: 400, margin: '0 auto', zIndex: 100 }}>
-            <motion.button whileTap={{ scale: vendedor.aberto && !foraDaArea ? 0.98 : 1 }} disabled={!vendedor.aberto || foraDaArea} onClick={() => { if (vendedor.aberto && !foraDaArea) setStep('checkout') }} style={{ width: '100%', background: vendedor.aberto && !foraDaArea ? 'linear-gradient(135deg, #0ea5e9, #22c55e)' : '#94a3b8', color: '#fff', border: 'none', borderRadius: 28, padding: '22px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: vendedor.aberto && !foraDaArea ? '0 20px 40px rgba(34,197,94,0.4)' : 'none', cursor: vendedor.aberto && !foraDaArea ? 'pointer' : 'not-allowed' }}>
+            <motion.button whileTap={{ scale: vendedor.aberto && !foraDaArea ? 0.98 : 1 }} disabled={!vendedor.aberto || foraDaArea} onClick={() => { if (vendedor.aberto && !foraDaArea) setStep('checkout') }} style={{ width: '100%', background: vendedor.aberto && !foraDaArea ? 'linear-gradient(135deg, #0ea5e9, #22c55e)' : 'var(--pg-faint)', color: 'var(--pg-on-brand)', border: 'none', borderRadius: 28, padding: '22px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: vendedor.aberto && !foraDaArea ? '0 20px 40px rgba(var(--pg-success-rgb), 0.4)' : 'none', cursor: vendedor.aberto && !foraDaArea ? 'pointer' : 'not-allowed' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: 14, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 900 }}>{totalItens}</div>
                 <span style={{ fontSize: 16, fontWeight: 900 }}>{foraDaArea ? 'Fora da área atendida' : !vendedor.localizacaoConfirmada ? 'Localização em configuração' : vendedor.aberto ? 'Finalizar Pedido' : 'Loja fechada agora 😴'}</span>

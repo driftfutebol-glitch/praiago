@@ -75,10 +75,10 @@ export function promptDialog(input: string | Opts): Promise<string | null> {
   return open('prompt', {}, input) as Promise<string | null>
 }
 
-const ACCENT = 'linear-gradient(135deg,#0ea5e9,#22c55e)'
-const CARD_BG = '#ffffff'
-const TITLE = '#0f172a'
-const TEXT = '#475569'
+const ACCENT = 'var(--pg-brand-gradient)'
+const CARD_BG = 'var(--pg-surface)'
+const TITLE = 'var(--pg-ink)'
+const TEXT = 'var(--pg-muted)'
 
 export function DialogHost() {
   const [dlg, setDlg] = useState<DialogState | null>(current)
@@ -106,8 +106,8 @@ export function DialogHost() {
   const danger = dlg?.tone === 'danger'
   const success = dlg?.tone === 'success'
   const Icon = danger ? AlertTriangle : success ? CheckCircle2 : Info
-  const iconBg = danger ? 'rgba(239,68,68,0.12)' : success ? 'rgba(34,197,94,0.12)' : 'rgba(14,165,233,0.12)'
-  const iconColor = danger ? '#ef4444' : success ? '#16a34a' : '#0ea5e9'
+  const iconBg = danger ? 'var(--pg-danger-bg)' : success ? 'var(--pg-success-bg)' : 'var(--pg-surface-alt)'
+  const iconColor = danger ? 'var(--pg-danger)' : success ? 'var(--pg-success)' : 'var(--pg-ocean)'
   const confirmBg = danger ? 'linear-gradient(135deg,#ef4444,#dc2626)' : ACCENT
 
   return (
@@ -129,8 +129,8 @@ export function DialogHost() {
             onClick={e => e.stopPropagation()}
             style={{ width: '100%', maxWidth: 400, background: CARD_BG, borderRadius: 26, padding: 26, boxShadow: '0 30px 70px rgba(15,23,42,0.35)', position: 'relative' }}
           >
-            <button aria-label="Fechar" onClick={cancelar} style={{ position: 'absolute', top: 16, right: 16, width: 32, height: 32, border: 0, borderRadius: 10, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-              <X size={16} color="#94a3b8" />
+            <button aria-label="Fechar" onClick={cancelar} style={{ position: 'absolute', top: 16, right: 16, width: 32, height: 32, border: 0, borderRadius: 10, background: 'var(--pg-surface-alt)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+              <X size={16} color="var(--pg-faint)" />
             </button>
 
             <div style={{ width: 52, height: 52, borderRadius: 18, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
@@ -148,17 +148,17 @@ export function DialogHost() {
                 onChange={e => setValor(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') confirmar(); if (e.key === 'Escape') cancelar() }}
                 placeholder={dlg.placeholder}
-                style={{ width: '100%', boxSizing: 'border-box', marginTop: 16, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 14, padding: '13px 14px', fontSize: 15, fontWeight: 600, color: TITLE, outline: 'none' }}
+                style={{ width: '100%', boxSizing: 'border-box', marginTop: 16, background: 'var(--pg-input)', border: '1px solid var(--pg-line)', borderRadius: 14, padding: '13px 14px', fontSize: 15, fontWeight: 600, color: TITLE, outline: 'none' }}
               />
             )}
 
             <div style={{ display: 'flex', gap: 10, marginTop: 22 }}>
               {dlg.kind !== 'alert' && (
-                <button onClick={cancelar} style={{ flex: 1, border: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569', borderRadius: 14, padding: 14, fontSize: 15, fontWeight: 800, cursor: 'pointer' }}>
+                <button onClick={cancelar} style={{ flex: 1, border: '1px solid var(--pg-line)', background: 'var(--pg-input)', color: 'var(--pg-muted)', borderRadius: 14, padding: 14, fontSize: 15, fontWeight: 800, cursor: 'pointer' }}>
                   {dlg.cancelText}
                 </button>
               )}
-              <button onClick={confirmar} style={{ flex: dlg.kind === 'alert' ? undefined : 1.4, width: dlg.kind === 'alert' ? '100%' : undefined, border: 0, background: confirmBg, color: '#fff', borderRadius: 14, padding: 14, fontSize: 15, fontWeight: 900, cursor: 'pointer', boxShadow: danger ? '0 8px 22px rgba(239,68,68,0.3)' : '0 8px 22px rgba(34,197,94,0.28)' }}>
+              <button onClick={confirmar} style={{ flex: dlg.kind === 'alert' ? undefined : 1.4, width: dlg.kind === 'alert' ? '100%' : undefined, border: 0, background: confirmBg, color: 'var(--pg-on-brand)', borderRadius: 14, padding: 14, fontSize: 15, fontWeight: 900, cursor: 'pointer', boxShadow: danger ? '0 8px 22px rgba(239,68,68,0.3)' : '0 8px 22px rgba(34,197,94,0.28)' }}>
                 {dlg.confirmText}
               </button>
             </div>

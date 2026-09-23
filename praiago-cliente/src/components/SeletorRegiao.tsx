@@ -71,27 +71,27 @@ export default function SeletorRegiao({
             role="dialog"
             aria-label="Selecionar região"
             style={{
-              width: '100%', maxWidth: 520, background: '#fff',
+              width: '100%', maxWidth: 520, background: 'var(--pg-surface)',
               borderRadius: '24px 24px 0 0', padding: '20px 18px 26px',
               maxHeight: '82vh', overflowY: 'auto',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                <MapPin size={19} color="#0891b2" />
-                <span style={{ fontSize: 17, fontWeight: 900, color: '#0f172a' }}>Selecionar região</span>
+                <MapPin size={19} color="var(--pg-ocean)" />
+                <span style={{ fontSize: 17, fontWeight: 900, color: 'var(--pg-ink)' }}>Selecionar região</span>
               </div>
               <button
                 type="button"
                 onClick={onFechar}
                 aria-label="Fechar"
-                style={{ border: 0, background: '#f1f5f9', borderRadius: 999, width: 32, height: 32, cursor: 'pointer', display: 'grid', placeItems: 'center' }}
+                style={{ border: 0, background: 'var(--pg-surface-alt)', borderRadius: 999, width: 32, height: 32, cursor: 'pointer', display: 'grid', placeItems: 'center' }}
               >
-                <X size={16} color="#475569" />
+                <X size={16} color="var(--pg-muted)" />
               </button>
             </div>
 
-            <p style={{ margin: '0 0 16px', fontSize: 12.5, lineHeight: 1.5, fontWeight: 600, color: '#64748b' }}>
+            <p style={{ margin: '0 0 16px', fontSize: 12.5, lineHeight: 1.5, fontWeight: 600, color: 'var(--pg-muted)' }}>
               Você pode ver qualquer região de onde estiver. Para fechar um pedido
               é preciso estar a até {RAIO_PEDIDO_KM} km da loja escolhida.
             </p>
@@ -110,28 +110,28 @@ export default function SeletorRegiao({
                     onClick={() => { onEscolher(cidade, CENTROS_CIDADES[cidade]); onFechar() }}
                     style={{
                       width: '100%', textAlign: 'left', cursor: 'pointer',
-                      border: `1.5px solid ${atual ? '#0891b2' : vazia ? '#e2e8f0' : '#bae6fd'}`,
-                      background: atual ? '#ecfeff' : vazia ? '#f8fafc' : '#fff',
+                      border: `1.5px solid ${atual ? 'var(--pg-ocean)' : 'var(--pg-line)'}`,
+                      background: atual ? 'var(--pg-brand-soft)' : vazia ? 'var(--pg-input)' : 'var(--pg-surface)',
                       borderRadius: 16, padding: '13px 15px',
                       display: 'flex', alignItems: 'center', gap: 12,
                     }}
                   >
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                        <span style={{ fontSize: 14.5, fontWeight: 900, color: vazia ? '#64748b' : '#0f172a' }}>{cidade}</span>
-                        {atual && <Check size={14} color="#0891b2" />}
+                        <span style={{ fontSize: 14.5, fontWeight: 900, color: vazia ? 'var(--pg-muted)' : 'var(--pg-ink)' }}>{cidade}</span>
+                        {atual && <Check size={14} color="var(--pg-ocean)" />}
                       </div>
 
                       {vazia ? (
-                        <div style={{ marginTop: 3, fontSize: 11.5, fontWeight: 650, color: '#94a3b8' }}>
+                        <div style={{ marginTop: 3, fontSize: 11.5, fontWeight: 650, color: 'var(--pg-faint)' }}>
                           Nenhum vendedor cadastrado ainda — em breve
                         </div>
                       ) : (
                         <div style={{ marginTop: 5, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5, fontWeight: 800, color: '#059669' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5, fontWeight: 800, color: 'var(--pg-success)' }}>
                             <Umbrella size={12} /> {c.ambulantes} {c.ambulantes === 1 ? 'ambulante' : 'ambulantes'}
                           </span>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5, fontWeight: 800, color: '#ea580c' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5, fontWeight: 800, color: 'var(--pg-warning)' }}>
                             <Store size={12} /> {c.restaurantes} {c.restaurantes === 1 ? 'restaurante' : 'restaurantes'}
                           </span>
                         </div>
@@ -142,8 +142,8 @@ export default function SeletorRegiao({
                       style={{
                         flexShrink: 0, fontSize: 10, fontWeight: 900, letterSpacing: 0.4,
                         padding: '5px 10px', borderRadius: 999,
-                        background: vazia ? '#f1f5f9' : '#dcfce7',
-                        color: vazia ? '#94a3b8' : '#15803d',
+                        background: vazia ? 'var(--pg-surface-alt)' : 'var(--pg-success-bg)',
+                        color: vazia ? 'var(--pg-faint)' : 'var(--pg-success)',
                       }}
                     >
                       {vazia ? 'SEM VENDEDOR' : `${total} ${total === 1 ? 'DISPONÍVEL' : 'DISPONÍVEIS'}`}
@@ -153,7 +153,7 @@ export default function SeletorRegiao({
               })}
             </div>
 
-            <p style={{ margin: '16px 0 0', fontSize: 11.5, lineHeight: 1.5, fontWeight: 600, color: '#94a3b8' }}>
+            <p style={{ margin: '16px 0 0', fontSize: 11.5, lineHeight: 1.5, fontWeight: 600, color: 'var(--pg-faint)' }}>
               Contagem em tempo real do catálogo. O PraiaGo está começando pela
               Baixada Santista, SP — Brasil.
             </p>

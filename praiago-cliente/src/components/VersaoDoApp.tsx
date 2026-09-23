@@ -27,7 +27,7 @@ export default function VersaoDoApp() {
   return (
     <div style={{
       marginTop: 18, marginBottom: 8, textAlign: 'center',
-      color: '#94a3b8', fontSize: 11, fontWeight: 700, letterSpacing: 0.2,
+      color: 'var(--pg-faint)', fontSize: 11, fontWeight: 700, letterSpacing: 0.2,
     }}>
       PraiaGo · {rotulo}
     </div>

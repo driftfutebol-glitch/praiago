@@ -221,23 +221,23 @@ function ComprarIngressoModal({ evento, onClose, sessao }: { evento: Evento; onC
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 2500, background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-      <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }} style={{ width: '100%', maxWidth: 460, background: '#ffffff', borderRadius: '24px 24px 0 0', padding: 20, boxShadow: '0 -20px 60px rgba(15,23,42,0.25)' }}>
+      <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }} style={{ width: '100%', maxWidth: 460, background: 'var(--pg-surface)', borderRadius: '24px 24px 0 0', padding: 20, boxShadow: '0 -20px 60px rgba(15,23,42,0.25)' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
           <div>
-            <div style={{ fontSize: 12, color: '#0ea5e9', fontWeight: 900, textTransform: 'uppercase' }}>Ingressos PraiaGo</div>
-            <h3 style={{ margin: '4px 0 0', fontSize: 20, lineHeight: 1.15, color: '#0f172a', fontWeight: 900 }}>{evento.titulo}</h3>
-            <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: 13, fontWeight: 600 }}>{evento.local_nome || 'Praia Grande'} {evento.data ? `· ${fmtData(evento.data)}` : ''}</p>
+            <div style={{ fontSize: 12, color: 'var(--pg-ocean-dark)', fontWeight: 900, textTransform: 'uppercase' }}>Ingressos PraiaGo</div>
+            <h3 style={{ margin: '4px 0 0', fontSize: 20, lineHeight: 1.15, color: 'var(--pg-ink)', fontWeight: 900 }}>{evento.titulo}</h3>
+            <p style={{ margin: '6px 0 0', color: 'var(--pg-muted)', fontSize: 13, fontWeight: 600 }}>{evento.local_nome || 'Praia Grande'} {evento.data ? `· ${fmtData(evento.data)}` : ''}</p>
           </div>
-          <button onClick={onClose} style={{ width: 36, height: 36, border: 0, borderRadius: 12, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <X size={18} color="#475569" />
+          <button onClick={onClose} style={{ width: 36, height: 36, border: 0, borderRadius: 12, background: 'var(--pg-surface-alt)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <X size={18} color="var(--pg-muted)" />
           </button>
         </div>
 
         {pix ? (
           <div style={{ marginTop: 18, display: 'grid', gap: 12 }}>
-            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 16, padding: 14 }}>
-              <div style={{ fontSize: 13, fontWeight: 900, color: '#15803d' }}>PIX gerado · {fmtMoney(pix.total)}</div>
-              <div style={{ marginTop: 4, fontSize: 12, color: '#166534', lineHeight: 1.4 }}>
+            <div style={{ background: 'var(--pg-success-bg)', border: '1px solid var(--pg-success)', borderRadius: 16, padding: 14 }}>
+              <div style={{ fontSize: 13, fontWeight: 900, color: 'var(--pg-success)' }}>PIX gerado · {fmtMoney(pix.total)}</div>
+              <div style={{ marginTop: 4, fontSize: 12, color: 'var(--pg-success)', lineHeight: 1.4 }}>
                 Pague no app do seu banco. Assim que cair, o ingresso vai pro seu e-mail.
               </div>
             </div>
@@ -246,12 +246,12 @@ function ComprarIngressoModal({ evento, onClose, sessao }: { evento: Evento; onC
             )}
             <div>
               <label style={modalLabel}>Codigo copia e cola</label>
-              <div style={{ ...modalInput, fontSize: 11, wordBreak: 'break-all', height: 'auto', minHeight: 64, padding: 10, color: '#334155' }}>
+              <div style={{ ...modalInput, fontSize: 11, wordBreak: 'break-all', height: 'auto', minHeight: 64, padding: 10, color: 'var(--pg-ink)' }}>
                 {pix.qr_code}
               </div>
             </div>
-            {erro && <div style={{ color: '#dc2626', fontSize: 13, fontWeight: 800 }}>{erro}</div>}
-            <button onClick={copiarPix} style={{ border: 0, borderRadius: 16, padding: '14px 16px', background: copiado ? 'linear-gradient(135deg, #16a34a, #15803d)' : 'linear-gradient(135deg, #0ea5e9, #22c55e)', color: '#fff', fontSize: 15, fontWeight: 900 }}>
+            {erro && <div style={{ color: 'var(--pg-danger)', fontSize: 13, fontWeight: 800 }}>{erro}</div>}
+            <button onClick={copiarPix} style={{ border: 0, borderRadius: 16, padding: '14px 16px', background: copiado ? 'linear-gradient(135deg, #16a34a, #15803d)' : 'linear-gradient(135deg, #0ea5e9, #22c55e)', color: 'var(--pg-on-brand)', fontSize: 15, fontWeight: 900 }}>
               {copiado ? 'Codigo copiado!' : 'Copiar codigo PIX'}
             </button>
           </div>
@@ -292,10 +292,10 @@ function ComprarIngressoModal({ evento, onClose, sessao }: { evento: Evento; onC
                   key={m}
                   onClick={() => setMetodo(m)}
                   style={{
-                    border: metodo === m ? '2px solid #0ea5e9' : '1px solid #e2e8f0',
-                    background: metodo === m ? '#f0f9ff' : '#fff',
+                    border: metodo === m ? '2px solid #0ea5e9' : '1px solid var(--pg-line)',
+                    background: metodo === m ? 'var(--pg-brand-soft)' : 'var(--pg-surface)',
                     borderRadius: 14, padding: '11px 10px', fontSize: 13, fontWeight: 900,
-                    color: metodo === m ? '#0369a1' : '#64748b',
+                    color: metodo === m ? 'var(--pg-ocean-dark)' : 'var(--pg-muted)',
                   }}
                 >
                   {m === 'pix' ? 'PIX' : 'Cartão de crédito'}
@@ -304,19 +304,19 @@ function ComprarIngressoModal({ evento, onClose, sessao }: { evento: Evento; onC
             </div>
           </div>
 
-          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 16, padding: 14 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontSize: 13, fontWeight: 700 }}>
+          <div style={{ background: 'var(--pg-surface-alt)', border: '1px solid var(--pg-line)', borderRadius: 16, padding: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--pg-muted)', fontSize: 13, fontWeight: 700 }}>
               <span>{quantidade}x {lote?.nome}</span>
               <span>{fmtMoney(total)}</span>
             </div>
-            <div style={{ marginTop: 6, fontSize: 11, color: '#94a3b8', lineHeight: 1.35 }}>
+            <div style={{ marginTop: 6, fontSize: 11, color: 'var(--pg-faint)', lineHeight: 1.35 }}>
               Entrega do ingresso é conferida por admin após o pagamento.
             </div>
           </div>
 
-          {erro && <div style={{ color: '#dc2626', fontSize: 13, fontWeight: 800 }}>{erro}</div>}
+          {erro && <div style={{ color: 'var(--pg-danger)', fontSize: 13, fontWeight: 800 }}>{erro}</div>}
 
-          <button disabled={loading || !lote} onClick={comprar} style={{ border: 0, borderRadius: 16, padding: '14px 16px', background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', color: '#fff', fontSize: 15, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: loading ? 0.6 : 1 }}>
+          <button disabled={loading || !lote} onClick={comprar} style={{ border: 0, borderRadius: 16, padding: '14px 16px', background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', color: 'var(--pg-on-brand)', fontSize: 15, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: loading ? 0.6 : 1 }}>
             {loading ? <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> : <ShoppingCart size={18} />}
             Comprar ingresso
           </button>
@@ -331,7 +331,7 @@ const modalLabel: CSSProperties = {
   display: 'block',
   fontSize: 11,
   fontWeight: 900,
-  color: '#64748b',
+  color: 'var(--pg-muted)',
   textTransform: 'uppercase',
   letterSpacing: 0.4,
   marginBottom: 6,
@@ -339,11 +339,11 @@ const modalLabel: CSSProperties = {
 
 const modalInput: CSSProperties = {
   width: '100%',
-  border: '1px solid #e2e8f0',
-  background: '#f8fafc',
+  border: '1px solid var(--pg-line)',
+  background: 'var(--pg-surface-alt)',
   borderRadius: 12,
   padding: '11px 12px',
-  color: '#0f172a',
+  color: 'var(--pg-ink)',
   fontSize: 14,
   fontWeight: 700,
   outline: 'none',
@@ -388,9 +388,9 @@ export default function EventosPage() {
 
       {/* Cabeçalho com a cena de praia atrás, igual ao da Home — é o que
           amarra as duas telas como sendo do mesmo app. */}
-      <header style={{ position: 'relative', overflow: 'hidden', padding: '24px 20px', margin: '12px 16px 20px', border: '1px solid var(--pg-line)', borderRadius: 24, background: '#fff' }}>
+      <header style={{ position: 'relative', overflow: 'hidden', padding: '24px 20px', margin: '12px 16px 20px', border: '1px solid var(--pg-line)', borderRadius: 24, background: 'var(--pg-surface)' }}>
         <img src="/images/home-beach-v2.webp" alt="" aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', opacity: 0.62, pointerEvents: 'none' }} />
-        <span aria-hidden="true" style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg, #fff 0%, rgba(255,255,255,0.94) 44%, rgba(255,255,255,0.18) 100%)', pointerEvents: 'none' }} />
+        <span aria-hidden="true" style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg, var(--pg-surface) 0%, rgba(var(--pg-surface-rgb), 0.94) 44%, rgba(var(--pg-surface-rgb), 0.18) 100%)', pointerEvents: 'none' }} />
         <div style={{ position: 'relative', zIndex: 1 }}>
           <span className="pg-eyebrow">ALÉM DA AREIA</span>
           <h1 style={{ margin: '8px 0 0', fontSize: 28, fontWeight: 850, color: 'var(--pg-ink)', letterSpacing: -.8, lineHeight: 1.1, maxWidth: '90%' }}>
@@ -398,7 +398,7 @@ export default function EventosPage() {
             <br />
             Baixada Santista.
           </h1>
-          <p style={{ margin: '7px 0 0', maxWidth: '76%', fontSize: 12.5, color: '#64748b', fontWeight: 700, lineHeight: 1.45 }}>
+          <p style={{ margin: '7px 0 0', maxWidth: '76%', fontSize: 12.5, color: 'var(--pg-muted)', fontWeight: 700, lineHeight: 1.45 }}>
             {CIDADES.join(' · ')}
           </p>
         </div>
@@ -417,22 +417,22 @@ export default function EventosPage() {
       {erroLista && <div role="status" className="pg-catalog-error"><div>Não foi possível atualizar os eventos. Confira sua conexão.</div><button onClick={() => void carregar()}>Tentar de novo</button></div>}
       {loading ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: '60px 0' }}>
-          <Loader2 size={30} color="#22c55e" style={{ animation: 'spin 1s linear infinite' }} />
+          <Loader2 size={30} color="var(--pg-success)" style={{ animation: 'spin 1s linear infinite' }} />
         </div>
       ) : lista.length === 0 && !erroLista ? (
-        <div style={{ textAlign: 'center', padding: '64px 32px', color: '#64748b' }}>
-          <div style={{ width: 72, height: 72, borderRadius: 24, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-            <CalendarX size={32} color="#475569" />
+        <div style={{ textAlign: 'center', padding: '64px 32px', color: 'var(--pg-muted)' }}>
+          <div style={{ width: 72, height: 72, borderRadius: 24, background: 'var(--pg-surface-alt)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+            <CalendarX size={32} color="var(--pg-muted)" />
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: '#334155' }}>Nenhum evento {filtro !== 'todos' ? `de ${PERIODOS.find(p => p.id === filtro)?.label.toLowerCase()}` : ''} por enquanto</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--pg-ink)' }}>Nenhum evento {filtro !== 'todos' ? `de ${PERIODOS.find(p => p.id === filtro)?.label.toLowerCase()}` : ''} por enquanto</div>
           <div style={{ fontSize: 13, marginTop: 6 }}>Novos eventos aparecem aqui automaticamente.</div>
         </div>
       ) : (
         <>
           <div style={{ padding: '0 20px 16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-              <h2 style={{ fontSize: 19, fontWeight: 950, color: '#0f172a', margin: 0, letterSpacing: 0 }}>Próximos eventos</h2>
-              <span style={{ fontSize: 12.5, fontWeight: 900, color: '#16a34a' }}>{lista.length} {lista.length === 1 ? 'evento' : 'eventos'}</span>
+              <h2 style={{ fontSize: 19, fontWeight: 950, color: 'var(--pg-ink)', margin: 0, letterSpacing: 0 }}>Próximos eventos</h2>
+              <span style={{ fontSize: 12.5, fontWeight: 900, color: 'var(--pg-success)' }}>{lista.length} {lista.length === 1 ? 'evento' : 'eventos'}</span>
             </div>
 
             {/* Um layout de cartão só. Antes destaque e "outros" tinham
@@ -453,8 +453,8 @@ export default function EventosPage() {
                       exit={{ opacity: 0 }}
                       style={{
                         display: 'flex',
-                        background: '#ffffff',
-                        border: '1px solid #eef2f7',
+                        background: 'var(--pg-surface)',
+                        border: '1px solid var(--pg-line)',
                         borderRadius: 20,
                         overflow: 'hidden',
                         boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 12px 28px -18px rgba(15,23,42,0.28)',
@@ -462,7 +462,7 @@ export default function EventosPage() {
                     >
                       {/* Capa: usa a imagem do evento quando existe; senão um
                           azulejo com o emoji — nada de foto genérica. */}
-                      <div className="pg-event-cover" style={{ position: 'relative', flexShrink: 0, background: 'linear-gradient(150deg,#e0f2fe,#dcfce7)' }}>
+                      <div className="pg-event-cover" style={{ position: 'relative', flexShrink: 0, background: 'linear-gradient(150deg,var(--pg-brand-soft),var(--pg-success-bg))' }}>
                         {ev.imagem_url ? (
                           <img
                             src={ev.imagem_url}
@@ -480,7 +480,7 @@ export default function EventosPage() {
                             position: 'absolute', top: 8, left: 8,
                             padding: '3px 8px', borderRadius: 999,
                             fontSize: 8.5, fontWeight: 900, letterSpacing: 0.4,
-                            color: '#fff', background: '#16a34a',
+                            color: 'var(--pg-on-brand)', background: '#16a34a',
                             boxShadow: '0 3px 8px rgba(22,163,74,0.5)',
                           }}>
                             EM DESTAQUE
@@ -490,33 +490,33 @@ export default function EventosPage() {
 
                       <div style={{ flex: 1, minWidth: 0, padding: '13px 14px 14px' }}>
                         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                          <h3 style={{ flex: 1, minWidth: 0, margin: 0, fontSize: 17, fontWeight: 950, color: '#0f172a', letterSpacing: 0, lineHeight: 1.2 }}>
+                          <h3 style={{ flex: 1, minWidth: 0, margin: 0, fontSize: 17, fontWeight: 950, color: 'var(--pg-ink)', letterSpacing: 0, lineHeight: 1.2 }}>
                             {ev.titulo}
                           </h3>
                           <span style={{
                             flexShrink: 0, padding: '4px 9px', borderRadius: 999,
                             fontSize: 11.5, fontWeight: 900,
-                            color: preco > 0 ? '#15803d' : '#0369a1',
-                            background: preco > 0 ? '#dcfce7' : '#e0f2fe',
+                            color: preco > 0 ? 'var(--pg-success)' : 'var(--pg-ocean-dark)',
+                            background: preco > 0 ? 'var(--pg-success-bg)' : 'var(--pg-brand-soft)',
                           }}>
                             {preco > 0 ? fmtMoney(preco) : 'Grátis'}
                           </span>
                         </div>
 
                         <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 7 }}>
-                          <MapPin size={13} color="#16a34a" strokeWidth={2.5} />
-                          <span style={{ fontSize: 12.5, color: '#475569', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <MapPin size={13} color="var(--pg-success)" strokeWidth={2.5} />
+                          <span style={{ fontSize: 12.5, color: 'var(--pg-muted)', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {ev.local_nome ?? 'Baixada Santista'}
                           </span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3 }}>
-                          <Calendar size={13} color="#16a34a" strokeWidth={2.5} />
-                          <span style={{ fontSize: 12.5, color: '#475569', fontWeight: 700 }}>
+                          <Calendar size={13} color="var(--pg-success)" strokeWidth={2.5} />
+                          <span style={{ fontSize: 12.5, color: 'var(--pg-muted)', fontWeight: 700 }}>
                             {fmtData(ev.data)}{ev.hora ? ` · ${ev.hora.slice(0, 5)}` : ''}
                           </span>
                         </div>
                         {ev.categoria && (
-                          <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 700, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <div style={{ fontSize: 12, color: 'var(--pg-faint)', fontWeight: 700, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {ev.categoria}
                           </div>
                         )}
@@ -526,7 +526,7 @@ export default function EventosPage() {
                             onClick={() => setComprando(ev)}
                             style={{
                               width: '100%', marginTop: 11, padding: '11px 0', border: 'none', borderRadius: 13,
-                              background: 'linear-gradient(100deg,#16a34a,#22c55e)', color: '#fff',
+                              background: 'linear-gradient(100deg,#16a34a,#22c55e)', color: 'var(--pg-on-brand)',
                               fontSize: 14, fontWeight: 900, cursor: 'pointer',
                               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
                               boxShadow: '0 10px 22px -12px rgba(22,163,74,0.95)',
@@ -542,14 +542,14 @@ export default function EventosPage() {
                             onClick={() => compartilhar(ev)}
                             style={ACAO_SECUNDARIA}
                           >
-                            <Share2 size={14} strokeWidth={2.4} color="#64748b" /> Compartilhar
+                            <Share2 size={14} strokeWidth={2.4} color="var(--pg-muted)" /> Compartilhar
                           </button>
                           <button
                             type="button"
                             onClick={() => abrirNoMapa(ev)}
-                            style={{ ...ACAO_SECUNDARIA, color: '#0284c7' }}
+                            style={{ ...ACAO_SECUNDARIA, color: 'var(--pg-ocean-dark)' }}
                           >
-                            <Navigation size={14} strokeWidth={2.4} color="#0284c7" /> Local
+                            <Navigation size={14} strokeWidth={2.4} color="var(--pg-ocean-dark)" /> Local
                           </button>
                         </div>
                       </div>
@@ -570,9 +570,9 @@ const ACAO_SECUNDARIA: CSSProperties = {
   minWidth: 0,
   padding: '9px 0',
   borderRadius: 12,
-  border: '1px solid #e8eef5',
-  background: '#ffffff',
-  color: '#64748b',
+  border: '1px solid var(--pg-line)',
+  background: 'var(--pg-surface)',
+  color: 'var(--pg-muted)',
   fontSize: 12.5,
   fontWeight: 800,
   cursor: 'pointer',

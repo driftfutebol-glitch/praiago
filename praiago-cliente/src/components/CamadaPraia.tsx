@@ -30,11 +30,11 @@ export default function CamadaPraia({ activeZone }: { activeZone: string }) {
   const visible = useMemo(() => BEACH_SHAPES.filter(shape => viewport.bounds.intersects(L.latLngBounds(shape.sand))), [viewport.bounds])
   const palmCount = viewport.zoom >= 16 ? 7 : 3
   return <><Pane name="beach-artwork" style={{ zIndex: 250, pointerEvents: 'none' }}>
-    <Polygon positions={BEACH_LAND} interactive={false} pathOptions={{ stroke: false, fillColor: '#edf1e2', fillOpacity: 1 }}/>
-    {BEACH_SHAPES.map(shape => <Polygon key={shape.zone.id} positions={shape.sand} interactive={false} pathOptions={{ stroke: false, fillColor: shape.zone.id === activeZone ? '#ffcf4f' : '#f7d877', fillOpacity: 1 }}/>)}
-    {visible.map(shape => <Polyline key={'walk-' + shape.zone.id} positions={shape.promenade} interactive={false} pathOptions={{ color: '#fffbec', weight: 6, opacity: 1 }}/>)}
-    {visible.map(shape => <Polyline key={'wave-' + shape.zone.id} positions={shape.coast} interactive={false} pathOptions={{ color: '#e2f6ec', weight: 4, opacity: .9 }}/>)}
-    {viewport.zoom >= 14 && visible.map(shape => <Polyline key={'zone-' + shape.zone.id} positions={[shape.sand[0], shape.sand[1]]} interactive={false} pathOptions={{ color: '#ac8b37', weight: 1.5, dashArray: '4 5', opacity: .8 }}/>)}
+    <Polygon positions={BEACH_LAND} interactive={false} pathOptions={{ stroke: false, fillColor: 'var(--pg-map-land)', fillOpacity: 1 }}/>
+    {BEACH_SHAPES.map(shape => <Polygon key={shape.zone.id} positions={shape.sand} interactive={false} pathOptions={{ stroke: false, fillColor: shape.zone.id === activeZone ? 'var(--pg-map-sand-active)' : 'var(--pg-map-sand)', fillOpacity: 1 }}/>)}
+    {visible.map(shape => <Polyline key={'walk-' + shape.zone.id} positions={shape.promenade} interactive={false} pathOptions={{ color: 'var(--pg-map-walk)', weight: 6, opacity: 1 }}/>)}
+    {visible.map(shape => <Polyline key={'wave-' + shape.zone.id} positions={shape.coast} interactive={false} pathOptions={{ color: 'var(--pg-map-wave)', weight: 4, opacity: .9 }}/>)}
+    {viewport.zoom >= 14 && visible.map(shape => <Polyline key={'zone-' + shape.zone.id} positions={[shape.sand[0], shape.sand[1]]} interactive={false} pathOptions={{ color: 'var(--pg-map-zone)', weight: 1.5, dashArray: '4 5', opacity: .8 }}/>)}
     </Pane><Pane name="beach-decoration" style={{ zIndex: 350, pointerEvents: 'none' }}>
     {viewport.zoom >= 15 && visible.flatMap(shape => Array.from({ length: palmCount }, (_, i) => {
       const point = between(shape.promenade[0], shape.promenade[1], (i + .5) / palmCount)

@@ -27,6 +27,7 @@ import PasswordRecoveryHandler from './components/PasswordRecoveryHandler'
 import IntroSplash from './components/IntroSplash'
 import { deveMostrarIntro } from './lib/introSession'
 import BrandLogo from './components/BrandLogo'
+import AppearanceSync from './components/AppearanceSync'
 
 function playNotifySound() {
   try {
@@ -80,7 +81,7 @@ function NotificationToast() {
         left: 16,
         right: 16,
         zIndex: 2000,
-        background: '#ffffff',
+        background: 'var(--pg-surface)',
         border: '1px solid rgba(14,165,233,0.22)',
         borderRadius: 18,
         padding: 14,
@@ -96,11 +97,11 @@ function NotificationToast() {
         <Bell size={19} color="#fff" />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14, color: '#0f172a', fontWeight: 900 }}>{ultima.titulo}</div>
-        <div style={{ fontSize: 12, color: '#475569', fontWeight: 600, marginTop: 3, lineHeight: 1.35 }}>{ultima.texto}</div>
+        <div style={{ fontSize: 14, color: 'var(--pg-ink)', fontWeight: 900 }}>{ultima.titulo}</div>
+        <div style={{ fontSize: 12, color: 'var(--pg-muted)', fontWeight: 600, marginTop: 3, lineHeight: 1.35 }}>{ultima.texto}</div>
       </div>
-      <button aria-label="Fechar aviso" onClick={() => setVisivel(false)} style={{ border: 0, background: '#f1f5f9', width: 44, height: 44, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-        <X size={15} color="#64748b" />
+      <button aria-label="Fechar aviso" onClick={() => setVisivel(false)} style={{ border: 0, background: 'var(--pg-surface-alt)', width: 44, height: 44, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+        <X size={15} color="var(--pg-muted)" />
       </button>
     </motion.div>
   )
@@ -116,7 +117,7 @@ function TelaCarregando() {
         role="status"
         style={{
           width: 34, height: 34, borderRadius: '50%',
-          border: '3px solid #e0f2fe', borderTopColor: '#0284c7',
+          border: '3px solid #e0f2fe', borderTopColor: 'var(--pg-ocean)',
           animation: 'spin 0.7s linear infinite',
         }}
       />
@@ -287,6 +288,7 @@ export default function App() {
     // tem contra o que resolver e o mapa do Radar colapsa pra 0px.
     // Quem rola agora é o `main`, não a janela.
     <MotionConfig reducedMotion={reducedMotion ? 'always' : 'user'}>
+    <AppearanceSync />
     <div className="pg-shell" style={{ display: 'flex', flexDirection: 'column', height: '100dvh', minHeight: '100dvh', background: 'var(--pg-sand)' }}>
       <AnimatePresence>
         {mostrarIntro && <IntroSplash key="intro" onFim={() => setMostrarIntro(false)} />}
@@ -389,8 +391,8 @@ export default function App() {
           // Sem `backdrop-filter` de proposito. Ele e a metade fragil do bug
           // acima, e com o fundo a 96% de opacidade nao se via diferenca —
           // pagavamos o risco por um efeito que ninguem enxergava.
-          background: 'rgba(255,255,255,0.96)',
-          border: '1px solid #eef2f7',
+          background: 'var(--pg-topbar)',
+          border: '1px solid var(--pg-line)',
           boxShadow: '0 2px 6px rgba(15,23,42,0.05), 0 16px 36px -14px rgba(15,23,42,0.28)',
         }}>
           {navItems.map(({ to, icon: Icon, label }) => {
@@ -408,7 +410,7 @@ export default function App() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: 3,
-                  color: active ? '#05616d' : '#536b74',
+                  color: active ? 'var(--pg-ocean-dark)' : 'var(--pg-muted)',
                   textDecoration: 'none',
                   position: 'relative',
                   height: '100%',
@@ -419,7 +421,7 @@ export default function App() {
                     layoutId="navBubble"
                     style={{
                       position: 'absolute', inset: '7px 3px', borderRadius: 18,
-                      background: '#e5f4ef', zIndex: 0,
+                      background: 'var(--pg-brand-soft)', zIndex: 0,
                     }}
                     transition={{ type: 'spring', stiffness: 320, damping: 30 }}
                   />
@@ -429,7 +431,7 @@ export default function App() {
                   whileTap={{ scale: 0.88 }}
                   style={{ zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}
                 >
-                  <Icon size={21} color={active ? '#05616d' : '#536b74'} strokeWidth={active ? 2.5 : 1.9} />
+                  <Icon size={21} color={active ? 'var(--pg-ocean-dark)' : 'var(--pg-muted)'} strokeWidth={active ? 2.5 : 1.9} />
                   <span
                     style={{
                       fontSize: 10.5,

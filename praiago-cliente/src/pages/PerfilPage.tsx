@@ -11,6 +11,7 @@ import { origemDoCadastro } from '../lib/origemCadastro'
 import SuportePanel from '../components/SuportePanel'
 import { AvatarPerfil } from '../components/FotoPerfilCliente'
 import EditProfileDialog from '../components/EditProfileDialog'
+import AppearanceSetting from '../components/AppearanceSetting'
 import { usePreferences } from '../store/usePreferences'
 import { apenasDigitosCpf, cpfMascarado, formatarCpf, validarCpf } from '../lib/cpf'
 import { TEXTO_AREA_ATENDIDA, RAIO_PEDIDO_KM } from '../lib/serviceArea'
@@ -222,38 +223,38 @@ function TelaLogada() {
             </div>
             <div>
               <h2 className="pg-section-title" style={{ marginBottom: 2 }}>Sua conta, protegida</h2>
-              <div style={{ fontSize: 11.5, fontWeight: 650, color: '#64748b', marginTop: 2, lineHeight: 1.35 }}>E-mail confirmado + CPF válido libera checkout e cupons.</div>
+              <div style={{ fontSize: 11.5, fontWeight: 650, color: 'var(--pg-muted)', marginTop: 2, lineHeight: 1.35 }}>E-mail confirmado + CPF válido libera checkout e cupons.</div>
             </div>
           </div>
 
           {verificacaoCarregando && <p className="pg-caption" role="status">Conferindo sua conta…</p>}
           {verificacaoErro && <div role="status" className="pg-feedback pg-feedback-error">Não foi possível conferir sua conta agora. Suas verificações anteriores não foram alteradas.<button className="pg-button" style={{ marginTop: 10, width: '100%' }} onClick={() => void carregarVerificacao()}>Tentar novamente</button></div>}
           <div style={{ display: verificacao && !verificacaoErro ? 'grid' : 'none', gap: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: emailConfirmado ? '#ecfdf5' : '#fffbeb', border: `1px solid ${emailConfirmado ? '#bbf7d0' : '#fde68a'}`, borderRadius: 16, padding: 12 }}>
-              {emailConfirmado ? <CheckCircle2 size={20} color="#16a34a" /> : <AlertCircle size={20} color="#d97706" />}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: emailConfirmado ? 'var(--pg-success-bg)' : 'var(--pg-warning-bg)', border: `1px solid ${emailConfirmado ? 'var(--pg-line)' : 'var(--pg-line)'}`, borderRadius: 16, padding: 12 }}>
+              {emailConfirmado ? <CheckCircle2 size={20} color="var(--pg-success)" /> : <AlertCircle size={20} color="var(--pg-warning)" />}
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 900, color: '#0f172a' }}>E-mail</div>
-                <div style={{ fontSize: 11.5, fontWeight: 700, color: emailConfirmado ? '#15803d' : '#a16207', marginTop: 2 }}>
+                <div style={{ fontSize: 13, fontWeight: 900, color: 'var(--pg-ink)' }}>E-mail</div>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: emailConfirmado ? 'var(--pg-success)' : 'var(--pg-warning)', marginTop: 2 }}>
                   {emailConfirmado ? 'E-mail confirmado' : `Pendente em ${sessao.email}`}
                 </div>
               </div>
               {!emailConfirmado && (
-                <button type="button" disabled={reenviandoEmail} onClick={reenviarEmailConfirmacao} style={{ border: 0, background: '#fff', color: '#92400e', borderRadius: 12, padding: '9px 11px', fontSize: 11.5, fontWeight: 900, display: 'inline-flex', alignItems: 'center', gap: 6, cursor: reenviandoEmail ? 'wait' : 'pointer' }}>
+                <button type="button" disabled={reenviandoEmail} onClick={reenviarEmailConfirmacao} style={{ border: 0, background: 'var(--pg-surface)', color: 'var(--pg-warning)', borderRadius: 12, padding: '9px 11px', fontSize: 11.5, fontWeight: 900, display: 'inline-flex', alignItems: 'center', gap: 6, cursor: reenviandoEmail ? 'wait' : 'pointer' }}>
                   <Mail size={13} /> {reenviandoEmail ? 'Enviando' : 'Enviar'}
                 </button>
               )}
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: cpfOk ? '#ecfdf5' : '#fff7ed', border: `1px solid ${cpfOk ? '#bbf7d0' : '#fed7aa'}`, borderRadius: 16, padding: 12 }}>
-              {cpfOk ? <CheckCircle2 size={20} color="#16a34a" /> : <AlertCircle size={20} color="#ea580c" />}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: cpfOk ? 'var(--pg-success-bg)' : 'var(--pg-warning-bg)', border: `1px solid ${cpfOk ? 'var(--pg-line)' : 'var(--pg-line)'}`, borderRadius: 16, padding: 12 }}>
+              {cpfOk ? <CheckCircle2 size={20} color="var(--pg-success)" /> : <AlertCircle size={20} color="var(--pg-warning)" />}
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 900, color: '#0f172a' }}>CPF</div>
-                <div style={{ fontSize: 11.5, fontWeight: 700, color: cpfOk ? '#15803d' : '#c2410c', marginTop: 2 }}>
+                <div style={{ fontSize: 13, fontWeight: 900, color: 'var(--pg-ink)' }}>CPF</div>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: cpfOk ? 'var(--pg-success)' : 'var(--pg-warning)', marginTop: 2 }}>
                   {cpfOk ? `${cpfMascarado(verificacao?.cpf || '')} validado` : 'Informe um CPF válido para fazer pedido'}
                 </div>
               </div>
               {!cpfOk && (
-                <button type="button" onClick={editarCpf} style={{ border: 0, background: '#fff', color: '#c2410c', borderRadius: 12, padding: '9px 11px', fontSize: 11.5, fontWeight: 900, display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <button type="button" onClick={editarCpf} style={{ border: 0, background: 'var(--pg-surface)', color: 'var(--pg-warning)', borderRadius: 12, padding: '9px 11px', fontSize: 11.5, fontWeight: 900, display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
                   <Edit3 size={13} /> Validar
                 </button>
               )}
@@ -264,13 +265,13 @@ function TelaLogada() {
         <motion.div initial={{ y: 12, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="pg-card" style={{ marginBottom: 20 }}>
           <h2 className="pg-section-title">Últimos pedidos</h2>
           {pedidos.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '30px 0', color: '#64748b', fontSize: 14, fontWeight: 500 }}>Você ainda não fez pedidos.</div>
+            <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--pg-muted)', fontSize: 14, fontWeight: 500 }}>Você ainda não fez pedidos.</div>
           ) : pedidos.slice(0, 3).map((p, i) => (
-            <div key={p.id} style={{ paddingTop: i > 0 ? 16 : 0, marginTop: i > 0 ? 16 : 0, borderTop: i > 0 ? '1px solid rgba(0,0,0,0.05)' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div key={p.id} style={{ paddingTop: i > 0 ? 16 : 0, marginTop: i > 0 ? 16 : 0, borderTop: i > 0 ? '1px solid var(--pg-line)' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <div style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>{p.vendedorNome}</div>
-                <div style={{ fontSize: 13, color: '#64748b', marginTop: 4, fontWeight: 500 }}>{p.itens.map(it => `${it.qtd}x ${it.nome}`).join(', ')}</div>
-                <div style={{ fontSize: 11, color: '#64748b', marginTop: 6, fontWeight: 600 }}>{fmtData(p.data)}</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--pg-ink)' }}>{p.vendedorNome}</div>
+                <div style={{ fontSize: 13, color: 'var(--pg-muted)', marginTop: 4, fontWeight: 500 }}>{p.itens.map(it => `${it.qtd}x ${it.nome}`).join(', ')}</div>
+                <div style={{ fontSize: 11, color: 'var(--pg-muted)', marginTop: 6, fontWeight: 600 }}>{fmtData(p.data)}</div>
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div style={{ fontSize: 15, fontWeight: 850, color: 'var(--pg-ocean-dark)', whiteSpace: 'nowrap' }}>{p.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</div>
@@ -292,33 +293,34 @@ function TelaLogada() {
           <a className="pg-menu-row" href="https://www.praiago.com.br/privacidade.html" target="_blank" rel="noopener noreferrer"><span className="pg-menu-icon"><Shield size={19}/></span><span className="pg-menu-copy">Privacidade e seus dados<small>Saiba como suas informações são tratadas</small></span><ChevronRight size={17}/></a>
         </div></section>
         <section className="pg-profile-section"><h2 className="pg-section-title">Seu jeito de usar</h2><div className="pg-card pg-menu">
+          <AppearanceSetting />
           <div className="pg-menu-row"><span className="pg-menu-icon"><Volume2 size={19}/></span><span className="pg-menu-copy" id="sound-label">Sons de avisos<small>Não altera as notificações do celular</small></span><button role="switch" aria-labelledby="sound-label" aria-checked={preferences.notificationSounds} className="pg-toggle" onClick={() => preferences.setNotificationSounds(!preferences.notificationSounds)}/></div>
           <div className="pg-menu-row"><span className="pg-menu-icon"><Sparkles size={19}/></span><span className="pg-menu-copy" id="motion-label">Reduzir movimento<small>Transições mais discretas neste aparelho</small></span><button role="switch" aria-labelledby="motion-label" aria-checked={preferences.reducedMotion} className="pg-toggle" onClick={() => preferences.setReducedMotion(!preferences.reducedMotion)}/></div>
         </div></section>
 
         <motion.button whileTap={{ scale: 0.96 }} onClick={async () => { await supabase.auth.signOut(); logout() }} style={{ width: '100%', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 20, padding: '18px 20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, boxShadow: '0 4px 15px rgba(239,68,68,0.1)' }}>
-          <LogOut size={20} color="#a33025" />
-          <span style={{ fontSize: 15, fontWeight: 800, color: '#a33025' }}>Sair da conta</span>
+          <LogOut size={20} color="var(--pg-danger)" />
+          <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--pg-danger)' }}>Sair da conta</span>
         </motion.button>
 
           {/* AREA_ATENDIDA_INFO — a Apple pede que a cobertura fique clara no app */}
-          <div style={{ marginTop: 14, padding: '12px 14px', borderRadius: 14, background: '#f0f9ff', border: '1px solid #bae6fd' }}>
-            <div style={{ fontSize: 12.5, fontWeight: 900, color: '#075985', marginBottom: 4 }}>
+          <div style={{ marginTop: 14, padding: '12px 14px', borderRadius: 14, background: 'var(--pg-brand-soft)', border: '1px solid var(--pg-line)' }}>
+            <div style={{ fontSize: 12.5, fontWeight: 900, color: 'var(--pg-ocean-dark)', marginBottom: 4 }}>
               Onde o PraiaGo entrega
             </div>
-            <div style={{ fontSize: 12, lineHeight: 1.5, fontWeight: 600, color: '#0c4a6e' }}>
+            <div style={{ fontSize: 12, lineHeight: 1.5, fontWeight: 600, color: 'var(--pg-muted)' }}>
               Você vê todos os ambulantes e restaurantes de qualquer lugar do mundo.
               Para fechar um pedido é preciso estar a até {RAIO_PEDIDO_KM} km da loja.
               Hoje entregamos em {TEXTO_AREA_ATENDIDA} — SP, Brasil.
             </div>
           </div>
 
-        <button type="button" disabled={excluindoConta} onClick={() => void excluirConta()} style={{ width: '100%', marginTop: 12, padding: '14px 18px', border: 0, background: 'transparent', color: '#b91c1c', fontSize: 13, fontWeight: 850, cursor: excluindoConta ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, opacity: excluindoConta ? 0.65 : 1 }}>
+        <button type="button" disabled={excluindoConta} onClick={() => void excluirConta()} style={{ width: '100%', marginTop: 12, padding: '14px 18px', border: 0, background: 'transparent', color: 'var(--pg-danger)', fontSize: 13, fontWeight: 850, cursor: excluindoConta ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, opacity: excluindoConta ? 0.65 : 1 }}>
           {excluindoConta ? <Loader2 size={17} className="animate-spin-slow" /> : <Trash2 size={17} />}
           {excluindoConta ? 'Processando exclusão…' : 'Excluir minha conta'}
         </button>
-        <div style={{ marginTop: 4, textAlign: 'center', color: '#64748b', fontSize: 11.5, lineHeight: 1.45 }}>
-          Veja quais dados são apagados ou preservados na <a href="https://www.praiago.com.br/excluir-conta.html" target="_blank" rel="noopener noreferrer" style={{ color: '#0284c7', fontWeight: 800 }}>página de exclusão</a>.
+        <div style={{ marginTop: 4, textAlign: 'center', color: 'var(--pg-muted)', fontSize: 11.5, lineHeight: 1.45 }}>
+          Veja quais dados são apagados ou preservados na <a href="https://www.praiago.com.br/excluir-conta.html" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--pg-ocean)', fontWeight: 800 }}>página de exclusão</a>.
         </div>
       </div>
 
@@ -508,19 +510,20 @@ export default function PerfilPage() {
     <div className="pg-auth">
       <div className="pg-auth-intro"><span className="pg-eyebrow">MAIS PRAIA, MENOS PREOCUPAÇÃO</span><h1>{codigoEnvio ? 'Só falta confirmar.' : tab === 'entrar' ? <>Seu dia de praia<br/>começa aqui.</> : <>Um perfil.<br/>Muitas descobertas.</>}</h1><p>{tab === 'entrar' ? 'Entre para pedir, salvar seus favoritos e aproveitar cada momento.' : 'Crie sua conta para encontrar os sabores da praia e acompanhar seus pedidos.'}</p></div>
       <motion.div initial={{ y: 12, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="pg-auth-card">
+        <div className="pg-auth-appearance"><AppearanceSetting /></div>
         {codigoEnvio ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 42, marginBottom: 6 }}>📧</div>
-              <h2 style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', margin: 0 }}>Confirme seu e-mail</h2>
-              <p style={{ fontSize: 13.5, color: '#64748b', fontWeight: 600, marginTop: 6 }}>Enviamos um código de 6 dígitos pra <b style={{ color: '#0f172a' }}>{codigoEnvio}</b></p>
+              <h2 style={{ fontSize: 20, fontWeight: 900, color: 'var(--pg-ink)', margin: 0 }}>Confirme seu e-mail</h2>
+              <p style={{ fontSize: 13.5, color: 'var(--pg-muted)', fontWeight: 600, marginTop: 6 }}>Enviamos um código de 6 dígitos pra <b style={{ color: 'var(--pg-ink)' }}>{codigoEnvio}</b></p>
             </div>
             <input aria-label="Código de confirmação" autoComplete="one-time-code" inputMode="numeric" autoFocus value={codigo} onChange={e => setCodigo(e.target.value.replace(/\D/g, '').slice(0, 8))} onKeyDown={e => e.key === 'Enter' && confirmarCadastro()} placeholder="000000" style={{ ...inputStyle, textAlign: 'center', fontSize: 30, fontWeight: 900, letterSpacing: 12, fontFamily: 'monospace' }} />
             {erro && <div role="alert" className={`pg-feedback ${erro.includes('inválido') || erro.includes('Não') ? 'pg-feedback-error' : ''}`}>{erro}</div>}
             <motion.button disabled={loading} whileTap={{ scale: 0.98 }} onClick={confirmarCadastro} className="pg-button pg-button-primary">{loading ? 'Confirmando…' : 'Confirmar código'}</motion.button>
             <div style={{ display: 'flex', justifyContent: 'center', gap: 16 }}>
-              <button type="button" onClick={reenviarCodigo} style={{ background: 'none', border: 0, color: '#16a34a', fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>Reenviar código</button>
-              <button type="button" onClick={() => { setCodigoEnvio(null); setErro('') }} style={{ background: 'none', border: 0, color: '#64748b', fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>Trocar e-mail</button>
+              <button type="button" onClick={reenviarCodigo} style={{ background: 'none', border: 0, color: 'var(--pg-success)', fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>Reenviar código</button>
+              <button type="button" onClick={() => { setCodigoEnvio(null); setErro('') }} style={{ background: 'none', border: 0, color: 'var(--pg-muted)', fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>Trocar e-mail</button>
             </div>
           </div>
         ) : (<>
@@ -536,7 +539,7 @@ export default function PerfilPage() {
           <AnimatePresence mode="popLayout">
             {tab === 'cadastro' && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }}>
-                <label htmlFor="cli-nome" style={{ fontSize: 13, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Nome Completo</label>
+                <label htmlFor="cli-nome" style={{ fontSize: 13, fontWeight: 700, color: 'var(--pg-muted)', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Nome Completo</label>
                 <input id="cli-nome" autoComplete="name" maxLength={80} value={nome} onChange={e => setNome(e.target.value)} placeholder="Como gosta de ser chamado" style={inputStyle} />
               </motion.div>
             )}
@@ -545,22 +548,22 @@ export default function PerfilPage() {
           <AnimatePresence mode="popLayout">
             {tab === 'cadastro' && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }}>
-                <label htmlFor="cli-cpf" style={{ fontSize: 13, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>CPF</label>
+                <label htmlFor="cli-cpf" style={{ fontSize: 13, fontWeight: 700, color: 'var(--pg-muted)', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>CPF</label>
                 <input id="cli-cpf" inputMode="numeric" value={cpf} onChange={e => setCpf(formatarCpf(e.target.value))} placeholder="000.000.000-00" style={inputStyle} />
-                <div style={{ fontSize: 11.5, color: '#166534', fontWeight: 650, marginTop: 8 }}>CPF válido + e-mail confirmado libera 20% na primeira compra.</div>
+                <div style={{ fontSize: 11.5, color: 'var(--pg-success)', fontWeight: 650, marginTop: 8 }}>CPF válido + e-mail confirmado libera 20% na primeira compra.</div>
               </motion.div>
             )}
           </AnimatePresence>
 
           <div>
-            <label htmlFor="cli-email" style={{ fontSize: 13, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>E-mail</label>
+            <label htmlFor="cli-email" style={{ fontSize: 13, fontWeight: 700, color: 'var(--pg-muted)', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>E-mail</label>
             <input id="cli-email" type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} value={email} onChange={e => setEmail(e.target.value)} placeholder="voce@exemplo.com" style={inputStyle} />
           </div>
           <div>
-            <label htmlFor="cli-senha" style={{ fontSize: 13, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Senha</label>
+            <label htmlFor="cli-senha" style={{ fontSize: 13, fontWeight: 700, color: 'var(--pg-muted)', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>Senha</label>
             <div style={{ position: 'relative' }}>
               <input id="cli-senha" autoComplete={tab === 'cadastro' ? 'new-password' : 'current-password'} type={verSenha ? 'text' : 'password'} value={senha} onChange={e => setSenha(e.target.value)} placeholder={tab === 'cadastro' ? 'Crie uma senha segura' : 'Sua senha'} style={{ ...inputStyle, padding: '14px 52px 14px 16px' }} />
-              <button type="button" aria-label={verSenha ? 'Ocultar senha' : 'Mostrar senha'} onClick={() => setVerSenha(!verSenha)} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#536b74', width: 44, height: 44, display: 'grid', placeItems: 'center' }}>
+              <button type="button" aria-label={verSenha ? 'Ocultar senha' : 'Mostrar senha'} onClick={() => setVerSenha(!verSenha)} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--pg-muted)', width: 44, height: 44, display: 'grid', placeItems: 'center' }}>
                 {verSenha ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
             </div>
@@ -568,10 +571,10 @@ export default function PerfilPage() {
           </div>
 
           {tab === 'cadastro' && (
-            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', background: '#f8fafc', border: `1.5px solid ${aceitouTermos ? '#22c55e' : 'rgba(0,0,0,0.08)'}`, borderRadius: 14, padding: '12px 14px', transition: 'border-color .2s' }}>
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', background: 'var(--pg-surface-alt)', border: `1.5px solid ${aceitouTermos ? '#22c55e' : 'var(--pg-line)'}`, borderRadius: 14, padding: '12px 14px', transition: 'border-color .2s' }}>
               <input type="checkbox" checked={aceitouTermos} onChange={e => setAceitouTermos(e.target.checked)} style={{ width: 18, height: 18, accentColor: '#22c55e', marginTop: 1, flexShrink: 0, cursor: 'pointer' }} />
-              <span style={{ fontSize: 12.5, color: '#475569', fontWeight: 600, lineHeight: 1.5 }}>
-                Li e aceito os <a href="https://www.praiago.com.br/termos.html" target="_blank" rel="noopener noreferrer" style={{ color: '#0284c7', fontWeight: 800 }}>Termos de Uso</a> e a <a href="https://www.praiago.com.br/privacidade.html" target="_blank" rel="noopener noreferrer" style={{ color: '#0284c7', fontWeight: 800 }}>Política de Privacidade</a> — incluindo o uso da minha <strong>localização (GPS)</strong> durante os pedidos e o tratamento de nome, e-mail, CPF e dados de pagamento.
+              <span style={{ fontSize: 12.5, color: 'var(--pg-muted)', fontWeight: 600, lineHeight: 1.5 }}>
+                Li e aceito os <a href="https://www.praiago.com.br/termos.html" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--pg-ocean)', fontWeight: 800 }}>Termos de Uso</a> e a <a href="https://www.praiago.com.br/privacidade.html" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--pg-ocean)', fontWeight: 800 }}>Política de Privacidade</a> — incluindo o uso da minha <strong>localização (GPS)</strong> durante os pedidos e o tratamento de nome, e-mail, CPF e dados de pagamento.
               </span>
             </label>
           )}
@@ -590,9 +593,9 @@ export default function PerfilPage() {
           </motion.button>
           {tab === 'entrar' && (
             <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap', marginTop: -2 }}>
-              <button type="button" onClick={enviarResetSenha} style={{ background: 'none', border: 0, color: '#0284c7', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Esqueci minha senha</button>
-              <button type="button" onClick={confirmarCodigoSenha} style={{ background: 'none', border: 0, color: '#7c3aed', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Tenho código</button>
-              <button type="button" disabled={loading} onClick={reenviarVerificacao} style={{ background: 'none', border: 0, color: '#166534', fontSize: 12, fontWeight: 750, minHeight: 36, cursor: 'pointer' }}>Reenviar verificação</button>
+              <button type="button" onClick={enviarResetSenha} style={{ background: 'none', border: 0, color: 'var(--pg-ocean)', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Esqueci minha senha</button>
+              <button type="button" onClick={confirmarCodigoSenha} style={{ background: 'none', border: 0, color: 'var(--pg-ocean)', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>Tenho código</button>
+              <button type="button" disabled={loading} onClick={reenviarVerificacao} style={{ background: 'none', border: 0, color: 'var(--pg-success)', fontSize: 12, fontWeight: 750, minHeight: 36, cursor: 'pointer' }}>Reenviar verificação</button>
             </div>
           )}
         </form>
@@ -605,7 +608,7 @@ export default function PerfilPage() {
 
 const inputStyle: React.CSSProperties = {
   width: '100%', padding: '14px 16px', borderRadius: 13,
-  border: '1px solid #d5e3df', fontSize: 16,
-  color: '#12343d', background: '#f6f9f8', boxSizing: 'border-box',
+  border: '1px solid var(--pg-line)', fontSize: 16,
+  color: 'var(--pg-ink)', background: 'var(--pg-input)', boxSizing: 'border-box',
   transition: 'border-color 0.2s', fontWeight: 500,
 }

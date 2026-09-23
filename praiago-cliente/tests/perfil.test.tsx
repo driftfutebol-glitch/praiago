@@ -10,12 +10,34 @@ import PerfilPage from '../src/pages/PerfilPage'
 import EditProfileDialog from '../src/components/EditProfileDialog'
 import { useStore } from '../src/store/useStore'
 import { usePreferences } from '../src/store/usePreferences'
+import AppearanceSync from '../src/components/AppearanceSync'
 import { fixtureProfile, resetScenario, scenario } from './supabaseDouble'
 
 function Location() { const location = useLocation(); return <output data-testid="location">{location.pathname}{location.search}</output> }
-function page() { return render(<MemoryRouter initialEntries={['/perfil']}><MotionConfig reducedMotion="always"><PerfilPage/><Location/></MotionConfig></MemoryRouter>) }
+function page() { return render(<MemoryRouter initialEntries={['/perfil']}><MotionConfig reducedMotion="always"><AppearanceSync/><PerfilPage/><Location/></MotionConfig></MemoryRouter>) }
 function session() { useStore.getState().login(fixtureProfile.id, fixtureProfile.email, fixtureProfile.nome, fixtureProfile.telefone) }
-beforeEach(() => { resetScenario(); useStore.getState().logout(); usePreferences.setState({ reducedMotion: false, notificationSounds: true, mapStyle: 'praia' }) })
+beforeEach(() => { resetScenario(); useStore.getState().logout(); usePreferences.setState({ darkMode: false, reducedMotion: false, notificationSounds: true, mapStyle: 'praia' }) })
+
+describe('Aparência no Perfil', () => {
+  it.each([false, true])('troca e persiste o tema sem alterar a sessão (logado: %s)', async loggedIn => {
+    if (loggedIn) session()
+    const previousSession = useStore.getState().sessao
+    page()
+    const toggle = screen.getByRole('switch', { name: 'Modo escuro', exact: true })
+    expect(toggle.getAttribute('aria-checked')).toBe('false')
+    await userEvent.click(toggle)
+    expect(toggle.getAttribute('aria-checked')).toBe('true')
+    expect(document.documentElement.dataset.theme).toBe('dark')
+    expect(document.documentElement.style.colorScheme).toBe('dark')
+    expect(JSON.parse(localStorage.getItem('praiago-cliente-preferences')!).state.darkMode).toBe(true)
+    expect(useStore.getState().sessao).toBe(previousSession)
+    expect(scenario.signIns).toHaveLength(0)
+    expect(scenario.signups).toHaveLength(0)
+    expect(scenario.calls.filter(c => c.action === 'update')).toHaveLength(0)
+    await userEvent.click(toggle)
+    expect(document.documentElement.dataset.theme).toBe('light')
+  })
+})
 
 describe('Acesso e proteção da conta', () => {
   it('mostra controles rotulados e autofill correto', () => {

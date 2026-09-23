@@ -6,19 +6,19 @@ import { CalendarDays, ChevronRight, MapPin } from 'lucide-react'
 // espaçamento — quando cada tela desenhava o seu, a diferença aparecia na
 // rolagem entre abas.
 
-/** Raio/sombra padrão dos cartões brancos do app. */
+/** Superfície, raio e sombra compartilhados pelos cartões do app. */
 export const CARTAO: React.CSSProperties = {
-  background: '#ffffff',
+  background: 'var(--pg-surface)',
   borderRadius: 20,
-  border: '1px solid #eef2f7',
-  boxShadow: '0 1px 2px rgba(15,23,42,0.04), 0 10px 26px -14px rgba(15,23,42,0.18)',
+  border: '1px solid var(--pg-line)',
+  boxShadow: 'var(--pg-shadow)',
 }
 
 /** Selo "NOVO" — mesmo em todo lugar (nav, banner, cartão). */
 export function SeloNovo({ tom = 'verde' }: { tom?: 'verde' | 'amarelo' }) {
   const cores = tom === 'amarelo'
     ? { fundo: '#fde047', texto: '#713f12' }
-    : { fundo: '#16a34a', texto: '#ffffff' }
+    : { fundo: 'var(--pg-success-bg)', texto: 'var(--pg-success)' }
   return (
     <span
       style={{
@@ -72,13 +72,13 @@ export function CartaoLocal({
           borderRadius: 13,
           display: 'grid',
           placeItems: 'center',
-          background: 'linear-gradient(140deg, #e0f2fe, #dcfce7)',
+          background: 'var(--pg-brand-soft)',
         }}
       >
-        <MapPin size={19} color="#0284c7" strokeWidth={2.4} />
+        <MapPin size={19} color="var(--pg-ocean)" strokeWidth={2.4} />
       </span>
       <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: 'block', fontSize: 15, fontWeight: 900, color: '#0f172a', letterSpacing: 0 }}>
+        <span style={{ display: 'block', fontSize: 15, fontWeight: 900, color: 'var(--pg-ink)', letterSpacing: 0 }}>
           {cidade}
         </span>
         <span
@@ -86,7 +86,7 @@ export function CartaoLocal({
             display: 'block',
             fontSize: 12,
             fontWeight: 700,
-            color: '#64748b',
+            color: 'var(--pg-muted)',
             marginTop: 1,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
@@ -96,7 +96,7 @@ export function CartaoLocal({
           {descricao}
         </span>
       </span>
-      {onClick && <ChevronRight size={19} color="#94a3b8" strokeWidth={2.4} style={{ flexShrink: 0 }} />}
+      {onClick && <ChevronRight size={19} color="var(--pg-faint)" strokeWidth={2.4} style={{ flexShrink: 0 }} />}
     </button>
   )
 }
@@ -155,12 +155,12 @@ export function BannerEventos({ onClick }: { onClick: () => void }) {
           boxShadow: '0 8px 24px rgba(2,32,71,0.32)',
         }}
       >
-        <CalendarDays size={22} color="#ffffff" strokeWidth={2.35} />
+        <CalendarDays size={22} color="var(--pg-on-brand)" strokeWidth={2.35} />
       </span>
 
       <span style={{ position: 'relative', flex: 1, minWidth: 0 }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 17, fontWeight: 950, color: '#ffffff', lineHeight: 1.1 }}>
+          <span style={{ fontSize: 17, fontWeight: 950, color: 'var(--pg-on-brand)', lineHeight: 1.1 }}>
             Eventos na Baixada
           </span>
           <SeloNovo tom="amarelo" />
@@ -179,8 +179,8 @@ export function BannerEventos({ onClick }: { onClick: () => void }) {
           gap: 4,
           padding: '9px 10px',
           borderRadius: 999,
-          background: '#ffffff',
-          color: '#15803d',
+          background: 'var(--pg-surface)',
+          color: 'var(--pg-success)',
           fontSize: 11.5,
           fontWeight: 950,
           boxShadow: '0 6px 16px rgba(2,32,71,0.24)',
@@ -208,7 +208,7 @@ export function TituloSecao({
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginBottom: 13 }}>
       <div style={{ minWidth: 0 }}>
-        <h3 style={{ fontSize: 19, fontWeight: 950, color: '#0f172a', margin: 0, letterSpacing: 0 }}>{titulo}</h3>
+        <h3 style={{ fontSize: 19, fontWeight: 950, color: 'var(--pg-ink)', margin: 0, letterSpacing: 0 }}>{titulo}</h3>
         {children}
       </div>
       {acao && (
@@ -219,7 +219,7 @@ export function TituloSecao({
             flexShrink: 0,
             border: 0,
             background: 'transparent',
-            color: '#16a34a',
+            color: 'var(--pg-success)',
             fontSize: 13,
             fontWeight: 900,
             cursor: 'pointer',

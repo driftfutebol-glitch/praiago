@@ -16,6 +16,18 @@ Atualização do aplicativo **Cliente**. Ambulante, sites, contratos de API, reg
 - Um acompanhamento de GPS compartilhado. Pino manual sincronizado entre telas, sem substituir a localização objetiva na autorização de pedidos. Removida publicação em canal global de GPS sem consumidor; compartilhamento por pedido preservado.
 - Chat de ajuda carregado sob demanda e acessível no cabeçalho, sem balão sobre o mapa ou checkout.
 
+### Modo escuro · 23/09/2026
+
+- Perfil → Modo escuro: disponível com e sem login; ativação imediata, com rótulo acessível, alvo de toque de 48 × 44 px e preferência local persistida. Tema claro permanece o padrão.
+- Paleta noturna em azul-petróleo e verde; superfícies, campos, cartões, navegação, ajuda, cupons, avisos e estados de erro acompanham o tema. Fotos, marca original e QR de pagamento não são invertidos.
+- Praia mantém areia dourada, zonas e palmeiras. Cidade mantém OpenStreetMap com brilho reduzido somente nos tiles; sem novo provedor, chave ou permissão.
+- Inicialização externa antes da primeira pintura, compatível com a CSP existente. Preferências anteriores preservadas; gravação restrita a quatro configurações, sem sessão, localização ou dados pessoais. Falha de armazenamento não impede usar o tema na sessão atual.
+- Transparências usam canais RGB dos tokens, sem depender de `color-mix()` (disponível apenas a partir do [Safari 16.2](https://webkit.org/blog/13591/webkit-features-in-safari-16-2/)). Mantido o requisito nativo existente, sem elevar a versão mínima do iOS.
+- Barra de status nativa acompanha a escolha usando o plugin já instalado; chamadas serializadas e falhas toleradas. Implementação conforme [Status Bar do Capacitor](https://capacitorjs.com/docs/apis/status-bar); falta homologação visual em aparelho físico.
+- **56 testes em seis arquivos**, incluindo contraste mínimo de 4,5:1 dos pares principais, persistência/reidratação, armazenamento inválido/bloqueado, Perfil autenticado e anônimo, inicialização e barra nativa simulada. Build web aprovado; lint sem erros, mantendo avisos legados; auditoria de dependências de produção sem vulnerabilidades.
+- Nenhum exemplo público, migração, alteração de autorização, pedido real, pagamento ou alteração do aplicativo Ambulante.
+- Revisão visual no app normal: Perfil claro/escuro em 320 × 700 e 390 × 844, persistência após recarregar, início, catálogo, pedidos sem sessão, eventos, ajuda e mapas Praia/Cidade. Perfil autenticado coberto por testes isolados; não foram criadas contas de demonstração.
+
 ### Refinamento de marca e mapa · 21/09/2026
 
 - Logotipo oficial no cabeçalho, usando o PNG já existente sem redesenhar a marca.
@@ -73,7 +85,7 @@ Abra `http://127.0.0.1:5173/ambulantes`. É o aplicativo normal, com o catálogo
 - [ ] Homologação do visual e definição do dia de lançamento em outubro.
 - [ ] Preparação da versão pública, metadados e revisão Apple quando a candidata for aprovada.
 
-### Candidata atual · 21/09/2026
+### Candidata anterior · 21/09/2026 · 1.1 (18)
 
 - Código: `b6b9536ce3f689e50e32d290555a15b384bf8ee3`, branch `feat/cliente-outubro-2026`; aplicação no commit `aa961621ddd49b9ea51fe15a4f8937530c3c1bf2` e correção de YAML no commit seguinte.
 - [Codemagic](https://codemagic.io/app/6a74a80b532034dc3f9b1a5d/build/6ab0a17aa02981cef2c6b5d2), workflow `ios-cliente-outubro-candidate`: todas as etapas concluídas com sucesso; testes **45/45**, lint sem erros, compilação IPA assinada e upload aprovados. Artefato `App.ipa`, versão **1.1 (18)**; log confirmou `UPLOAD SUCCEEDED with no errors`.
