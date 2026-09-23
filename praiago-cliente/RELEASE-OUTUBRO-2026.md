@@ -94,7 +94,17 @@ Abra `http://127.0.0.1:5173/ambulantes`. É o aplicativo normal, com o catálogo
 - [ ] Homologação do visual e definição do dia de lançamento em outubro.
 - [ ] Preparação da versão pública, metadados e revisão Apple quando a candidata for aprovada.
 
-### Candidata atual · 23/09/2026 · 1.1 (19)
+### Candidata atual · 23/09/2026 · 1.1 (20)
+
+- Código: `2af86ea4cfe74621e28cb6af52c48a4ceb7009e1`, branch `feat/cliente-outubro-2026`. Acabamento principal em `713a4cb32e239c8c6e0c60828851e65609af699f`; último commit corrige a precedência do tema sobre CSS Leaflet carregado sob demanda.
+- [Codemagic](https://codemagic.io/app/6a74a80b532034dc3f9b1a5d/build/6ab3551141b65d47e783bdcb): todas as etapas com sucesso; **57/57 testes**, build web/iOS, assinatura e upload. Log confirmou versão **1.1 (20)**, bundle `com.ferrazcode.praiago.cliente`, iOS mínimo 15.0 e `UPLOAD SUCCEEDED with no errors`.
+- App Store Connect confirmou build `965335c2-d2be-4154-856b-3a51e4eaac77`, versão **1.1 (20)**, `processingState: VALID`, `internalBuildState: IN_BETA_TESTING`, `externalBuildState: READY_FOR_BETA_SUBMISSION`. Disponível para testes internos, sem submissão pública/externa nem novos testadores.
+- A tentativa `6ab3549aba56bd187badfddb` foi cancelada antes da compilação/publicação para incluir o fundo escuro no carregamento do mapa. Não é a build de entrega.
+- Revisão visual no aplicativo real: Home/faixa de categorias, grade Todos, Perfil/login, catálogo, pedidos sem sessão, eventos, atendimento e estilos Praia/Cidade. As 28 categorias tiveram geometria conferida em 320 e 390 px, sem sobreposição de nome/contador e sem overflow horizontal da página. Tema claro preservado; console da aba de QA sem erros. Nenhuma conta/pedido/pagamento real criado. Fluxos autenticados avaliados em código e testes isolados, não homologados em produção.
+- [GitHub Actions](https://github.com/driftfutebol-glitch/praiago/actions/runs/35818376512): job não iniciou por bloqueio de cobrança da conta, confirmado pela anotação. O resultado independente do Codemagic está aprovado; nenhuma alteração financeira.
+- Sem merge para `main`, OTA de produção ou publicação na App Store. Homologação física no iPhone e fluxo autorizado em sandbox continuam pendentes.
+
+### Candidata anterior · 23/09/2026 · 1.1 (19)
 
 - Código: `2f0dd54fd4f7f12da315c73171b1513b6cd836fe`, branch `feat/cliente-outubro-2026`, [PR #3 em rascunho](https://github.com/driftfutebol-glitch/praiago/pull/3).
 - [Codemagic](https://codemagic.io/app/6a74a80b532034dc3f9b1a5d/build/6ab34e52c8f5d2bf623edd4f): todas as etapas concluídas com sucesso, **56/56 testes**, build web/iOS, assinatura e upload. Log confirmou versão **1.1 (19)** e `UPLOAD SUCCEEDED with no errors`; check nativo no GitHub também aprovado.
