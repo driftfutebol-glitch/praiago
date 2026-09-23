@@ -53,7 +53,7 @@ type Cupom = {
 }
 
 const cardShadow = '0 16px 40px rgba(15,23,42,0.10)'
-const CATEGORY_SPRITE = '/images/categorias-comida-v1.webp'
+const CATEGORY_SPRITE = '/images/categorias-comida-v2.webp'
 const CATEGORIAS_DESTAQUE: readonly CategoriaId[] = ['bebidas', 'bebidas_alcoolicas', 'espetos', 'salgados', 'porcoes', 'almoco', 'acai']
 
 function NotifPanel({ onClose }: { onClose: () => void }) {
@@ -207,12 +207,9 @@ function CategoriasPanel({
                 aria-label={`${categoria.nome}: ${count} ${count === 1 ? 'loja' : 'lojas'}`}
                 onClick={() => onSelect(categoria.id)}
                 className="prg-category-tile"
-                style={{ position: 'relative', minHeight: 128, overflow: 'hidden', borderRadius: 18, border: `1px solid ${selecionadaAgora ? categoria.cor : 'var(--pg-line)'}`, background: 'var(--pg-surface)', padding: '13px 10px 12px 13px', textAlign: 'left', cursor: 'pointer', boxShadow: selecionadaAgora ? `0 12px 26px -12px ${categoria.cor}` : '0 1px 2px rgba(15,23,42,0.04), 0 10px 24px -16px rgba(15,23,42,0.28)' }}
+                style={{ position: 'relative', minHeight: 144, overflow: 'hidden', borderRadius: 18, border: `1px solid ${selecionadaAgora ? categoria.cor : 'var(--pg-line)'}`, background: 'var(--pg-surface)', padding: '13px 10px 12px 13px', textAlign: 'left', cursor: 'pointer', boxShadow: selecionadaAgora ? `0 12px 26px -12px ${categoria.cor}` : '0 1px 2px rgba(15,23,42,0.04), 0 10px 24px -16px rgba(15,23,42,0.28)' }}
               >
-                {/* Chip colorido com a inicial — o mockup traz um ícone por
-                    categoria, mas não existe um ícone próprio no catálogo e
-                    inventar 20 ícones deixaria metade sem sentido. */}
-                <span style={{ position: 'relative', zIndex: 1, display: 'grid', placeItems: 'center', width: 34, height: 34, borderRadius: 11, marginBottom: 9, background: `${categoria.cor}18`, color: categoria.cor, fontSize: 15, fontWeight: 950 }}>
+                <span style={{ position: 'relative', zIndex: 1, display: 'grid', placeItems: 'center', width: 34, height: 34, borderRadius: 11, marginBottom: 9, background: `${categoria.cor}18`, color: 'var(--pg-ink)', fontSize: 15, fontWeight: 950 }}>
                   {restrita ? '18+' : categoria.nome.charAt(0)}
                 </span>
                 <span style={{ position: 'relative', zIndex: 1, display: 'block', maxWidth: restrita ? '50%' : '62%', fontSize: restrita ? 13.5 : 14.5, fontWeight: 950, color: 'var(--pg-ink)', lineHeight: 1.15, letterSpacing: 0 }}>{categoria.nome}</span>
@@ -317,8 +314,8 @@ function VendorCard({ v, onClick }: { v: Vendedor; onClick: () => void }) {
             {v.tipo === 'restaurante' ? 'Restaurante' : 'Ambulante'}
           </span>
           {!v.localizacaoConfirmada
-            ? <span style={{ background: '#f59e0b', color: 'var(--pg-on-brand)', borderRadius: 999, padding: '5px 9px', fontSize: 10, fontWeight: 900 }}>Local em ajuste</span>
-            : v.aberto && <span style={{ background: '#16a34a', color: 'var(--pg-on-brand)', borderRadius: 999, padding: '5px 9px', fontSize: 10, fontWeight: 900 }}>Aberto</span>}
+            ? <span style={{ background: 'var(--pg-warning-bg)', color: 'var(--pg-warning)', borderRadius: 999, padding: '5px 9px', fontSize: 10, fontWeight: 900 }}>Local em ajuste</span>
+            : v.aberto && <span style={{ background: 'var(--pg-success-bg)', color: 'var(--pg-success)', borderRadius: 999, padding: '5px 9px', fontSize: 10, fontWeight: 900 }}>Aberto</span>}
         </div>
         <button
           aria-label={isFav ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
@@ -363,7 +360,7 @@ function ProdutoCard({ item, onAdd, added }: { item: ProdutoDestaque; onAdd: () 
     <div style={{ background: 'var(--pg-surface)', borderRadius: 22, padding: 14, border: '1px solid var(--pg-line)', boxShadow: '0 10px 26px rgba(15,23,42,0.06)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
         <div style={{ minWidth: 0 }}>
-          {item.promocao && <div style={{ display: 'inline-flex', fontSize: 9, fontWeight: 950, color: 'var(--pg-on-brand)', background: '#ea580c', borderRadius: 999, padding: '3px 7px', marginBottom: 6 }}>{item.promocao.selo}</div>}
+          {item.promocao && <div style={{ display: 'inline-flex', fontSize: 9, fontWeight: 950, color: 'var(--pg-warning)', background: 'var(--pg-warning-bg)', borderRadius: 999, padding: '3px 7px', marginBottom: 6 }}>{item.promocao.selo}</div>}
           <div style={{ fontSize: 13, fontWeight: 900, color: 'var(--pg-ink)', lineHeight: 1.25 }}>{item.nome}</div>
           <div style={{ fontSize: 10, color: 'var(--pg-muted)', fontWeight: 700, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.vendedorNome}</div>
         </div>
@@ -380,9 +377,9 @@ function ProdutoCard({ item, onAdd, added }: { item: ProdutoDestaque; onAdd: () 
           height: 34,
           minWidth: 38,
           borderRadius: 12,
-          border: `1px solid ${added ? '#16a34a' : 'var(--pg-line)'}`,
-          background: added ? '#16a34a' : 'var(--pg-brand-soft)',
-          color: added ? 'var(--pg-on-brand)' : theme.color.primary,
+          border: `1px solid ${added ? 'var(--pg-action)' : 'var(--pg-line)'}`,
+          background: added ? 'var(--pg-action)' : 'var(--pg-brand-soft)',
+          color: added ? 'var(--pg-action-ink)' : theme.color.primary,
           display: 'grid',
           placeItems: 'center',
           cursor: 'pointer',
@@ -578,6 +575,7 @@ export default function HomePage() {
 
       <header style={{ position: 'relative', minHeight: 176, padding: '20px 20px 18px', overflow: 'hidden', background: 'var(--pg-surface)', margin: '12px 16px', borderRadius: 24, border: '1px solid var(--pg-line)' }}>
         <img
+          className="pg-home-beach-photo"
           src="/images/home-beach-v2.webp"
           alt=""
           aria-hidden="true"
@@ -660,13 +658,13 @@ export default function HomePage() {
             color: 'var(--pg-on-brand)',
             position: 'relative',
             overflow: 'hidden',
-            background: 'linear-gradient(135deg,#0284c7 0%,#0ea5e9 46%,#16a34a 100%)',
+            background: 'var(--pg-brand-gradient)',
             boxShadow: '0 22px 46px rgba(var(--pg-ocean-rgb), 0.24)',
             marginBottom: 18,
           }}>
-            <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 88% 16%, rgba(255,255,255,0.34), transparent 22%), radial-gradient(circle at 74% 120%, rgba(var(--pg-warning-rgb), 0.38), transparent 32%)' }} />
+            <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 88% 16%, rgba(255,255,255,0.08), transparent 22%), radial-gradient(circle at 74% 120%, rgba(var(--pg-warning-rgb), 0.38), transparent 32%)' }} />
             <div style={{ position: 'relative', zIndex: 1, maxWidth: 260 }}>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 999, padding: '6px 10px', background: 'rgba(255,255,255,0.18)', fontSize: 11, fontWeight: 950, marginBottom: 12 }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 999, padding: '6px 10px', background: 'rgba(255,255,255,0.08)', fontSize: 11, fontWeight: 950, marginBottom: 12 }}>
                 <Percent size={13} /> Promoções da praia
               </div>
               <h1 style={{ margin: 0, fontSize: 25, fontWeight: 950, lineHeight: 1.05, letterSpacing: 0 }}>{produtoPromocao.promocao?.titulo || produtoPromocao.nome}</h1>
@@ -678,7 +676,7 @@ export default function HomePage() {
                 Ver oferta
               </button>
             </div>
-            <div style={{ position: 'absolute', right: 12, bottom: 12, width: 110, height: 110, borderRadius: 28, overflow: 'hidden', background: 'rgba(255,255,255,0.18)', display: 'grid', placeItems: 'center' }}>
+            <div style={{ position: 'absolute', right: 12, bottom: 12, width: 110, height: 110, borderRadius: 28, overflow: 'hidden', background: 'rgba(255,255,255,0.08)', display: 'grid', placeItems: 'center' }}>
               {produtoPromocao.foto
                 ? <img src={produtoPromocao.foto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 : <Percent size={44} color="rgba(var(--pg-on-brand-rgb), 0.92)" />}
@@ -687,10 +685,10 @@ export default function HomePage() {
         )}
 
         <section className="prg-stagger" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 24 }}>
-          <QuickAction title="Restaurantes" subtitle="Perto de você" count={restaurantesLabel} color="#f97316" icon={<Utensils size={22} />} onClick={() => navigate('/pedir?tipo=restaurante')} />
-          <QuickAction title="Ambulantes" subtitle="Perto da praia" count={ambulantesLabel} color="#16a34a" icon={<ShoppingBag size={22} />} onClick={() => navigate('/pedir?tipo=ambulante')} />
-          <QuickAction title="Radar ao vivo" subtitle="Ache quem está na praia" count={ambulantesLabel} color="#0284c7" icon={<MapPin size={22} />} onClick={() => navigate('/ambulantes')} />
-          <QuickAction title="Cupons" subtitle="Descontos exclusivos" count={cupons.length > 0 ? `${cupons.length} ativo${cupons.length === 1 ? '' : 's'}` : undefined} color="#7c3aed" icon={<Ticket size={22} />} onClick={() => setCuponsAberto(true)} />
+          <QuickAction title="Restaurantes" subtitle="Perto de você" count={restaurantesLabel} color="#c2410c" icon={<Utensils size={22} />} onClick={() => navigate('/pedir?tipo=restaurante')} />
+          <QuickAction title="Ambulantes" subtitle="Perto da praia" count={ambulantesLabel} color="#15803d" icon={<ShoppingBag size={22} />} onClick={() => navigate('/pedir?tipo=ambulante')} />
+          <QuickAction title="Radar ao vivo" subtitle="Ache quem está na praia" count={ambulantesLabel} color="#0369a1" icon={<MapPin size={22} />} onClick={() => navigate('/ambulantes')} />
+          <QuickAction title="Cupons" subtitle="Descontos exclusivos" count={cupons.length > 0 ? `${cupons.length} ativo${cupons.length === 1 ? '' : 's'}` : undefined} color="#6d28d9" icon={<Ticket size={22} />} onClick={() => setCuponsAberto(true)} />
         </section>
 
         {/* Evento em destaque — só aparece se existir um marcado no banco.
@@ -742,8 +740,8 @@ export default function HomePage() {
                   fontSize: 9.5,
                   fontWeight: 900,
                   letterSpacing: 0,
-                  color: 'var(--pg-on-brand)',
-                  background: '#16a34a',
+                  color: 'var(--pg-success)',
+                  background: 'var(--pg-success-bg)',
                 }}
               >
                 EM DESTAQUE
@@ -859,7 +857,7 @@ export default function HomePage() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 15, fontWeight: 950, color: 'var(--pg-warning)' }}>{c.titulo}</span>
-                      <span style={{ fontSize: 11, fontWeight: 950, color: 'var(--pg-on-brand)', background: '#ea580c', padding: '4px 8px', borderRadius: 999 }}>{desconto}</span>
+                      <span style={{ fontSize: 11, fontWeight: 950, color: 'var(--pg-warning)', background: 'var(--pg-warning-bg)', padding: '4px 8px', borderRadius: 999 }}>{desconto}</span>
                     </div>
                     <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--pg-warning)', marginTop: 5 }}>
                       Use {c.codigo}{c.valor_minimo > 0 ? ` · minimo R$ ${Number(c.valor_minimo).toFixed(2).replace('.', ',')}` : ''}

@@ -34,9 +34,9 @@ import { MAPA_TILES, MAPA_ATRIBUICAO, MAPA_ZOOM_MAX } from '../lib/mapa'
 function makeIcon(html: string) {
   return L.divIcon({ className: '', html, iconSize: [44, 44], iconAnchor: [22, 22] })
 }
-const ambulanteIcon = makeIcon(`<div style="width:44px;height:44px;border-radius:15px;background:linear-gradient(135deg,#0ea5e9,#22c55e);color:#fff;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 8px 20px rgba(22,163,74,0.35)">${cartMarkup}</div>`)
-const restauranteIcon = makeIcon(`<div style="width:44px;height:44px;border-radius:15px;background:linear-gradient(135deg,#f97316,#ea580c);color:#fff;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 8px 20px rgba(234,88,12,0.35)">${storeMarkup}</div>`)
-const clienteIcon = makeIcon(`<div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#38bdf8,#0284c7);color:#fff;display:flex;align-items:center;justify-content:center;border:3px solid #fff;box-shadow:0 8px 20px rgba(2,132,199,0.35)">${customerMarkup}</div>`)
+const ambulanteIcon = makeIcon(`<div style="width:44px;height:44px;border-radius:15px;background:linear-gradient(135deg,#0ea5e9,#22c55e);color:#fff;display:flex;align-items:center;justify-content:center;border:3px solid var(--pg-map-pin-outline);box-shadow:0 8px 20px rgba(22,163,74,0.35)">${cartMarkup}</div>`)
+const restauranteIcon = makeIcon(`<div style="width:44px;height:44px;border-radius:15px;background:linear-gradient(135deg,#f97316,#ea580c);color:#fff;display:flex;align-items:center;justify-content:center;border:3px solid var(--pg-map-pin-outline);box-shadow:0 8px 20px rgba(234,88,12,0.35)">${storeMarkup}</div>`)
+const clienteIcon = makeIcon(`<div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#38bdf8,#0284c7);color:#fff;display:flex;align-items:center;justify-content:center;border:3px solid var(--pg-map-pin-outline);box-shadow:0 8px 20px rgba(2,132,199,0.35)">${customerMarkup}</div>`)
 
 
 function calcDist(a: [number, number], b: [number, number]): number {
@@ -133,7 +133,7 @@ function ChatModal({ vendedor, pedidoId, onClose }: { vendedor: Vendedor; pedido
                 initial={{ opacity: 0, scale: 0.95, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} key={m.id}
                 style={{
                   alignSelf: meu ? 'flex-end' : 'flex-start', maxWidth: '78%',
-                  background: meu ? 'linear-gradient(135deg,#0ea5e9,#22c55e)' : 'var(--pg-surface-alt)',
+                  background: meu ? 'var(--pg-brand-gradient)' : 'var(--pg-surface-alt)',
                   color: meu ? 'var(--pg-on-brand)' : 'var(--pg-ink)',
                   padding: '11px 15px', borderRadius: 20,
                   borderBottomRightRadius: meu ? 4 : 20, borderBottomLeftRadius: meu ? 20 : 4,
@@ -177,13 +177,13 @@ function ChatModal({ vendedor, pedidoId, onClose }: { vendedor: Vendedor; pedido
             disabled={!pedidoId || !texto.trim() || enviando}
             style={{
               width: 50, flexShrink: 0,
-              background: (!pedidoId || !texto.trim() || enviando) ? 'var(--pg-line)' : 'linear-gradient(135deg,#0ea5e9,#22c55e)',
-              border: 'none', borderRadius: 16, color: 'var(--pg-on-brand)',
+              background: (!pedidoId || !texto.trim() || enviando) ? 'var(--pg-surface-alt)' : 'var(--pg-action)',
+              border: 'none', borderRadius: 16, color: 'var(--pg-action-ink)',
               cursor: (!pedidoId || !texto.trim() || enviando) ? 'default' : 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
           >
-            <Send size={20} color={(!pedidoId || !texto.trim() || enviando) ? 'var(--pg-faint)' : 'var(--pg-on-brand)'} />
+            <Send size={20} color={(!pedidoId || !texto.trim() || enviando) ? 'var(--pg-faint)' : 'var(--pg-action-ink)'} />
           </button>
         </div>
       </motion.div>
@@ -372,11 +372,10 @@ function RastreamentoModal({ vendedor, clientePos, pedidoId, onClose }: { vended
         </div>
       )}
 
-      {/* Área superior: MAPA DARK MODE */}
-      <div style={{ flex: 1, position: 'relative', background: 'var(--pg-line)' }}>
+      {/* O rastreamento acompanha o mesmo tema do mapa de exploração. */}
+      <div className="pg-map-standard" style={{ flex: 1, position: 'relative', background: 'var(--pg-line)' }}>
         {atrasado ? (
           <MapContainer center={pos} zoom={16} style={{ height: '100%', width: '100%' }} zoomControl={false}>
-            {/* Mapa estilo Dark/Tático */}
             <TileLayer attribution={MAPA_ATRIBUICAO} url={MAPA_TILES} maxZoom={MAPA_ZOOM_MAX} />
             <RecenterMap a={pos} b={clientePos} />
             <Marker position={pos} icon={vendedor.tipo === 'restaurante' ? restauranteIcon : ambulanteIcon} />
@@ -387,7 +386,7 @@ function RastreamentoModal({ vendedor, clientePos, pedidoId, onClose }: { vended
               : <Polyline positions={[pos, clientePos]} pathOptions={{ color: 'var(--pg-ocean-dark)', weight: 3, dashArray: '8 6', opacity: 0.4 }} />}
           </MapContainer>
         ) : (
-          <div style={{ height: '100%', background: 'linear-gradient(160deg,#0ea5e9,#22c55e)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--pg-on-brand)', textAlign: 'center', padding: '0 32px' }}>
+          <div style={{ height: '100%', background: 'var(--pg-brand-gradient)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--pg-on-brand)', textAlign: 'center', padding: '0 32px' }}>
             <motion.div animate={{ y: [0, -10, 0] }} transition={{ repeat: Infinity, duration: 2 }} style={{ fontSize: 72, marginBottom: 16, filter: 'drop-shadow(0 10px 15px rgba(0,0,0,0.2))' }}>
               {status === 'chegou' ? '🎉' : status === 'a_caminho' ? '🛵' : status === 'preparando' ? '👨‍🍳' : '📨'}
             </motion.div>
@@ -458,7 +457,7 @@ function RastreamentoModal({ vendedor, clientePos, pedidoId, onClose }: { vended
                   ))}
                 </div>
                 <input value={comentario} onChange={e => setComentario(e.target.value)} placeholder="Deixe um comentário (opcional)" style={{ width: '100%', padding: '12px 14px', borderRadius: 14, border: '1px solid var(--pg-line)', background: 'var(--pg-surface-alt)', color: 'var(--pg-ink)', fontSize: 14, outline: 'none', marginBottom: 12, boxSizing: 'border-box' }} />
-                <motion.button whileTap={{ scale: 0.97 }} onClick={enviarAvaliacao} disabled={nota === 0} style={{ width: '100%', background: nota === 0 ? 'var(--pg-line)' : 'linear-gradient(135deg, #0ea5e9, #22c55e)', color: nota === 0 ? 'var(--pg-faint)' : 'var(--pg-on-brand)', border: 'none', padding: '14px 0', borderRadius: 16, fontWeight: 900, fontSize: 15, cursor: nota === 0 ? 'default' : 'pointer' }}>
+                <motion.button whileTap={{ scale: 0.97 }} onClick={enviarAvaliacao} disabled={nota === 0} style={{ width: '100%', background: nota === 0 ? 'var(--pg-line)' : 'var(--pg-action)', color: nota === 0 ? 'var(--pg-faint)' : 'var(--pg-action-ink)', border: 'none', padding: '14px 0', borderRadius: 16, fontWeight: 900, fontSize: 15, cursor: nota === 0 ? 'default' : 'pointer' }}>
                   ENVIAR AVALIAÇÃO
                 </motion.button>
               </>
@@ -473,7 +472,7 @@ function RastreamentoModal({ vendedor, clientePos, pedidoId, onClose }: { vended
               <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--pg-ink)' }}>{vendedor.nome}</div>
               <div style={{ fontSize: 12, color: 'var(--pg-muted)' }}>Vendedor oficial PraiaGo</div>
             </div>
-            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setChatOpen(true)} style={{ background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', color: 'var(--pg-on-brand)', border: 'none', padding: '12px 20px', borderRadius: 16, fontWeight: 800, fontSize: 14, cursor: 'pointer', boxShadow: '0 4px 15px rgba(var(--pg-success-rgb), 0.3)' }}>
+            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setChatOpen(true)} style={{ background: 'var(--pg-action)', color: 'var(--pg-action-ink)', border: 'none', padding: '12px 20px', borderRadius: 16, fontWeight: 800, fontSize: 14, cursor: 'pointer', boxShadow: '0 4px 15px rgba(var(--pg-success-rgb), 0.3)' }}>
               Chat
             </motion.button>
           </div>
@@ -589,8 +588,8 @@ function PixPagamentoModal({ cobranca, pedidoId, total, onPago, onClose }: {
         <AnimatePresence mode="wait">
           {pago ? (
             <motion.div key="pago" initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} style={{ textAlign: 'center', padding: '34px 10px 40px' }}>
-              <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', damping: 12, stiffness: 200, delay: 0.1 }} style={{ width: 92, height: 92, borderRadius: '50%', background: 'linear-gradient(135deg, #22c55e, #16a34a)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', boxShadow: '0 18px 44px rgba(34,197,94,0.45)' }}>
-                <Check size={46} color="var(--pg-on-brand)" strokeWidth={3.5} />
+              <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', damping: 12, stiffness: 200, delay: 0.1 }} style={{ width: 92, height: 92, borderRadius: '50%', background: 'var(--pg-success-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', boxShadow: 'var(--pg-shadow)' }}>
+                <Check size={46} color="var(--pg-success)" strokeWidth={3.5} />
               </motion.div>
               <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--pg-ink)' }}>Pagamento aprovado! 🎉</div>
               <p style={{ fontSize: 14.5, color: 'var(--pg-muted)', fontWeight: 600, marginTop: 8 }}>Enviando seu pedido pro vendedor…</p>
@@ -624,7 +623,7 @@ function PixPagamentoModal({ cobranca, pedidoId, total, onPago, onClose }: {
                 </div>
               </div>
 
-              <motion.button whileTap={{ scale: 0.97 }} onClick={copiar} style={{ width: '100%', border: 'none', borderRadius: 20, padding: '17px 20px', fontSize: 15, fontWeight: 900, cursor: 'pointer', color: 'var(--pg-on-brand)', background: copiado ? 'linear-gradient(135deg, #16a34a, #15803d)' : 'linear-gradient(135deg, #0ea5e9, #22c55e)', boxShadow: '0 14px 30px rgba(var(--pg-ocean-rgb), 0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+              <motion.button whileTap={{ scale: 0.97 }} onClick={copiar} style={{ width: '100%', border: 'none', borderRadius: 20, padding: '17px 20px', fontSize: 15, fontWeight: 900, cursor: 'pointer', color: 'var(--pg-action-ink)', background: 'var(--pg-action)', boxShadow: '0 14px 30px rgba(var(--pg-ocean-rgb), 0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
                 {copiado ? <><Check size={19} /> Código copiado! Cola no app do banco</> : <>📋 Copiar código PIX</>}
               </motion.button>
 
@@ -751,8 +750,8 @@ function CartaoPagamentoModal({ tipo, pedidoId, total, emailCliente, onPago, onC
 
         {aprovado ? (
           <motion.div initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} style={{ textAlign: 'center', padding: '34px 10px 40px' }}>
-            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', damping: 12, stiffness: 200, delay: 0.1 }} style={{ width: 92, height: 92, borderRadius: '50%', background: 'linear-gradient(135deg, #22c55e, #16a34a)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', boxShadow: '0 18px 44px rgba(34,197,94,0.45)' }}>
-              <Check size={46} color="var(--pg-on-brand)" strokeWidth={3.5} />
+            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', damping: 12, stiffness: 200, delay: 0.1 }} style={{ width: 92, height: 92, borderRadius: '50%', background: 'var(--pg-success-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', boxShadow: 'var(--pg-shadow)' }}>
+              <Check size={46} color="var(--pg-success)" strokeWidth={3.5} />
             </motion.div>
             <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--pg-ink)' }}>Pagamento aprovado! 🎉</div>
             <p style={{ fontSize: 14.5, color: 'var(--pg-muted)', fontWeight: 600, marginTop: 8 }}>Enviando seu pedido pro vendedor…</p>
@@ -806,7 +805,7 @@ function CartaoPagamentoModal({ tipo, pedidoId, total, emailCliente, onPago, onC
               </motion.div>
             )}
 
-            <motion.button whileTap={{ scale: processando ? 1 : 0.97 }} disabled={processando} onClick={pagar} style={{ width: '100%', marginTop: 16, border: 'none', borderRadius: 20, padding: '17px 20px', fontSize: 15.5, fontWeight: 900, cursor: processando ? 'wait' : 'pointer', color: 'var(--pg-on-brand)', background: processando ? 'var(--pg-faint)' : 'linear-gradient(135deg, #0ea5e9, #22c55e)', boxShadow: processando ? 'none' : '0 14px 30px rgba(var(--pg-ocean-rgb), 0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+            <motion.button whileTap={{ scale: processando ? 1 : 0.97 }} disabled={processando} onClick={pagar} style={{ width: '100%', marginTop: 16, border: 'none', borderRadius: 20, padding: '17px 20px', fontSize: 15.5, fontWeight: 900, cursor: processando ? 'wait' : 'pointer', color: processando ? 'var(--pg-muted)' : 'var(--pg-action-ink)', background: processando ? 'var(--pg-surface-alt)' : 'var(--pg-action)', boxShadow: processando ? 'none' : '0 14px 30px rgba(var(--pg-ocean-rgb), 0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
               {processando ? 'Processando…' : `Pagar R$ ${total.toFixed(2).replace('.', ',')} 🔒`}
             </motion.button>
             <p style={{ fontSize: 11.5, color: 'var(--pg-faint)', fontWeight: 600, textAlign: 'center', marginTop: 10 }}>
@@ -1298,14 +1297,14 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 900, color: 'var(--pg-ink)' }}>
-                <Shield size={16} color={sessao ? '#16a34a' : '#ea580c'} /> Pedido seguro PraiaGo
+                <Shield size={16} color={sessao ? 'var(--pg-success)' : 'var(--pg-warning)'} /> Pedido seguro PraiaGo
               </div>
               <div style={{ fontSize: 12.5, color: 'var(--pg-muted)', fontWeight: 700, marginTop: 4 }}>
                 {sessao ? `${sessao.nome || 'Cliente'} · ${emailConfirmado ? 'e-mail confirmado' : 'confirme seu e-mail'}` : 'Entre ou crie sua conta para fechar pedido.'}
               </div>
             </div>
             {!sessao && (
-              <button type="button" onClick={() => navigate('/perfil')} style={{ border: 'none', background: 'linear-gradient(135deg,#0ea5e9,#22c55e)', color: 'var(--pg-on-brand)', borderRadius: 14, padding: '10px 12px', fontSize: 12, fontWeight: 900, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              <button type="button" onClick={() => navigate('/perfil')} style={{ border: 'none', background: 'var(--pg-action)', color: 'var(--pg-action-ink)', borderRadius: 14, padding: '10px 12px', fontSize: 12, fontWeight: 900, cursor: 'pointer', whiteSpace: 'nowrap' }}>
                 Entrar
               </button>
             )}
@@ -1316,7 +1315,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
                 <label style={{ fontSize: 10.5, fontWeight: 900, color: 'var(--pg-muted)', display: 'block', marginBottom: 6, letterSpacing: 0.6 }}>CPF DO CLIENTE</label>
                 <input inputMode="numeric" value={cpfCliente} onChange={e => setCpfCliente(formatarCpfCliente(e.target.value))} readOnly={cpfOk} placeholder="000.000.000-00" style={{ ...darkInput, cursor: cpfOk ? 'default' : 'text', opacity: cpfOk ? 0.82 : 1 }} />
               </div>
-              <button type="button" disabled={salvandoCpf || cpfOk} onClick={salvarCpfCliente} style={{ height: 48, border: 'none', background: cpfOk ? 'var(--pg-success-bg)' : '#0ea5e9', color: cpfOk ? 'var(--pg-success)' : 'var(--pg-on-brand)', borderRadius: 15, padding: '0 14px', fontSize: 12, fontWeight: 900, cursor: cpfOk ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
+              <button type="button" disabled={salvandoCpf || cpfOk} onClick={salvarCpfCliente} style={{ height: 48, border: 'none', background: cpfOk ? 'var(--pg-success-bg)' : 'var(--pg-action)', color: cpfOk ? 'var(--pg-success)' : 'var(--pg-action-ink)', borderRadius: 15, padding: '0 14px', fontSize: 12, fontWeight: 900, cursor: cpfOk ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
                 {cpfOk ? 'Validado' : salvandoCpf ? 'Salvando' : 'Validar'}
               </button>
             </div>
@@ -1328,7 +1327,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
                 <label style={{ fontSize: 10.5, fontWeight: 900, color: 'var(--pg-muted)', display: 'block', marginBottom: 6, letterSpacing: 0.6 }}>TELEFONE (COM DDD)</label>
                 <input inputMode="numeric" value={telefoneCliente} onChange={e => setTelefoneCliente(formatarTelefone(e.target.value))} placeholder="(13) 99999-8888" style={darkInput} />
               </div>
-              <button type="button" disabled={salvandoTel || telefoneSalvo} onClick={salvarTelefone} style={{ height: 48, border: 'none', background: telefoneSalvo ? 'var(--pg-success-bg)' : '#0ea5e9', color: telefoneSalvo ? 'var(--pg-success)' : 'var(--pg-on-brand)', borderRadius: 15, padding: '0 14px', fontSize: 12, fontWeight: 900, cursor: telefoneSalvo ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
+              <button type="button" disabled={salvandoTel || telefoneSalvo} onClick={salvarTelefone} style={{ height: 48, border: 'none', background: telefoneSalvo ? 'var(--pg-success-bg)' : 'var(--pg-action)', color: telefoneSalvo ? 'var(--pg-success)' : 'var(--pg-action-ink)', borderRadius: 15, padding: '0 14px', fontSize: 12, fontWeight: 900, cursor: telefoneSalvo ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
                 {salvandoTel ? 'Salvando' : telefoneSalvo ? 'Salvo' : 'Salvar'}
               </button>
             </div>
@@ -1344,7 +1343,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
         <div style={{ background: 'var(--pg-surface-alt)', borderRadius: 24, padding: '20px', marginBottom: 20, border: '1px solid var(--pg-line)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 16 }}>
             <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--pg-muted)', letterSpacing: 1, textTransform: 'uppercase' }}>Resumo · {vendedor.nome}</div>
-            <button type="button" onClick={excluirPedido} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid rgba(var(--pg-danger-rgb), 0.18)', background: 'var(--pg-danger-bg)', color: '#e11d48', borderRadius: 999, padding: '8px 11px', fontSize: 12, fontWeight: 900, cursor: 'pointer' }}>
+            <button type="button" onClick={excluirPedido} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid rgba(var(--pg-danger-rgb), 0.18)', background: 'var(--pg-danger-bg)', color: 'var(--pg-danger)', borderRadius: 999, padding: '8px 11px', fontSize: 12, fontWeight: 900, cursor: 'pointer' }}>
               <Trash2 size={14} /> Excluir pedido
             </button>
           </div>
@@ -1437,7 +1436,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
                     cursor: c.bloqueado ? 'not-allowed' : 'pointer',
                   }}
                 >
-                  <div style={{ width: 42, height: 42, borderRadius: 15, background: c.bloqueado ? 'var(--pg-line)' : 'linear-gradient(135deg,#0ea5e9,#22c55e)', color: 'var(--pg-on-brand)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <div style={{ width: 42, height: 42, borderRadius: 15, background: c.bloqueado ? 'var(--pg-surface-alt)' : 'var(--pg-brand-gradient)', color: c.bloqueado ? 'var(--pg-muted)' : 'var(--pg-on-brand)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     {selecionado ? <Check size={18} /> : <TicketPercent size={18} />}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -1459,7 +1458,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
             {mostrarCodigoManual && (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10 }}>
                 <input value={cupomTexto} onChange={e => setCupomTexto(e.target.value.toUpperCase())} placeholder="Digite seu codigo" style={darkInput} />
-                <button type="button" onClick={() => aplicarCupom()} style={{ border: 'none', background: '#0ea5e9', color: 'var(--pg-on-brand)', borderRadius: 15, padding: '0 14px', fontSize: 12, fontWeight: 900, cursor: 'pointer' }}>
+                <button type="button" onClick={() => aplicarCupom()} style={{ border: 'none', background: 'var(--pg-action)', color: 'var(--pg-action-ink)', borderRadius: 15, padding: '0 14px', fontSize: 12, fontWeight: 900, cursor: 'pointer' }}>
                   Aplicar
                 </button>
               </div>
@@ -1475,12 +1474,12 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
         {/* Pagamento — estilo lista, com a marca PraiaGo Pay */}
         <div style={{ marginBottom: 24 }}>
           <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--pg-ink)', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <CreditCard size={18} color="#2a22de" /> Como você quer pagar?
+            <CreditCard size={18} color="var(--pg-ocean-dark)" /> Como você quer pagar?
           </div>
 
           {[
             {
-              id: 'app', cor: '#2a22de', corBg: 'rgba(42,34,222,0.06)',
+              id: 'app', cor: 'var(--pg-ocean)', corBg: 'var(--pg-brand-soft)',
               opcoes: [
                 { key: 'pix', Icon: QrCode, label: 'Pix', sub: 'Aprovação automática', tag: 'Na hora' },
                 { key: 'credito_online', Icon: CreditCard, label: 'Cartão de crédito', sub: 'Visa, Master, Elo, Amex e mais', tag: '' },
@@ -1488,7 +1487,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
               ],
             },
             {
-              id: 'entrega', cor: 'var(--pg-success)', corBg: 'rgba(22,163,94,0.06)',
+              id: 'entrega', cor: 'var(--pg-success)', corBg: 'var(--pg-success-bg)',
               opcoes: [
                 { key: 'dinheiro', Icon: Banknote, label: 'Dinheiro', sub: 'Pague ao receber o pedido', tag: '' },
                 { key: 'cartao_fisico', Icon: CreditCard, label: 'Maquininha', sub: 'Crédito ou débito na entrega', tag: '' },
@@ -1521,13 +1520,13 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
                       style={{
                         width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 14,
                         background: sel ? grupo.corBg : 'var(--pg-surface)',
-                        border: `2px solid ${sel ? grupo.cor : 'rgba(15,23,42,0.08)'}`,
+                        border: `2px solid ${sel ? grupo.cor : 'var(--pg-line)'}`,
                         borderRadius: 18, padding: '15px 16px', cursor: 'pointer',
-                        boxShadow: sel ? `0 10px 24px ${grupo.cor}22` : '0 2px 8px rgba(15,23,42,0.04)',
+                        boxShadow: sel ? 'var(--pg-shadow)' : 'none',
                         transition: 'border-color .2s, box-shadow .2s, background .2s',
                       }}
                     >
-                      <div style={{ width: 46, height: 46, borderRadius: 14, background: sel ? grupo.cor : 'var(--pg-surface-alt)', color: sel ? 'var(--pg-on-brand)' : 'var(--pg-faint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background .2s, color .2s' }}>
+                      <div style={{ width: 46, height: 46, borderRadius: 14, background: sel ? 'var(--pg-action)' : 'var(--pg-surface-alt)', color: sel ? 'var(--pg-action-ink)' : 'var(--pg-faint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background .2s, color .2s' }}>
                         <o.Icon size={22} />
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -1560,8 +1559,8 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
             }}
             style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: querCpfNota ? 'rgba(var(--pg-ocean-rgb), 0.08)' : 'var(--pg-surface-alt)', border: `1.5px solid ${querCpfNota ? '#0ea5e9' : 'var(--pg-line)'}`, borderRadius: 16, padding: '14px 16px', cursor: 'pointer', textAlign: 'left' }}
           >
-            <div style={{ width: 22, height: 22, borderRadius: 7, border: `2px solid ${querCpfNota ? '#0ea5e9' : 'var(--pg-line)'}`, background: querCpfNota ? '#0ea5e9' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              {querCpfNota && <Check size={14} color="var(--pg-on-brand)" strokeWidth={3.5} />}
+            <div style={{ width: 22, height: 22, borderRadius: 7, border: `2px solid ${querCpfNota ? 'var(--pg-action)' : 'var(--pg-line)'}`, background: querCpfNota ? 'var(--pg-action)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              {querCpfNota && <Check size={14} color="var(--pg-action-ink)" strokeWidth={3.5} />}
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--pg-ink)' }}>Adicionar CPF na nota</div>
@@ -1642,7 +1641,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
             </div>
           </div>
         )}
-        <motion.button whileTap={{ scale: 0.96 }} onClick={handleConfirm} disabled={confirming || longeDaLoja} style={{ width: '100%', background: confirming ? '#22c55e' : 'linear-gradient(135deg, #0ea5e9, #22c55e)', border: 'none', borderRadius: 20, padding: '20px', color: 'var(--pg-on-brand)', fontSize: 18, fontWeight: 900, cursor: confirming ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, boxShadow: confirming ? '0 0 20px rgba(34,197,94,0.6)' : '0 10px 30px rgba(var(--pg-ocean-rgb), 0.4)', transition: 'all 0.3s' }}>
+        <motion.button whileTap={{ scale: 0.96 }} onClick={handleConfirm} disabled={confirming || longeDaLoja} style={{ width: '100%', background: 'var(--pg-action)', border: 'none', borderRadius: 20, padding: '20px', color: 'var(--pg-action-ink)', fontSize: 18, fontWeight: 900, cursor: confirming ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, boxShadow: confirming ? '0 0 20px rgba(34,197,94,0.6)' : '0 10px 30px rgba(var(--pg-ocean-rgb), 0.4)', transition: 'all 0.3s' }}>
           {confirming ? <><Check size={24} /> {isPagamentoOnline(pagamento) ? 'Preparando pagamento...' : 'Pedido Enviado!'}</> : <><Send size={20} /> Fechar Pedido · R$ {dinheiro(total)}</>}
         </motion.button>
       </motion.div>
@@ -1681,7 +1680,7 @@ function LojaCard({ v, index, onOpen }: { v: Vendedor; index: number; onOpen: ()
         <img src={v.image} alt={v.nome} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: v.aberto ? 'none' : 'grayscale(0.9) brightness(0.9)' }} />
         <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(var(--pg-surface-rgb), 0.95), transparent 55%)' }} />
         {/* Badge aberto/fechado com horário */}
-        <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', alignItems: 'center', gap: 6, background: !v.localizacaoConfirmada ? 'rgba(245,158,11,0.96)' : v.aberto ? 'rgba(34,197,94,0.95)' : 'rgba(100,116,139,0.95)', color: 'var(--pg-on-brand)', borderRadius: 999, padding: '6px 12px', fontSize: 11, fontWeight: 900, boxShadow: '0 6px 16px rgba(0,0,0,0.18)' }}>
+        <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', alignItems: 'center', gap: 6, background: !v.localizacaoConfirmada ? 'var(--pg-warning-bg)' : v.aberto ? 'var(--pg-success-bg)' : 'var(--pg-surface-alt)', color: !v.localizacaoConfirmada ? 'var(--pg-warning)' : v.aberto ? 'var(--pg-success)' : 'var(--pg-muted)', borderRadius: 999, padding: '6px 12px', fontSize: 11, fontWeight: 900, boxShadow: '0 6px 16px rgba(0,0,0,0.18)' }}>
           {!v.localizacaoConfirmada ? <MapPin size={12} /> : <Clock size={12} />}
           {!v.localizacaoConfirmada ? 'Local em ajuste' : labelHorario(v.aberto, v.horarioAbre, v.horarioFecha)}
         </div>
@@ -1777,8 +1776,8 @@ function LojasList({ vendedores, loading, tipoInicial, foraDaArea, modoRevisao, 
   return (
     <div className="pg-explore" style={{ minHeight: '100%', background: 'var(--pg-sand)', paddingBottom: 28 }}>
       {/* Header */}
-      <div style={{ background: 'linear-gradient(120deg,#094f5b,#0b7f87)', padding: '24px 20px 48px', borderBottomLeftRadius: 28, borderBottomRightRadius: 28, position: 'relative', overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', top: -60, right: -40, width: 190, height: 190, borderRadius: '50%', background: 'rgba(255,255,255,0.14)', filter: 'blur(2px)' }} />
+      <div style={{ background: 'var(--pg-brand-gradient)', padding: '24px 20px 48px', borderBottomLeftRadius: 28, borderBottomRightRadius: 28, position: 'relative', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', top: -60, right: -40, width: 190, height: 190, borderRadius: '50%', background: 'rgba(255,255,255,0.05)', filter: 'blur(2px)' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button aria-label="Voltar" onClick={() => navigate('/')} style={{ width: 42, height: 42, borderRadius: 14, background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
             <ArrowLeft size={19} color="var(--pg-on-brand)" />
@@ -1814,7 +1813,7 @@ function LojasList({ vendedores, loading, tipoInicial, foraDaArea, modoRevisao, 
           <div style={{ marginTop: 4, fontSize: 12, lineHeight: 1.45, fontWeight: 650 }}>
             Estamos começando pela Baixada Santista. Você pode explorar também as outras regiões.
           </div>
-          <button type="button" onClick={onExplorarArea} style={{ marginTop: 10, width: '100%', border: 0, borderRadius: 13, padding: '10px 12px', background: '#0ea5e9', color: 'var(--pg-on-brand)', fontSize: 12, fontWeight: 900, cursor: 'pointer' }}>
+          <button type="button" onClick={onExplorarArea} style={{ marginTop: 10, width: '100%', border: 0, borderRadius: 13, padding: '10px 12px', background: 'var(--pg-action)', color: 'var(--pg-action-ink)', fontSize: 12, fontWeight: 900, cursor: 'pointer' }}>
             Ver Praia Grande
           </button>
         </div>
@@ -1833,7 +1832,7 @@ function LojasList({ vendedores, loading, tipoInicial, foraDaArea, modoRevisao, 
             </div>
           </div>
           {foraDaArea && (
-            <button type="button" onClick={onExplorarArea} style={{ marginTop: 10, width: '100%', border: 0, borderRadius: 13, padding: '10px 12px', background: '#0ea5e9', color: 'var(--pg-on-brand)', fontSize: 12, fontWeight: 900, cursor: 'pointer' }}>
+            <button type="button" onClick={onExplorarArea} style={{ marginTop: 10, width: '100%', border: 0, borderRadius: 13, padding: '10px 12px', background: 'var(--pg-action)', color: 'var(--pg-action-ink)', fontSize: 12, fontWeight: 900, cursor: 'pointer' }}>
               Explorar Praia Grande
             </button>
           )}
@@ -1848,7 +1847,7 @@ function LojasList({ vendedores, loading, tipoInicial, foraDaArea, modoRevisao, 
           style={{ width: '100%', textAlign: 'left', border: '1px solid var(--pg-line)', cursor: 'pointer', borderRadius: 18, padding: 0, background: 'var(--pg-brand-soft)', overflow: 'hidden' }}
         >
           <div style={{ padding: 14, display: 'flex', alignItems: 'center', gap: 12, color: 'var(--pg-ocean-dark)', position: 'relative' }}>
-            <div style={{ width: 46, height: 46, borderRadius: 16, background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.26)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 46, height: 46, borderRadius: 16, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.26)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <TicketPercent size={23} />
             </div>
             <div style={{ flex: 1 }}>
@@ -2118,34 +2117,34 @@ export default function PedirPage() {
               </div>
               <div style={{ position: 'relative', flexShrink: 0 }}>
                 <div style={{ width: 100, height: 100, borderRadius: 24, background: 'var(--pg-surface-alt)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 44, border: '1px solid var(--pg-line)', boxShadow: 'inset 0 4px 20px rgba(0,0,0,0.2)', overflow: 'hidden' }}>{p.foto ? <img src={p.foto} alt={p.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : p.emoji}</div>
-                {promocaoLabel && <div style={{ position: 'absolute', top: -8, right: -8, background: '#ea580c', color: 'var(--pg-on-brand)', borderRadius: 999, padding: '5px 8px', fontSize: 10, fontWeight: 950, boxShadow: '0 8px 18px rgba(234,88,12,0.35)' }}>OFF</div>}
-                <div style={{ position: 'absolute', bottom: -14, left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', background: esgotado ? 'var(--pg-faint)' : '#0ea5e9', borderRadius: 16, boxShadow: esgotado ? 'none' : '0 8px 20px rgba(var(--pg-ocean-rgb), 0.4)' }}>
+                {promocaoLabel && <div style={{ position: 'absolute', top: -8, right: -8, background: 'var(--pg-warning-bg)', color: 'var(--pg-warning)', borderRadius: 999, padding: '5px 8px', fontSize: 10, fontWeight: 950, boxShadow: '0 8px 18px rgba(234,88,12,0.35)' }}>OFF</div>}
+                <div style={{ position: 'absolute', bottom: -14, left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', background: esgotado ? 'var(--pg-surface-alt)' : 'var(--pg-action)', color: esgotado ? 'var(--pg-muted)' : 'var(--pg-action-ink)', borderRadius: 16, boxShadow: esgotado ? 'none' : '0 8px 20px rgba(var(--pg-ocean-rgb), 0.4)' }}>
                   {esgotado && qtd === 0 ? (
                     // Sem onClick de proposito: o produto esgotou, o botao vira rotulo.
-                    <span style={{ padding: '8px 16px', color: 'var(--pg-on-brand)', fontWeight: 900, fontSize: 12.5 }}>Esgotado</span>
+                    <span style={{ padding: '8px 16px', color: 'inherit', fontWeight: 900, fontSize: 12.5 }}>Esgotado</span>
                   ) : esgotado ? (
                     // Esgotou com o item JA no carrinho: o servidor manda "tire do
                     // carrinho pra fechar o pedido", entao tem que dar pra tirar aqui.
                     // Fica so o "-", sem o "+".
                     <>
-                      <motion.button whileTap={{ scale: 0.9 }} onClick={() => void alterarQuantidade(p, -1)} aria-label={`Tirar um ${p.nome} do carrinho`} style={{ padding: '6px 12px', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--pg-on-brand)', fontWeight: 900, fontSize: 20, lineHeight: 1 }}>−</motion.button>
-                      <span style={{ fontSize: 15, fontWeight: 900, color: 'var(--pg-on-brand)', minWidth: 24, textAlign: 'center' }}>{qtd}</span>
-                      <span style={{ padding: '6px 12px', color: 'var(--pg-on-brand)', fontWeight: 900, fontSize: 12 }}>Esgotado</span>
+                      <motion.button whileTap={{ scale: 0.9 }} onClick={() => void alterarQuantidade(p, -1)} aria-label={`Tirar um ${p.nome} do carrinho`} style={{ padding: '6px 12px', border: 'none', background: 'none', cursor: 'pointer', color: 'inherit', fontWeight: 900, fontSize: 20, lineHeight: 1 }}>−</motion.button>
+                      <span style={{ fontSize: 15, fontWeight: 900, color: 'inherit', minWidth: 24, textAlign: 'center' }}>{qtd}</span>
+                      <span style={{ padding: '6px 12px', color: 'inherit', fontWeight: 900, fontSize: 12 }}>Esgotado</span>
                     </>
                   ) : qtd > 0 ? (
                     <>
-                      <motion.button whileTap={{ scale: 0.9 }} onClick={() => void alterarQuantidade(p, -1)} style={{ padding: '6px 12px', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--pg-on-brand)', fontWeight: 900, fontSize: 20, lineHeight: 1 }}>−</motion.button>
-                      <span style={{ fontSize: 15, fontWeight: 900, color: 'var(--pg-on-brand)', minWidth: 24, textAlign: 'center' }}>{qtd}</span>
+                      <motion.button whileTap={{ scale: 0.9 }} onClick={() => void alterarQuantidade(p, -1)} style={{ padding: '6px 12px', border: 'none', background: 'none', cursor: 'pointer', color: 'inherit', fontWeight: 900, fontSize: 20, lineHeight: 1 }}>−</motion.button>
+                      <span style={{ fontSize: 15, fontWeight: 900, color: 'inherit', minWidth: 24, textAlign: 'center' }}>{qtd}</span>
                       <motion.button
                         whileTap={{ scale: noLimite ? 1 : 0.9 }}
                         onClick={() => void alterarQuantidade(p, 1)}
                         disabled={noLimite}
                         aria-label={noLimite ? `Sem mais estoque de ${p.nome}` : `Adicionar mais um ${p.nome}`}
-                        style={{ padding: '6px 12px', border: 'none', background: 'none', cursor: noLimite ? 'not-allowed' : 'pointer', color: 'var(--pg-on-brand)', opacity: noLimite ? 0.45 : 1, fontWeight: 900, fontSize: 20, lineHeight: 1 }}
+                        style={{ padding: '6px 12px', border: 'none', background: 'none', cursor: noLimite ? 'not-allowed' : 'pointer', color: 'inherit', opacity: noLimite ? 0.45 : 1, fontWeight: 900, fontSize: 20, lineHeight: 1 }}
                       >+</motion.button>
                     </>
                   ) : (
-                    <motion.button whileTap={{ scale: 0.95 }} onClick={() => void alterarQuantidade(p, 1)} style={{ padding: '8px 20px', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--pg-on-brand)', fontWeight: 800, fontSize: 14 }}>Add</motion.button>
+                    <motion.button whileTap={{ scale: 0.95 }} onClick={() => void alterarQuantidade(p, 1)} style={{ padding: '8px 20px', border: 'none', background: 'none', cursor: 'pointer', color: 'inherit', fontWeight: 800, fontSize: 14 }}>Add</motion.button>
                   )}
                 </div>
               </div>
@@ -2157,7 +2156,7 @@ export default function PedirPage() {
       <AnimatePresence>
         {totalItens > 0 && (
           <motion.div initial={{ y: 100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 100, opacity: 0 }} style={{ position: 'fixed', bottom: 100, left: 24, right: 24, maxWidth: 400, margin: '0 auto', zIndex: 100 }}>
-            <motion.button whileTap={{ scale: vendedor.aberto && !foraDaArea ? 0.98 : 1 }} disabled={!vendedor.aberto || foraDaArea} onClick={() => { if (vendedor.aberto && !foraDaArea) setStep('checkout') }} style={{ width: '100%', background: vendedor.aberto && !foraDaArea ? 'linear-gradient(135deg, #0ea5e9, #22c55e)' : 'var(--pg-faint)', color: 'var(--pg-on-brand)', border: 'none', borderRadius: 28, padding: '22px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: vendedor.aberto && !foraDaArea ? '0 20px 40px rgba(var(--pg-success-rgb), 0.4)' : 'none', cursor: vendedor.aberto && !foraDaArea ? 'pointer' : 'not-allowed' }}>
+            <motion.button whileTap={{ scale: vendedor.aberto && !foraDaArea ? 0.98 : 1 }} disabled={!vendedor.aberto || foraDaArea} onClick={() => { if (vendedor.aberto && !foraDaArea) setStep('checkout') }} style={{ width: '100%', background: vendedor.aberto && !foraDaArea ? 'var(--pg-action)' : 'var(--pg-surface-alt)', color: vendedor.aberto && !foraDaArea ? 'var(--pg-action-ink)' : 'var(--pg-muted)', border: 'none', borderRadius: 28, padding: '22px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: vendedor.aberto && !foraDaArea ? '0 20px 40px rgba(var(--pg-success-rgb), 0.4)' : 'none', cursor: vendedor.aberto && !foraDaArea ? 'pointer' : 'not-allowed' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ background: 'rgba(255,255,255,0.2)', borderRadius: 14, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 900 }}>{totalItens}</div>
                 <span style={{ fontSize: 16, fontWeight: 900 }}>{foraDaArea ? 'Fora da área atendida' : !vendedor.localizacaoConfirmada ? 'Localização em configuração' : vendedor.aberto ? 'Finalizar Pedido' : 'Loja fechada agora 😴'}</span>

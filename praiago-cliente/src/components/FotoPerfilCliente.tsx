@@ -233,15 +233,15 @@ export function AvatarPerfil({ path, tamanho = 64 }: { path: string | null; tama
         overflow: 'hidden',
         display: 'grid',
         placeItems: 'center',
-        background: 'rgba(255,255,255,0.2)',
-        border: '3px solid rgba(255,255,255,0.6)',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+        background: 'var(--pg-brand-soft)',
+        border: '3px solid var(--pg-line)',
+        boxShadow: 'var(--pg-shadow)',
         backdropFilter: 'blur(10px)',
       }}
     >
       {url
         ? <img src={url} alt="Sua foto de perfil" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        : <User size={tamanho * 0.5} color="var(--pg-on-brand)" strokeWidth={2.2} />}
+        : <User size={tamanho * 0.5} color="var(--pg-ocean)" strokeWidth={2.2} />}
     </div>
   )
 }

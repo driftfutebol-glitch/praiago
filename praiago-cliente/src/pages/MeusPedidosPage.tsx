@@ -11,23 +11,23 @@ import LocalizacaoAoVivoBotao from '../components/LocalizacaoAoVivoBotao'
 import { supabase } from '../lib/supabase'
 
 const STATUS_CFG = {
-  aguardando_pagamento: { label: 'Verificando pagamento', cor: 'var(--pg-warning)', bg: 'rgba(var(--pg-warning-rgb), 0.12)', icon: CreditCard },
-  enviado: { label: 'Pedido enviado', cor: 'var(--pg-ocean-dark)', bg: 'rgba(var(--pg-ocean-rgb), 0.12)', icon: Send },
-  preparando: { label: 'Preparando', cor: 'var(--pg-warning)', bg: 'rgba(var(--pg-warning-rgb), 0.12)', icon: Clock },
-  a_caminho:  { label: 'A caminho',  cor: 'var(--pg-ocean-dark)', bg: 'rgba(var(--pg-ocean-rgb), 0.12)', icon: Bike },
-  entregue:   { label: 'Entregue',   cor: 'var(--pg-success)', bg: 'rgba(var(--pg-success-rgb), 0.12)', icon: CheckCircle2 },
-  cancelado:  { label: 'Cancelado',  cor: 'var(--pg-danger)', bg: 'rgba(var(--pg-danger-rgb), 0.1)', icon: XCircle },
+  aguardando_pagamento: { label: 'Verificando pagamento', cor: 'var(--pg-warning)', bg: 'var(--pg-warning-bg)', icon: CreditCard },
+  enviado: { label: 'Pedido enviado', cor: 'var(--pg-ocean-dark)', bg: 'var(--pg-brand-soft)', icon: Send },
+  preparando: { label: 'Preparando', cor: 'var(--pg-warning)', bg: 'var(--pg-warning-bg)', icon: Clock },
+  a_caminho:  { label: 'A caminho',  cor: 'var(--pg-ocean-dark)', bg: 'var(--pg-brand-soft)', icon: Bike },
+  entregue:   { label: 'Entregue',   cor: 'var(--pg-success)', bg: 'var(--pg-success-bg)', icon: CheckCircle2 },
+  cancelado:  { label: 'Cancelado',  cor: 'var(--pg-danger)', bg: 'var(--pg-danger-bg)', icon: XCircle },
 } as const
 
 // Enquanto a entrega está acontecendo, faz sentido oferecer o compartilhamento
 // de localização. Antes disso o vendedor nem viu o pedido; depois, acabou.
 const EM_ANDAMENTO = ['enviado', 'preparando', 'a_caminho'] as const
 
-const REEMBOLSO_CFG: Record<string, { rotulo: string; cor: string; bg: string }> = {
-  solicitado: { rotulo: 'Reembolso em análise', cor: 'var(--pg-warning)', bg: 'rgba(var(--pg-warning-rgb), 0.1)' },
-  aprovado:   { rotulo: 'Reembolso aprovado',   cor: 'var(--pg-success)', bg: 'rgba(var(--pg-success-rgb), 0.1)' },
-  concluido:  { rotulo: 'Reembolso concluído',  cor: 'var(--pg-success)', bg: 'rgba(var(--pg-success-rgb), 0.1)' },
-  rejeitado:  { rotulo: 'Reembolso recusado',   cor: 'var(--pg-danger)', bg: 'rgba(var(--pg-danger-rgb), 0.08)' },
+const REEMBOLSO_CFG: Record<string, { rotulo: string; cor: string; bg: string; borda: string }> = {
+  solicitado: { rotulo: 'Reembolso em análise', cor: 'var(--pg-warning)', bg: 'var(--pg-warning-bg)', borda: 'rgba(var(--pg-warning-rgb), 0.28)' },
+  aprovado:   { rotulo: 'Reembolso aprovado',   cor: 'var(--pg-success)', bg: 'var(--pg-success-bg)', borda: 'rgba(var(--pg-success-rgb), 0.28)' },
+  concluido:  { rotulo: 'Reembolso concluído',  cor: 'var(--pg-success)', bg: 'var(--pg-success-bg)', borda: 'rgba(var(--pg-success-rgb), 0.28)' },
+  rejeitado:  { rotulo: 'Reembolso recusado',   cor: 'var(--pg-danger)', bg: 'var(--pg-danger-bg)', borda: 'rgba(var(--pg-danger-rgb), 0.28)' },
 }
 
 function fmtData(ts: number) {
@@ -235,8 +235,8 @@ export default function MeusPedidosPage() {
 
             return (
               <div key={p.id} style={{ background: theme.color.surface, borderRadius: 20, padding: 16, marginBottom: 12, border: `1px solid ${theme.color.border}` }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                  <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+                  <div style={{ flex: '1 1 150px', minWidth: 0, overflowWrap: 'anywhere' }}>
                     <div style={{ fontSize: 15, fontWeight: 800, color: theme.color.text }}>{p.vendedorNome}</div>
                     <div style={{ fontSize: 12, color: theme.color.textMuted, marginTop: 2 }}>{p.id} · {fmtData(p.data)}</div>
                   </div>
@@ -268,7 +268,7 @@ export default function MeusPedidosPage() {
                 )}
 
                 {reembolso && (
-                  <div style={{ fontSize: 12, lineHeight: 1.45, color: reembolso.cor, background: reembolso.bg, border: `1px solid ${reembolso.cor}33`, borderRadius: 12, padding: '10px 12px', marginBottom: 12, fontWeight: 800 }}>
+                  <div style={{ fontSize: 12, lineHeight: 1.45, color: reembolso.cor, background: reembolso.bg, border: `1px solid ${reembolso.borda}`, borderRadius: 12, padding: '10px 12px', marginBottom: 12, fontWeight: 800 }}>
                     {reembolso.rotulo}
                   </div>
                 )}

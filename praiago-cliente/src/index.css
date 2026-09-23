@@ -215,7 +215,7 @@ input:focus, select:focus, textarea:focus {
   right: 13px;
   padding: 4px;
   border-radius: 9px;
-  background: rgba(255,255,255,.76);
+  background: var(--pg-surface-alt);
   box-sizing: content-box;
 }
 .prg-action-icon { position: relative; z-index: 1; }
@@ -228,7 +228,7 @@ input:focus, select:focus, textarea:focus {
 .prg-category-photo-small,
 .prg-category-photo-large {
   position: absolute;
-  background-color: #fff;
+  background-color: transparent;
   transition: transform .24s cubic-bezier(.22,1,.36,1);
 }
 .prg-category-photo-small { width: 76px; height: 72px; right: -3px; bottom: -1px; }

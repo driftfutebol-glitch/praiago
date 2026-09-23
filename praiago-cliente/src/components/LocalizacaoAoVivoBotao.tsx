@@ -59,7 +59,7 @@ export default function LocalizacaoAoVivoBotao({
         width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
         marginBottom: 12, borderRadius: 12, padding: '11px 12px', cursor: 'pointer',
         background: ativo ? 'var(--pg-success-bg)' : 'var(--pg-surface-alt)',
-        border: `1px solid ${ativo ? 'rgba(34,197,94,0.30)' : 'rgba(14,165,233,0.22)'}`,
+        border: '1px solid var(--pg-line)',
         color: ativo ? 'var(--pg-success)' : 'var(--pg-ocean)',
         fontSize: 12.5, fontWeight: 800,
       }}

@@ -251,7 +251,7 @@ function ComprarIngressoModal({ evento, onClose, sessao }: { evento: Evento; onC
               </div>
             </div>
             {erro && <div style={{ color: 'var(--pg-danger)', fontSize: 13, fontWeight: 800 }}>{erro}</div>}
-            <button onClick={copiarPix} style={{ border: 0, borderRadius: 16, padding: '14px 16px', background: copiado ? 'linear-gradient(135deg, #16a34a, #15803d)' : 'linear-gradient(135deg, #0ea5e9, #22c55e)', color: 'var(--pg-on-brand)', fontSize: 15, fontWeight: 900 }}>
+            <button onClick={copiarPix} style={{ border: 0, borderRadius: 16, padding: '14px 16px', background: 'var(--pg-action)', color: 'var(--pg-action-ink)', fontSize: 15, fontWeight: 900 }}>
               {copiado ? 'Codigo copiado!' : 'Copiar codigo PIX'}
             </button>
           </div>
@@ -292,7 +292,7 @@ function ComprarIngressoModal({ evento, onClose, sessao }: { evento: Evento; onC
                   key={m}
                   onClick={() => setMetodo(m)}
                   style={{
-                    border: metodo === m ? '2px solid #0ea5e9' : '1px solid var(--pg-line)',
+                    border: metodo === m ? '2px solid var(--pg-ocean)' : '1px solid var(--pg-line)',
                     background: metodo === m ? 'var(--pg-brand-soft)' : 'var(--pg-surface)',
                     borderRadius: 14, padding: '11px 10px', fontSize: 13, fontWeight: 900,
                     color: metodo === m ? 'var(--pg-ocean-dark)' : 'var(--pg-muted)',
@@ -316,7 +316,7 @@ function ComprarIngressoModal({ evento, onClose, sessao }: { evento: Evento; onC
 
           {erro && <div style={{ color: 'var(--pg-danger)', fontSize: 13, fontWeight: 800 }}>{erro}</div>}
 
-          <button disabled={loading || !lote} onClick={comprar} style={{ border: 0, borderRadius: 16, padding: '14px 16px', background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', color: 'var(--pg-on-brand)', fontSize: 15, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: loading ? 0.6 : 1 }}>
+          <button disabled={loading || !lote} onClick={comprar} style={{ border: 0, borderRadius: 16, padding: '14px 16px', background: 'var(--pg-action)', color: 'var(--pg-action-ink)', fontSize: 15, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: loading ? 0.6 : 1 }}>
             {loading ? <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> : <ShoppingCart size={18} />}
             Comprar ingresso
           </button>
@@ -480,8 +480,8 @@ export default function EventosPage() {
                             position: 'absolute', top: 8, left: 8,
                             padding: '3px 8px', borderRadius: 999,
                             fontSize: 8.5, fontWeight: 900, letterSpacing: 0.4,
-                            color: 'var(--pg-on-brand)', background: '#16a34a',
-                            boxShadow: '0 3px 8px rgba(22,163,74,0.5)',
+                            color: 'var(--pg-success)', background: 'var(--pg-success-bg)',
+                            boxShadow: 'var(--pg-shadow)',
                           }}>
                             EM DESTAQUE
                           </span>
@@ -526,10 +526,10 @@ export default function EventosPage() {
                             onClick={() => setComprando(ev)}
                             style={{
                               width: '100%', marginTop: 11, padding: '11px 0', border: 'none', borderRadius: 13,
-                              background: 'linear-gradient(100deg,#16a34a,#22c55e)', color: 'var(--pg-on-brand)',
+                              background: 'var(--pg-action)', color: 'var(--pg-action-ink)',
                               fontSize: 14, fontWeight: 900, cursor: 'pointer',
                               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                              boxShadow: '0 10px 22px -12px rgba(22,163,74,0.95)',
+                              boxShadow: 'var(--pg-shadow)',
                             }}
                           >
                             <ShoppingCart size={16} strokeWidth={2.5} /> Comprar

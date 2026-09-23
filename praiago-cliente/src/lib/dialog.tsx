@@ -108,7 +108,8 @@ export function DialogHost() {
   const Icon = danger ? AlertTriangle : success ? CheckCircle2 : Info
   const iconBg = danger ? 'var(--pg-danger-bg)' : success ? 'var(--pg-success-bg)' : 'var(--pg-surface-alt)'
   const iconColor = danger ? 'var(--pg-danger)' : success ? 'var(--pg-success)' : 'var(--pg-ocean)'
-  const confirmBg = danger ? 'linear-gradient(135deg,#ef4444,#dc2626)' : ACCENT
+  const confirmBg = danger ? 'var(--pg-danger-bg)' : ACCENT
+  const confirmColor = danger ? 'var(--pg-danger)' : 'var(--pg-on-brand)'
 
   return (
     <AnimatePresence>
@@ -119,7 +120,7 @@ export function DialogHost() {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={dlg.kind === 'alert' ? confirmar : cancelar}
-          style={{ position: 'fixed', inset: 0, zIndex: 100000, background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          style={{ position: 'fixed', inset: 0, zIndex: 100000, background: 'var(--pg-overlay)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
         >
           <motion.div
             initial={{ scale: 0.92, y: 12, opacity: 0 }}
@@ -127,7 +128,7 @@ export function DialogHost() {
             exit={{ scale: 0.95, y: 8, opacity: 0 }}
             transition={{ type: 'spring', damping: 24, stiffness: 300 }}
             onClick={e => e.stopPropagation()}
-            style={{ width: '100%', maxWidth: 400, background: CARD_BG, borderRadius: 26, padding: 26, boxShadow: '0 30px 70px rgba(15,23,42,0.35)', position: 'relative' }}
+            style={{ width: '100%', maxWidth: 400, background: CARD_BG, border: '1px solid var(--pg-line)', borderRadius: 26, padding: 26, boxShadow: 'var(--pg-shadow)', position: 'relative' }}
           >
             <button aria-label="Fechar" onClick={cancelar} style={{ position: 'absolute', top: 16, right: 16, width: 32, height: 32, border: 0, borderRadius: 10, background: 'var(--pg-surface-alt)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
               <X size={16} color="var(--pg-faint)" />
@@ -158,7 +159,7 @@ export function DialogHost() {
                   {dlg.cancelText}
                 </button>
               )}
-              <button onClick={confirmar} style={{ flex: dlg.kind === 'alert' ? undefined : 1.4, width: dlg.kind === 'alert' ? '100%' : undefined, border: 0, background: confirmBg, color: 'var(--pg-on-brand)', borderRadius: 14, padding: 14, fontSize: 15, fontWeight: 900, cursor: 'pointer', boxShadow: danger ? '0 8px 22px rgba(239,68,68,0.3)' : '0 8px 22px rgba(34,197,94,0.28)' }}>
+              <button onClick={confirmar} style={{ flex: dlg.kind === 'alert' ? undefined : 1.4, width: dlg.kind === 'alert' ? '100%' : undefined, border: danger ? '1px solid var(--pg-danger)' : 0, background: confirmBg, color: confirmColor, borderRadius: 14, padding: 14, fontSize: 15, fontWeight: 900, cursor: 'pointer', boxShadow: 'var(--pg-shadow)' }}>
                 {dlg.confirmText}
               </button>
             </div>

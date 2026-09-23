@@ -40,6 +40,15 @@ Atualização do aplicativo **Cliente**. Ambulante, sites, contratos de API, reg
 - Tiles de Cidade carregam após o movimento, sem atualizações durante zoom e com buffer reduzido. Palmeiras só são montadas dentro da área visível e em zoom legível. Configuração conforme [Leaflet 1.9.4](https://leafletjs.com/reference.html).
 - Removida a entrada de prévia autenticada e de lojas fictícias. Nenhum vendedor/produto de demonstração entra no bundle. Dublês existem somente nos testes automatizados isolados, nunca na aplicação pública.
 
+### Acabamento do modo escuro · 23/09/2026
+
+- Removida a placa clara de CSS atrás do logotipo original e o aro branco do avatar.
+- As 28 categorias da Home e da grade Todos usam imagens recortadas com alpha real, não fundos brancos embutidos. Originais preservados; [arquivos, edição e prompts](docs/CATEGORIAS-RECORTES-2026-09-23.md).
+- Corrigido contraste de botões de compra/checkout/chat, selos, estados de pedidos/reembolso, diálogos e escudo de segurança do perfil. Sem alteração de regras, APIs ou pagamentos.
+- Escala e contornos dos pinos de mapa acompanham o tema; rastreamento usa o mesmo tratamento noturno dos tiles de Cidade. QR Pix continua preto sobre branco.
+- Mais espaço para nomes de categorias: as 28 não apresentam sobreposição entre título e contador em 320 e 390 px. Tema claro preservado e fundo decorativo do início suavizado no escuro.
+- 57 testes aprovados: inclui regressão de alpha dos WebP e contraste dos extremos dos gradientes de marca. Build aprovado, lint sem erros (20 avisos anteriores).
+
 ## Validação reproduzível
 
 ```sh

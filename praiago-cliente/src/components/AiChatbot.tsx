@@ -179,7 +179,7 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
               borderRadius: 32,
               background: 'var(--pg-brand-gradient)',
               border: 'none',
-              boxShadow: '0 10px 25px rgba(14,165,233,0.5)',
+              boxShadow: 'var(--pg-shadow)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -216,7 +216,7 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
               background: 'var(--pg-surface)',
               backdropFilter: 'blur(20px)',
               border: '1px solid var(--pg-line)',
-              boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+              boxShadow: 'var(--pg-shadow)',
               display: 'flex',
               flexDirection: 'column',
               zIndex: 9999,
@@ -290,13 +290,13 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
                 </button>
                 <button
                   onClick={() => startTicketFlow()}
-                  style={{ whiteSpace: 'nowrap', padding: '6px 12px', borderRadius: 12, background: 'var(--pg-danger-bg)', border: '1px solid rgba(239,68,68,0.2)', color: 'var(--pg-danger)', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                  style={{ whiteSpace: 'nowrap', padding: '6px 12px', borderRadius: 12, background: 'var(--pg-danger-bg)', border: '1px solid var(--pg-line)', color: 'var(--pg-danger)', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
                 >
                   <Headphones size={14} /> Falar com Suporte
                 </button>
                 <button
                   onClick={() => startTicketFlow('Solicitacao de reembolso')}
-                  style={{ whiteSpace: 'nowrap', padding: '6px 12px', borderRadius: 12, background: 'var(--pg-surface-alt)', border: '1px solid rgba(14,165,233,0.2)', color: 'var(--pg-ocean)', fontSize: 12, cursor: 'pointer' }}
+                  style={{ whiteSpace: 'nowrap', padding: '6px 12px', borderRadius: 12, background: 'var(--pg-surface-alt)', border: '1px solid var(--pg-line)', color: 'var(--pg-ocean)', fontSize: 12, cursor: 'pointer' }}
                 >
                   Reembolso
                 </button>

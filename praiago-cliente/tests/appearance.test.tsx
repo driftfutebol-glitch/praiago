@@ -31,6 +31,20 @@ describe('Tema salvo neste aparelho', () => {
         const a = luminance(tokens[fg]), b = luminance(tokens[bg])
         expect((Math.max(a,b) + .05) / (Math.min(a,b) + .05), `${selector}: ${fg}/${bg}`).toBeGreaterThanOrEqual(4.5)
       }
+      const gradient = block.match(/--pg-brand-gradient:([^;]+);/)![1]
+      for (const stop of gradient.match(/#[a-f\d]{6}/gi)!) {
+        const a = luminance(tokens['on-brand']), b = luminance(stop)
+        expect((Math.max(a,b) + .05) / (Math.min(a,b) + .05), `${selector}: on-brand/${stop}`).toBeGreaterThanOrEqual(4.5)
+      }
+    }
+  })
+  it('mantém transparência nos recortes das categorias, sem placas brancas', () => {
+    for (const file of ['categorias-comida-v2.webp', 'bebidas-alcoolicas-v2.webp']) {
+      const bytes = readFileSync(`public/images/${file}`)
+      expect(bytes.toString('ascii', 0, 4), file).toBe('RIFF')
+      expect(bytes.toString('ascii', 8, 16), file).toBe('WEBPVP8X')
+      // O bit 4 do cabeçalho WebP estendido anuncia o canal alpha.
+      expect(bytes[20] & 0x10, file).toBe(0x10)
     }
   })
   it('recupera modo escuro após reidratar e persiste apenas preferências', async () => {

@@ -17,7 +17,7 @@ export const CARTAO: React.CSSProperties = {
 /** Selo "NOVO" — mesmo em todo lugar (nav, banner, cartão). */
 export function SeloNovo({ tom = 'verde' }: { tom?: 'verde' | 'amarelo' }) {
   const cores = tom === 'amarelo'
-    ? { fundo: '#fde047', texto: '#713f12' }
+    ? { fundo: 'var(--pg-warning-bg)', texto: 'var(--pg-warning)' }
     : { fundo: 'var(--pg-success-bg)', texto: 'var(--pg-success)' }
   return (
     <span
@@ -122,7 +122,7 @@ export function BannerEventos({ onClick }: { onClick: () => void }) {
         cursor: 'pointer',
         textAlign: 'left',
         background: '#082f49',
-        boxShadow: '0 16px 34px -16px rgba(2,132,199,0.78)',
+        boxShadow: 'var(--pg-shadow)',
       }}
     >
       <img
@@ -151,7 +151,7 @@ export function BannerEventos({ onClick }: { onClick: () => void }) {
           display: 'grid',
           placeItems: 'center',
           background: 'rgba(14,165,233,0.3)',
-          border: '1px solid rgba(255,255,255,0.42)',
+          border: '1px solid rgba(var(--pg-on-brand-rgb),0.18)',
           boxShadow: '0 8px 24px rgba(2,32,71,0.32)',
         }}
       >

@@ -63,13 +63,13 @@ function restauranteIcon(aberto: boolean) {
       <div style="
         position:absolute; left:50%; bottom:4px; margin-left:-5px;
         width:0; height:0; border-left:5px solid transparent;
-        border-right:5px solid transparent; border-top:9px solid #ffffff;
+        border-right:5px solid transparent; border-top:9px solid var(--pg-map-pin-outline);
         filter: drop-shadow(0 3px 3px rgba(15,23,42,0.28));
       "></div>
       <div style="
         position:absolute; left:50%; top:0; margin-left:-19px;
         width:38px; height:38px; border-radius:12px;
-        background:${cor}; border:3px solid #ffffff;
+        background:${cor}; border:3px solid var(--pg-map-pin-outline);
         box-shadow: 0 6px 16px rgba(15,23,42,0.3);
         display:flex; align-items:center; justify-content:center;
       ">
@@ -121,13 +121,13 @@ function ambulanteIcon(_emoji: string, aberto: boolean, fotoUrl?: string | null)
       <div style="
         position:absolute; left:50%; bottom:6px; margin-left:-6px;
         width:0; height:0; border-left:6px solid transparent;
-        border-right:6px solid transparent; border-top:11px solid #ffffff;
+        border-right:6px solid transparent; border-top:11px solid var(--pg-map-pin-outline);
         filter: drop-shadow(0 3px 3px rgba(15,23,42,0.28));
       "></div>
       <div style="
         position:absolute; left:50%; top:0; margin-left:-21px;
         width:42px; height:42px; border-radius:50%;
-        background:${cor}; border:3px solid #ffffff;
+        background:${cor}; border:3px solid var(--pg-map-pin-outline);
         box-shadow: 0 6px 16px rgba(15,23,42,0.3);
         display:flex; align-items:center; justify-content:center;
         overflow:hidden;
@@ -137,7 +137,7 @@ function ambulanteIcon(_emoji: string, aberto: boolean, fotoUrl?: string | null)
       <!-- bolinha de "online" -->
       <div style="
         position:absolute; right:1px; top:1px; width:12px; height:12px;
-        border-radius:50%; background:${corClara}; border:2.5px solid #ffffff;
+        border-radius:50%; background:${corClara}; border:2.5px solid var(--pg-map-pin-outline);
       "></div>
     </div>`,
   })
@@ -288,14 +288,14 @@ function EscalaMapa() {
   if (!escala.texto) return null
 
   return (
-    <div style={{ position: 'absolute', bottom: 14, left: 14, zIndex: 1000, pointerEvents: 'none' }}>
-      <div style={{ fontSize: 11, fontWeight: 900, color: '#475569', textShadow: '0 1px 2px rgba(255,255,255,0.9)' }}>
+    <div className="pg-map-scale">
+      <div style={{ fontSize: 11, fontWeight: 800 }}>
         {escala.texto}
       </div>
       <div style={{ width: escala.px, height: 3, marginTop: 3, position: 'relative' }}>
-        <div style={{ position: 'absolute', inset: 0, background: '#475569', borderRadius: 1 }} />
-        <div style={{ position: 'absolute', left: 0, bottom: 0, width: 2, height: 8, background: '#475569' }} />
-        <div style={{ position: 'absolute', right: 0, bottom: 0, width: 2, height: 8, background: '#475569' }} />
+        <div style={{ position: 'absolute', inset: 0, background: 'currentColor', borderRadius: 1 }} />
+        <div style={{ position: 'absolute', left: 0, bottom: 0, width: 2, height: 8, background: 'currentColor' }} />
+        <div style={{ position: 'absolute', right: 0, bottom: 0, width: 2, height: 8, background: 'currentColor' }} />
       </div>
     </div>
   )

@@ -218,8 +218,8 @@ function TelaLogada() {
 
         <motion.div initial={{ y: 12, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="pg-card" style={{ marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 14, background: 'linear-gradient(135deg,#0ea5e9,#22c55e)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Shield size={19} color="#fff" />
+            <div style={{ width: 38, height: 38, borderRadius: 14, background: 'var(--pg-brand-gradient)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Shield size={19} color="var(--pg-on-brand)" />
             </div>
             <div>
               <h2 className="pg-section-title" style={{ marginBottom: 2 }}>Sua conta, protegida</h2>

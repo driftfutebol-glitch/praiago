@@ -41,7 +41,7 @@ export default class ErrorBoundary extends Component<Props, State> {
           width: '100%',
           maxWidth: 520,
           borderRadius: 22,
-          border: '1px solid rgba(14,165,233,0.20)',
+          border: '1px solid var(--pg-line)',
           background: 'var(--pg-surface)',
           boxShadow: '0 24px 80px rgba(15,23,42,0.14)',
           padding: 28,
