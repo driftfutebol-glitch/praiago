@@ -12,6 +12,7 @@ import { CLIENTE_FALLBACK, useGPS, type GPSFonte, type GPSStatus } from '../hook
 import { criarMonitorSentido, type SentidoStatus } from '../lib/trafego'
 import { broadcastOrder } from '../hooks/useOrderBroadcast'
 import { pertenceACategoria, semAcento, type Vendedor } from '../lib/catalogo'
+import { productMenuSection, visibleProductDescription } from '../lib/menuSection'
 import CatalogFeedback from '../components/CatalogFeedback'
 import { checarPedido, RAIO_PEDIDO_KM } from '../lib/serviceArea'
 import { criarPix, isPagamentoOnline, pagarComCartao, mensagemRecusaCartao, type PixCobranca } from '../lib/pagamento'
@@ -37,6 +38,8 @@ function makeIcon(html: string) {
 const ambulanteIcon = makeIcon(`<div style="width:44px;height:44px;border-radius:15px;background:linear-gradient(135deg,#0ea5e9,#22c55e);color:#fff;display:flex;align-items:center;justify-content:center;border:3px solid var(--pg-map-pin-outline);box-shadow:0 8px 20px rgba(22,163,74,0.35)">${cartMarkup}</div>`)
 const restauranteIcon = makeIcon(`<div style="width:44px;height:44px;border-radius:15px;background:linear-gradient(135deg,#f97316,#ea580c);color:#fff;display:flex;align-items:center;justify-content:center;border:3px solid var(--pg-map-pin-outline);box-shadow:0 8px 20px rgba(234,88,12,0.35)">${storeMarkup}</div>`)
 const clienteIcon = makeIcon(`<div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#38bdf8,#0284c7);color:#fff;display:flex;align-items:center;justify-content:center;border:3px solid var(--pg-map-pin-outline);box-shadow:0 8px 20px rgba(2,132,199,0.35)">${customerMarkup}</div>`)
+
+const MENU_CATEGORY_ORDER = ['Pizzas premium', 'Pizzas salgadas', 'Pizzas doces', 'Pizza', 'Bebidas', 'Bebidas alcoólicas']
 
 
 function calcDist(a: [number, number], b: [number, number]): number {
@@ -1946,6 +1949,24 @@ export default function PedirPage() {
   const [entrega, setEntrega] = useState<Entrega | null>(null)
   const [pedidoId, setPedidoId] = useState<string | null>(null)
   const [maioridadeConfirmada, setMaioridadeConfirmada] = useState(false)
+  const [menuCategory, setMenuCategory] = useState('Todos')
+  const menuSections = useMemo(() => {
+    if (!vendedor) return []
+    const grouped = new Map<string, Vendedor['produtos']>()
+    for (const product of vendedor.produtos) {
+      const category = productMenuSection(product.categoria?.trim() || 'Outros', product.desc)
+      const section = grouped.get(category) || []
+      section.push(product)
+      grouped.set(category, section)
+    }
+    return [...grouped].sort(([a], [b]) => {
+      const aOrder = MENU_CATEGORY_ORDER.indexOf(a)
+      const bOrder = MENU_CATEGORY_ORDER.indexOf(b)
+      if (aOrder !== bOrder) return (aOrder < 0 ? 999 : aOrder) - (bOrder < 0 ? 999 : bOrder)
+      return a.localeCompare(b, 'pt-BR')
+    }).map(([name, products]) => ({ name, products }))
+  }, [vendedor])
+  const selectedMenuCategory = menuSections.some(section => section.name === menuCategory) ? menuCategory : 'Todos'
 
   // Sem loja escolhida → lista de lojas disponíveis (estilo iFood).
   if (!vendedor) {
@@ -2087,8 +2108,20 @@ export default function PedirPage() {
       </div>
 
       <div style={{ padding: '32px 24px 140px' }}>
-        <h3 style={{ fontSize: 20, fontWeight: 900, color: 'var(--pg-ink)', marginBottom: 24, display: 'flex', alignItems: 'center', gap: 10 }}>Cardápio <span style={{ fontSize: 24 }}>🔥</span></h3>
-        {vendedor.produtos.map(p => {
+        <h3 style={{ fontSize: 20, fontWeight: 900, color: 'var(--pg-ink)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>Cardápio <span style={{ fontSize: 24 }}>🔥</span></h3>
+        {menuSections.length > 1 && (
+          <nav aria-label="Categorias do cardápio" style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 12, marginBottom: 16, scrollbarWidth: 'thin' }}>
+            {['Todos', ...menuSections.map(section => section.name)].map(category => (
+              <button key={category} type="button" aria-pressed={selectedMenuCategory === category} onClick={() => setMenuCategory(category)} style={{ flexShrink: 0, border: `1px solid ${selectedMenuCategory === category ? 'var(--pg-action)' : 'var(--pg-line)'}`, background: selectedMenuCategory === category ? 'var(--pg-action)' : 'var(--pg-surface)', color: selectedMenuCategory === category ? 'var(--pg-action-ink)' : 'var(--pg-ink)', borderRadius: 999, padding: '10px 14px', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
+                {category}
+              </button>
+            ))}
+          </nav>
+        )}
+        {menuSections.filter(section => selectedMenuCategory === 'Todos' || section.name === selectedMenuCategory).map(section => (
+          <section key={section.name} aria-label={section.name}>
+            <h4 style={{ fontSize: 17, fontWeight: 900, color: 'var(--pg-ink)', margin: '22px 0 18px' }}>{section.name} <span style={{ color: 'var(--pg-muted)', fontSize: 13 }}>({section.products.length})</span></h4>
+            {section.products.map(p => {
           const qtd = meuCarrinho[p.id] ?? 0
           const exigeMaioridade = pertenceACategoria(p.categoria, 'bebidas_alcoolicas')
           const precoOriginal = p.precoOriginal && p.precoOriginal > p.preco ? p.precoOriginal : null
@@ -2123,7 +2156,7 @@ export default function PedirPage() {
                   </div>
                 )}
                 <h4 style={{ fontSize: 17, fontWeight: 800, color: 'var(--pg-ink)' }}>{p.nome}</h4>
-                <p style={{ fontSize: 14, color: 'var(--pg-muted)', marginTop: 6, lineHeight: 1.5 }}>{p.desc}</p>
+                <p style={{ fontSize: 14, color: 'var(--pg-muted)', marginTop: 6, lineHeight: 1.5 }}>{visibleProductDescription(p.desc)}</p>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 10 }}>
                   <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--pg-success)', textShadow: '0 0 10px rgba(74,222,128,0.16)' }}>R$ {p.preco.toFixed(2).replace('.', ',')}</div>
                   {precoOriginal && <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--pg-faint)', textDecoration: 'line-through' }}>R$ {precoOriginal.toFixed(2).replace('.', ',')}</div>}
@@ -2164,7 +2197,9 @@ export default function PedirPage() {
               </div>
             </div>
           )
-        })}
+            })}
+          </section>
+        ))}
       </div>
 
       <AnimatePresence>
