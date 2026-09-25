@@ -2,6 +2,7 @@ export const BUSINESS_CATEGORIES = [
   'Restaurante',
   'Pizzaria',
   'Bar',
+  'Adega',
   'Lanchonete',
   'Cafeteria',
   'Pastelaria',
