@@ -589,7 +589,7 @@ export default function CardapioPage() {
           </div>
         )}
       </AnimatePresence>
-      {importando && verificado && sessao && <BulkProductImport sellerId={sessao.id} existingProducts={produtos.map(item => ({ id: item.id, nome: item.nome, categoria: item.categoria, descricao: item.descricao }))} onClose={() => setImportando(false)} onImported={fetchProdutos} />}
+      {importando && verificado && sessao && <BulkProductImport sellerId={sessao.id} existingProducts={produtos.map(item => ({ id: item.id, nome: item.nome, categoria: item.categoria, descricao: item.descricao, foto: item.foto }))} onClose={() => setImportando(false)} onImported={fetchProdutos} />}
     </div>
   )
 }

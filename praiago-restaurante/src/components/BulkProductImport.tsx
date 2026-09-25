@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { getProductCategory } from '../lib/productCategories'
-import { baseProductCategory, descriptionWithMenuSection } from '../lib/menuSection'
+import { baseProductCategory, descriptionWithMenuSection, visibleProductDescription } from '../lib/menuSection'
 
 type Variant = { label: string; price: number }
 type ImportProduct = {
@@ -62,7 +62,7 @@ function prepareManifest(value: unknown): PreparedProduct[] {
 
 export default function BulkProductImport({ sellerId, existingProducts, onClose, onImported }: {
   sellerId: string
-  existingProducts: Array<{ id: string; nome: string; categoria: string; descricao: string }>
+  existingProducts: Array<{ id: string; nome: string; categoria: string; descricao: string; foto: string | null }>
   onClose: () => void
   onImported: () => Promise<void>
 }) {
@@ -77,13 +77,15 @@ export default function BulkProductImport({ sellerId, existingProducts, onClose,
     const found = existing.get(item.name.toLocaleLowerCase('pt-BR'))
     if (!found) return []
     const category = baseProductCategory(item.category)
-    const description = descriptionWithMenuSection(found.descricao, item.category)
-    return found.categoria !== category || found.descricao !== description
-      ? [{ id: found.id, name: item.name, category, description }]
+    const cleanDescription = visibleProductDescription(found.descricao)
+    const description = descriptionWithMenuSection(item.image && !cleanDescription.includes('Foto ilustrativa.') ? `${cleanDescription}\nFoto ilustrativa.` : cleanDescription, item.category)
+    const image = item.image && !found.foto ? item.image : undefined
+    return found.categoria !== category || found.descricao !== description || Boolean(image)
+      ? [{ id: found.id, name: item.name, category, description, image }]
       : []
   })
   const photoMap = useMemo(() => new Map(photos.map(file => [file.name.toLocaleLowerCase('pt-BR'), file])), [photos])
-  const missing = [...new Set(pending.map(item => item.image).filter((name): name is string => Boolean(name && !photoMap.has(name.toLocaleLowerCase('pt-BR')))))]
+  const missing = [...new Set([...pending, ...updates].map(item => item.image).filter((name): name is string => Boolean(name && !photoMap.has(name.toLocaleLowerCase('pt-BR')))))]
 
   async function readManifest(file?: File) {
     setError('')
@@ -103,11 +105,35 @@ export default function BulkProductImport({ sellerId, existingProducts, onClose,
     setError('')
     let completed = 0
     let reclassified = 0
+    const uploadedPhotos = new Map<string, { url: string; path: string }>()
+    const usedPhotoUrls = new Set<string>()
     try {
       for (const item of updates) {
         setProgress(`Organizando ${reclassified + 1} de ${updates.length}: ${item.name}`)
-        const { error } = await supabase.from('produtos').update({ categoria: item.category, descricao: item.description }).eq('id', item.id).eq('vendedor_id', sellerId)
+        let photoUrl: string | undefined
+        if (item.image) {
+          const key = item.image.toLocaleLowerCase('pt-BR')
+          const cached = uploadedPhotos.get(key)
+          if (cached) {
+            photoUrl = cached.url
+          } else {
+            const photo = photoMap.get(key)
+            if (!photo || !['image/png', 'image/jpeg', 'image/webp'].includes(photo.type) || photo.size > 5 * 1024 * 1024) {
+              throw new Error(`Foto inválida ou maior que 5 MB: ${item.image}`)
+            }
+            const path = `${sellerId}/${crypto.randomUUID()}.${photo.name.split('.').pop()?.toLowerCase()}`
+            const { error: uploadError } = await supabase.storage.from('produtos').upload(path, photo, { contentType: photo.type, upsert: false })
+            if (uploadError) throw uploadError
+            photoUrl = supabase.storage.from('produtos').getPublicUrl(path).data.publicUrl
+            uploadedPhotos.set(key, { url: photoUrl, path })
+          }
+        }
+        const patch = photoUrl
+          ? { categoria: item.category, descricao: item.description, foto: photoUrl }
+          : { categoria: item.category, descricao: item.description }
+        const { error } = await supabase.from('produtos').update(patch).eq('id', item.id).eq('vendedor_id', sellerId)
         if (error) throw error
+        if (photoUrl) usedPhotoUrls.add(photoUrl)
         reclassified++
       }
       for (const item of pending) {
@@ -143,10 +169,13 @@ export default function BulkProductImport({ sellerId, existingProducts, onClose,
         }
         completed++
       }
-      setProgress(`${completed} itens novos e ${reclassified} categorias atualizadas com sucesso.`)
+      setProgress(`${completed} itens novos e ${reclassified} itens atualizados com sucesso.`)
       await onImported()
     } catch (cause) {
-      setError(`Importação interrompida após ${completed} item(ns) novo(s) e ${reclassified} categoria(s). ${cause instanceof Error ? cause.message : 'Tente novamente.'} Reabra o arquivo para continuar sem duplicar os já salvos.`)
+      for (const uploaded of uploadedPhotos.values()) {
+        if (!usedPhotoUrls.has(uploaded.url)) await supabase.storage.from('produtos').remove([uploaded.path])
+      }
+      setError(`Importação interrompida após ${completed} item(ns) novo(s) e ${reclassified} item(ns) atualizado(s). ${cause instanceof Error ? cause.message : 'Tente novamente.'} Reabra o arquivo para continuar sem duplicar os já salvos.`)
       await onImported()
     } finally {
       setSaving(false)
@@ -157,14 +186,14 @@ export default function BulkProductImport({ sellerId, existingProducts, onClose,
     <div role="dialog" aria-modal="true" aria-label="Importar cardápio" style={{ position: 'fixed', inset: 0, zIndex: 12000, background: 'rgba(15,23,42,.72)', display: 'grid', placeItems: 'center', padding: 16 }}>
       <div style={{ width: 'min(100%, 560px)', maxHeight: '90vh', overflowY: 'auto', background: '#fff', color: '#0f172a', borderRadius: 22, padding: 24, boxShadow: '0 24px 70px rgba(0,0,0,.28)' }}>
         <h2 style={{ margin: '0 0 8px' }}>Importar cardápio</h2>
-        <p style={{ color: '#475569', lineHeight: 1.5 }}>Selecione o JSON de produtos e as fotos indicadas nele. Cada tamanho vira um item com seu próprio preço. Itens existentes não serão duplicados; só a seção do cardápio será atualizada quando estiver diferente. As seções de pizza mantêm a categoria Pizza para compatibilidade com o app público.</p>
+        <p style={{ color: '#475569', lineHeight: 1.5 }}>Selecione o JSON de produtos e as fotos indicadas nele. Cada tamanho vira um item com seu próprio preço. Itens existentes não serão duplicados; se estiverem sem foto, a imagem ilustrativa e a seção do cardápio serão atualizadas. As seções de pizza mantêm a categoria Pizza para compatibilidade com o app público.</p>
         <label style={{ display: 'block', fontWeight: 700, marginBottom: 12 }}>Cardápio JSON
           <input type="file" accept=".json,application/json" disabled={saving} onChange={event => void readManifest(event.target.files?.[0])} style={{ display: 'block', marginTop: 6 }} />
         </label>
         <label style={{ display: 'block', fontWeight: 700, marginBottom: 16 }}>Fotos dos produtos
           <input type="file" accept="image/png,image/jpeg,image/webp" multiple disabled={saving} onChange={event => setPhotos(Array.from(event.target.files || []))} style={{ display: 'block', marginTop: 6 }} />
         </label>
-        {products.length > 0 && <p role="status">{products.length} itens no arquivo · {pending.length} novos · {updates.length} categorias para atualizar · {products.length - pending.length - updates.length} sem mudanças.</p>}
+        {products.length > 0 && <p role="status">{products.length} itens no arquivo · {pending.length} novos · {updates.length} para atualizar · {products.length - pending.length - updates.length} sem mudanças.</p>}
         {missing.length > 0 && <p style={{ color: '#b45309' }}>Faltam {missing.length} foto(s): {missing.slice(0, 5).join(', ')}{missing.length > 5 ? '…' : ''}</p>}
         {progress && <p role="status">{progress}</p>}
         {error && <p role="alert" style={{ color: '#b91c1c' }}>{error}</p>}
