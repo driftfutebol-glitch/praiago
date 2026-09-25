@@ -6,6 +6,8 @@ import { getSessao } from '../lib/auth'
 import { alertDialog, confirmDialog } from '../lib/dialog'
 import ProductCategoryPicker, { CategoryPhoto } from '../components/ProductCategoryPicker'
 import { getProductCategory } from '../lib/productCategories'
+import BulkProductImport from '../components/BulkProductImport'
+import { baseProductCategory, descriptionWithMenuSection, productMenuSection, visibleProductDescription } from '../lib/menuSection'
 
 type Produto = {
   id: string
@@ -70,6 +72,7 @@ export default function CardapioPage() {
   const [editCategoria, setEditCategoria] = useState('')
   const [editEstoque, setEditEstoque] = useState('')
   const [adicionando, setAdicionando] = useState(false)
+  const [importando, setImportando] = useState(false)
   const [loading, setLoading] = useState(true)
   const [verificado, setVerificado] = useState<boolean | null>(null)
   const [novo, setNovo] = useState<NovoForm>(NOVO_INICIAL)
@@ -238,7 +241,9 @@ export default function CardapioPage() {
     }
     const newPreco = editPreco.trim() !== '' ? precoNum : p.preco
 
-    const newCategoria = getProductCategory(editCategoria || p.categoria).label
+    const newSection = getProductCategory(editCategoria || productMenuSection(p.categoria, p.descricao)).label
+    const newCategoria = baseProductCategory(newSection)
+    const newDescricao = descriptionWithMenuSection(p.descricao, newSection)
     // Campo vazio grava NULO de proposito: "sem numero" quer dizer "nao
     // controlo estoque", que e diferente de zero (zero e esgotado).
     const newEstoque = editEstoque.trim() === ''
@@ -246,13 +251,13 @@ export default function CardapioPage() {
       : Math.max(0, Math.floor(Number(editEstoque) || 0))
 
     setProdutos(prev => prev.map(p => p.id === id
-      ? { ...p, nome: newNome, preco: newPreco, categoria: newCategoria, estoque: newEstoque }
+      ? { ...p, nome: newNome, preco: newPreco, categoria: newCategoria, descricao: newDescricao, estoque: newEstoque }
       : p
     ))
     setEditando(null)
 
     await supabase.from('produtos')
-      .update({ nome: newNome, preco: newPreco, categoria: newCategoria, estoque: newEstoque })
+      .update({ nome: newNome, preco: newPreco, categoria: newCategoria, descricao: newDescricao, estoque: newEstoque })
       .eq('id', id)
   }
 
@@ -283,8 +288,8 @@ export default function CardapioPage() {
         vendedor_id: sessao.id,
         nome: novo.nome.trim(),
         preco: precoNum,
-        descricao: novo.descricao.trim(),
-        categoria: novo.categoria,
+        descricao: descriptionWithMenuSection(novo.descricao, novo.categoria),
+        categoria: baseProductCategory(novo.categoria),
         ativo: true,
         emoji: novo.emoji,
         foto: fotoUrl,
@@ -309,10 +314,10 @@ export default function CardapioPage() {
     }
   }
 
-  const todasCategorias = ['Todos', ...Array.from(new Set(produtos.map(p => getProductCategory(p.categoria).label)))]
+  const todasCategorias = ['Todos', ...Array.from(new Set(produtos.map(p => productMenuSection(p.categoria, p.descricao))))]
   const filtrados = categoriaFiltro === 'Todos'
     ? produtos
-    : produtos.filter(p => getProductCategory(p.categoria).label === categoriaFiltro)
+    : produtos.filter(p => productMenuSection(p.categoria, p.descricao) === categoriaFiltro)
 
   return (
     <div style={{ padding: '32px 0 48px', minHeight: '100vh', position: 'relative' }}>
@@ -330,10 +335,12 @@ export default function CardapioPage() {
           <h1 style={{ fontSize: 32, fontWeight: 900, color: '#0f172a', letterSpacing: -1, marginBottom: 8 }}>Cardápio</h1>
           <p style={{ color: '#64748b', fontSize: 16 }}>Gerencie seus pratos, bebidas e combos.</p>
         </div>
-        <button onClick={() => { if (verificado) setAdicionando(true) }} disabled={!verificado} style={{ display: 'flex', alignItems: 'center', gap: 8, background: verificado ? 'linear-gradient(135deg, #f97316, #ea580c)' : '#cbd5e1', color: '#fff', border: 'none', padding: '12px 24px', borderRadius: 16, fontSize: 15, fontWeight: 700, cursor: verificado ? 'pointer' : 'not-allowed', boxShadow: verificado ? '0 10px 25px rgba(249,115,22,0.3)' : 'none', transition: 'transform 0.2s, box-shadow 0.2s' }} onMouseOver={e => { if (verificado) e.currentTarget.style.transform = 'translateY(-2px)' }} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
-          <Plus size={20} />
-          Adicionar Item
-        </button>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+          <button type="button" onClick={() => setImportando(true)} disabled={!verificado} style={{ padding: '12px 18px', borderRadius: 16, border: '1px solid #fdba74', background: '#fff7ed', color: '#c2410c', fontWeight: 800, cursor: verificado ? 'pointer' : 'not-allowed' }}>Importar cardápio</button>
+          <button onClick={() => { if (verificado) setAdicionando(true) }} disabled={!verificado} style={{ display: 'flex', alignItems: 'center', gap: 8, background: verificado ? 'linear-gradient(135deg, #f97316, #ea580c)' : '#cbd5e1', color: '#fff', border: 'none', padding: '12px 24px', borderRadius: 16, fontSize: 15, fontWeight: 700, cursor: verificado ? 'pointer' : 'not-allowed', boxShadow: verificado ? '0 10px 25px rgba(249,115,22,0.3)' : 'none', transition: 'transform 0.2s, box-shadow 0.2s' }} onMouseOver={e => { if (verificado) e.currentTarget.style.transform = 'translateY(-2px)' }} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
+            <Plus size={20} /> Adicionar Item
+          </button>
+        </div>
       </motion.div>
 
       {/* Gate de verificação: sem CNPJ aprovado, não anuncia produto e não aparece pro cliente */}
@@ -396,7 +403,7 @@ export default function CardapioPage() {
                 </div>
                 <div style={{ flex: 1, paddingTop: 4 }}>
                   <div style={{ fontSize: 12, color: '#f97316', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
-                    {getProductCategory(p.categoria).label}
+                    {productMenuSection(p.categoria, p.descricao)}
                   </div>
                   {/* So aparece pra quem controla estoque: produto de estoque
                       nulo nao deve ganhar rotulo nenhum. */}
@@ -440,12 +447,12 @@ export default function CardapioPage() {
               </div>
 
               <p style={{ fontSize: 14, color: '#64748b', lineHeight: 1.5, margin: '0 0 20px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                {p.descricao}
+                {visibleProductDescription(p.descricao)}
               </p>
 
               {editando === p.id && (
                 <div style={{ margin: '0 0 18px' }}>
-                  <ProductCategoryPicker value={editCategoria || p.categoria} onChange={category => setEditCategoria(category.label)} />
+                  <ProductCategoryPicker value={editCategoria || productMenuSection(p.categoria, p.descricao)} onChange={category => setEditCategoria(category.label)} />
                 </div>
               )}
 
@@ -462,7 +469,7 @@ export default function CardapioPage() {
                   </>
                 ) : (
                   <>
-                    <button onClick={() => { setEditando(p.id); setEditNome(p.nome); setEditPreco(p.preco.toString()); setEditCategoria(getProductCategory(p.categoria).label); setEditEstoque(p.estoque == null ? '' : String(p.estoque)) }} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(0,0,0,0.05)', color: '#334155', border: 'none', padding: '8px', borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                    <button onClick={() => { setEditando(p.id); setEditNome(p.nome); setEditPreco(p.preco.toString()); setEditCategoria(productMenuSection(p.categoria, p.descricao)); setEditEstoque(p.estoque == null ? '' : String(p.estoque)) }} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(0,0,0,0.05)', color: '#334155', border: 'none', padding: '8px', borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
                       <Edit2 size={16} /> Editar
                     </button>
                     <button onClick={() => deletar(p.id)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)', padding: '8px', borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
@@ -582,6 +589,7 @@ export default function CardapioPage() {
           </div>
         )}
       </AnimatePresence>
+      {importando && verificado && sessao && <BulkProductImport sellerId={sessao.id} existingProducts={produtos.map(item => ({ id: item.id, nome: item.nome, categoria: item.categoria, descricao: item.descricao, foto: item.foto }))} onClose={() => setImportando(false)} onImported={fetchProdutos} />}
     </div>
   )
 }

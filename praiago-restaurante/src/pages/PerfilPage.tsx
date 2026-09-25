@@ -11,6 +11,7 @@ import SellerPhotoManager from '../components/SellerPhotoManager'
 import TrocaNomeLoja from '../components/TrocaNomeLoja'
 import EditorHorarios from '../components/EditorHorarios'
 import { sellerPhotoUrl } from '../lib/sellerPhotos'
+import { businessCategoryOptions } from '../lib/businessCategories'
 
 type PerfilInfo = {
   nome: string
@@ -251,6 +252,9 @@ export default function PerfilPage() {
   const [painelAberto, setPainelAberto] = useState<Painel | null>(null)
   const [suporteAberto, setSuporteAberto] = useState(false)
   const [telefoneComercial, setTelefoneComercial] = useState('')
+  const [categoriaNegocio, setCategoriaNegocio] = useState('Restaurante')
+  const [salvandoCategoria, setSalvandoCategoria] = useState(false)
+  const [categoriaMsg, setCategoriaMsg] = useState('')
   const [salvandoTelefone, setSalvandoTelefone] = useState(false)
   const [telefoneMsg, setTelefoneMsg] = useState('')
   // Endereco escrito da loja. Existe separado do fluxo de correcao porque
@@ -382,7 +386,7 @@ export default function PerfilPage() {
 
     supabase
       .from('profiles')
-      .select('nome, razao_social, avaliacao_media, total_avaliacoes, telefone_comercial, endereco, horario_abre, horario_fecha, horarios, lat, lng, foto_perfil_path, foto_capa_path')
+      .select('nome, razao_social, categoria, avaliacao_media, total_avaliacoes, telefone_comercial, endereco, horario_abre, horario_fecha, horarios, lat, lng, foto_perfil_path, foto_capa_path')
       .eq('id', sessao.id)
       .maybeSingle()
       .then(({ data }) => {
@@ -399,6 +403,7 @@ export default function PerfilPage() {
         setHoraFecha(data.horario_fecha || '')
         setHorariosPerfil(data.horarios ?? null)
         setTelefoneComercial(formatarTelefone(data.telefone_comercial || ''))
+        setCategoriaNegocio(data.categoria || 'Restaurante')
         setLat(data.lat != null ? Number(data.lat) : null)
         setLng(data.lng != null ? Number(data.lng) : null)
       })
@@ -690,6 +695,15 @@ export default function PerfilPage() {
     setTimeout(() => setTelefoneMsg(''), 3500)
   }
 
+  async function salvarCategoriaNegocio() {
+    if (!sessao) return
+    setSalvandoCategoria(true)
+    setCategoriaMsg('')
+    const { error } = await supabase.from('profiles').update({ categoria: categoriaNegocio }).eq('id', sessao.id)
+    setSalvandoCategoria(false)
+    setCategoriaMsg(error ? 'Não deu para salvar o tipo de negócio.' : 'Tipo de negócio salvo! O cliente verá esta categoria no app.')
+  }
+
   /** Grava o endereco escrito UMA vez, sem tocar em lat/lng.
    *  A loja nasce com coordenada e sem endereco (o cadastro grava as duas em
    *  momentos diferentes), e antes disso ela ficava sem poder nunca dizer ao
@@ -802,6 +816,14 @@ export default function PerfilPage() {
         </InfoCard>
 
         <InfoCard title="Informacoes publicas" icon={<MapPin size={16} color="#0ea5e9" />}>
+          <div>
+            <label htmlFor="categoria-negocio" style={{ fontSize: 11, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 6 }}>TIPO DE NEGÓCIO</label>
+            <select id="categoria-negocio" value={categoriaNegocio} onChange={event => { setCategoriaNegocio(event.target.value); setCategoriaMsg('') }} style={{ width: '100%', border: '1px solid #cbd5e1', borderRadius: 14, padding: 12, fontSize: 15, fontWeight: 700, color: '#0f172a', background: '#f8fafc' }}>
+              {businessCategoryOptions(categoriaNegocio).map(category => <option key={category} value={category}>{category}</option>)}
+            </select>
+            <button type="button" disabled={salvandoCategoria} onClick={() => void salvarCategoriaNegocio()} style={{ width: '100%', marginTop: 10, border: '1px solid #fdba74', background: '#fff7ed', color: '#c2410c', borderRadius: 14, padding: 13, fontWeight: 900, cursor: salvandoCategoria ? 'wait' : 'pointer' }}>{salvandoCategoria ? 'Salvando...' : 'Salvar tipo de negócio'}</button>
+            {categoriaMsg && <p role="status" style={{ color: categoriaMsg.includes('salvo') ? '#15803d' : '#b91c1c', fontSize: 12, fontWeight: 700 }}>{categoriaMsg}</p>}
+          </div>
           <div>
             <label htmlFor="telefone-comercial" style={{ fontSize: 11, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 6, letterSpacing: 0.5 }}>TELEFONE COMERCIAL</label>
             <input
