@@ -6,6 +6,7 @@ import { getSessao } from '../lib/auth'
 import { alertDialog, confirmDialog } from '../lib/dialog'
 import ProductCategoryPicker, { CategoryPhoto } from '../components/ProductCategoryPicker'
 import { getProductCategory } from '../lib/productCategories'
+import BulkProductImport from '../components/BulkProductImport'
 
 type Produto = {
   id: string
@@ -70,6 +71,7 @@ export default function CardapioPage() {
   const [editCategoria, setEditCategoria] = useState('')
   const [editEstoque, setEditEstoque] = useState('')
   const [adicionando, setAdicionando] = useState(false)
+  const [importando, setImportando] = useState(false)
   const [loading, setLoading] = useState(true)
   const [verificado, setVerificado] = useState<boolean | null>(null)
   const [novo, setNovo] = useState<NovoForm>(NOVO_INICIAL)
@@ -330,10 +332,12 @@ export default function CardapioPage() {
           <h1 style={{ fontSize: 32, fontWeight: 900, color: '#0f172a', letterSpacing: -1, marginBottom: 8 }}>Cardápio</h1>
           <p style={{ color: '#64748b', fontSize: 16 }}>Gerencie seus pratos, bebidas e combos.</p>
         </div>
-        <button onClick={() => { if (verificado) setAdicionando(true) }} disabled={!verificado} style={{ display: 'flex', alignItems: 'center', gap: 8, background: verificado ? 'linear-gradient(135deg, #f97316, #ea580c)' : '#cbd5e1', color: '#fff', border: 'none', padding: '12px 24px', borderRadius: 16, fontSize: 15, fontWeight: 700, cursor: verificado ? 'pointer' : 'not-allowed', boxShadow: verificado ? '0 10px 25px rgba(249,115,22,0.3)' : 'none', transition: 'transform 0.2s, box-shadow 0.2s' }} onMouseOver={e => { if (verificado) e.currentTarget.style.transform = 'translateY(-2px)' }} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
-          <Plus size={20} />
-          Adicionar Item
-        </button>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+          <button type="button" onClick={() => setImportando(true)} disabled={!verificado} style={{ padding: '12px 18px', borderRadius: 16, border: '1px solid #fdba74', background: '#fff7ed', color: '#c2410c', fontWeight: 800, cursor: verificado ? 'pointer' : 'not-allowed' }}>Importar cardápio</button>
+          <button onClick={() => { if (verificado) setAdicionando(true) }} disabled={!verificado} style={{ display: 'flex', alignItems: 'center', gap: 8, background: verificado ? 'linear-gradient(135deg, #f97316, #ea580c)' : '#cbd5e1', color: '#fff', border: 'none', padding: '12px 24px', borderRadius: 16, fontSize: 15, fontWeight: 700, cursor: verificado ? 'pointer' : 'not-allowed', boxShadow: verificado ? '0 10px 25px rgba(249,115,22,0.3)' : 'none', transition: 'transform 0.2s, box-shadow 0.2s' }} onMouseOver={e => { if (verificado) e.currentTarget.style.transform = 'translateY(-2px)' }} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
+            <Plus size={20} /> Adicionar Item
+          </button>
+        </div>
       </motion.div>
 
       {/* Gate de verificação: sem CNPJ aprovado, não anuncia produto e não aparece pro cliente */}
@@ -582,6 +586,7 @@ export default function CardapioPage() {
           </div>
         )}
       </AnimatePresence>
+      {importando && verificado && sessao && <BulkProductImport sellerId={sessao.id} existingNames={produtos.map(item => item.nome)} onClose={() => setImportando(false)} onImported={fetchProdutos} />}
     </div>
   )
 }

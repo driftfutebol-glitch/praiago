@@ -6,6 +6,12 @@ Atualização do aplicativo **Cliente**. Ambulante, sites, contratos de API, reg
 
 ## O que mudou
 
+### Cardápio de pizzaria · 25/09/2026
+
+- A categoria Pizza no app candidato reconhece também os rótulos futuros "Pizzas premium" e "Pizzas salgadas"; os produtos publicados hoje continuam com `categoria = Pizza` para permanecerem visíveis no app público atual.
+- Checkout de restaurante ganhou pedido de talheres e observação curta. As instruções são enviadas no campo de itens exibidos ao vendedor; preço e quantidade continuam validados pelo servidor a partir de `itens_detalhe`.
+- Build, lint e 57 testes locais aprovados. Não houve pedido de teste, pagamento, migração de banco, OTA de produção nem nova build pública. A validação integrada em iPhone continua pendente antes da candidata de outubro ser distribuída.
+
 - Identidade visual em tons de oceano, areia e verde; tipografia legível, navegação de cinco destinos e alvos maiores.
 - Login/cadastro com contraste corrigido, formulário de teclado, autofill, visibilidade de senha, estados de erro e confirmação por código preservados.
 - Perfil com edição de nome/telefone/foto, atalhos reais de pedidos, favoritos, cupons, região, notificações, suporte e privacidade.

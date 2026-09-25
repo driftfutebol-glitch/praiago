@@ -894,6 +894,8 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
   const [cartao, setCartao] = useState<{ tipo: 'credit' | 'debit'; pedidoId: string; entrega: Entrega; valor: number } | null>(null)
   const [querCpfNota, setQuerCpfNota] = useState(false)
   const [cpfNota, setCpfNota] = useState('')
+  const [talheres, setTalheres] = useState(false)
+  const [observacao, setObservacao] = useState('')
   const carrinho = useStore(s => s.carrinho)
   const criarPedido = useStore(s => s.criarPedido)
   const setQtd = useStore(s => s.setQtd)
@@ -1193,7 +1195,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
       setConfirming(false)
       return
     }
-    const entrega: Entrega = { reta: reta.trim(), barraca: barraca.trim(), modo, pagamento, lat: clientePos[0], lng: clientePos[1], cpfNota: querCpfNota ? cpfNota.replace(/\D/g, '') : undefined }
+    const entrega: Entrega = { reta: reta.trim(), barraca: barraca.trim(), modo, pagamento, lat: clientePos[0], lng: clientePos[1], cpfNota: querCpfNota ? cpfNota.replace(/\D/g, '') : undefined, ...(vendedor.tipo === 'restaurante' ? { talheres, observacao: observacao.trim().slice(0, 60) } : {}) }
     let pedido: Awaited<ReturnType<typeof criarPedido>>
     try {
       pedido = await criarPedido(entrega, {
@@ -1239,7 +1241,7 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
       vendedorId: vendedor.id,
       clienteNome: sessao?.nome ?? 'Cliente PraiaGo',
       clienteTel: telefoneCliente || sessao?.telefone || '',
-      itens: itensList.map(p => `${carrinho[p.id]}x ${p.nome}`),
+      itens: [...itensList.map(p => `${carrinho[p.id]}x ${p.nome}`), ...(vendedor.tipo === 'restaurante' ? [`Talheres: ${talheres ? 'enviar' : 'não enviar'}`] : []), ...(observacao.trim() ? [`Observação: ${observacao.trim().slice(0, 60)}`] : [])],
       total,
       clienteLat: clientePos[0],
       clienteLng: clientePos[1],
@@ -1546,6 +1548,18 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
             </div>
           ))}
         </div>
+
+        {vendedor.tipo === 'restaurante' && (
+          <div style={{ marginBottom: 24, padding: 16, border: '1px solid var(--pg-line)', borderRadius: 18, background: 'var(--pg-surface-alt)' }}>
+            <div style={{ fontSize: 14, fontWeight: 900, color: 'var(--pg-ink)', marginBottom: 10 }}>Como preparar seu pedido?</div>
+            <label style={{ display: 'flex', gap: 10, alignItems: 'center', color: 'var(--pg-ink)', fontWeight: 700, marginBottom: 12 }}>
+              <input type="checkbox" checked={talheres} onChange={event => setTalheres(event.target.checked)} /> Preciso de talheres
+            </label>
+            <label htmlFor="pedido-observacao" style={{ display: 'block', fontSize: 12, fontWeight: 800, color: 'var(--pg-muted)', marginBottom: 6 }}>OBSERVAÇÃO PARA A LOJA (OPCIONAL)</label>
+            <textarea id="pedido-observacao" value={observacao} maxLength={60} onChange={event => setObservacao(event.target.value)} placeholder="Ex: sem cebola" rows={2} style={{ ...darkInput, resize: 'vertical' }} />
+            <div style={{ color: 'var(--pg-muted)', fontSize: 11, marginTop: 5 }}>Não inclua dados pessoais. {observacao.length}/60</div>
+          </div>
+        )}
 
         {/* CPF na nota (opcional) */}
         <div style={{ marginBottom: 24 }}>

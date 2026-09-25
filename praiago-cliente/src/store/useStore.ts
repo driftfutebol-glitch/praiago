@@ -37,6 +37,8 @@ export type Entrega = {
   lat?: number
   lng?: number
   cpfNota?: string // CPF na nota (opcional, só dígitos)
+  talheres?: boolean
+  observacao?: string
 }
 export type Pedido = {
   id: string
@@ -270,6 +272,11 @@ export const useStore = create<State>()(
           .filter((x): x is { id: string; nome: string; qtd: number; preco: number } => x !== null)
         if (itensBrutos.length === 0) return null
         const itens: PedidoItem[] = itensBrutos.map(({ nome, qtd, preco }) => ({ nome, qtd, preco }))
+        const instrucoes = [
+          ...(entrega?.talheres == null ? [] : [`Talheres: ${entrega.talheres ? 'enviar' : 'não enviar'}`]),
+          ...(entrega?.observacao?.trim() ? [`Observação: ${entrega.observacao.trim().slice(0, 60)}`] : []),
+        ]
+        const itensExibicao = [...itens.map(i => `${i.qtd}x ${i.nome}`), ...instrucoes]
         const subtotal = itens.reduce((a, i) => a + i.preco * i.qtd, 0)
         const discountAmount = Math.max(0, Math.min(subtotal, Math.round(Number(options.desconto?.valor ?? 0) * 100) / 100))
         const total = Math.max(0, Math.round((subtotal - discountAmount) * 100) / 100)
@@ -284,7 +291,7 @@ export const useStore = create<State>()(
         if (!presencial) {
           let pendentesQuery = supabase
             .from('pedidos')
-            .select('id,created_at,total,subtotal_amount,discount_amount,discount_code,itens_detalhe,reta,barraca,payment_status')
+            .select('id,created_at,total,subtotal_amount,discount_amount,discount_code,itens_detalhe,itens,reta,barraca,payment_status')
             .eq('cliente_id', sessao.id)
             .eq('vendedor_id', vend.id)
             .eq('pagamento', method)
@@ -301,6 +308,7 @@ export const useStore = create<State>()(
 
           const existente = pendentes?.find(row => (
             mesmosItens(row.itens_detalhe, itensDetalhe)
+            && JSON.stringify(row.itens) === JSON.stringify(itensExibicao)
             && String(row.reta || '') === String(entrega?.reta || '')
             && String(row.barraca || '') === String(entrega?.barraca || '')
           ))
@@ -342,7 +350,7 @@ export const useStore = create<State>()(
           lat: entrega?.lat ?? null,
           lng: entrega?.lng ?? null,
           cpf_nota: entrega?.cpfNota || null,
-          itens: itens.map(i => `${i.qtd}x ${i.nome}`),
+          itens: itensExibicao,
           // itens com ID do produto — o SERVIDOR recalcula o preço real por aqui
           // (o total/subtotal abaixo são só palpite; o trigger sobrescreve).
           itens_detalhe: itensDetalhe,

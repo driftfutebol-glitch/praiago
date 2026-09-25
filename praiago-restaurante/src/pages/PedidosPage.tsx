@@ -226,11 +226,14 @@ export default function PedidosPage() {
 
                 {/* Itens */}
                 <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(0,0,0,0.05)', borderRadius: 16, padding: '16px', marginBottom: 20, position: 'relative', zIndex: 1 }}>
-                  {p.itens.map((item, i) => (
-                    <div key={i} style={{ fontSize: 14, color: '#334155', lineHeight: '1.8', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500 }}>
-                      <div style={{ width: 6, height: 6, borderRadius: '50%', background: s.cor, boxShadow: `0 0 5px ${s.cor}` }} /> {item}
-                    </div>
-                  ))}
+                  {p.itens.map((item, i) => {
+                    const instrucao = item.startsWith('Talheres:') || item.startsWith('Observação:')
+                    return (
+                      <div key={i} style={{ fontSize: 14, color: instrucao ? '#9a3412' : '#334155', lineHeight: '1.8', display: 'flex', alignItems: 'center', gap: 8, fontWeight: instrucao ? 800 : 500, background: instrucao ? '#fff7ed' : 'transparent', borderRadius: 8, padding: instrucao ? '2px 8px' : 0 }}>
+                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: instrucao ? '#ea580c' : s.cor, boxShadow: `0 0 5px ${instrucao ? '#ea580c' : s.cor}` }} /> {item}
+                      </div>
+                    )
+                  })}
                 </div>
 
                 {/* Entregador */}

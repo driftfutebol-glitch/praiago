@@ -12,6 +12,7 @@ import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-lea
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { MAPA_TILES, MAPA_ATRIBUICAO, MAPA_ZOOM_MAX } from '../lib/mapa'
+import { BUSINESS_CATEGORIES } from '../lib/businessCategories'
 
 const restaurantLocationIcon = L.divIcon({
   className: '',
@@ -89,6 +90,7 @@ export default function LoginPage() {
   // Cadastro: dados reais do negócio
   const [nomePessoa, setNomePessoa] = useState('')
   const [nomeLoja, setNomeLoja] = useState('')
+  const [categoriaNegocio, setCategoriaNegocio] = useState('Restaurante')
   const [cnpj, setCnpj] = useState('')
   const [cnpjStatus, setCnpjStatus] = useState<'idle' | 'buscando' | 'ok' | 'invalido' | 'nao_encontrado' | 'duplicado'>('idle')
   const [razaoSocial, setRazaoSocial] = useState('')
@@ -349,6 +351,7 @@ export default function LoginPage() {
             email: emailNormalizado, senha,
             metadata: {
               role: 'restaurante', nome: nomeLoja.trim(),
+              categoria: categoriaNegocio,
               cnpj: cnpj.replace(/\D/g, '') || null,
               razao_social: razaoSocial || nomePessoa.trim(),
               endereco: endereco.trim() || null,
@@ -368,7 +371,7 @@ export default function LoginPage() {
         // completa os dados do negócio (o trigger já criou o profile básico)
         if (resp?.user_id) {
           await supabase.from('profiles').update({
-            nome: nomeLoja.trim(), role: 'restaurante', email: emailNormalizado,
+            nome: nomeLoja.trim(), role: 'restaurante', email: emailNormalizado, categoria: categoriaNegocio,
             cnpj: cnpj.replace(/\D/g, '') || null,
             razao_social: razaoSocial || nomePessoa.trim(),
             endereco: endereco.trim() || null,
@@ -383,6 +386,7 @@ export default function LoginPage() {
         const { data: otp, error: otpErr } = await supabase.auth.verifyOtp({ email: emailNormalizado, token: codigo.trim(), type: 'signup' })
         if (otpErr) { setErro('Código inválido ou expirado. Quando confirmar, entre em "Tenho código".'); setIsLogin(true); return }
         if (otp.user) {
+          await supabase.from('profiles').update({ categoria: categoriaNegocio }).eq('id', otp.user.id)
           const { data: perfil } = await supabase.from('profiles').select('role,status').eq('id', otp.user.id).maybeSingle()
           if (perfil?.role !== 'restaurante' || perfil?.status === 'banido') {
             await supabase.auth.signOut()
@@ -465,6 +469,12 @@ export default function LoginPage() {
                 <div>
                   <label htmlFor="rest-loja" style={{ fontSize: 12, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 8, letterSpacing: 1 }}>NOME DO RESTAURANTE / LOJA</label>
                   <input id="rest-loja" value={nomeLoja} onChange={e => setNomeLoja(e.target.value)} placeholder="Quiosque da Praia" style={inputStyle} />
+                </div>
+                <div>
+                  <label htmlFor="rest-categoria" style={{ fontSize: 12, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 8, letterSpacing: 1 }}>TIPO DE NEGÓCIO</label>
+                  <select id="rest-categoria" value={categoriaNegocio} onChange={e => setCategoriaNegocio(e.target.value)} style={inputStyle}>
+                    {BUSINESS_CATEGORIES.map(category => <option key={category} value={category}>{category}</option>)}
+                  </select>
                 </div>
                 <div>
                   <label htmlFor="rest-end" style={{ fontSize: 12, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 8, letterSpacing: 1 }}>LOCALIZAÇÃO DA LOJA</label>

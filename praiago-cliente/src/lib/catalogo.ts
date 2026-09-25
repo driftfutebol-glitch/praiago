@@ -67,7 +67,7 @@ export const CATEGORIAS = [
   { id: 'brasileira',    nome: 'Brasileira',     cor: '#15803d', sprite: [3, 1], aliases: ['brasileira', 'comida brasileira', 'culinaria brasileira'] },
   { id: 'pastel',        nome: 'Pastel',         cor: '#ca8a04', sprite: [4, 1], aliases: ['pastel', 'pasteis'] },
   { id: 'padarias',      nome: 'Padarias',       cor: '#a16207', sprite: [0, 2], aliases: ['padaria', 'padarias', 'pao', 'paes', 'panificacao'] },
-  { id: 'pizza',         nome: 'Pizza',           cor: '#e11d48', sprite: [1, 2], aliases: ['pizza', 'pizzas', 'pizzaria'] },
+  { id: 'pizza',         nome: 'Pizza',           cor: '#e11d48', sprite: [1, 2], aliases: ['pizza', 'pizzas', 'pizzaria', 'pizzas premium', 'pizzas salgadas'] },
   { id: 'italiana',      nome: 'Italiana',       cor: '#dc2626', sprite: [2, 2], aliases: ['italiana', 'comida italiana', 'massa', 'massas', 'macarrao'] },
   { id: 'saudavel',      nome: 'Saudável',       cor: '#16a34a', sprite: [3, 2], aliases: ['saudavel', 'salada', 'saladas', 'fitness', 'fit'] },
   { id: 'carnes',        nome: 'Carnes',         cor: '#b91c1c', sprite: [4, 2], aliases: ['carne', 'carnes', 'churrascaria'] },
