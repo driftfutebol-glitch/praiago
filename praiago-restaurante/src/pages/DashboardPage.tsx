@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
-import { ShoppingBag, TrendingUp, Clock, Map as MapIcon,
+import { Clock, Map as MapIcon,
          Zap, ArrowUpRight, CheckCircle2, ChefHat, Bike, Bell, X, Shield } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { supabase } from '../lib/supabase'
 import { getSessao } from '../lib/auth'
 import { useOrders } from '../store/useOrders'
+import { useSalesReport } from '../hooks/useSalesReport'
+import SalesOverview from '../components/SalesOverview'
 
 // ── Tipos ────────────────────────────────────────────────────
 type OrderPayload = {
@@ -49,33 +50,6 @@ const STATUS_CFG: Record<string, { bg: string; cor: string; label: string; icon:
   entregando: { bg: 'rgba(249,115,22,0.15)', cor: '#fb923c', label: 'Em rota',   icon: Bike        },
 }
 
-function StatCard({ icon: Icon, label, value, sub, gradient, change, live, delay }: {
-  icon: any; label: string; value: string; sub?: string
-  gradient: string; change?: string; live?: boolean; delay: number
-}) {
-  return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay, duration: 0.4 }} className="glass-panel" style={{ borderRadius: 24, padding: '24px', position: 'relative', overflow: 'hidden', transition: 'transform 0.2s' }} whileHover={{ y: -5 }}>
-      <div style={{ position: 'absolute', top: -20, right: -20, width: 100, height: 100, borderRadius: '50%', background: gradient, opacity: 0.15, filter: 'blur(20px)' }} />
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18, position: 'relative' }}>
-        <div style={{ width: 48, height: 48, borderRadius: 16, background: gradient, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 20px rgba(0,0,0,0.3)' }}>
-          <Icon size={22} color="#fff" />
-        </div>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          {live && <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: 20, padding: '4px 8px' }}>
-            <div className="animate-pulse-neon" style={{ width: 6, height: 6, borderRadius: '50%', background: '#4ade80' }} />
-            <span style={{ fontSize: 9, fontWeight: 900, color: '#4ade80', letterSpacing: 0.5 }}>LIVE</span>
-          </div>}
-          {change && <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(34,197,94,0.1)', color: '#4ade80', fontSize: 11, fontWeight: 800, padding: '4px 10px', borderRadius: 20 }}>
-            <ArrowUpRight size={11} /> {change}
-          </div>}
-        </div>
-      </div>
-      <div style={{ fontSize: 32, fontWeight: 900, color: '#0f172a', letterSpacing: -1 }}>{value}</div>
-      <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600, marginTop: 4 }}>{label}</div>
-      {sub && <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>{sub}</div>}
-    </motion.div>
-  )
-}
 
 function ZonePill({ zoneId }: { zoneId: string }) {
   return (
@@ -146,8 +120,7 @@ export default function DashboardPage() {
 
   const [liveOrders, setLiveOrders] = useState<OrderPayload[]>([])
   const [latestOrder, setLatestOrder] = useState<OrderPayload | null>(null)
-  const [todayCount, setTodayCount] = useState(0)
-  const [revenue, setRevenue] = useState(0)
+  const salesData = useSalesReport()
   const channelRef = useRef<BroadcastChannel | null>(null)
 
   // Escuta pedidos ao vivo via BroadcastChannel
@@ -161,27 +134,6 @@ export default function DashboardPage() {
     }
     return () => channelRef.current?.close()
   }, [])
-
-  useEffect(() => {
-    async function loadStats() {
-      const s = getSessao()
-      if (!s) return
-      
-      const inicioDia = new Date(); inicioDia.setHours(0, 0, 0, 0)  // dia LOCAL, não UTC
-      const { data } = await supabase
-        .from('pedidos')
-        .select('total,status')
-        .eq('vendedor_id', s.id)
-        .gte('created_at', inicioDia.toISOString())
-      if (data) {
-        // só conta pedido pago/válido (fora aguardando_pagamento e cancelado)
-        const validos = data.filter(p => !['aguardando_pagamento', 'cancelado', 'pagamento_recusado'].includes(String(p.status)))
-        setTodayCount(validos.length)
-        setRevenue(validos.reduce((acc, p) => acc + Number(p.total), 0))
-      }
-    }
-    loadStats()
-  }, [pedidos])
 
   // Auto-dismiss banner após 6s
   useEffect(() => {
@@ -223,11 +175,12 @@ export default function DashboardPage() {
       </motion.div>
 
       {/* ── Stats ─────────────────────────────────────────────── */}
-      <div className="restaurant-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 24, marginBottom: 36 }}>
-        <StatCard delay={0.1} icon={ShoppingBag} label="Pedidos hoje" value={String(todayCount)} sub={`${ativos.length} em andamento`} gradient="linear-gradient(135deg,#f97316,#ea580c)" />
-        <StatCard delay={0.2} icon={TrendingUp} label="Faturamento hoje" value={`R$ ${revenue.toLocaleString('pt-BR',{minimumFractionDigits:2})}`} gradient="linear-gradient(135deg,#22c55e,#16a34a)" />
-        <StatCard delay={0.3} icon={ChefHat} label="Na cozinha" value={String(pedidos.filter(p => p.status === 'preparando').length)} sub="Pedidos em preparo" gradient="linear-gradient(135deg,#0ea5e9,#0284c7)" />
-        <StatCard delay={0.4} icon={CheckCircle2} label="Prontos" value={String(pedidos.filter(p => p.status === 'pronto').length)} sub="Aguardando saída" gradient="linear-gradient(135deg,#f59e0b,#d97706)" />
+      <SalesOverview data={salesData} />
+      <div className="sales-secondary-grid sales-operation">
+        <div><span>Pedidos ativos agora</span><strong>{ativos.length}</strong></div>
+        <div><span>Na cozinha</span><strong>{pedidos.filter(p => p.status === 'preparando').length}</strong></div>
+        <div><span>Prontos para sair</span><strong>{pedidos.filter(p => p.status === 'pronto').length}</strong></div>
+        <div><span>Em entrega</span><strong>{pedidos.filter(p => p.status === 'entregando').length}</strong></div>
       </div>
 
       {/* ── Grid principal ────────────────────────────────────── */}
@@ -302,7 +255,7 @@ export default function DashboardPage() {
                 <span style={{ fontSize: 12, color: '#4ade80', fontWeight: 900, textTransform: 'uppercase', letterSpacing: 1.5 }}>Ao vivo</span>
               </div>
               <h3 style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', margin: '0 0 8px' }}>Entregas em Rota</h3>
-              <p style={{ fontSize: 14, color: '#64748b', margin: '0 0 24px', fontWeight: 500 }}>0 entregadores ativos agora</p>
+              <p style={{ fontSize: 14, color: '#64748b', margin: '0 0 24px', fontWeight: 500 }}>{ativos.filter(pedido => pedido.status === 'entregando').length} pedido(s) em entrega agora</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 28 }}>
                 {([] as string[]).map((e, i) => (
                   <motion.div whileHover={{ scale: 1.02 }} key={e} style={{ background: 'rgba(0,0,0,0.05)', borderRadius: 16, padding: '12px 16px', fontSize: 14, color: '#0f172a', fontWeight: 700, border: '1px solid rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', gap: 12 }}>

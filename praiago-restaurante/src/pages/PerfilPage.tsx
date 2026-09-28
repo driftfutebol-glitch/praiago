@@ -12,6 +12,8 @@ import TrocaNomeLoja from '../components/TrocaNomeLoja'
 import EditorHorarios from '../components/EditorHorarios'
 import { sellerPhotoUrl } from '../lib/sellerPhotos'
 import { businessCategoryOptions } from '../lib/businessCategories'
+import { useSalesReport } from '../hooks/useSalesReport'
+import { formatBRL, summarizeSales } from '../lib/salesReport'
 
 type PerfilInfo = {
   nome: string
@@ -247,8 +249,8 @@ export default function PerfilPage() {
     fotoPerfilPath: null,
     fotoCapaPath: null,
   })
-  const [pedidosMes, setPedidosMes] = useState(0)
-  const [faturamentoMes, setFaturamentoMes] = useState(0)
+  const salesData = useSalesReport()
+  const sales = salesData.report ? summarizeSales(salesData.report, 'all') : null
   const [painelAberto, setPainelAberto] = useState<Painel | null>(null)
   const [suporteAberto, setSuporteAberto] = useState(false)
   const [telefoneComercial, setTelefoneComercial] = useState('')
@@ -408,20 +410,6 @@ export default function PerfilPage() {
         setLng(data.lng != null ? Number(data.lng) : null)
       })
 
-    const inicioMes = new Date()
-    inicioMes.setDate(1)
-    inicioMes.setHours(0, 0, 0, 0)
-
-    supabase
-      .from('pedidos')
-      .select('total, status')
-      .eq('vendedor_id', sessao.id)
-      .gte('created_at', inicioMes.toISOString())
-      .then(({ data }) => {
-        const entregues = (data ?? []).filter(p => p.status === 'entregue')
-        setPedidosMes(entregues.length)
-        setFaturamentoMes(entregues.reduce((a, p) => a + (Number(p.total) || 0), 0))
-      })
   }, [sessao])
 
   useEffect(() => {
@@ -810,9 +798,13 @@ export default function PerfilPage() {
       )}
 
       <div className="restaurant-profile-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: 24, marginBottom: 32 }}>
-        <InfoCard title="Desempenho do mes" icon={<TrendingUp size={16} color="#16a34a" />}>
-          <Metric label="Pedidos concluidos" value={String(pedidosMes)} color="#0f172a" />
-          <Metric label="Faturamento bruto" value={`R$ ${faturamentoMes.toFixed(2).replace('.', ',')}`} color="#16a34a" />
+        <InfoCard title="Desempenho da loja · histórico" icon={<TrendingUp size={16} color="#16a34a" />}>
+          <Metric label="Vendas realizadas" value={sales ? String(sales.count) : '—'} color="#0f172a" />
+          <Metric label="Faturamento bruto" value={sales ? formatBRL(sales.gross) : '—'} color="#16a34a" />
+          <Metric label="Comissão PraiaGo" value={sales?.commission != null ? formatBRL(sales.commission) : '—'} color="#c2410c" />
+          <Metric label="Líquido da loja" value={sales?.net != null ? formatBRL(sales.net) : '—'} color="#0369a1" />
+          <p className="sales-sync" role="status">{salesData.loading ? 'Atualizando vendas…' : salesData.error ? 'Consulta indisponível; não considere estes dados atualizados.' : 'Inclui vendas pagas ainda em entrega. Líquido não é saldo para saque.'}</p>
+          <button type="button" className="sales-profile-link" onClick={() => navigate('/vendas')}>Ver resumo completo <ChevronRight size={16} /></button>
         </InfoCard>
 
         <InfoCard title="Informacoes publicas" icon={<MapPin size={16} color="#0ea5e9" />}>
