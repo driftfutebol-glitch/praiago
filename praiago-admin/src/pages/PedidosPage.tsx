@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { confirmDialog, alertDialog } from '../lib/dialog'
-import { Search, Ban } from 'lucide-react'
+import { Search, Ban, CheckCircle2 } from 'lucide-react'
+import { canConcludeExternalDelivery } from '../lib/adminExceptions'
+import { askExceptionReason } from '../lib/adminExceptionDialogs'
 import { format } from 'date-fns'
 
 export default function PedidosPage() {
   const [pedidos, setPedidos] = useState<any[]>([])
   const [busca, setBusca] = useState('')
+  const [concluindo, setConcluindo] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -32,9 +35,26 @@ export default function PedidosPage() {
     await supabase.from('financial_ledger').update({ status: 'cancelado' }).eq('pedido_id', id).neq('status', 'pago')
   }
 
+  async function concluirEntrega(pedido: any) {
+    if (concluindo) return
+    setConcluindo(pedido.id)
+    try {
+      const motivo = await askExceptionReason('Concluir entrega por exceção', `Pedido ${pedido.id.slice(0, 8)}: descreva como a entrega foi confirmada por fora e por que o código não pôde ser usado. O repasse externo deve estar registrado antes.`)
+      if (!motivo || !await confirmDialog({ title: 'Confirmar entrega administrativa?', message: 'Use somente após conferir que a entrega foi realizada. O pedido ficará entregue por ação administrativa, sem validar o código do cliente e sem liberar novamente o saldo já pago.', confirmText: 'Concluir sem código', tone: 'danger' })) return
+      const { data, error } = await supabase.rpc('admin_concluir_entrega_externa', { p_pedido: pedido.id, p_motivo: motivo })
+      if (error || data?.ok !== true) throw new Error(error?.message || 'O servidor não confirmou a entrega.')
+      setPedidos(rows => rows.map(row => row.id === pedido.id ? { ...row, status: 'entregue', entrega_confirmada: true } : row))
+      await alertDialog({ title: 'Pedido concluído', message: 'Exceção registrada na auditoria. O saldo pago não foi liberado novamente.', tone: 'success' })
+    } catch (error) {
+      await alertDialog({ title: 'Pedido não concluído', message: error instanceof Error ? error.message : 'Não foi possível concluir agora.', tone: 'danger' })
+    } finally {
+      setConcluindo(null)
+    }
+  }
+
   const filtrados = pedidos.filter(p => 
     p.id.toLowerCase().includes(busca.toLowerCase()) || 
-    p.cliente_nome.toLowerCase().includes(busca.toLowerCase())
+    String(p.cliente_nome || '').toLowerCase().includes(busca.toLowerCase())
   )
 
   return (
@@ -83,7 +103,12 @@ export default function PedidosPage() {
                   </span>
                 </td>
                 <td className="p-4 text-right">
-                  {p.status !== 'cancelado' && p.status !== 'entregue' && (
+                  {canConcludeExternalDelivery(p) && (
+                    <button disabled={!!concluindo} onClick={() => void concluirEntrega(p)} className="p-2 mr-2 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 rounded-lg inline-flex items-center gap-2 text-xs font-bold disabled:opacity-40">
+                      <CheckCircle2 size={14} /> {concluindo === p.id ? 'Conferindo…' : 'Concluir sem código'}
+                    </button>
+                  )}
+                  {p.status !== 'cancelado' && p.status !== 'entregue' && p.settlement_status !== 'repasse_manual_pago' && (
                     <button 
                       onClick={() => cancelarPedido(p.id)}
                       className="p-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors inline-flex items-center gap-2 text-xs font-bold"

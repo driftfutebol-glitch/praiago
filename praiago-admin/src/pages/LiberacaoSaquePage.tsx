@@ -3,6 +3,8 @@ import {
   ShieldAlert, ExternalLink, Send, Loader2, CheckCircle2, Clock, RefreshCw,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { confirmDialog, alertDialog } from '../lib/dialog'
+import { askExceptionReason } from '../lib/adminExceptionDialogs'
 
 // Fila de liberação de saque (o KYC do recebedor na Pagar.me).
 //
@@ -49,6 +51,7 @@ function desde(iso: string) {
 }
 
 export default function LiberacaoSaquePage() {
+  const [encerrando, setEncerrando] = useState<string | null>(null)
   const [chamados, setChamados] = useState<Chamado[]>([])
   const [mensagens, setMensagens] = useState<Record<string, Mensagem[]>>({})
   const [rascunho, setRascunho] = useState<Record<string, string>>({})
@@ -123,6 +126,23 @@ export default function LiberacaoSaquePage() {
     if (!ultimo) return { fase: 'nenhum' as const, resta: 0 }
     const resta = new Date(ultimo.created_at).getTime() + VALIDADE_LINK_MS - agora
     return { fase: resta > 0 ? ('valido' as const) : ('vencido' as const), resta: Math.max(0, resta) }
+  }
+
+  async function encerrarAviso(c: Chamado) {
+    if (encerrando) return
+    setEncerrando(c.id)
+    try {
+      const motivo = await askExceptionReason('Motivo para retirar o aviso', 'O chamado será encerrado, mas seu histórico continuará salvo. Isso não aprova o cadastro bancário nem libera saques na Pagar.me.')
+      if (!motivo || !await confirmDialog({ title: 'Retirar aviso de verificação?', message: `Encerrar o aviso de ${c.usuario_nome}? A aprovação bancária continua dependendo da Pagar.me. Se ainda houver uma pendência real, o vendedor poderá pedir atendimento novamente.`, confirmText: 'Encerrar aviso' })) return
+      const { data, error } = await supabase.rpc('admin_encerrar_aviso_kyc', { p_ticket: c.id, p_motivo: motivo })
+      if (error || data?.ok !== true) throw new Error(error?.message || 'O servidor não confirmou o encerramento.')
+      await carregar()
+      await alertDialog({ title: 'Aviso encerrado', message: 'Retirado da fila e do painel de verificação. Histórico preservado, sem alterar a aprovação bancária.', tone: 'success' })
+    } catch (error) {
+      await alertDialog({ title: 'Aviso não encerrado', message: error instanceof Error ? error.message : 'Não foi possível encerrar agora.', tone: 'danger' })
+    } finally {
+      setEncerrando(null)
+    }
   }
 
   const relogio = (ms: number) => {
@@ -253,6 +273,9 @@ export default function LiberacaoSaquePage() {
                 <p className="text-slate-600 text-[11px] mt-2">
                   Ele recebe um aviso no aparelho na hora, e o link vira botão dentro do app.
                 </p>
+                <button disabled={!!encerrando || !!enviando} onClick={() => void encerrarAviso(c)} className="mt-4 inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-xs font-bold text-slate-300 hover:bg-slate-800 disabled:opacity-40">
+                  <CheckCircle2 size={14} /> {encerrando === c.id ? 'Conferindo…' : 'Retirar aviso / encerrar chamado'}
+                </button>
               </div>
             )
           })}
