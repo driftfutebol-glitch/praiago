@@ -320,7 +320,7 @@ export default function CardapioPage() {
     : produtos.filter(p => productMenuSection(p.categoria, p.descricao) === categoriaFiltro)
 
   return (
-    <div style={{ padding: '32px 0 48px', minHeight: '100vh', position: 'relative' }}>
+    <div className="restaurant-page" style={{ padding: '32px 0 48px', minHeight: '100vh', position: 'relative' }}>
       <input
         ref={trocarFotoRef}
         type="file"
@@ -330,12 +330,12 @@ export default function CardapioPage() {
       />
 
       {/* Header */}
-      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} style={{ padding: '0 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
+      <motion.div className="restaurant-page-header restaurant-inset-section" initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} style={{ padding: '0 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
         <div>
           <h1 style={{ fontSize: 32, fontWeight: 900, color: '#0f172a', letterSpacing: -1, marginBottom: 8 }}>Cardápio</h1>
           <p style={{ color: '#64748b', fontSize: 16 }}>Gerencie seus pratos, bebidas e combos.</p>
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+        <div className="restaurant-header-actions" style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
           <button type="button" onClick={() => setImportando(true)} disabled={!verificado} style={{ padding: '12px 18px', borderRadius: 16, border: '1px solid #fdba74', background: '#fff7ed', color: '#c2410c', fontWeight: 800, cursor: verificado ? 'pointer' : 'not-allowed' }}>Importar cardápio</button>
           <button onClick={() => { if (verificado) setAdicionando(true) }} disabled={!verificado} style={{ display: 'flex', alignItems: 'center', gap: 8, background: verificado ? 'linear-gradient(135deg, #f97316, #ea580c)' : '#cbd5e1', color: '#fff', border: 'none', padding: '12px 24px', borderRadius: 16, fontSize: 15, fontWeight: 700, cursor: verificado ? 'pointer' : 'not-allowed', boxShadow: verificado ? '0 10px 25px rgba(249,115,22,0.3)' : 'none', transition: 'transform 0.2s, box-shadow 0.2s' }} onMouseOver={e => { if (verificado) e.currentTarget.style.transform = 'translateY(-2px)' }} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
             <Plus size={20} /> Adicionar Item
@@ -345,7 +345,7 @@ export default function CardapioPage() {
 
       {/* Gate de verificação: sem CNPJ aprovado, não anuncia produto e não aparece pro cliente */}
       {verificado === false && (
-        <div style={{ margin: '0 40px 24px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 16, padding: '16px 20px' }}>
+        <div className="restaurant-menu-gate" style={{ margin: '0 40px 24px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 16, padding: '16px 20px' }}>
           <div style={{ fontSize: 15, fontWeight: 800, color: '#b45309', marginBottom: 4 }}>⚠️ Verificação pendente</div>
           <p style={{ fontSize: 14, color: '#92400e', margin: 0, lineHeight: 1.5 }}>
             Você precisa <strong>completar a verificação (CNPJ + documento)</strong> antes de anunciar produtos.
@@ -355,7 +355,7 @@ export default function CardapioPage() {
       )}
 
       {/* Tabs / Filters */}
-      <div style={{ padding: '0 40px', marginBottom: 32, display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 8 }} className="hide-scrollbar">
+      <div style={{ padding: '0 40px', marginBottom: 32, display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 8 }} className="hide-scrollbar restaurant-inset-section">
         {todasCategorias.map(cat => (
           <button key={cat} onClick={() => setCategoriaFiltro(cat)} style={{ minHeight: 54, padding: cat === 'Todos' ? '8px 20px' : '6px 15px 6px 8px', borderRadius: 14, fontSize: 13, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.2s', background: categoriaFiltro === cat ? '#fff7ed' : '#ffffff', color: categoriaFiltro === cat ? '#ea580c' : '#475569', border: `1px solid ${categoriaFiltro === cat ? '#fdba74' : '#e2e8f0'}`, display: 'inline-flex', alignItems: 'center', gap: 8, boxShadow: categoriaFiltro === cat ? '0 7px 18px rgba(234,88,12,0.12)' : 'none' }}>
             {cat !== 'Todos' && <CategoryPhoto category={getProductCategory(cat)} size={40} />}
@@ -365,12 +365,12 @@ export default function CardapioPage() {
       </div>
 
       {/* Grid */}
-      <div style={{ padding: '0 40px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 24 }}>
+      <div className="restaurant-menu-grid" style={{ padding: '0 40px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 320px), 1fr))', gap: 24 }}>
         <AnimatePresence>
           {loading ? (
             <div style={{ color: '#64748b', padding: 20 }}>Carregando cardápio do servidor...</div>
           ) : filtrados.map(p => (
-            <motion.div key={p.id} layout initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} transition={{ duration: 0.2 }} style={{ background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(10px)', borderRadius: 24, padding: 20, border: '1px solid rgba(0,0,0,0.05)', position: 'relative', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' }}>
+            <motion.div className="restaurant-product-card" key={p.id} layout initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} transition={{ duration: 0.2 }} style={{ background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(10px)', borderRadius: 24, padding: 20, border: '1px solid rgba(0,0,0,0.05)', position: 'relative', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' }}>
               {/* Badge Ativo */}
               <button onClick={() => toggleAtivo(p.id)} style={{ position: 'absolute', top: 20, right: 20, background: p.ativo ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)', border: `1px solid ${p.ativo ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`, color: p.ativo ? '#4ade80' : '#f87171', padding: '4px 12px', borderRadius: 12, fontSize: 12, fontWeight: 800, cursor: 'pointer', transition: 'all 0.2s' }}>
                 {p.ativo ? 'ATIVO' : 'PAUSADO'}
@@ -379,7 +379,7 @@ export default function CardapioPage() {
               <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
                 <div style={{ width: 72, height: 72, borderRadius: 16, background: 'rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, position: 'relative', overflow: 'hidden' }}>
                   {p.foto
-                    ? <img src={p.foto} alt={p.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ? <img src={p.foto} alt={p.nome} loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     : <CategoryPhoto category={getProductCategory(p.categoria)} size={72} />}
                   <button
                     type="button"
@@ -401,7 +401,7 @@ export default function CardapioPage() {
                     {enviandoFotoId === p.id ? <Loader2 size={15} className="animate-spin-slow" /> : <Camera size={15} />}
                   </button>
                 </div>
-                <div style={{ flex: 1, paddingTop: 4 }}>
+                <div style={{ flex: 1, minWidth: 0, paddingTop: 4, overflowWrap: 'anywhere' }}>
                   <div style={{ fontSize: 12, color: '#f97316', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
                     {productMenuSection(p.categoria, p.descricao)}
                   </div>

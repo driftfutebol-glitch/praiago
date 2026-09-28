@@ -763,7 +763,7 @@ export default function PerfilPage() {
       }}>
         {fotoCapa && <img src={fotoCapa} alt="" aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.16 }} />}
         <div style={{ position: 'relative' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+        <div className="restaurant-profile-identity" style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
           <div style={{
             width: 88,
             height: 88,
@@ -809,7 +809,7 @@ export default function PerfilPage() {
         />
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24, marginBottom: 32 }}>
+      <div className="restaurant-profile-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: 24, marginBottom: 32 }}>
         <InfoCard title="Desempenho do mes" icon={<TrendingUp size={16} color="#16a34a" />}>
           <Metric label="Pedidos concluidos" value={String(pedidosMes)} color="#0f172a" />
           <Metric label="Faturamento bruto" value={`R$ ${faturamentoMes.toFixed(2).replace('.', ',')}`} color="#16a34a" />

@@ -478,7 +478,7 @@ export default function EntregadoresPage() {
   if (!sessao) return null
 
   return (
-    <div style={{ minHeight: '100vh', paddingBottom: 48 }}>
+    <div className="restaurant-page" style={{ minHeight: '100vh', paddingBottom: 48 }}>
       <AnimatePresence>
         {showForm && <FormModal onClose={() => setShowForm(false)} onSave={addEntregador} />}
       </AnimatePresence>
@@ -494,7 +494,7 @@ export default function EntregadoresPage() {
       </AnimatePresence>
 
       {/* Header */}
-      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} style={{ padding: '32px 40px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <motion.div className="restaurant-page-header restaurant-inset-section" initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} style={{ padding: '32px 40px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 style={{ fontSize: 38, fontWeight: 900, color: '#0f172a', margin: '0 0 8px', letterSpacing: -1, textShadow: '0 0 30px rgba(0,0,0,0.08)' }}>Equipe Tática</h1>
           <p style={{ fontSize: 15, color: '#64748b', margin: 0, fontWeight: 500 }}>Gestão da sua frota própria de entregas</p>
@@ -511,10 +511,10 @@ export default function EntregadoresPage() {
       </motion.div>
 
       {/* Stats e Busca */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} style={{ padding: '0 40px 32px', display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', gap: 12 }}>
+      <motion.div className="restaurant-inset-section" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} style={{ padding: '0 40px 32px', display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+        <div className="restaurant-courier-stats" style={{ display: 'flex', gap: 12 }}>
           {[
-            { n: entregadores.length, l: 'TOTAL', bg: 'rgba(0,0,0,0.05)', c: '#f8fafc', b: 'rgba(0,0,0,0.08)' },
+            { n: entregadores.length, l: 'TOTAL', bg: 'rgba(0,0,0,0.05)', c: '#334155', b: 'rgba(0,0,0,0.08)' },
             { n: disponiveis, l: 'DISPONÍVEIS', bg: 'rgba(34,197,94,0.1)', c: '#4ade80', b: 'rgba(34,197,94,0.2)' },
             { n: emEntrega, l: 'EM ROTA', bg: 'rgba(14,165,233,0.1)', c: '#38bdf8', b: 'rgba(14,165,233,0.2)' },
             { n: verificados, l: 'VERIFICADOS', bg: 'rgba(249,115,22,0.1)', c: '#f97316', b: 'rgba(249,115,22,0.2)' },
@@ -526,18 +526,19 @@ export default function EntregadoresPage() {
           ))}
         </div>
 
-        <div className="glass-panel" style={{ flex: 1, minWidth: 300, borderRadius: 16, border: '1px solid rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', padding: '0 20px', background: 'rgba(0,0,0,0.2)' }}>
+        <div className="glass-panel restaurant-search" style={{ flex: 1, minWidth: 300, borderRadius: 16, border: '1px solid rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', padding: '0 20px', background: '#f8fafc' }}>
           <Search size={20} color="#64748b" />
           <input
             value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Buscar entregador pelo nome..."
+            aria-label="Buscar entregador pelo nome"
             style={{ width: '100%', background: 'transparent', border: 'none', color: '#0f172a', padding: '16px 12px', fontSize: 15, outline: 'none' }}
           />
         </div>
       </motion.div>
 
       {/* Lista */}
-      <div style={{ padding: '0 40px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="restaurant-inset-section" style={{ padding: '0 40px', display: 'flex', flexDirection: 'column', gap: 16 }}>
         {entregadores.length === 0 && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ textAlign: 'center', padding: '80px 0', color: '#64748b' }}>
             <div style={{ fontSize: 64, marginBottom: 20, filter: 'drop-shadow(0 10px 20px rgba(0,0,0,0.5))' }}>🛵</div>
@@ -553,7 +554,7 @@ export default function EntregadoresPage() {
             const vb = verifBadge[e.verificacao]
             const VbIcon = vb.icon
             return (
-              <motion.div layout initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ delay: idx * 0.05 }} key={e.id} className="glass-panel" style={{
+              <motion.div layout initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ delay: idx * 0.05 }} key={e.id} className="glass-panel restaurant-courier-card" style={{
                 borderRadius: 20, padding: '24px',
                 boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
                 border: `1px solid ${e.status === 'em_entrega' ? 'rgba(14,165,233,0.3)' : 'rgba(0,0,0,0.05)'}`,

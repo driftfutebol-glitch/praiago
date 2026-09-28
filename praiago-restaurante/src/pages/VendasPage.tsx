@@ -60,7 +60,7 @@ export default function VendasPage() {
   ]
 
   return (
-    <div style={{ padding: '32px 40px 48px', minHeight: '100vh' }}>
+    <div className="restaurant-page" style={{ padding: '32px 40px 48px', minHeight: '100vh' }}>
       <motion.div initial={{ opacity: 0, y: -14 }} animate={{ opacity: 1, y: 0 }}>
         <h1 style={{ fontSize: 38, fontWeight: 900, color: '#0f172a', margin: '0 0 8px', letterSpacing: -1 }}>Resumo de Vendas</h1>
         <p style={{ fontSize: 15, color: '#64748b', margin: '0 0 32px', fontWeight: 500 }}>Seu desempenho real, direto dos pedidos entregues</p>
@@ -84,12 +84,12 @@ export default function VendasPage() {
 
       {/* Gráfico últimos 7 dias */}
       <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="glass-panel" style={{ borderRadius: 24, padding: 26 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 22 }}>
+        <div className="restaurant-chart-header" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 22 }}>
           <CalendarDays size={18} color="#f97316" />
           <span style={{ fontSize: 13, fontWeight: 900, color: '#0f172a', textTransform: 'uppercase', letterSpacing: 1 }}>Últimos 7 dias</span>
           <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: '#64748b' }}>faturamento por dia</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14, height: 190 }}>
+        <div className="restaurant-table-scroll" tabIndex={0} role="region" aria-label="Gráfico de faturamento dos últimos sete dias"><div className="restaurant-chart" style={{ display: 'flex', alignItems: 'flex-end', gap: 14, height: 190 }}>
           {resumo.dias.map((d, i) => (
             <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, height: '100%', justifyContent: 'flex-end' }}>
               <div style={{ fontSize: 11, fontWeight: 800, color: d.valor > 0 ? '#16a34a' : '#cbd5e1' }}>
@@ -109,6 +109,7 @@ export default function VendasPage() {
               <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8' }}>{d.pedidos} ped.</div>
             </div>
           ))}
+        </div>
         </div>
         {carregado && resumo.pedidosMes === 0 && (
           <div style={{ textAlign: 'center', color: '#64748b', fontSize: 13, fontWeight: 600, marginTop: 18 }}>

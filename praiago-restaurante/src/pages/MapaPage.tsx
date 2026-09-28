@@ -186,10 +186,10 @@ export default function MapaPage() {
   }, []);
 
   return (
-    <div style={{ display: 'flex', height: '100vh', flexDirection: 'column' }}>
+    <div className="restaurant-map-page" style={{ display: 'flex', height: 'calc(100vh - 60px)', flexDirection: 'column' }}>
 
       {/* ── Top bar ─────────────────────────────────────────── */}
-      <div style={{ padding: '20px 32px', background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(0,0,0,0.05)', flexShrink: 0, zIndex: 10 }}>
+      <div className="restaurant-map-header" style={{ padding: '20px 32px', background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(0,0,0,0.05)', flexShrink: 0, zIndex: 10 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <h1 style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -208,7 +208,7 @@ export default function MapaPage() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div className="restaurant-map-controls" style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             {/* Tab cidade/praia/tudo */}
             <div style={{ display: 'flex', background: 'rgba(0,0,0,0.05)', borderRadius: 16, padding: 4, border: '1px solid rgba(0,0,0,0.08)' }}>
               {(['tudo','cidade','praia'] as const).map(t => (
@@ -241,10 +241,10 @@ export default function MapaPage() {
         </div>
       </div>
 
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+      <div className="restaurant-map-layout" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
         {/* ── Sidebar esquerda ──────────────────────────────── */}
-        <div className="glass-panel" style={{ width: 340, borderRight: '1px solid rgba(0,0,0,0.05)', overflowY: 'auto', flexShrink: 0, display: 'flex', flexDirection: 'column', zIndex: 10 }}>
+        <div className="glass-panel restaurant-map-details" style={{ width: 340, borderRight: '1px solid rgba(0,0,0,0.05)', overflowY: 'auto', flexShrink: 0, display: 'flex', flexDirection: 'column', zIndex: 10 }}>
 
           {/* Heatmap das zonas */}
           <div style={{ padding: '24px 24px 16px' }}>
@@ -371,7 +371,7 @@ export default function MapaPage() {
         </div>
 
         {/* ── Mapa ──────────────────────────────────────────── */}
-        <div style={{ flex: 1, position: 'relative' }}>
+        <div className="restaurant-map-canvas" style={{ flex: 1, position: 'relative', minWidth: 0 }}>
           <MapContainer
             center={PRAIA_GRANDE_CENTER} zoom={12}
             style={{ height: '100%', width: '100%', background: '#ffffff' }}
@@ -475,7 +475,7 @@ export default function MapaPage() {
           </MapContainer>
 
           {/* ── Legenda flutuante ─────────────────────────── */}
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} style={{
+          <motion.div className="restaurant-map-legend" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} style={{
             position: 'absolute', bottom: 24, right: 24, zIndex: 999,
             background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(12px)', borderRadius: 20, padding: '20px',
             boxShadow: '0 20px 40px rgba(0,0,0,0.4)', border: '1px solid rgba(0,0,0,0.08)',

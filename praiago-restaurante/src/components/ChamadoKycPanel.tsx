@@ -18,7 +18,7 @@ import { useChamadoKyc } from '../hooks/useChamadoKyc'
 const CHAVE_MIN = 'praiago:vendedor:chamado-kyc-min'
 
 function leMinimizado() {
-  try { return localStorage.getItem(CHAVE_MIN) === '1' } catch { return false }
+  try { return localStorage.getItem(CHAVE_MIN) !== '0' } catch { return true }
 }
 
 function horaCurta(ms: number) {
@@ -42,6 +42,7 @@ export default function ChamadoKycPanel() {
   const [falhou, setFalhou] = useState(false)
   const [assistenteAberto, setAssistenteAberto] = useState(false)
   const fim = useRef<HTMLDivElement | null>(null)
+  const lista = useRef<HTMLDivElement | null>(null)
 
   // O assistente e este painel dividem o canto inferior direito. Enquanto a
   // janela dele esta aberta, esta some — na primeira versao ficava por cima
@@ -69,7 +70,8 @@ export default function ChamadoKycPanel() {
   }, [mensagens])
 
   useEffect(() => {
-    if (!minimizado) fim.current?.scrollIntoView({ block: 'end' })
+    // scrollIntoView no painel fixo também rolava a página de Pedidos inteira.
+    if (!minimizado && lista.current) lista.current.scrollTop = lista.current.scrollHeight
   }, [mensagens, minimizado])
 
   if (!chamado || dispensado) return null
@@ -172,7 +174,7 @@ export default function ChamadoKycPanel() {
         </button>
       </div>
 
-      <div style={{ maxHeight: '38dvh', overflowY: 'auto', padding: '12px 14px', background: '#f8fafc' }}>
+      <div ref={lista} style={{ maxHeight: '38dvh', overflowY: 'auto', padding: '12px 14px', background: '#f8fafc' }}>
         {mensagens.map(m => {
           const daGente = m.autor === 'admin'
           const doSistema = m.autor === 'sistema'

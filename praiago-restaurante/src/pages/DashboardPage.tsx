@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
-import { ShoppingBag, TrendingUp, Clock, Star, Users, Map as MapIcon,
-         Zap, ArrowUpRight, CheckCircle2, ChefHat, Bike, Bell, X, Shield, Activity } from 'lucide-react'
+import { ShoppingBag, TrendingUp, Clock, Map as MapIcon,
+         Zap, ArrowUpRight, CheckCircle2, ChefHat, Bike, Bell, X, Shield } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { getSessao } from '../lib/auth'
+import { useOrders } from '../store/useOrders'
 
 // ── Tipos ────────────────────────────────────────────────────
 type OrderPayload = {
@@ -88,7 +89,7 @@ function ZonePill({ zoneId }: { zoneId: string }) {
 // ── Banner de novo pedido ao vivo ─────────────────────────────
 function LiveOrderBanner({ order, onDismiss }: { order: OrderPayload; onDismiss: () => void }) {
   return (
-    <motion.div initial={{ x: 100, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 100, opacity: 0 }} style={{
+    <motion.div className="restaurant-live-order-banner" initial={{ x: 100, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 100, opacity: 0 }} style={{
       position: 'fixed', top: 80, right: 24, zIndex: 9999,
       width: 340, background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(20px)', borderRadius: 24,
       boxShadow: '0 20px 60px rgba(0,0,0,0.5)', border: '1px solid rgba(0,0,0,0.08)',
@@ -133,6 +134,8 @@ export default function DashboardPage() {
   const hora = new Date().getHours()
   const saudacao = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite'
   const sessao = getSessao()
+  const pedidos = useOrders(state => state.pedidos)
+  const ativos = pedidos.filter(pedido => pedido.status !== 'entregue')
   const nomeRestaurante = sessao?.nome?.trim() || 'seu restaurante'
   const dataHoje = new Intl.DateTimeFormat('pt-BR', {
     weekday: 'long',
@@ -155,8 +158,6 @@ export default function DashboardPage() {
       playBeep()
       setLatestOrder(order)
       setLiveOrders(prev => [order, ...prev.slice(0, 9)])
-      setTodayCount(c => c + 1)
-      setRevenue(r => r + order.total)
     }
     return () => channelRef.current?.close()
   }, [])
@@ -180,7 +181,7 @@ export default function DashboardPage() {
       }
     }
     loadStats()
-  }, [])
+  }, [pedidos])
 
   // Auto-dismiss banner após 6s
   useEffect(() => {
@@ -189,9 +190,9 @@ export default function DashboardPage() {
     return () => clearTimeout(timer)
   }, [latestOrder])
 
-  const allPedidos = liveOrders.slice(0, 6).map(o => ({
-      id: o.id, cliente: o.clienteNome, itens: o.itens.join(', '),
-      total: o.total, status: 'novo', tempo: 'agora', zona: o.zona,
+  const allPedidos = ativos.slice(0, 6).map(o => ({
+      id: o.id, cliente: o.cliente, itens: o.itens.join(', '),
+      total: o.total, status: o.status, tempo: o.hora, zona: o.zona,
   }))
 
   return (
@@ -205,7 +206,7 @@ export default function DashboardPage() {
       {/* ── Cabeçalho ────────────────────────────────────────── */}
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} style={{ marginBottom: 36 }}>
         <p style={{ fontSize: 15, color: '#64748b', fontWeight: 700, marginBottom: 8, letterSpacing: 0.5 }}>{saudacao}, {nomeRestaurante} 👋</p>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div className="restaurant-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <h1 style={{ fontSize: 38, fontWeight: 900, color: '#0f172a', letterSpacing: -1, margin: 0, textShadow: '0 0 30px rgba(0,0,0,0.08)' }}>Painel de Controle</h1>
           <AnimatePresence>
             {liveOrders.length > 0 && (
@@ -223,10 +224,10 @@ export default function DashboardPage() {
 
       {/* ── Stats ─────────────────────────────────────────────── */}
       <div className="restaurant-stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 24, marginBottom: 36 }}>
-        <StatCard delay={0.1} icon={ShoppingBag} label="Pedidos hoje"  value={String(todayCount)}         sub={`${allPedidos.filter(p=>p.status==='novo').length} em andamento`}  gradient="linear-gradient(135deg,#f97316,#ea580c)" change="+0%"  live />
-        <StatCard delay={0.2} icon={TrendingUp}  label="Faturamento"   value={`R$ ${revenue.toLocaleString('pt-BR',{minimumFractionDigits:0})}`} sub="meta: R$ 0" gradient="linear-gradient(135deg,#22c55e,#16a34a)" change="+0%" live />
-        <StatCard delay={0.3} icon={Users}       label="Clientes hoje" value="0"                          sub="0 novos"                                                              gradient="linear-gradient(135deg,#0ea5e9,#0284c7)" />
-        <StatCard delay={0.4} icon={Star}        label="Avaliação"     value="0.0 ★"                       sub="0 avaliações"                                                       gradient="linear-gradient(135deg,#f59e0b,#d97706)" />
+        <StatCard delay={0.1} icon={ShoppingBag} label="Pedidos hoje" value={String(todayCount)} sub={`${ativos.length} em andamento`} gradient="linear-gradient(135deg,#f97316,#ea580c)" />
+        <StatCard delay={0.2} icon={TrendingUp} label="Faturamento hoje" value={`R$ ${revenue.toLocaleString('pt-BR',{minimumFractionDigits:2})}`} gradient="linear-gradient(135deg,#22c55e,#16a34a)" />
+        <StatCard delay={0.3} icon={ChefHat} label="Na cozinha" value={String(pedidos.filter(p => p.status === 'preparando').length)} sub="Pedidos em preparo" gradient="linear-gradient(135deg,#0ea5e9,#0284c7)" />
+        <StatCard delay={0.4} icon={CheckCircle2} label="Prontos" value={String(pedidos.filter(p => p.status === 'pronto').length)} sub="Aguardando saída" gradient="linear-gradient(135deg,#f59e0b,#d97706)" />
       </div>
 
       {/* ── Grid principal ────────────────────────────────────── */}
@@ -235,13 +236,13 @@ export default function DashboardPage() {
         {/* Pedidos ativos */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }} className="glass-panel" style={{ borderRadius: 28, padding: '28px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
+            <div className="restaurant-page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
               <div>
                 <h2 style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
                   Pedidos Ativos <div className="animate-pulse-neon" style={{ width: 8, height: 8, borderRadius: '50%', background: '#4ade80' }} />
                 </h2>
                 <p style={{ fontSize: 13, color: '#64748b', marginTop: 6, fontWeight: 500 }}>
-                  {liveOrders.length > 0 ? `⚡ ${liveOrders.length} chegaram em tempo real` : 'Atualizado em tempo real'}
+                  {ativos.length > 0 ? `${ativos.length} em andamento na sua loja` : 'Nenhum pedido em andamento no momento'}
                 </p>
               </div>
               <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => navigate('/pedidos')} style={{ background: 'linear-gradient(135deg,#f97316,#ea580c)', color: '#fff', border: 'none', borderRadius: 16, padding: '10px 20px', fontSize: 14, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 8px 20px rgba(249,115,22,0.3)' }}>
@@ -254,9 +255,9 @@ export default function DashboardPage() {
                 {allPedidos.map((p, idx) => {
                   const s = STATUS_CFG[p.status] ?? STATUS_CFG['novo']
                   const SIcon = s.icon
-                  const isNew = idx < liveOrders.length
+                  const isNew = p.status === 'novo'
                   return (
-                    <motion.div layout initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }} key={`${p.id}-${idx}`} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '18px 20px', borderRadius: 20, background: isNew ? 'rgba(14,165,233,0.05)' : 'rgba(255,255,255,0.02)', border: isNew ? '1px solid rgba(14,165,233,0.3)' : '1px solid rgba(0,0,0,0.05)', transition: 'all 0.2s', boxShadow: isNew ? '0 0 20px rgba(14,165,233,0.1)' : 'none' }}>
+                    <motion.div className="restaurant-dashboard-order" layout initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }} key={`${p.id}-${idx}`} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '18px 20px', borderRadius: 20, background: isNew ? 'rgba(14,165,233,0.05)' : 'rgba(255,255,255,0.02)', border: isNew ? '1px solid rgba(14,165,233,0.3)' : '1px solid rgba(0,0,0,0.05)', transition: 'all 0.2s', boxShadow: isNew ? '0 0 20px rgba(14,165,233,0.1)' : 'none' }}>
                       <div style={{ width: 56, height: 56, borderRadius: 16, flexShrink: 0, background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', border: `1px solid ${s.cor}30` }}>
                         <SIcon size={24} color={s.cor} />
                         {isNew && <div className="animate-pulse-neon" style={{ position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: '50%', background: '#f87171', border: '3px solid #1e293b' }} />}
@@ -337,7 +338,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 900, color: '#0f172a' }}>Sistema Seguro</div>
-                <div style={{ fontSize: 12, color: '#64748b', marginTop: 2, fontWeight: 500 }}>4 robôs verificando · Criptografia ativa</div>
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 2, fontWeight: 500 }}>Acesso protegido à sua loja</div>
               </div>
               <div style={{ marginLeft: 'auto', fontSize: 13, fontWeight: 900, color: '#4ade80', textShadow: '0 0 10px rgba(74,222,128,0.5)' }}>✓ ONLINE</div>
             </div>

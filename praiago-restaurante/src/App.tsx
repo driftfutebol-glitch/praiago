@@ -1,37 +1,30 @@
 import { Routes, Route, NavLink, useLocation, useNavigate, Navigate } from 'react-router-dom'
 import {
-  LayoutDashboard, ShoppingBag, UtensilsCrossed, Map, User, Users,
   Bell, LogOut, TrendingUp, Zap, Wifi,
 } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, lazy, Suspense } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSessao, logout, getSessao } from './lib/auth'
 import { supabase } from './lib/supabase'
 import { useOrders, connectRealtime } from './store/useOrders'
-import LoginPage        from './pages/LoginPage'
 import DashboardPage    from './pages/DashboardPage'
-import PedidosPage      from './pages/PedidosPage'
-import VendasPage       from './pages/VendasPage'
-import CardapioPage     from './pages/CardapioPage'
-import MapaPage         from './pages/MapaPage'
-import EntregadoresPage from './pages/EntregadoresPage'
-import PerfilPage       from './pages/PerfilPage'
-import CarteiraPage     from './pages/CarteiraPage'
 import VerificationBar  from './components/VerificationBar'
 import AiChatbot        from './components/AiChatbot'
 import ChamadoKycPanel  from './components/ChamadoKycPanel'
 import PasswordRecoveryHandler from './components/PasswordRecoveryHandler'
 import { DialogHost } from './lib/dialog'
+import MobileNavigation from './components/MobileNavigation'
+import { restaurantNavigation } from './lib/navigation'
 
-const navItems = [
-  { to: '/',             icon: LayoutDashboard, label: 'Painel',        badge: null },
-  { to: '/pedidos',      icon: ShoppingBag,     label: 'Pedidos',       badge: null },
-  { to: '/vendas',       icon: TrendingUp,      label: 'Vendas',        badge: null },
-  { to: '/cardapio',     icon: UtensilsCrossed, label: 'Cardápio',      badge: null },
-  { to: '/entregadores', icon: Users,           label: 'Entregadores',  badge: null },
-  { to: '/mapa',         icon: Map,             label: 'Zonas Ao Vivo', badge: null },
-  { to: '/perfil',       icon: User,            label: 'Perfil',        badge: null },
-]
+// O celular carrega mapa, perfil e cardápio só quando abre essas áreas.
+const LoginPage = lazy(() => import('./pages/LoginPage'))
+const PedidosPage = lazy(() => import('./pages/PedidosPage'))
+const VendasPage = lazy(() => import('./pages/VendasPage'))
+const CardapioPage = lazy(() => import('./pages/CardapioPage'))
+const MapaPage = lazy(() => import('./pages/MapaPage'))
+const EntregadoresPage = lazy(() => import('./pages/EntregadoresPage'))
+const PerfilPage = lazy(() => import('./pages/PerfilPage'))
+const CarteiraPage = lazy(() => import('./pages/CarteiraPage'))
 
 const PUBLIC = ['/login']
 
@@ -136,6 +129,7 @@ function GlobalAvisoToast({ locationNotice }: { locationNotice: LocationNotice |
 
   return (
     <motion.div
+      className="restaurant-global-toast"
       initial={{ opacity: 0, y: 18, scale: 0.96 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 18, scale: 0.96 }}
@@ -225,13 +219,32 @@ export default function App() {
   const [notifOpen, setNotifOpen] = useState(false)
   const [kycLocked, setKycLocked] = useState(false)
   const [locationNotice, setLocationNotice] = useState<LocationNotice | null>(null)
+  const mainRef = useRef<HTMLElement>(null)
+
+  useLayoutEffect(() => {
+    // Cada área começa no topo, mesmo depois de rolar o cardápio inteiro.
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+    if (mainRef.current) mainRef.current.scrollTop = 0
+  }, [location.pathname])
 
   const pedidos = useOrders(s => s.pedidos)            // referência estável
   const pedidosNovos = pedidos.filter(p => p.status === 'novo')
   const novos = pedidosNovos.length
 
-  // Recebe pedidos do cliente em tempo real (uma vez)
-  useEffect(() => { connectRealtime() }, [])
+  // Conecta depois do login e atualiza ao voltar do segundo plano no celular.
+  useEffect(() => {
+    if (!sessao?.id || isPublic) return
+    connectRealtime()
+    const refresh = () => {
+      if (document.visibilityState === 'visible') void useOrders.getState().fetchOrders()
+    }
+    document.addEventListener('visibilitychange', refresh)
+    window.addEventListener('online', refresh)
+    return () => {
+      document.removeEventListener('visibilitychange', refresh)
+      window.removeEventListener('online', refresh)
+    }
+  }, [sessao?.id, isPublic])
 
   useEffect(() => {
     if (!sessao?.id || isPublic) return
@@ -371,7 +384,7 @@ export default function App() {
   function sair() { logout(); navigate('/login') }
 
   return (
-    <div className="restaurant-shell" style={{ display: 'flex', minHeight: '100vh', fontFamily: 'system-ui,-apple-system,sans-serif' }}>
+    <div className={`restaurant-shell${!isPublic && !kycLocked ? ' has-navigation' : ''}`} style={{ display: 'flex', minHeight: '100vh', fontFamily: 'system-ui,-apple-system,sans-serif' }}>
       <PasswordRecoveryHandler />
 
       {/* ══ SIDEBAR ══════════════════════════════════════════ */}
@@ -451,15 +464,15 @@ export default function App() {
             <p style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1.5, color: '#64748b', textTransform: 'uppercase', marginBottom: 12, paddingLeft: 10 }}>
               Gestão
             </p>
-            {navItems.map(({ to, icon: Icon, label, badge }) => {
-              const badgeVal = to === '/pedidos' ? (novos > 0 ? String(novos) : null) : badge
+            {restaurantNavigation.map(({ to, icon: Icon, label }) => {
+              const badgeVal = to === '/pedidos' ? (novos > 0 ? String(novos) : null) : null
               return (
-                <NavLink className="restaurant-nav-link" key={to} to={to} style={({ isActive }) => ({
+                <NavLink className="restaurant-nav-link" key={to} to={to} end={to === '/'} style={({ isActive }) => ({
                   display: 'flex', alignItems: 'center', gap: 14,
                   padding: '12px 16px', borderRadius: 14, marginBottom: 6,
                   textDecoration: 'none',
                   background: isActive ? 'linear-gradient(135deg, rgba(249,115,22,0.15), rgba(234,88,12,0.05))' : 'transparent',
-                  color: isActive ? '#f97316' : '#94a3b8',
+                  color: isActive ? '#c2410c' : '#475569',
                   fontWeight: isActive ? 800 : 600, fontSize: 14,
                   borderLeft: isActive ? '3px solid #f97316' : '3px solid transparent',
                   transition: 'all 0.2s',
@@ -551,7 +564,8 @@ export default function App() {
       )}
 
       {/* ══ MAIN ═════════════════════════════════════════════ */}
-      <main className="restaurant-main" style={{ flex: 1, marginLeft: isPublic || kycLocked ? 0 : 256, overflowY: 'auto', minHeight: '100vh', position: 'relative' }}>
+      <main ref={mainRef} className="restaurant-main" style={{ flex: 1, marginLeft: isPublic || kycLocked ? 0 : 256, minHeight: '100vh', position: 'relative' }}>
+        {!isPublic && !kycLocked && <MobileNavigation restaurantName={sessao?.nome || 'Meu restaurante'} newOrders={novos} notices={notifs} onLogout={sair} />}
         <AnimatePresence mode="wait">
           {!isPublic && !kycLocked && (
             <motion.div className="restaurant-topbar" initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} style={{
@@ -587,7 +601,7 @@ export default function App() {
             {!isPublic && kycLocked ? (
               <KycLockedPanel />
             ) : (
-              <Routes location={location}>
+              <Suspense fallback={<div className="restaurant-route-loading" role="status">Carregando área do restaurante...</div>}><Routes location={location}>
                 <Route path="/login"         element={<LoginPage />} />
                 <Route path="/"              element={<DashboardPage />} />
                 <Route path="/pedidos"       element={<PedidosPage />} />
@@ -597,7 +611,7 @@ export default function App() {
                 <Route path="/mapa"          element={<MapaPage />} />
                 <Route path="/perfil"        element={<PerfilPage />} />
                 <Route path="/carteira"      element={<CarteiraPage />} />
-              </Routes>
+              </Routes></Suspense>
             )}
           </motion.div>
         </AnimatePresence>
