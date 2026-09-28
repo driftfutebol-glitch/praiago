@@ -12,6 +12,7 @@ process.on('uncaughtException', error => {
 const { PGlite } = await import(pathToFileURL(resolve(process.argv[2])).href)
 const db = new PGlite()
 const migration = await readFile(new URL('../migrations/20260928120000_admin_external_repasse.sql', import.meta.url), 'utf8')
+const amountGuard = await readFile(new URL('../migrations/20260928130000_external_repasse_preserve_amounts.sql', import.meta.url), 'utf8')
 const id = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
 const admin = id(1), seller = id(2), buyer = id(3), order = id(4), ledger = id(5), ticket = id(6)
 const reason = 'Repasse conferido por responsável; operação realizada fora do aplicativo.'
@@ -67,7 +68,10 @@ await db.exec(`
   insert into public.seller_recipients values ('${seller}','fixture-only','pagarme');
   insert into public.tickets values ('${ticket}','kyc','aberto',true,true,now());
 `)
+await db.exec(`alter table public.pedidos add column total numeric, add column gross_amount numeric, add column platform_fee_amount numeric;
+  update public.pedidos set total=107.20, gross_amount=107.20, platform_fee_amount=10.72;`)
 await db.exec(migration)
+await db.exec(amountGuard)
 await db.exec(`select set_config('request.jwt.claim.sub','${seller}',false)`)
 await rejects(`select public.admin_registrar_repasse_externo('${order}',96.48,'${reason}')`, /Sem permissao financeira/)
 await rejects(`select public.admin_concluir_entrega_externa('${order}','${reason}')`, /Sem permissao/)
@@ -97,6 +101,15 @@ check(await scalar(`select count(*)::int as v from public.payouts`), 0)
 check(await scalar(`select status as v from public.financial_ledger where id='${ledger}'`), 'pendente')
 check(await scalar(`select settlement_status as v from public.pedidos where id='${order}'`), 'pendente')
 await db.exec(`alter table public.security_audit_logs drop constraint fixture_reject_audit`)
+// A legacy trigger must not silently reprice an already approved order.
+await db.exec(`create function public.fixture_reprice() returns trigger language plpgsql as $$
+  begin new.vendor_amount := new.vendor_amount - 1; return new; end; $$;
+  create trigger fixture_reprice before update of settlement_status on public.pedidos
+    for each row execute function public.fixture_reprice();`)
+await rejects(`select public.admin_registrar_repasse_externo('${order}',96.48,'${reason}')`, /valores historicos/)
+check(await scalar(`select count(*)::int as v from public.payouts`), 0)
+check(await scalar(`select vendor_amount::text as v from public.pedidos where id='${order}'`), '96.48')
+await db.exec(`drop trigger fixture_reprice on public.pedidos`)
 await db.exec(`set role authenticated`)
 check((await scalar(`select public.admin_registrar_repasse_externo('${order}',96.48,'${reason}') as v`)).ok, true)
 await db.exec(`reset role`)
