@@ -550,6 +550,11 @@ html, body {
 
 /* Dados de vendas: tipografia legível, áreas de toque e valores sem cortes. */
 .sales-overview { margin-bottom: 28px; min-width: 0; }
+.restaurant-mobile-verification:empty { display: none; }
+.restaurant-mobile-verification { flex-shrink: 0; }
+.restaurant-kyc-toggle.is-inline .restaurant-kyc-label { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.restaurant-kyc-toggle.is-inline .restaurant-kyc-count { position: absolute; right: -4px; top: -5px; }
+.restaurant-kyc-toggle:focus-visible { outline: 3px solid #fb923c; outline-offset: 3px; }
 .sales-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
 .sales-toolbar h2, .sales-panel h2 { margin: 0; font-size: 19px; font-weight: 900; color: #0f172a; }
 .sales-toolbar p, .sales-panel-heading p { margin: 5px 0 0; color: #64748b; font-size: 12px; line-height: 1.5; }

@@ -35,6 +35,7 @@ export default function MobileNavigation({ restaurantName, newOrders, notices, o
           <span>{restaurantName}</span>
           <strong>{currentPage}</strong>
         </div>
+        <div id="restaurant-mobile-verification" className="restaurant-mobile-verification" />
         <button type="button" className="restaurant-mobile-notices" aria-label={`Notificações, ${notices.length} avisos`} onClick={() => dialog.current?.showModal()}>
           <Bell size={20} />
           {notices.length > 0 && <span className="restaurant-mobile-badge">{notices.length}</span>}
