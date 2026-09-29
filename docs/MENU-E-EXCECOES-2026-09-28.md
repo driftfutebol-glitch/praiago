@@ -41,4 +41,12 @@ Bases web anteriores a esta entrega:
 - Admin: `dpl_7YkjpDaeKHeeRr3AZjQvjQx4tf5j`, SHA `fa95b9a308e7c041b09077c8bd05b3968a125db4`.
 - Restaurante: `dpl_CYkGX2Bs6LinGwS2YSgtXs2aiwsn`, mesmo SHA.
 
-Se falhar o menu, login, autorização, cálculo ou suporte, parar a distribuição dos apps e promover a implantação web anterior verificada. Manter as colunas aditivas e registros financeiros/auditoria; não apagar migrações, históricos ou saldos para fazer rollback. Qualquer reversão de função de banco exige comparação e teste da definição anterior em transação controlada. Registrar os IDs e o SHA das novas implantações na entrega após a verificação ao vivo.
+Se falhar o menu, login, autorização, cálculo ou suporte, parar a distribuição dos apps e promover a implantação web anterior verificada. Manter as colunas aditivas e registros financeiros/auditoria; não apagar migrações, históricos ou saldos para fazer rollback. Qualquer reversão de função de banco exige comparação e teste da definição anterior em transação controlada. 
+
+### Publicação verificada
+
+- Código implantado: `9d387b2b9b6ecf41e6163349f22f940c4831fef6`, branch `feat/cliente-outubro-2026`, confirmado no GitHub e nas duas implantações de produção.
+- Restaurante: `dpl_Ebi3ka7aG2CQVqkT3n4fsXKUFPTF`, estado READY, domínio `restaurante.praiago.com.br`. HTML e chunk `CardapioPage-D9uXVV0D.js` servidos com HTTP 200. Em 390 × 844, filtro de pizzas doces e formulário de edição mostraram ingredientes, participação no meio a meio e tamanho Grande; sem overflow horizontal e sem gravar produto de teste.
+- Admin: `dpl_DnGmQJD8ccsWMhEvYypjKUYwz3jQ`, estado READY, domínio `admin.praiago.com.br`. HTML e bundle `index-DcTe9Mc4.js` servidos com HTTP 200, incluindo as duas operações novas. Login carregou; não havia sessão administrativa de navegador, portanto não foi acionada operação real. Permissões, reversão atômica e duplicidades foram cobertas pelos testes PostgreSQL isolados.
+- Cliente local: navegação à seção Bebidas e composição Calabresa/Da Casa confirmadas em 390 × 844 com catálogo real. Não foi criado pedido real nem realizado pagamento para QA. O GPS fora da área de atendimento continuou bloqueando a compra; não foi contornado para testar.
+- Build web dos quatro aplicativos aprovado. Cliente: lint sem erros, com 20 avisos legados; Restaurante não tem script de lint. Builds nativas/OTA de Cliente e Ambulante continuam pendentes para a próxima candidata.
