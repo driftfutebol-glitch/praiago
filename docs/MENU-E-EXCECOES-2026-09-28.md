@@ -41,7 +41,7 @@ Bases web anteriores a esta entrega:
 - Admin: `dpl_7YkjpDaeKHeeRr3AZjQvjQx4tf5j`, SHA `fa95b9a308e7c041b09077c8bd05b3968a125db4`.
 - Restaurante: `dpl_CYkGX2Bs6LinGwS2YSgtXs2aiwsn`, mesmo SHA.
 
-Se falhar o menu, login, autorização, cálculo ou suporte, parar a distribuição dos apps e promover a implantação web anterior verificada. Manter as colunas aditivas e registros financeiros/auditoria; não apagar migrações, históricos ou saldos para fazer rollback. Qualquer reversão de função de banco exige comparação e teste da definição anterior em transação controlada. 
+Se falhar o menu, login, autorização, cálculo ou suporte, parar a distribuição dos apps e promover a implantação web anterior verificada. Manter as colunas aditivas e registros financeiros/auditoria; não apagar migrações, históricos ou saldos para fazer rollback. Qualquer reversão de função de banco exige comparação e teste da definição anterior em transação controlada.
 
 ### Publicação verificada
 
