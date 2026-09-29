@@ -20,6 +20,7 @@ import TrocaContaPage from './pages/TrocaContaPage'
 import TrocaNomePage from './pages/TrocaNomePage'
 import CadastrosEventoPage from './pages/CadastrosEventoPage'
 import AdminsPage from './pages/AdminsPage'
+import AtualizacoesPage from './pages/AtualizacoesPage'
 import TestersPage from './pages/TestersPage'
 import NovosUsuariosPage from './pages/NovosUsuariosPage'
 import LocalizacoesPage from './pages/LocalizacoesPage'
@@ -303,6 +304,7 @@ export default function App() {
             <Route path="/troca-conta" element={guard('financeiro', <TrocaContaPage />)} />
             <Route path="/erros" element={guard('erros', <ErrorsPage />)} />
             <Route path="/admins" element={perfil?.role === 'sysadmin' ? <AdminsPage /> : <Navigate to="/" replace />} />
+            <Route path="/atualizacoes" element={isSys ? <AtualizacoesPage /> : <Navigate to="/" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

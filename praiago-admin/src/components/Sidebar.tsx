@@ -411,6 +411,12 @@ export default function Sidebar({ onLogout, perfil }: { onLogout: () => void; pe
 
         {/* Administradores — exclusivo do dono (sysadmin) */}
         {isSys && (
+          <NavLink to="/atualizacoes" className={linkClass}>
+            <Smartphone size={18} />
+            Atualizações dos apps
+          </NavLink>
+        )}
+        {isSys && (
           <NavLink to="/admins" className={linkClass}>
             <ShieldAlert size={18} />
             Administradores

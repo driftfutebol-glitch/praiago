@@ -1,8 +1,14 @@
 import { Capacitor } from '@capacitor/core'
 import { CapacitorUpdater } from '@capgo/capacitor-updater'
+import { installStoreUpdateNotice } from '../../../mobile/store-update-notice'
 
 export function markOtaBundleReady() {
   if (!Capacitor.isNativePlatform()) return
+
+  installStoreUpdateNotice('ambulante', {
+    platform: () => Capacitor.getPlatform(),
+    nativeVersion: async () => (await CapacitorUpdater.current()).native,
+  })
 
   void CapacitorUpdater.notifyAppReady().catch((error) => {
     console.warn('[ota] notifyAppReady failed', error)
