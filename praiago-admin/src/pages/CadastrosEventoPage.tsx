@@ -1,3 +1,4 @@
+import ResponsiveTable from '../components/ResponsiveTable'
 // Relatorio de quem foi cadastrado pela equipe DENTRO do evento.
 //
 // Por que essa tela existe separada da de Usuarios: no dia do evento a equipe
@@ -241,7 +242,7 @@ export default function CadastrosEventoPage() {
 
       {/* Filtros */}
       <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 flex flex-wrap items-end gap-3">
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5 max-w-full">
           {TIPOS.map(t => (
             <button
               key={t}
@@ -324,7 +325,7 @@ export default function CadastrosEventoPage() {
         </div>
       ) : (
         <div className="rounded-xl border border-slate-800 bg-slate-900/50 overflow-x-auto">
-          <table className="w-full text-sm min-w-[860px]">
+          <ResponsiveTable label="Cadastros de evento" className="w-full text-sm min-w-[860px]">
             <thead>
               <tr className="text-[10px] font-black uppercase tracking-widest text-slate-600 border-b border-slate-800">
                 <th className="text-left px-4 py-3">Pessoa</th>
@@ -377,7 +378,7 @@ export default function CadastrosEventoPage() {
                 )
               })}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
       )}
     </div>

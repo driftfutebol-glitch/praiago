@@ -1,3 +1,4 @@
+import ResponsiveTable from '../components/ResponsiveTable'
 import { useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
 import { AlertCircle, BellRing, CheckCircle2, CreditCard, DollarSign, Percent, RefreshCw, Search, WalletCards, XCircle } from 'lucide-react'
@@ -423,7 +424,7 @@ export default function FinanceiroPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1180px] text-left border-collapse">
+          <ResponsiveTable label="Pedidos e repasses" className="w-full min-w-[1180px] text-left border-collapse">
             <thead>
               <tr className="bg-slate-900/80 text-slate-400 text-xs font-bold uppercase tracking-wider border-b border-slate-800">
                 <th className="p-4">Pedido</th>
@@ -483,7 +484,7 @@ export default function FinanceiroPage() {
                 </tr>
               )}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
       </section>
     </div>

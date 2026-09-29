@@ -284,7 +284,7 @@ export default function VerificacoesPage() {
       </header>
 
       {/* Stats bar */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-3">
         <div className="glass-panel px-4 py-2.5 rounded-xl border-slate-800 flex items-center gap-2">
           <Clock size={14} className="text-amber-400" />
           <span className="text-xs font-bold text-slate-400">Pendentes:</span>
@@ -307,7 +307,7 @@ export default function VerificacoesPage() {
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex items-center gap-1 glass-panel rounded-xl p-1.5 border-slate-800 w-fit">
+      <div className="flex flex-wrap items-center gap-1 glass-panel rounded-xl p-1.5 border-slate-800 w-fit max-w-full">
         <Filter size={14} className="text-slate-500 mx-2" />
         {filterTabs.map(tab => (
           <button

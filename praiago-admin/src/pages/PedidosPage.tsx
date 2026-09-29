@@ -1,3 +1,4 @@
+import ResponsiveTable from '../components/ResponsiveTable'
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { confirmDialog, alertDialog } from '../lib/dialog'
@@ -5,16 +6,26 @@ import { Search, Ban, CheckCircle2 } from 'lucide-react'
 import { canConcludeExternalDelivery } from '../lib/adminExceptions'
 import { askExceptionReason } from '../lib/adminExceptionDialogs'
 import { format } from 'date-fns'
+import { formatMoney } from '../lib/dashboardMetrics'
 
 export default function PedidosPage() {
   const [pedidos, setPedidos] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
+  const [statusFilter, setStatusFilter] = useState('all')
   const [busca, setBusca] = useState('')
   const [concluindo, setConcluindo] = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase.from('pedidos').select('*').order('created_at', { ascending: false })
-      if (data) setPedidos(data)
+      setLoading(true)
+      setLoadError(false)
+      try {
+      const { data, error } = await supabase.from('pedidos').select('*').order('created_at', { ascending: false })
+      if (!error && data) setPedidos(data)
+      else setLoadError(true)
+      } catch {setLoadError(true)}
+      finally {setLoading(false)}
     }
     load()
 
@@ -52,10 +63,10 @@ export default function PedidosPage() {
     }
   }
 
-  const filtrados = pedidos.filter(p => 
+  const filtrados = pedidos.filter(p => (statusFilter==='all'||p.status===statusFilter) && (
     p.id.toLowerCase().includes(busca.toLowerCase()) || 
     String(p.cliente_nome || '').toLowerCase().includes(busca.toLowerCase())
-  )
+  ))
 
   return (
     <div className="space-y-6">
@@ -67,7 +78,7 @@ export default function PedidosPage() {
         <div className="relative">
           <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input 
-            type="text" 
+            type="search" aria-label="Buscar pedidos por ID ou cliente"
             placeholder="Buscar ID ou Cliente..."
             value={busca}
             onChange={e => setBusca(e.target.value)}
@@ -76,8 +87,10 @@ export default function PedidosPage() {
         </div>
       </header>
 
+      <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-slate-400">{loading?'Consultando pedidos…':filtrados.length+' pedidos na lista carregada'}</p><select aria-label="Filtrar status do pedido" value={statusFilter} onChange={event=>setStatusFilter(event.target.value)} className="rounded-xl border border-slate-700 bg-slate-900 p-3 text-sm"><option value="all">Todos os status</option>{[...new Set(pedidos.map(order=>String(order.status)))].sort().map(status=><option key={status} value={status}>{status.replaceAll('_',' ')}</option>)}</select></div>
+      {loadError&&<p className="admin-inline-warning" role="alert">Não foi possível atualizar a lista. Os pedidos carregados anteriormente foram mantidos.</p>}
       <div className="glass-panel rounded-2xl overflow-hidden border-slate-800">
-        <table className="w-full text-left border-collapse">
+        <ResponsiveTable label="Pedidos" className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-slate-900/80 text-slate-400 text-xs font-bold uppercase tracking-wider border-b border-slate-800">
               <th className="p-4">ID</th>
@@ -96,7 +109,7 @@ export default function PedidosPage() {
                 <td className="p-4 text-slate-400">{format(new Date(p.created_at), 'dd/MM HH:mm')}</td>
                 <td className="p-4 text-slate-200 font-bold">{p.cliente_nome}</td>
                 <td className="p-4 text-slate-400">{p.zona}</td>
-                <td className="p-4 text-green-400 font-bold">R$ {Number(p.total).toFixed(2)}</td>
+                <td className="p-4 text-green-400 font-bold">{p.total!==null&&Number.isFinite(Number(p.total))?formatMoney(Number(p.total)):'—'}</td>
                 <td className="p-4">
                   <span className={`px-2 py-1 rounded-md text-xs font-bold uppercase ${p.status === 'cancelado' ? 'bg-red-500/10 text-red-400' : p.status === 'entregue' ? 'bg-green-500/10 text-green-400' : 'bg-blue-500/10 text-blue-400'}`}>
                     {p.status}
@@ -119,13 +132,14 @@ export default function PedidosPage() {
                 </td>
               </tr>
             ))}
-            {filtrados.length === 0 && (
+            {!loading&&!loadError&&filtrados.length === 0 && (
               <tr>
                 <td colSpan={7} className="p-8 text-center text-slate-500 font-bold">Nenhum pedido encontrado.</td>
               </tr>
             )}
+            {loading&&<tr><td colSpan={7} className="p-8 text-center text-slate-400">Carregando pedidos…</td></tr>}
           </tbody>
-        </table>
+        </ResponsiveTable>
       </div>
     </div>
   )

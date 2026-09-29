@@ -31,11 +31,11 @@ type Pedido = {
 }
 
 const STATUS: Record<string, { label: string; cor: string; fundo: string }> = {
-  pendente: { label: 'Aguardando análise', cor: '#b45309', fundo: 'rgba(245,158,11,0.12)' },
-  em_analise: { label: 'Em análise', cor: '#0369a1', fundo: 'rgba(14,165,233,0.12)' },
-  aprovado: { label: 'Aprovado', cor: '#15803d', fundo: 'rgba(34,197,94,0.12)' },
-  recusado: { label: 'Recusado', cor: '#dc2626', fundo: 'rgba(239,68,68,0.1)' },
-  cancelado: { label: 'Cancelado', cor: '#64748b', fundo: 'rgba(100,116,139,0.12)' },
+  pendente: { label: 'Aguardando análise', cor: '#f5c366', fundo: 'rgba(245,158,11,0.12)' },
+  em_analise: { label: 'Em análise', cor: '#76d3ff', fundo: 'rgba(14,165,233,0.12)' },
+  aprovado: { label: 'Aprovado', cor: '#72dda4', fundo: 'rgba(34,197,94,0.12)' },
+  recusado: { label: 'Recusado', cor: '#ff96ae', fundo: 'rgba(239,68,68,0.1)' },
+  cancelado: { label: 'Cancelado', cor: '#9ba8c4', fundo: 'rgba(100,116,139,0.12)' },
 }
 
 const mascararDoc = (d?: string | null) => {
@@ -79,30 +79,30 @@ export default function TrocaContaPage() {
   }
 
   return (
-    <div style={{ padding: 24 }}>
+    <div style={{ padding: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, gap: 12, flexWrap: 'wrap' }}>
-        <h1 style={{ fontSize: 26, fontWeight: 900, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h1 style={{ fontSize: 26, fontWeight: 900, color: '#edf2ff', margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
           <Landmark size={24} /> Troca de conta bancária
         </h1>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => setSoAbertos(s => !s)} style={{ border: '1px solid rgba(0,0,0,0.1)', background: soAbertos ? '#eff6ff' : '#fff', color: soAbertos ? '#0284c7' : '#64748b', borderRadius: 12, padding: '9px 14px', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
+          <button onClick={() => setSoAbertos(s => !s)} style={{ border: '1px solid rgba(166,181,225,0.18)', background: soAbertos ? '#112741' : '#111a30', color: soAbertos ? '#76d3ff' : '#9ba8c4', borderRadius: 12, padding: '9px 14px', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
             {soAbertos ? 'Só pendentes' : 'Todos'}
           </button>
-          <button onClick={carregar} style={{ border: '1px solid rgba(0,0,0,0.1)', background: '#fff', color: '#64748b', borderRadius: 12, padding: '9px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+          <button onClick={carregar} style={{ border: '1px solid rgba(166,181,225,0.18)', background: '#111a30', color: '#9ba8c4', borderRadius: 12, padding: '9px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
             <RefreshCw size={15} />
           </button>
         </div>
       </div>
-      <p style={{ fontSize: 13.5, color: '#64748b', fontWeight: 600, marginTop: 0, marginBottom: 20, maxWidth: 720 }}>
+      <p style={{ fontSize: 13.5, color: '#9ba8c4', fontWeight: 600, marginTop: 0, marginBottom: 20, maxWidth: 720 }}>
         Confirme com o vendedor pelo chat antes de aprovar. Aprovar <strong>não troca a conta</strong> — libera uma janela de 48h pra ele cadastrar os dados novos no app dele.
       </p>
 
       {carregando ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#64748b', fontWeight: 700 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#9ba8c4', fontWeight: 700 }}>
           <Loader2 size={16} className="animate-spin" /> Carregando…
         </div>
       ) : pedidos.length === 0 ? (
-        <div style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 20, padding: 40, textAlign: 'center', color: '#64748b', fontWeight: 700 }}>
+        <div style={{ background: '#111a30', border: '1px solid rgba(166,181,225,0.14)', borderRadius: 20, padding: 40, textAlign: 'center', color: '#9ba8c4', fontWeight: 700 }}>
           Nenhum pedido {soAbertos ? 'pendente' : 'registrado'}.
         </div>
       ) : (
@@ -120,17 +120,17 @@ export default function TrocaContaPage() {
               <motion.div
                 key={p.id}
                 initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 20, padding: 18 }}
+                style={{ background: '#111a30', border: '1px solid rgba(166,181,225,0.14)', borderRadius: 20, padding: 18 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
                   <div>
-                    <div style={{ fontSize: 16, fontWeight: 900, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <User size={15} color="#64748b" /> {p.profiles?.nome || 'Vendedor'}
-                      <span style={{ fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', background: '#f1f5f9', borderRadius: 8, padding: '2px 8px' }}>
+                    <div style={{ fontSize: 16, fontWeight: 900, color: '#edf2ff', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <User size={15} color="#9ba8c4" /> {p.profiles?.nome || 'Vendedor'}
+                      <span style={{ fontSize: 11, fontWeight: 800, color: '#9ba8c4', textTransform: 'uppercase', background: '#16213c', borderRadius: 8, padding: '2px 8px' }}>
                         {p.profiles?.role ?? '—'}
                       </span>
                     </div>
-                    <div style={{ fontSize: 12.5, color: '#64748b', fontWeight: 600, marginTop: 3 }}>
+                    <div style={{ fontSize: 12.5, color: '#9ba8c4', fontWeight: 600, marginTop: 3 }}>
                       {p.profiles?.email} · pedido em {new Date(p.created_at).toLocaleString('pt-BR')}
                     </div>
                   </div>
@@ -139,7 +139,7 @@ export default function TrocaContaPage() {
                   </span>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginTop: 14, background: '#f8fafc', borderRadius: 14, padding: 14 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(160px, 100%), 1fr))', gap: 10, marginTop: 14, background: '#0c1428', borderRadius: 14, padding: 14 }}>
                   {[
                     ['Banco', `${p.banco_codigo} ${p.banco_nome ? `· ${p.banco_nome}` : ''}`],
                     ['Agência', p.agencia],
@@ -147,8 +147,8 @@ export default function TrocaContaPage() {
                     ['Titular', p.titular_nome],
                   ].map(([k, v]) => (
                     <div key={k}>
-                      <div style={{ fontSize: 10.5, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.6 }}>{k}</div>
-                      <div style={{ fontSize: 13.5, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>{v}</div>
+                      <div style={{ fontSize: 10.5, fontWeight: 800, color: '#a8b4cf', textTransform: 'uppercase', letterSpacing: 0.6 }}>{k}</div>
+                      <div style={{ fontSize: 13.5, fontWeight: 800, color: '#edf2ff', marginTop: 2 }}>{v}</div>
                     </div>
                   ))}
                 </div>
@@ -156,7 +156,7 @@ export default function TrocaContaPage() {
                 <div style={{
                   marginTop: 10, fontSize: 12.5, fontWeight: 800, borderRadius: 12, padding: '10px 12px',
                   display: 'flex', alignItems: 'center', gap: 7,
-                  color: documentoBate ? '#15803d' : '#dc2626',
+                  color: documentoBate ? '#72dda4' : '#ff96ae',
                   background: documentoBate ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.08)',
                   border: `1px solid ${documentoBate ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.25)'}`,
                 }}>
@@ -167,17 +167,17 @@ export default function TrocaContaPage() {
                 </div>
 
                 {p.motivo && (
-                  <div style={{ marginTop: 10, fontSize: 13, color: '#475569', fontWeight: 600 }}>
-                    <strong style={{ color: '#0f172a' }}>Motivo alegado:</strong> {p.motivo}
+                  <div style={{ marginTop: 10, fontSize: 13, color: '#b5c0d7', fontWeight: 600 }}>
+                    <strong style={{ color: '#edf2ff' }}>Motivo alegado:</strong> {p.motivo}
                   </div>
                 )}
                 {p.parecer && !aberto && (
-                  <div style={{ marginTop: 8, fontSize: 13, color: '#475569', fontWeight: 600 }}>
-                    <strong style={{ color: '#0f172a' }}>Parecer:</strong> {p.parecer}
+                  <div style={{ marginTop: 8, fontSize: 13, color: '#b5c0d7', fontWeight: 600 }}>
+                    <strong style={{ color: '#edf2ff' }}>Parecer:</strong> {p.parecer}
                   </div>
                 )}
                 {p.status === 'aprovado' && p.liberado_ate && (
-                  <div style={{ marginTop: 8, fontSize: 12.5, fontWeight: 800, color: '#15803d', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ marginTop: 8, fontSize: 12.5, fontWeight: 800, color: '#72dda4', display: 'flex', alignItems: 'center', gap: 6 }}>
                     <Clock size={13} /> Janela aberta até {new Date(p.liberado_ate).toLocaleString('pt-BR')}
                   </div>
                 )}
@@ -188,26 +188,26 @@ export default function TrocaContaPage() {
                       value={parecer[p.id] ?? ''}
                       onChange={e => setParecer(v => ({ ...v, [p.id]: e.target.value }))}
                       placeholder="Parecer (o vendedor vê isso se for recusado)"
-                      style={{ width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 12, padding: '11px 12px', fontSize: 14, fontWeight: 600, color: '#0f172a', background: '#f8fafc', outline: 'none' }}
+                      style={{ width: '100%', border: '1px solid rgba(166,181,225,0.18)', borderRadius: 12, padding: '11px 12px', fontSize: 14, fontWeight: 600, color: '#edf2ff', background: '#0c1428', outline: 'none' }}
                     />
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       <button
                         onClick={() => decidir(p.id, 'aprovado')} disabled={processando === p.id}
-                        style={{ flex: 1, minWidth: 150, border: 'none', background: 'linear-gradient(135deg, #16a34a, #22c55e)', color: '#fff', borderRadius: 12, padding: '12px 16px', fontSize: 14, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}
+                        style={{ flex: 1, minWidth: 150, border: 'none', background: 'linear-gradient(135deg, #16a34a, #22c55e)', color: '#111a30', borderRadius: 12, padding: '12px 16px', fontSize: 14, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}
                       >
                         {processando === p.id ? <Loader2 size={15} className="animate-spin" /> : <ShieldCheck size={15} />} Aprovar (libera 48h)
                       </button>
                       {p.status === 'pendente' && (
                         <button
                           onClick={() => decidir(p.id, 'em_analise')} disabled={processando === p.id}
-                          style={{ border: '1px solid rgba(14,165,233,0.3)', background: '#eff6ff', color: '#0284c7', borderRadius: 12, padding: '12px 16px', fontSize: 14, fontWeight: 800, cursor: 'pointer' }}
+                          style={{ border: '1px solid rgba(14,165,233,0.3)', background: '#112741', color: '#76d3ff', borderRadius: 12, padding: '12px 16px', fontSize: 14, fontWeight: 800, cursor: 'pointer' }}
                         >
                           Marcar em análise
                         </button>
                       )}
                       <button
                         onClick={() => decidir(p.id, 'recusado')} disabled={processando === p.id}
-                        style={{ border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.06)', color: '#dc2626', borderRadius: 12, padding: '12px 16px', fontSize: 14, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7 }}
+                        style={{ border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.06)', color: '#ff96ae', borderRadius: 12, padding: '12px 16px', fontSize: 14, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7 }}
                       >
                         <ShieldX size={15} /> Recusar
                       </button>

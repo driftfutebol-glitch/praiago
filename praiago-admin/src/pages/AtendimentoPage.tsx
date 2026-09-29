@@ -1,3 +1,4 @@
+import ResponsiveTable from '../components/ResponsiveTable'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -320,7 +321,7 @@ export default function AtendimentoPage() {
       {/* Tickets Table */}
       {!loading && (
         <div className="glass-panel rounded-2xl overflow-hidden border-slate-800">
-          <table className="w-full text-left border-collapse">
+          <ResponsiveTable label="Atendimento" className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-900/80 text-slate-500 text-[10px] font-bold uppercase tracking-wider border-b border-slate-800">
                 <th className="p-4 w-8"></th>
@@ -353,13 +354,16 @@ export default function AtendimentoPage() {
                       } ${ticket.prioridade === 'urgente' ? 'border-l-2 border-l-red-500/50' : ''}`}
                     >
                       <td className="p-4">
+                        <button type="button" aria-label={`${isExpanded ? 'Fechar' : 'Abrir'} chamado ${ticket.id.slice(0, 8)}`} aria-expanded={isExpanded} className="p-2 rounded-lg text-purple-300 hover:bg-purple-500/10 flex items-center gap-2" onClick={event=>{event.stopPropagation();void abrirTicket(ticket.id)}}>
                         <motion.div
                           animate={{ rotate: isExpanded ? 180 : 0 }}
                           transition={{ duration: 0.2 }}
-                          className="text-slate-600"
+                          className="text-purple-300"
                         >
                           {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                         </motion.div>
+                        <span className="sm:sr-only text-xs font-semibold">{isExpanded?'Fechar chamado':'Abrir chamado'}</span>
+                        </button>
                       </td>
                       <td className="p-4 font-mono font-bold text-purple-400 text-xs">
                         {ticket.id.substring(0, 8)}
@@ -373,8 +377,8 @@ export default function AtendimentoPage() {
                           {pLabel}
                         </td>
                       )}
-                      <td className="p-4 text-slate-300 max-w-[300px]">
-                        <div className="truncate">{ticket.assunto}</div>
+                      <td className="admin-cell-wide p-4 text-slate-300 max-w-[300px]">
+                        <div className="sm:truncate">{ticket.assunto}</div>
                         {ticket.origem === 'ia' && (
                           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 text-[9px] font-black uppercase">
@@ -654,7 +658,7 @@ export default function AtendimentoPage() {
                 </tr>
               )}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
       )}
     </div>
