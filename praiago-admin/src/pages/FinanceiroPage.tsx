@@ -207,9 +207,13 @@ export default function FinanceiroPage() {
         await alertDialog({ title: 'Confira o repasse', message: 'O valor precisa corresponder exatamente ao líquido da loja. Se foi pago o bruto ou outro valor, concilie a diferença antes da baixa.', tone: 'danger' })
         return
       }
+      const referencia = await promptDialog({ title: 'Referência da conferência', message: 'Informe responsável, data ou identificador do comprovante. Não inclua dados bancários completos.', placeholder: 'Responsável / data / referência', confirmText: 'Continuar' })
+      if (referencia === null) return
+      if (referencia.trim().length < 3 || referencia.trim().length > 160) { await alertDialog({ title: 'Referência obrigatória', message: 'Use de 3 a 160 caracteres.', tone: 'danger' }); return }
+      const comissaoRecebida = Number(pedido.platform_fee_amount) > 0 && await confirmDialog({ title: 'A comissão também já foi recebida por fora?', message: `Comissão deste pedido: ${money(pedido.platform_fee_amount)}. Só marque como recebida se ela já foi conferida. Não haverá nova cobrança.`, confirmText: 'Sim, já recebemos', cancelText: 'Não registrar comissão' })
       const motivo = await askExceptionReason('Motivo da baixa externa', 'Registre quem fez o repasse e como o recebimento foi conferido. Não inclua senha ou dados bancários completos.')
-      if (!motivo || !await confirmDialog({ title: 'Registrar pagamento já realizado?', message: `${money(valor)} para ${pedido.vendedor_nome || 'a loja'}, pedido ${pedido.id.slice(0, 8)}. A baixa quitará este repasse e impedirá nova retirada desse saldo. Nenhum pagamento será enviado ao banco.`, confirmText: 'Registrar baixa externa', tone: 'success' })) return
-      const { data, error } = await supabase.rpc('admin_registrar_repasse_externo', { p_pedido: pedido.id, p_valor: valor, p_motivo: motivo })
+      if (!motivo || !await confirmDialog({ title: 'Registrar pagamento já realizado?', message: `${money(valor)} para ${pedido.vendedor_nome || 'a loja'}, pedido ${pedido.id.slice(0, 8)}. A baixa quitará este repasse e impedirá nova retirada desse saldo. ${comissaoRecebida ? ` Comissão já recebida: ${money(pedido.platform_fee_amount)}.` : ' Comissão não será alterada.'} Nenhum pagamento será enviado ao banco.`, confirmText: 'Registrar baixa externa', tone: 'success' })) return
+      const { data, error } = await supabase.rpc('admin_baixa_externa_completa', { p_pedido: pedido.id, p_valor: valor, p_comissao: comissaoRecebida ? Number(pedido.platform_fee_amount) : 0, p_motivo: motivo, p_referencia: referencia.trim(), p_ticket: null })
       if (error || data?.ok !== true) throw new Error(error?.message || 'O servidor não confirmou a baixa.')
       await load()
       await loadSaques()

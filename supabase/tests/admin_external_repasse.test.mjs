@@ -138,4 +138,42 @@ await db.exec(`select set_config('request.jwt.claim.role','service_role',false)`
 await db.exec(`select private.account_deletion_unchecked_solicitar_saque('${seller}',50)`)
 check(await scalar(`select saldo_disponivel::text as v from public.carteira_espelho('${seller}')`), '0')
 console.log(`PASS: ${checks} PostgreSQL assertions; permissions, accounting, audit rollback, idempotence, delivery and future withdrawals.`)
+
+await db.exec(`alter table public.pedidos add column cliente_id uuid,add column refunded_at timestamptz;
+  alter table public.tickets add column usuario_id uuid,add column pedido_ref text,add column assunto text;
+  alter table public.security_audit_logs add column created_at timestamptz default now();
+  create table public.ticket_mensagens(ticket_id uuid,autor text,mensagem text);
+  create table private.pedido_codigos_entrega(pedido_id uuid primary key,cliente_id uuid,codigo text,tentativas int default 0,bloqueado_ate timestamptz,created_at timestamptz default now(),confirmado_em timestamptz);
+  create function private.generate_delivery_code() returns text language sql as $$ select lpad(floor(random()*1000000)::text,6,'0') $$;
+  update public.pedidos set cliente_id='${buyer}' where id='${order}';`)
+await db.exec(await readFile(new URL('../migrations/20260928203000_admin_ticket_order_exceptions.sql',import.meta.url),'utf8'))
+await db.exec(`delete from public.payouts where provider='pagarme'`) // Disposable fixture only, not production.
+const newOrder=id(20),newTicket=id(21)
+await db.exec(`insert into public.pedidos(id,vendedor_id,cliente_id,total,gross_amount,platform_fee_amount,vendor_amount,status,payment_provider,payment_status,settlement_status,reembolso_status)
+ values('${newOrder}','${seller}','${buyer}',107.20,107.20,10.72,96.48,'entregando','pagarme','aprovado','pendente','nenhum');
+ insert into public.financial_ledger(pedido_id,vendedor_id,tipo,valor,status,provider) values('${newOrder}','${seller}','repasse_vendedor',96.48,'pendente','manual'),('${newOrder}','${seller}','taxa_plataforma',10.72,'pendente','manual');
+ insert into public.tickets(id,origem,status,usuario_id,pedido_ref,assunto) values('${newTicket}','humano','aberto','${buyer}','${newOrder}','Erro no codigo');
+ insert into private.pedido_codigos_entrega(pedido_id,cliente_id,codigo,tentativas) values('${newOrder}','${buyer}','111111',5);
+ select set_config('request.jwt.claim.sub','${seller}',false);set role authenticated;`)
+await rejects(`select public.admin_regenerar_codigo_por_ticket('${newTicket}','${newOrder}','${reason}')`,/Sem permissao/)
+await rejects(`select public.admin_baixa_externa_completa('${newOrder}',96.48,10.72,'${reason}','fixture',null)`,/Sem permissao/)
+await db.exec(`reset role;select set_config('request.jwt.claim.sub','${admin}',false);set role authenticated;`)
+await rejects(`select public.admin_regenerar_codigo_por_ticket('${ticket}','${newOrder}','${reason}')`,/Chamado aberto/)
+check((await scalar(`select public.admin_regenerar_codigo_por_ticket('${newTicket}','${newOrder}','${reason}') as v`)).ok,true)
+check((await scalar(`select public.admin_regenerar_codigo_por_ticket('${newTicket}','${newOrder}','${reason}') as v`)).idempotente,true)
+await db.exec('reset role')
+check(await scalar(`select codigo<>'111111' and tentativas=0 and bloqueado_ate is null as v from private.pedido_codigos_entrega where pedido_id='${newOrder}'`),true)
+check(await scalar(`select count(*)::int as v from public.ticket_mensagens where ticket_id='${newTicket}'`),1)
+check(await scalar(`select status as v from public.pedidos where id='${newOrder}'`),'entregando')
+await rejects(`select public.admin_regenerar_codigo_por_ticket('${newTicket}','${order}','${reason}')`,/Somente pedido pago/)
+await rejects(`select public.admin_baixa_externa_completa('${newOrder}',96.48,11,'${reason}','fixture','${newTicket}')`,/Comissao deve corresponder/)
+check(await scalar(`select count(*)::int as v from public.payouts po join public.financial_ledger fl on po.ledger_entry_id=fl.id where fl.pedido_id='${newOrder}'`),0)
+await db.exec('set role authenticated')
+check((await scalar(`select public.admin_baixa_externa_completa('${newOrder}',96.48,10.72,'${reason}','fixture','${newTicket}') as v`)).ok,true)
+check((await scalar(`select public.admin_baixa_externa_completa('${newOrder}',96.48,10.72,'${reason}','fixture','${newTicket}') as v`)).idempotente,true)
+await db.exec('reset role')
+check(await scalar(`select status='pago' and provider='comissao_externa' as v from public.financial_ledger where pedido_id='${newOrder}' and tipo='taxa_plataforma'`),true)
+check(await scalar(`select count(*)::int as v from public.security_audit_logs where metadata->>'acao'='regenerar_codigo_entrega' and metadata->>'alvo_id'='${newOrder}'`),1)
+check(await scalar(`select count(*)::int as v from public.security_audit_logs where metadata->>'codigo' is not null`),0)
+console.log(`PASS: ${checks} total administrative PostgreSQL assertions; no gateway operation.`)
 await db.close()

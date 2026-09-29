@@ -12,6 +12,9 @@ import { CLIENTE_FALLBACK, useGPS, type GPSFonte, type GPSStatus } from '../hook
 import { criarMonitorSentido, type SentidoStatus } from '../lib/trafego'
 import { broadcastOrder } from '../hooks/useOrderBroadcast'
 import { pertenceACategoria, semAcento, type Vendedor } from '../lib/catalogo'
+import CategoryTabs from '../components/CategoryTabs'
+import PizzaBuilder from '../components/PizzaBuilder'
+import { cartProducts, resolveCartProduct, stockError } from '../lib/pizzaCart'
 import { productMenuSection, visibleProductDescription } from '../lib/menuSection'
 import CatalogFeedback from '../components/CatalogFeedback'
 import { checarPedido, RAIO_PEDIDO_KM } from '../lib/serviceArea'
@@ -222,10 +225,16 @@ function RastreamentoModal({ vendedor, clientePos, pedidoId, onClose }: { vended
       .then(({ data }) => {
         if (data?.status && DB_STATUS[data.status]) setStatus(DB_STATUS[data.status])
       })
-    supabase.rpc('obter_codigo_entrega', { p_pedido_id: pedidoId })
-      .then(({ data, error }) => {
-        if (!error && typeof data === 'string') setCodigoEntrega(data)
+    let active = true
+    const refreshCode = () => {
+      if (document.visibilityState === 'hidden') return
+      void supabase.rpc('obter_codigo_entrega', { p_pedido_id: pedidoId }).then(({ data, error }) => {
+        if (active && !error && typeof data === 'string') setCodigoEntrega(data)
       })
+    }
+    refreshCode()
+    const codeTimer = window.setInterval(refreshCode, 20000)
+    document.addEventListener('visibilitychange', refreshCode)
     const ch = supabase.channel(`pedido_${pedidoId}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pedidos', filter: `id=eq.${pedidoId}` }, (payload) => {
         const row = payload.new as { status?: string }
@@ -233,7 +242,7 @@ function RastreamentoModal({ vendedor, clientePos, pedidoId, onClose }: { vended
         if (st && DB_STATUS[st]) setStatus(DB_STATUS[st])
       })
       .subscribe()
-    return () => { supabase.removeChannel(ch) }
+    return () => { active = false; window.clearInterval(codeTimer); document.removeEventListener('visibilitychange', refreshCode); supabase.removeChannel(ch) }
   }, [pedidoId])
 
   // ANTI-MÁ-FÉ: cliente denuncia quem pede pra pagar por fora do app.
@@ -906,7 +915,8 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
   const addNotif = useStore(s => s.addNotif)
   const sessao = useStore(s => s.sessao)
 
-  const itensList = vendedor.produtos.filter(p => (carrinho[p.id] ?? 0) > 0)
+  const itensList = cartProducts(vendedor.produtos, carrinho)
+  const invalidItems = Object.keys(carrinho).filter(key => !resolveCartProduct(vendedor.produtos, key))
   const [taxaCreditoPercent, setTaxaCreditoPercent] = useState(0)
   useEffect(() => { obterTaxaCredito().then(setTaxaCreditoPercent).catch(() => setTaxaCreditoPercent(0)) }, [])
 
@@ -1352,10 +1362,11 @@ function CheckoutModal({ vendedor, onConfirm, onClose, clientePos, gpsStatus, gp
               <Trash2 size={14} /> Excluir pedido
             </button>
           </div>
+          {invalidItems.map((key, index) => <div key={key} role="alert" style={{ padding: 12, marginBottom: 12, border: '1px solid var(--pg-danger)', borderRadius: 12 }}><p style={{ color: 'var(--pg-danger)', fontSize: 13 }}>Um produto ou combinação mudou e não está mais disponível. Remova antes de concluir o pedido.</p><button type="button" onClick={() => removerItem(key)} aria-label={`Remover item indisponível ${index + 1}`} style={{ padding: 10, border: 0, borderRadius: 8, color: 'var(--pg-danger)', background: 'var(--pg-surface)' }}>Remover item indisponível</button></div>)}
           {itensList.map(p => (
             <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span style={{ fontSize: 24, background: 'var(--pg-surface)', padding: p.foto ? 0 : 8, borderRadius: 12, width: p.foto ? 40 : undefined, height: p.foto ? 40 : undefined, overflow: 'hidden', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{p.foto ? <img src={p.foto} alt={p.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : p.emoji}</span>
+                <span style={{ fontSize: 24, background: 'var(--pg-surface)', padding: p.foto ? 0 : 8, borderRadius: 12, width: p.foto ? 40 : undefined, height: p.foto ? 40 : undefined, overflow: 'hidden', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{p.foto ? <img src={p.foto} alt={p.nome} loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : p.emoji}</span>
                 <div>
                   <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--pg-ink)' }}>{p.nome}</div>
                   <div style={{ fontSize: 13, color: 'var(--pg-muted)' }}>{carrinho[p.id]}x · R$ {p.preco.toFixed(2)}</div>
@@ -1950,11 +1961,15 @@ export default function PedirPage() {
   const [pedidoId, setPedidoId] = useState<string | null>(null)
   const [maioridadeConfirmada, setMaioridadeConfirmada] = useState(false)
   const [menuCategory, setMenuCategory] = useState('Todos')
+  const [menuSearch, setMenuSearch] = useState('')
+  const [pizzaOpen, setPizzaOpen] = useState(false)
+  const sectionElements = useRef(new Map<string, HTMLElement>())
   const menuSections = useMemo(() => {
     if (!vendedor) return []
     const grouped = new Map<string, Vendedor['produtos']>()
     for (const product of vendedor.produtos) {
-      const category = productMenuSection(product.categoria?.trim() || 'Outros', product.desc)
+      if (menuSearch && !semAcento(product.nome + ' ' + visibleProductDescription(product.desc)).includes(semAcento(menuSearch))) continue
+      const category = productMenuSection(product.categoria?.trim() || 'Outros', product.desc, product.menu_secao)
       const section = grouped.get(category) || []
       section.push(product)
       grouped.set(category, section)
@@ -1965,7 +1980,21 @@ export default function PedirPage() {
       if (aOrder !== bOrder) return (aOrder < 0 ? 999 : aOrder) - (bOrder < 0 ? 999 : bOrder)
       return a.localeCompare(b, 'pt-BR')
     }).map(([name, products]) => ({ name, products }))
-  }, [vendedor])
+  }, [vendedor, menuSearch])
+  const pizzaSizes = new Map<string, number>()
+  for (const product of vendedor?.produtos || []) if (product.pizza_meio_a_meio && product.pizza_tamanho && product.categoria === 'Pizza') pizzaSizes.set(product.pizza_tamanho, (pizzaSizes.get(product.pizza_tamanho) || 0) + 1)
+  const hasHalfPizza = [...pizzaSizes.values()].some(count => count >= 2)
+  useEffect(() => {
+    setMenuCategory('Todos'); setMenuSearch(''); setPizzaOpen(false)
+  }, [vendedor?.id])
+  useEffect(() => {
+    if (typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver(entries => {
+      for (const entry of entries) if (entry.isIntersecting) { const name = (entry.target as HTMLElement).dataset.menuSection; if (name) setMenuCategory(name) }
+    }, { rootMargin: '-60px 0px -65% 0px', threshold: 0 })
+    for (const element of sectionElements.current.values()) observer.observe(element)
+    return () => observer.disconnect()
+  }, [menuSections, vendedor?.id])
   const selectedMenuCategory = menuSections.some(section => section.name === menuCategory) ? menuCategory : 'Todos'
 
   // Sem loja escolhida → lista de lojas disponíveis (estilo iFood).
@@ -1987,8 +2016,9 @@ export default function PedirPage() {
   const meuCarrinho = carrinhoVendedor === vendedor.id ? carrinho : {}
   const vendedorId = vendedor.id
   const localizacaoConfirmada = vendedor.localizacaoConfirmada
-  const totalItens = vendedor.produtos.reduce((a, p) => a + (meuCarrinho[p.id] ?? 0), 0)
-  const totalPreco = vendedor.produtos.reduce((a, p) => a + (meuCarrinho[p.id] ?? 0) * p.preco, 0)
+  const cartItems = cartProducts(vendedor.produtos, meuCarrinho)
+  const totalItens = Object.values(meuCarrinho).reduce((sum, quantity) => sum + quantity, 0)
+  const totalPreco = cartItems.reduce((sum, product) => sum + meuCarrinho[product.id] * product.preco, 0)
 
   async function alterarQuantidade(produto: Vendedor['produtos'][number], delta: number) {
     if (delta > 0 && foraDaArea) {
@@ -1996,14 +2026,14 @@ export default function PedirPage() {
         title: 'Pedido fora da área atendida',
         message: `No momento, pedidos funcionam em ${TEXTO_AREA_ATENDIDA}. Você pode explorar o catálogo, mas precisa estar fisicamente em uma dessas cidades para concluir o pedido.`,
       })
-      return
+      return false
     }
     if (delta > 0 && !localizacaoConfirmada) {
       await alertDialog({
         title: 'Localização da loja em configuração',
         message: 'Você já pode consultar o cardápio. Os pedidos serão liberados assim que o restaurante confirmar o ponto fixo.',
       })
-      return
+      return false
     }
     const exigeMaioridade = pertenceACategoria(produto.categoria, 'bebidas_alcoolicas')
     if (delta > 0 && exigeMaioridade && !maioridadeConfirmada) {
@@ -2013,30 +2043,21 @@ export default function PedirPage() {
         confirmText: 'Tenho 18 anos ou mais',
         cancelText: 'Cancelar',
       })
-      if (!confirmou) return
+      if (!confirmou) return false
       setMaioridadeConfirmada(true)
     }
-    // Defesa de EXPERIENCIA, nao de seguranca: o trigger `validar_preco_pedido`
-    // ja recusa no servidor. Isso aqui evita a pessoa so descobrir que esgotou
-    // na hora de pagar. `estoque` nulo = loja nao controla, entao nem entra.
-    if (delta > 0 && typeof produto.estoque === 'number') {
-      const noCarrinho = meuCarrinho[produto.id] ?? 0
-      if (noCarrinho + delta > produto.estoque) {
-        await alertDialog({
-          title: produto.estoque === 0 ? 'Produto esgotado' : 'Estoque limitado',
-          message: produto.estoque === 0
-            ? `${produto.nome} esgotou. Escolha outro item do cardápio.`
-            : `Restam só ${produto.estoque} de ${produto.nome}.`,
-        })
-        return
-      }
+    if (delta > 0) {
+      const inventoryError = stockError(vendedor!.produtos, { ...meuCarrinho, [produto.id]: (meuCarrinho[produto.id] || 0) + delta })
+      if (inventoryError) { await alertDialog({ title: 'Confira o carrinho', message: inventoryError }); return false }
     }
     addItem(vendedorId, produto.id, delta)
+    return true
   }
 
   return (
     <div style={{ minHeight: '100%', background: 'var(--pg-sand)', color: 'var(--pg-ink)', paddingBottom: 24 }}>
       <AnimatePresence>
+        {pizzaOpen && <PizzaBuilder products={vendedor.produtos} onClose={() => setPizzaOpen(false)} onAdd={async key => { const pizza = resolveCartProduct(vendedor.produtos, key); return pizza ? alterarQuantidade(pizza, 1) : false }} />}
         {step === 'checkout' && <CheckoutModal vendedor={vendedor} clientePos={clientePos} gpsStatus={gpsStatus} gpsFonte={gpsFonte} onConfirm={(e, pid) => { setEntrega(e); setPedidoId(pid); setStep('rastreando') }} onClose={() => setStep('menu')} />}
         {step === 'rastreando' && <RastreamentoModal vendedor={vendedor} clientePos={clientePos} entrega={entrega} pedidoId={pedidoId} onClose={() => { setStep('menu'); navigate('/') }} />}
       </AnimatePresence>
@@ -2109,17 +2130,20 @@ export default function PedirPage() {
 
       <div style={{ padding: '32px 24px 140px' }}>
         <h3 style={{ fontSize: 20, fontWeight: 900, color: 'var(--pg-ink)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>Cardápio <span style={{ fontSize: 24 }}>🔥</span></h3>
-        {menuSections.length > 1 && (
-          <nav aria-label="Categorias do cardápio" style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 12, marginBottom: 16, scrollbarWidth: 'thin' }}>
-            {['Todos', ...menuSections.map(section => section.name)].map(category => (
-              <button key={category} type="button" aria-pressed={selectedMenuCategory === category} onClick={() => setMenuCategory(category)} style={{ flexShrink: 0, border: `1px solid ${selectedMenuCategory === category ? 'var(--pg-action)' : 'var(--pg-line)'}`, background: selectedMenuCategory === category ? 'var(--pg-action)' : 'var(--pg-surface)', color: selectedMenuCategory === category ? 'var(--pg-action-ink)' : 'var(--pg-ink)', borderRadius: 999, padding: '10px 14px', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
-                {category}
-              </button>
-            ))}
-          </nav>
-        )}
-        {menuSections.filter(section => selectedMenuCategory === 'Todos' || section.name === selectedMenuCategory).map(section => (
-          <section key={section.name} aria-label={section.name}>
+        <label style={{ display: 'block', marginBottom: 16 }}><span style={{ fontSize: 13, color: 'var(--pg-muted)' }}>Buscar no cardápio</span><input aria-label="Buscar no cardápio" value={menuSearch} onChange={event => setMenuSearch(event.target.value)} placeholder="Produto ou ingrediente" style={{ width: '100%', padding: '13px 16px', marginTop: 6, border: '1px solid var(--pg-line)', borderRadius: 16, background: 'var(--pg-surface)', color: 'var(--pg-ink)', fontSize: 16 }} /></label>
+        <div style={{ position: 'sticky', top: 0, zIndex: 30, background: 'var(--pg-surface)' }}>
+          <CategoryTabs categories={['Todos', ...(hasHalfPizza ? ['Pizzas meio a meio'] : []), ...menuSections.map(section => section.name)]} value={menuCategory === 'Pizzas meio a meio' ? menuCategory : selectedMenuCategory} onChange={category => { setMenuCategory(category); sectionElements.current.get(category === 'Todos' ? menuSections[0]?.name : category)?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }) }} />
+        </div>
+        {hasHalfPizza && <section data-menu-section="Pizzas meio a meio" ref={element => { if (element) sectionElements.current.set('Pizzas meio a meio', element); else sectionElements.current.delete('Pizzas meio a meio') }} style={{ marginTop: 20, padding: 18, borderRadius: 18, background: 'var(--pg-surface)', border: '1px solid var(--pg-line)', scrollMarginTop: 64 }}>
+          <h4 style={{ fontSize: 18 }}>Pizzas meio a meio</h4><p style={{ color: 'var(--pg-muted)', fontSize: 13, margin: '8px 0 14px' }}>Combine dois sabores do mesmo tamanho e pague metade de cada um.</p>
+          <button type="button" onClick={() => setPizzaOpen(true)} style={{ padding: '12px 16px', border: 0, borderRadius: 12, fontWeight: 850, background: 'var(--pg-action)', color: 'var(--pg-action-ink)' }}>Montar minha pizza</button>
+        </section>}
+        {cartItems.filter(product => product.segundoSaborId).map(product => <div key={product.id} style={{ marginTop: 14, padding: 14, borderRadius: 14, background: 'var(--pg-surface)', border: '1px solid var(--pg-line)' }}>
+          <strong style={{ fontSize: 14 }}>{product.nome}</strong><div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}><span>R$ {dinheiro(product.preco)}</span><button aria-label={`Remover uma ${product.nome}`} type="button" onClick={() => void alterarQuantidade(product, -1)} style={{ padding: '8px 14px', background: 'var(--pg-surface-alt)', color: 'inherit', border: 0, borderRadius: 8 }}>−</button><span>{meuCarrinho[product.id]}</span><button aria-label={`Adicionar uma ${product.nome}`} type="button" onClick={() => void alterarQuantidade(product, 1)} style={{ padding: '8px 14px', background: 'var(--pg-surface-alt)', color: 'inherit', border: 0, borderRadius: 8 }}>+</button></div>
+        </div>)}
+        {menuSections.length === 0 && <p role="status" style={{ color: 'var(--pg-muted)', padding: 20 }}>Nenhum item encontrado para essa busca.</p>}
+        {menuSections.map(section => (
+          <section key={section.name} aria-label={section.name} data-menu-section={section.name} ref={element => { if (element) sectionElements.current.set(section.name, element); else sectionElements.current.delete(section.name) }} style={{ scrollMarginTop: 64 }}>
             <h4 style={{ fontSize: 17, fontWeight: 900, color: 'var(--pg-ink)', margin: '22px 0 18px' }}>{section.name} <span style={{ color: 'var(--pg-muted)', fontSize: 13 }}>({section.products.length})</span></h4>
             {section.products.map(p => {
           const qtd = meuCarrinho[p.id] ?? 0
@@ -2163,7 +2187,7 @@ export default function PedirPage() {
                 </div>
               </div>
               <div style={{ position: 'relative', flexShrink: 0 }}>
-                <div style={{ width: 100, height: 100, borderRadius: 24, background: 'var(--pg-surface-alt)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 44, border: '1px solid var(--pg-line)', boxShadow: 'inset 0 4px 20px rgba(0,0,0,0.2)', overflow: 'hidden' }}>{p.foto ? <img src={p.foto} alt={p.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : p.emoji}</div>
+                <div style={{ width: 100, height: 100, borderRadius: 24, background: 'var(--pg-surface-alt)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 44, border: '1px solid var(--pg-line)', boxShadow: 'inset 0 4px 20px rgba(0,0,0,0.2)', overflow: 'hidden' }}>{p.foto ? <img src={p.foto} alt={p.nome} loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : p.emoji}</div>
                 {promocaoLabel && <div style={{ position: 'absolute', top: -8, right: -8, background: 'var(--pg-warning-bg)', color: 'var(--pg-warning)', borderRadius: 999, padding: '5px 8px', fontSize: 10, fontWeight: 950, boxShadow: '0 8px 18px rgba(234,88,12,0.35)' }}>OFF</div>}
                 <div style={{ position: 'absolute', bottom: -14, left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', background: esgotado ? 'var(--pg-surface-alt)' : 'var(--pg-action)', color: esgotado ? 'var(--pg-muted)' : 'var(--pg-action-ink)', borderRadius: 16, boxShadow: esgotado ? 'none' : '0 8px 20px rgba(var(--pg-ocean-rgb), 0.4)' }}>
                   {esgotado && qtd === 0 ? (

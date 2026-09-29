@@ -11,6 +11,8 @@ import {
   X,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
+import CategoryTabs from '../components/CategoryTabs'
+import ProductMenuOptions, { type MenuOptions } from '../components/ProductMenuOptions'
 import ProductCategoryPicker, { CategoryPhoto } from '../components/ProductCategoryPicker'
 import { getSessao } from '../lib/auth'
 import { alertDialog, confirmDialog } from '../lib/dialog'
@@ -24,6 +26,9 @@ const PRODUCT_IMAGE_TYPES = new Map([
 ])
 
 type Produto = {
+  menu_secao?: string | null
+  pizza_meio_a_meio?: boolean
+  pizza_tamanho?: string | null
   id: string
   nome: string
   preco: number
@@ -43,7 +48,7 @@ type ProfileInfo = {
   verificado: boolean | null
 }
 
-type ProductForm = {
+type ProductForm = MenuOptions & {
   id: string | null
   nome: string
   preco: string
@@ -55,6 +60,7 @@ type ProductForm = {
 
 const emptyForm = (): ProductForm => ({
   id: null,
+  menu_secao: '', pizza_meio_a_meio: false, pizza_tamanho: '',
   nome: '',
   preco: '',
   descricao: '',
@@ -86,6 +92,7 @@ export default function CardapioPage() {
   const fileRef = useRef<HTMLInputElement>(null)
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [profile, setProfile] = useState<ProfileInfo | null>(null)
+  const [categoryFilter, setCategoryFilter] = useState('Todos')
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState<ProductForm>(emptyForm)
   const [modalOpen, setModalOpen] = useState(false)
@@ -100,7 +107,7 @@ export default function CardapioPage() {
       const [{ data: products }, { data: profileData }] = await Promise.all([
         supabase
           .from('produtos')
-          .select('id,nome,preco,descricao,categoria,ativo,foto,emoji,estoque')
+          .select('id,nome,preco,descricao,categoria,ativo,foto,emoji,estoque,menu_secao,pizza_meio_a_meio,pizza_tamanho')
           .eq('vendedor_id', sessao.id)
           .order('created_at', { ascending: false }),
         supabase
@@ -145,6 +152,7 @@ export default function CardapioPage() {
   function openEdit(product: Produto) {
     setForm({
       id: product.id,
+      menu_secao: product.menu_secao || '', pizza_meio_a_meio: product.pizza_meio_a_meio === true, pizza_tamanho: product.pizza_tamanho || '',
       nome: product.nome,
       preco: String(product.preco),
       descricao: product.descricao || '',
@@ -204,7 +212,10 @@ export default function CardapioPage() {
     }
 
     const category = getProductCategory(form.categoria)
+    const pizza = category.id === 'pizza' && form.pizza_meio_a_meio
+    if (pizza && !form.pizza_tamanho) { await alertDialog({ title: 'Tamanho obrigatório', message: 'Selecione o tamanho para combinar sabores.', tone: 'danger' }); return }
     const payload = {
+      menu_secao: form.menu_secao.trim() || null, pizza_meio_a_meio: pizza, pizza_tamanho: pizza ? form.pizza_tamanho : null,
       nome: form.nome.trim(),
       preco: Number(price.toFixed(2)),
       descricao: form.descricao.trim(),
@@ -277,6 +288,9 @@ export default function CardapioPage() {
     setProdutos(current => current.filter(item => item.id !== product.id))
   }
 
+  const sections = [...new Set(produtos.map(product => product.menu_secao?.trim() || product.categoria))].sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  const selectedCategory = sections.includes(categoryFilter) ? categoryFilter : 'Todos'
+  const filtered = produtos.filter(product => selectedCategory === 'Todos' || (product.menu_secao?.trim() || product.categoria) === selectedCategory)
   return (
     <div className="page-shell">
       <div className="page-heading">
@@ -301,6 +315,7 @@ export default function CardapioPage() {
         </div>
       )}
 
+      {!loading && produtos.length > 0 && <div style={{ marginBottom: 16 }}><CategoryTabs categories={['Todos', ...sections]} value={selectedCategory} onChange={setCategoryFilter} /></div>}
       {loading ? (
         <div className="surface shimmer" style={{ height: 132 }} />
       ) : produtos.length === 0 ? (
@@ -317,7 +332,7 @@ export default function CardapioPage() {
         </div>
       ) : (
         <div style={{ display: 'grid', gap: 10 }}>
-          {produtos.map(product => {
+          {filtered.map(product => {
             const category = getProductCategory(product.categoria)
             return (
               <motion.article layout key={product.id} className="surface" style={{ padding: 12, boxShadow: 'none', opacity: product.ativo ? 1 : 0.68 }}>
@@ -358,7 +373,7 @@ export default function CardapioPage() {
                         {product.ativo ? 'Disponível' : 'Esgotado'}
                       </button>
                     </div>
-                    <div style={{ marginTop: 7, color: category.color, fontSize: 11, fontWeight: 850 }}>{category.label}</div>
+                    <div style={{ marginTop: 7, color: category.color, fontSize: 11, fontWeight: 850 }}>{product.menu_secao?.trim() || category.label}{product.pizza_meio_a_meio ? ` · Meio a meio (${product.pizza_tamanho})` : ''}</div>
                   </div>
                 </div>
 
@@ -457,6 +472,7 @@ export default function CardapioPage() {
                 </div>
 
                 <ProductCategoryPicker value={form.categoria} onChange={category => setForm(current => ({ ...current, categoria: category.label }))} />
+                <ProductMenuOptions value={form} onChange={value => setForm(current => ({ ...current, ...value }))} pizza={getProductCategory(form.categoria).id === 'pizza'} sections={sections} />
 
                 <div>
                   <div className="field-label">Foto do produto</div>

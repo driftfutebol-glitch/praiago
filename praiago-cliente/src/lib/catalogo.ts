@@ -3,6 +3,9 @@
 import type { DiaHorario } from './horario'
 
 export type Produto = {
+  menu_secao?: string | null
+  pizza_meio_a_meio?: boolean
+  pizza_tamanho?: string | null
   id: string
   nome: string
   desc: string

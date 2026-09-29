@@ -4,6 +4,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { supabase } from '../lib/supabase'
+import { cartProducts, cartDetail, resolveCartProduct, stockError } from '../lib/pizzaCart'
 import { useCatalogo } from './useCatalogo'
 import { dentroDoPrazo, JANELA_REEMBOLSO_HORAS } from '../lib/reembolso'
 
@@ -15,7 +16,7 @@ function getVendedor(id: string | null | undefined) {
   return id ? useCatalogo.getState().getVendedor(id) : undefined
 }
 function getProduto(vendedorId: string, produtoId: string) {
-  return getVendedor(vendedorId)?.produtos.find(p => p.id === produtoId)
+  return resolveCartProduct(getVendedor(vendedorId)?.produtos || [], produtoId)
 }
 
 export type Sessao = {
@@ -141,7 +142,7 @@ function isPresencialPayment(method?: string) {
   return method === 'dinheiro' || method === 'cartao_fisico' || method === 'debito_fisico' || method === 'credito_fisico'
 }
 
-type ItemDetalhe = { produto_id: string; qtd: number }
+type ItemDetalhe = { produto_id: string; qtd: number; segundo_sabor_id?: string }
 
 function normalizarItensDetalhe(value: unknown): ItemDetalhe[] {
   if (!Array.isArray(value)) return []
@@ -151,10 +152,10 @@ function normalizarItensDetalhe(value: unknown): ItemDetalhe[] {
       const row = item as Record<string, unknown>
       const produtoId = String(row.produto_id || '')
       const qtd = Number(row.qtd || 0)
-      return produtoId && Number.isInteger(qtd) && qtd > 0 ? { produto_id: produtoId, qtd } : null
+      return produtoId && Number.isInteger(qtd) && qtd > 0 ? { produto_id: produtoId, qtd, ...(row.segundo_sabor_id ? { segundo_sabor_id: String(row.segundo_sabor_id) } : {}) } : null
     })
     .filter((item): item is ItemDetalhe => item !== null)
-    .sort((a, b) => a.produto_id.localeCompare(b.produto_id))
+    .sort((a, b) => (a.produto_id + (a.segundo_sabor_id || '')).localeCompare(b.produto_id + (b.segundo_sabor_id || '')))
 }
 
 function mesmosItens(a: unknown, b: ItemDetalhe[]) {
@@ -164,6 +165,7 @@ function mesmosItens(a: unknown, b: ItemDetalhe[]) {
     && normalizado.every((item, index) => (
       item.produto_id === esperado[index].produto_id
       && item.qtd === esperado[index].qtd
+      && item.segundo_sabor_id === esperado[index].segundo_sabor_id
     ))
 }
 
@@ -267,9 +269,11 @@ export const useStore = create<State>()(
         if (!vend) return null
         // Ignora itens que sumiram do catálogo (produto desativado / loja recarregada)
         // — antes usava non-null assertion e quebrava com TypeError no checkout.
-        const itensBrutos = Object.entries(carrinho)
-          .map(([pid, qtd]) => { const p = getProduto(carrinhoVendedor, pid); return p ? { id: pid, nome: p.nome, qtd, preco: p.preco } : null })
-          .filter((x): x is { id: string; nome: string; qtd: number; preco: number } => x !== null)
+        const products = cartProducts(vend.produtos, carrinho)
+        if (products.length !== Object.keys(carrinho).length) throw new Error('Um item ficou indisponível. Remova-o do carrinho e tente novamente.')
+        const inventoryError = stockError(vend.produtos, carrinho)
+        if (inventoryError) throw new Error(inventoryError)
+        const itensBrutos = products.map(p => ({ ...p, qtd: carrinho[p.id] }))
         if (itensBrutos.length === 0) return null
         const itens: PedidoItem[] = itensBrutos.map(({ nome, qtd, preco }) => ({ nome, qtd, preco }))
         const instrucoes = [
@@ -283,7 +287,7 @@ export const useStore = create<State>()(
         const method = entrega?.pagamento || 'pix'
         const presencial = isPresencialPayment(method)
         const cupomCodigo = options.desconto?.codigo?.trim().toUpperCase() || null
-        const itensDetalhe = itensBrutos.map(i => ({ produto_id: i.id, qtd: i.qtd }))
+        const itensDetalhe = itensBrutos.map(i => cartDetail(i, i.qtd))
 
         // Se a rede caiu depois do INSERT ou a pre-validacao do PIX falhou, o
         // cupom ja ficou reservado. Reutiliza o mesmo checkout em vez de criar
@@ -490,6 +494,7 @@ export const useStore = create<State>()(
           usuario_nome: get().sessao?.nome || 'Cliente PraiaGo',
           usuario_email: get().sessao?.email || 'N/A',
           assunto: `Cancelamento do pedido ${pedidoId}`,
+          pedido_ref: pedidoId,
           mensagem: `Cliente cancelou o pedido ${pedidoId} de ${pedido.vendedorNome}. Itens: ${pedido.itens.map(i => `${i.qtd}x ${i.nome}`).join(', ')}. Total: R$ ${pedido.total.toFixed(2)}.`,
           status: 'aberto',
           prioridade: 'alta',
@@ -552,6 +557,7 @@ export const useStore = create<State>()(
           usuario_nome: get().sessao?.nome || 'Cliente PraiaGo',
           usuario_email: get().sessao?.email || 'N/A',
           assunto,
+          pedido_ref: pedidoId,
           mensagem,
           status: 'aberto',
           prioridade: tipo === 'reembolso' ? 'urgente' : 'alta',

@@ -3,6 +3,9 @@ import { supabase } from '../lib/supabase'
 import type { Vendedor, VendedorTipo } from '../lib/catalogo'
 
 type ProdutoRow = {
+  menu_secao?: string | null
+  pizza_meio_a_meio?: boolean
+  pizza_tamanho?: string | null
   id: string
   vendedor_id: string | null
   vendedor_nome: string | null
@@ -94,7 +97,7 @@ function precoComPromocao(preco: number, promo?: PromocaoRow): number {
   }
   if (promo.desconto_tipo === 'percentual') {
     const percentual = Math.min(Math.max(Number(promo.desconto_valor) || 0, 0), 95)
-    return Math.max(0, preco * (1 - percentual / 100))
+    return Math.round(Math.max(0, preco * (1 - percentual / 100)) * 100) / 100
   }
   const valor = Math.max(Number(promo.desconto_valor) || 0, 0)
   return Math.max(0, preco - valor)
@@ -109,7 +112,7 @@ type State = {
   getVendedor: (id?: string | null) => Vendedor | undefined
 }
 
-const PRODUTO_COLUNAS = 'id,vendedor_id,vendedor_nome,vendedor_categoria,vendedor_emoji,nome,descricao,preco,emoji,categoria,ativo,estoque,foto'
+const PRODUTO_COLUNAS = 'id,vendedor_id,vendedor_nome,vendedor_categoria,vendedor_emoji,nome,descricao,preco,emoji,categoria,ativo,estoque,foto,menu_secao,pizza_meio_a_meio,pizza_tamanho'
 const PROMO_COLUNAS = 'id,titulo,descricao,produto_id,vendedor_id,desconto_tipo,desconto_valor,preco_promocional,selo,prioridade,data_fim'
 const VENDEDOR_COLUNAS = 'id,nome,categoria,emoji,role,avaliacao_media,total_avaliacoes,online,lat,lng,zona,endereco,horarios,verificado,status,horario_abre,horario_fecha,foto_perfil_path,foto_capa_path'
 let inFlight: Promise<void> | null = null
@@ -144,9 +147,13 @@ export const useCatalogo = create<State>((set, get) => ({
         .order('prioridade', { ascending: false }).order('created_at', { ascending: false }).order('id').range(from, to)),
     ])
 
+    const precoPorProduto = new Map(rows.map(row => [row.id, Number(row.preco)]))
     const promoPorProduto = new Map<string, PromocaoRow>()
     for (const promo of (promos ?? []) as PromocaoRow[]) {
-      if (!promoPorProduto.has(promo.produto_id)) promoPorProduto.set(promo.produto_id, promo)
+      const base = precoPorProduto.get(promo.produto_id)
+      if (base === undefined) continue
+      const current = promoPorProduto.get(promo.produto_id)
+      if (!current || precoComPromocao(base, promo) < precoComPromocao(base, current)) promoPorProduto.set(promo.produto_id, promo)
     }
 
     const ids = [...new Set(rows.map(r => r.vendedor_id).filter((v): v is string => !!v))]
@@ -216,6 +223,7 @@ export const useCatalogo = create<State>((set, get) => ({
       byVend.get(vid)!.produtos.push({
         id: r.id,
         nome: r.nome,
+        menu_secao: r.menu_secao, pizza_meio_a_meio: r.pizza_meio_a_meio, pizza_tamanho: r.pizza_tamanho,
         desc: r.descricao || '',
         preco: precoFinal,
         precoOriginal: temPromocao ? precoOriginal : undefined,

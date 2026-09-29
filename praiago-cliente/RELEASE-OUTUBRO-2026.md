@@ -2,7 +2,19 @@
 
 ## Escopo
 
-Atualização do aplicativo **Cliente**. Ambulante, sites, contratos de API, regras de pedidos, pagamentos e banco não foram migrados nesta mudança. Produção não deve receber esta candidata antes da validação e da janela de lançamento combinada para outubro.
+A candidata do aplicativo **Cliente** continua separada do aplicativo público até a validação e a janela de lançamento de outubro. O escopo inicial era somente visual; a entrega de 28/09/2026 abaixo também prepara o Ambulante e atualiza Restaurante, Admin e banco de forma compatível com o app público anterior. As builds nativas históricas listadas neste documento não contêm automaticamente as alterações posteriores.
+
+## Categorias e pizza meio a meio · 28/09/2026
+
+- Cliente: busca por produto/ingrediente, abas horizontais com indicador ativo, lista completa de seções e navegação para os títulos do cardápio. As seções são os dados reais da loja; sem produtos ou destaques fictícios.
+- Restaurante e Ambulante: nome de seção por produto, opção explícita de participar da pizza meio a meio e tamanho. Seção vazia preserva a categoria e os rótulos legados das pizzas existentes.
+- Dois sabores distintos, ativos, do mesmo vendedor e tamanho. Preço = metade de cada preço inteiro vigente, somados e arredondados em centavos. Exemplo real: Calabresa Grande R$ 43,00 + Da Casa Grande R$ 70,00 = R$ 56,50; não usa o maior preço.
+- Carrinho, total e pedido levam ambos os IDs reais. O servidor recalcula valores, promoções e estoque; não aceita preço enviado pelo cliente nem combinação de outra loja, bebida ou tamanho diferente. Carrinho com sabor removido exige correção, sem descartar itens silenciosamente.
+- Estoque inteiro agrega todas as metades de um sabor e arredonda para cima; cancelamento de pedido novo restaura somente o estoque efetivamente debitado. Produtos sem controle de estoque continuam ilimitados.
+- Banco: migrações aditivas `20260928200000` e `20260928203000` aplicadas isoladamente, sem `db push` da cadeia histórica. Piu Sapore: 90 sabores habilitados (45 Broto e 45 Grande), preservando preços, ingredientes, fotos e demais dados.
+- Admin: baixa de repasse externo com valor líquido integral, referência e motivo; comissão já recebida pode ser registrada separadamente na mesma operação atômica. Não transfere dinheiro, não admite baixa parcial nem duplica um pagamento já lançado. Novo código de entrega exige chamado aberto ligado ao pedido e permissões; não conclui entrega nem expõe o código na conversa.
+- Validação: 78 testes do Cliente, 51 do Restaurante, 21 do Admin e 87 verificações PostgreSQL isoladas. Builds web/TypeScript dos quatro aplicativos aprovados. Visual do menu e composição de dois sabores conferidos em 390 × 844 com catálogo real, sem pedido ou pagamento de teste em produção.
+- **Nenhum OTA ou upload nativo novo nesta entrega.** Cliente e Ambulante precisam de build candidata, teste em dispositivo e fluxo autorizado em sandbox antes da distribuição. Ver [regras e recuperação operacional](../docs/MENU-E-EXCECOES-2026-09-28.md).
 
 ## O que mudou
 
@@ -90,7 +102,7 @@ Abra `http://127.0.0.1:5173/ambulantes`. É o aplicativo normal, com o catálogo
 - [x] Build web/TypeScript local.
 - [x] Auditoria npm sem vulnerabilidades após atualização compatível de `@xmldom/xmldom` transitivo.
 - [x] Fluxos de exclusão, checkout, pagamento e CPF sem relaxamento de autorização.
-- [x] Nenhuma migration ou atualização de edge function aplicada.
+- [x] Na etapa visual até 23/09, nenhuma migration ou edge function foi aplicada. A etapa de cardápio de 28/09 tem migrações isoladas descritas acima; nenhuma edge function foi alterada.
 - [ ] GitHub Actions do commit final aprovado — bloqueado pela cobrança da conta antes de iniciar o job; não é um resultado dos testes.
 - [x] Build nativo assinado da candidata concluído no Codemagic.
 - [x] Upload da candidata para App Store Connect concluído sem erros.

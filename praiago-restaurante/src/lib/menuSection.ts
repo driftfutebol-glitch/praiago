@@ -14,10 +14,11 @@ export function visibleProductDescription(description: string): string {
   return (description || '').replace(/\n\nSeção do cardápio: Pizzas (?:premium|salgadas|doces)\s*$/u, '').trim()
 }
 
-export function productMenuSection(category: string, description: string): string {
+export function productMenuSection(category: string, description: string, section?: string | null): string {
+  if (section?.trim()) return section.trim()
   if (category !== 'Pizza') return category
-  const section = (description || '').match(/\n\nSeção do cardápio: (Pizzas (?:premium|salgadas|doces))\s*$/u)?.[1]
-  return section || category
+  const legacySection = (description || '').match(/\n\nSeção do cardápio: (Pizzas (?:premium|salgadas|doces))\s*$/u)?.[1]
+  return legacySection || category
 }
 
 export function descriptionWithMenuSection(description: string, section: string): string {
