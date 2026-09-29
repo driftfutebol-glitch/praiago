@@ -59,6 +59,17 @@ Artefatos: bucket `ota-bundles`, prefixo `store-notice-staging-20260928/praiago-
 - Testes não criaram produtos fictícios, avisos públicos ou pedidos/pagamentos reais.
 - Pendência explicitada: envio público OTA e teste em aparelho real ainda não concluídos. Nenhum upload às lojas foi feito.
 
+### Deploy Admin confirmado
+
+- Código: `29f138d4a636fd03c3276bb108b37f3302a54cc1`, confirmado no GitHub e na metadata da Vercel.
+- Preview: `dpl_4mk9JYFjcxtc8iuD6osmEesPYxcN`, `praiago-admin-bitbr8oac-pedrin1.vercel.app`, READY. HTML e JS conferidos via acesso autenticado da CLI; preview no navegador pede login Vercel, sem enfraquecer a proteção.
+- Produção: `dpl_FMsNv6ii7Bq6yUishkxQttZdympw`, `praiago-admin-3vkg9ra6e-pedrin1.vercel.app`, READY, alias `admin.praiago.com.br`.
+- Domínio `/atualizacoes`: HTTP 200, asset `/assets/index-BZzswzah.js`, rota, RPC de aprovação e verificação da loja presentes. Navegador mostrou o login Admin, sem sessão autenticada do dono disponível; os botões não foram acionados em produção. Contratos desses botões foram testados no harness local.
+- GitHub Actions não iniciou por bloqueio de cobrança da conta, confirmado nas annotations. Não há CI verde; evidência de testes é local, além do build efetivo da Vercel.
+- Páginas públicas dos dois apps na Play Store conferidas; elas não expuseram a versão nativa publicada na consulta. Não substituem o Play Console para definir faixa de compatibilidade do bootstrap.
+- Checksums dos dois ZIPs conferidos novamente após download do Storage.
+- Somente `praiago-restaurante/src/components/BulkProductImport.tsx`, alteração anterior não relacionada, permanece fora do commit/deploy.
+
 ## Rollback
 
 Aviso incorreto: usar “Pausar aviso”; os apps o retiram na próxima consulta bem-sucedida. Em indisponibilidade da API, o app continua funcionando.
