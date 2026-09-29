@@ -38,6 +38,19 @@ Pré-deploy: versão anterior do Admin confirmada no Vercel:
 - Commit anterior publicado: 29f138d4a636fd03c3276bb108b37f3302a54cc1.
 - Domínio: https://admin.praiago.com.br.
 
-A nova publicação será feita a partir de checkout limpo do commit de redesign, com preview antes de produção. Atualizar esta seção com IDs, SHA, arquivos servidos e resultado da verificação pública após o deploy.
+Publicado e verificado em produção em 29/09/2026:
+- Commit de código: c00669e8121803f41865d683d12e32e93fb19a32, confirmado no GitHub.
+- Checkout limpo exclusivo: C:/Users/SnyX/AppData/Local/Temp/praiago-admin-responsive-deploy-20260928. Alterações paralelas no Cliente, Ambulante, Restaurante e migrations não entraram nesta publicação.
+- Preview READY: dpl_7rJX3P5QdEKNmHXzgcgrDuffFHA1 / praiago-admin-bnjwdb34h-pedrin1.vercel.app.
+- Preview conferido por vercel curl autenticado: HTML, JavaScript, CSS, navegação móvel, busca e carregamento sob demanda presentes; nenhum marcador de fixture.
+- Produção READY: dpl_Ck1bvWfEfTckcLQDkDFDWa1MRyQq / praiago-admin-h88r5bql7-pedrin1.vercel.app.
+- Alias confirmado: admin.praiago.com.br.
+- HTTP público 200; JavaScript /assets/index-Cp9lNyfj.js; CSS /assets/index-DijBuJCC.css.
+- Link direto /pedidos serve a aplicação correta; /tests/visual/index.html não expõe o harness local.
+- CSP e HSTS preservados.
+- Navegador público: novo login confirmado em desktop e 390px, sem erros de console, sem inserir credenciais. Override de viewport removido ao concluir.
+- Servidor e aba de QA temporários encerrados.
+
+GitHub Actions não iniciou os jobs Cliente por bloqueio de cobrança da conta. Anotação conferida no check 109234657010 do run 36514821318. Isto não é um CI aprovado: as evidências de aprovação são os testes locais e o build/deploy da Vercel.
 
 Limite de validação: as telas internas foram verificadas em ambiente de QA isolado. A sessão real do Admin estava deslogada; não contornar a autenticação para testar produção.
