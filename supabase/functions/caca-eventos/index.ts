@@ -2,6 +2,7 @@
 // Coleta eventos de fontes configuradas, normaliza e salva como PENDENTE.
 // O admin aprova antes de aparecer para clientes.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2'
+import { canonicalSourceUrl, eventIdentity, isPraiaGrande, parseLot, parseSymplaListing, priceSituation, type PrecoSituacao } from './rules.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -9,7 +10,7 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 }
 
-const ROBO_VERSION = 'v2'
+const ROBO_VERSION = 'v5'
 const DEFAULT_MARKUP_PERCENT = 25
 const DEFAULT_MARKUP_PERCENT_CREDITO = 35
 
@@ -119,6 +120,7 @@ type EventoBruto = {
   venue?: string
   local?: string
   cidade?: string
+  isAccessibleForFree?: boolean | string
   endereco?: string
   address?: string
   lat?: number | string | null
@@ -146,9 +148,10 @@ type Fonte = {
 }
 
 const FONTES_PADRAO: Fonte[] = [
+  { url: 'https://www.sympla.com.br/eventos/praia-grande-sp/este-mes', nome: 'Sympla Praia Grande', categoria: 'Eventos' },
   { url: 'https://www.guicheweb.com.br/', nome: 'Guiche Web Praia Grande', categoria: 'Ingressos' },
-  { url: 'https://www.articket.com.br/', nome: 'ArTicket', categoria: 'Ingressos' },
   { url: 'https://www.roleagora.com.br/', nome: 'RoleAgora Praia Grande', categoria: 'Agenda local' },
+  { url: 'https://www.articket.com.br/', nome: 'ArTicket', categoria: 'Ingressos' },
 ]
 
 type EventoNormalizado = {
@@ -162,6 +165,9 @@ type EventoNormalizado = {
   lat: number | null
   lng: number | null
   preco: number
+  preco_situacao: PrecoSituacao
+  preco_verificado_em: string | null
+  cidade?: string | null
   categoria: string
   emoji: string
   fonte: 'robo'
@@ -394,27 +400,7 @@ const RE_LOTE_NUMERADO = /\b(\d{1,2})\s*[ºo°ª]?\s*lote\b|\blote\s*[ºo°]?\s*
 const RE_LOTE_PROMO = /\b(lote\s+)?(promocional|promo|pre[- ]?venda|primeiro lote|1\s*[ºo°]?\s*lote)\b/i
 const RE_LOTE_ULTIMO = /\b(ultimo|último)\s+lote\b/i
 
-function parseLote(nome: string, loteFonte?: string) {
-  const alvo = semAcento(`${nome} ${loteFonte || ''}`)
-  let ordem: number | null = null
-
-  const numerado = alvo.match(RE_LOTE_NUMERADO)
-  if (numerado) ordem = Number(numerado[1] ?? numerado[2])
-  else if (RE_LOTE_ULTIMO.test(alvo)) ordem = 99
-  else if (RE_LOTE_PROMO.test(alvo)) ordem = 0
-
-  // grupo = nome sem o trecho do lote, sem pontuacao solta nas pontas
-  const grupo = semAcento(nome)
-    .replace(RE_LOTE_NUMERADO, ' ')
-    .replace(RE_LOTE_ULTIMO, ' ')
-    .replace(RE_LOTE_PROMO, ' ')
-    .replace(/\blote\b/gi, ' ')
-    .replace(/[-–—|:,]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-
-  return { ordem, grupo: grupo || semAcento(nome).trim() }
-}
+function parseLote(nome: string, loteFonte?: string) { return parseLot(nome, loteFonte) }
 
 function normalizarIngressos(items: IngressoBruto[] | undefined, fonteUrl: string | null, fallbackPreco: number | null): IngressoNormalizado[] {
   const candidatos = Array.isArray(items) ? [...items] : []
@@ -466,6 +452,11 @@ function normalizarIngressos(items: IngressoBruto[] | undefined, fonteUrl: strin
   return ingressos
 }
 
+function ingressoMenorPreco(ingressos: IngressoNormalizado[]) {
+  const valores = ingressos.filter(i => !i.esgotado_na_fonte && i.estoque_disponivel !== 0).map(i => i.preco_origem)
+  return valores.length ? Math.min(...valores) : null
+}
+
 function emojiPorCategoria(cat?: string): string {
   const c = (cat || '').toLowerCase()
   if (c.includes('balada') || c.includes('dj') || c.includes('club')) return '🎧'
@@ -485,9 +476,16 @@ function normalizar(e: EventoBruto, fonte?: Fonte): EventoNormalizado | null {
   const categoria = text(e.categoria, e.genre, fonte?.categoria, 'Evento')
   const titulo = text(e.titulo, e.title, e.name, e.nome)
   if (titulo.length < 3) return null
-  const fonteUrl = absolutizarUrl(text(e.fonte_url, e.url, e.url_amigavel, fonte?.url), fonte?.url)
+  const fonteUrl = canonicalSourceUrl(absolutizarUrl(text(e.fonte_url, e.url, e.url_amigavel, fonte?.url), fonte?.url))
   const fallbackPreco = money(e.preco, e.price)
   const ingressos = normalizarIngressos(e.ingressos, fonteUrl || null, fallbackPreco)
+  const preco_situacao = priceSituation({
+    price: fallbackPreco,
+    ticketsWithPositivePrice: ingressos.length,
+    title: titulo,
+    description: text(e.descricao_curta, e.descricao, e.description),
+    freeFlag: e.isAccessibleForFree,
+  })
 
   return {
     titulo,
@@ -499,7 +497,10 @@ function normalizar(e: EventoBruto, fonte?: Fonte): EventoNormalizado | null {
     endereco: text(e.endereco, e.address, e.cidade) || null,
     lat: number(e.lat, e.latitude),
     lng: number(e.lng, e.longitude),
-    preco: fallbackPreco || 0,
+    preco: ingressoMenorPreco(ingressos) ?? fallbackPreco ?? 0,
+    preco_situacao,
+    preco_verificado_em: preco_situacao === 'a_confirmar' ? null : new Date().toISOString(),
+    cidade: text(e.cidade) || null,
     categoria,
     emoji: text(e.emoji) || emojiPorCategoria(categoria),
     fonte: 'robo',
@@ -519,13 +520,7 @@ function futuroOuSemData(ev: EventoNormalizado) {
 }
 
 function dentroDePraiaGrande(ev: EventoNormalizado) {
-  const blob = semAcento(`${ev.titulo || ''} ${ev.local_nome || ''} ${ev.endereco || ''} ${ev.descricao_curta || ''} ${ev.fonte_url || ''}`)
-  if (!blob) return false
-  if (blob.includes('praia grande')) return true
-  if (RE_BAIRROS_PG.test(blob)) return true
-  if (RE_BAIXADA.test(blob)) return true
-  if (mencionaAlvoPg(blob)) return true
-  return false
+  return isPraiaGrande(ev)
 }
 
 // Mesmo filtro de dentroDePraiaGrande, mas aplicado no evento BRUTO (antes de
@@ -535,17 +530,16 @@ function dentroDePraiaGrande(ev: EventoNormalizado) {
 // falso positivo aqui custa 1 requisição extra; um falso negativo aqui
 // significava um evento de PG nunca ganhar preço (foi o bug do "MC Daniel").
 function pareceSerPraiaGrande(e: EventoBruto): boolean {
-  const blob = semAcento(`${text(e.titulo, e.title, e.name, e.nome)} ${text(e.local_nome, e.venue, e.local)} ${text(e.endereco, e.address)} ${text(e.fonte_url, e.url)}`)
-  if (!blob) return false
-  if (blob.includes('praia grande')) return true
-  if (RE_BAIRROS_OU_ALVO_PG.test(blob)) return true
-  if (RE_BAIXADA.test(blob)) return true
-  if (mencionaAlvoPg(blob)) return true
-  return false
+  return isPraiaGrande({
+    titulo: text(e.titulo, e.title, e.name, e.nome),
+    local_nome: text(e.local_nome, e.venue, e.local),
+    endereco: text(e.endereco, e.address),
+    cidade: text(e.cidade),
+  })
 }
 
 function dedupeKey(ev: EventoNormalizado) {
-  return `${ev.titulo.toLowerCase()}|${ev.data || ''}|${ev.local_nome || ''}`
+  return eventIdentity(ev.titulo, ev.data)
 }
 
 function parseFontes(raw: string): Fonte[] {
@@ -591,6 +585,27 @@ function fontesDoPedido(body: Record<string, unknown>) {
   const usarPadrao = body.fontes_padrao !== false && body.default_sources !== false
   for (const fonte of [...(usarPadrao ? FONTES_PADRAO : []), ...envFontes, ...bodyFontes]) map.set(fonte.url, fonte)
   return [...map.values()]
+}
+
+async function mapConcurrent<T, R>(items: T[], limit: number, worker: (item: T) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length)
+  let next = 0
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const index = next++
+      results[index] = await worker(items[index])
+    }
+  }))
+  return results
+}
+
+function fontePublica(fonte: Fonte) {
+  try {
+    const url = new URL(fonte.url)
+    return fonte.nome || `${url.hostname}${url.pathname === '/' ? '' : url.pathname}`
+  } catch {
+    return fonte.nome || 'fonte configurada'
+  }
 }
 
 function objetosDeEvento(value: unknown, out: Record<string, unknown>[] = [], depth = 0) {
@@ -640,11 +655,13 @@ function brutoDeObjeto(obj: Record<string, unknown>, fonte: Fonte): EventoBruto 
     startDate: text(obj.startDate),
     startsAt: text(obj.startsAt),
     hora: text(obj.hora),
-    local_nome: text(obj.local_nome, obj.venue, obj.local, location?.name, fonte.local_nome, fonte.nome),
+    local_nome: text(obj.local_nome, obj.venue, obj.local, location?.name, fonte.local_nome),
     endereco: text(obj.endereco, obj.address, obj.cidade, location?.addressFormatted, address?.streetAddress, address?.addressLocality),
+    cidade: text(obj.cidade, address?.addressLocality),
+    isAccessibleForFree: obj.isAccessibleForFree as boolean | string | undefined,
     lat: number(obj.lat, obj.latitude, geo?.latitude),
     lng: number(obj.lng, obj.longitude, geo?.longitude),
-    preco: money(obj.preco, obj.price, offers?.price) || undefined,
+    preco: money(obj.preco, obj.price, offers?.price) ?? undefined,
     categoria: text(obj.categoria, obj.category, obj.genre, fonte.categoria),
     emoji: text(obj.emoji),
     url: absolutizarUrl(text(obj.url, obj.url_amigavel, offers?.url, fonte.url), fonte.url),
@@ -915,16 +932,20 @@ async function salvarEventoBruto(
   vistos.add(key)
 
   try {
-    const { ingressos, ...eventoRow } = ev
-    const { data: inserido, error } = await supabase.from('eventos').insert(eventoRow).select('id').maybeSingle()
-    const eventoId = inserido?.id || await localizarEvento(supabase, ev)
+    const { ingressos, cidade: _cidade, ...eventoRow } = ev
+    const existente = await localizarEvento(supabase, ev)
+    const { data: inserido, error } = existente
+      ? { data: null, error: null }
+      : await supabase.from('eventos').insert(eventoRow).select('id').maybeSingle()
+    const eventoId = existente || inserido?.id || await localizarEvento(supabase, ev)
 
     let ingressosSalvos = 0
     if (eventoId) {
+      await atualizarPrecoVerificado(supabase, eventoId, ev)
       const { salvos } = await salvarIngressos(supabase, eventoId, ingressos)
       ingressosSalvos = salvos
     }
-    return { estado: error && !eventoId ? 'erro' : 'salvo', ingressosSalvos }
+    return { estado: error && !eventoId ? 'erro' : inserido?.id ? 'salvo' : 'ja_visto', ingressosSalvos }
   } catch {
     return { estado: 'erro', ingressosSalvos: 0 }
   }
@@ -945,7 +966,7 @@ async function enriquecerDetalhesArticket(
   fonte: Fonte,
   ctx: { supabase: ReturnType<typeof createClient>; vistos: Set<string>; deadlineAt: number; stats: StatsEnriquecimento },
 ) {
-  const maxDetalhes = Math.max(1, Math.min(150, number(env('ARTICKET_DETAIL_MAX')) || 100))
+  const maxDetalhes = Math.max(1, Math.min(150, number(env('ARTICKET_DETAIL_MAX')) || 60))
 
   // Dedupe por URL absoluta ANTES de gastar requisição — carrosséis costumam
   // repetir o mesmo card várias vezes no HTML.
@@ -966,17 +987,15 @@ async function enriquecerDetalhesArticket(
     return url.includes('articket.com.br/e/')
   }).length
 
-  const enriquecidos: EventoBruto[] = []
   let consultados = 0
 
-  for (const evento of candidatos) {
+  return mapConcurrent(candidatos, 4, async evento => {
     const url = absolutizarUrl(text(evento.fonte_url, evento.url), fonte.url)
     const esgotouTempo = Date.now() >= ctx.deadlineAt
     if (esgotouTempo) ctx.stats.tempoEsgotado = true
 
     if (!url || !url.includes('articket.com.br/e/') || consultados >= maxDetalhes || esgotouTempo) {
-      enriquecidos.push(evento)
-      continue
+      return evento
     }
 
     try {
@@ -1004,14 +1023,12 @@ async function enriquecerDetalhesArticket(
       const salvo = await salvarEventoBruto(ctx.supabase, mesclado, ctx.vistos)
       if (salvo.estado === 'salvo') ctx.stats.salvosIncrementais++
       ctx.stats.ingressosIncrementais += salvo.ingressosSalvos
-      enriquecidos.push(mesclado)
+      return mesclado
     } catch {
       ctx.stats.detalhesFalhos++
-      enriquecidos.push(evento)
+      return evento
     }
-  }
-
-  return enriquecidos
+  })
 }
 
 function extrairDetalheHtmlGenerico(html: string, fonte: Fonte) {
@@ -1035,6 +1052,62 @@ function extrairDetalheHtmlGenerico(html: string, fonte: Fonte) {
     fonte_url: fonte.url,
     url: fonte.url,
   } as EventoBruto]
+}
+
+function extrairDetalheSympla(html: string, base: EventoBruto): EventoBruto {
+  try {
+    const raw = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/)?.[1]
+    if (!raw) return base
+    const next = asRecord(JSON.parse(raw))
+    const props = asRecord(next?.props)
+    const pageProps = asRecord(props?.pageProps)
+    const hydration = asRecord(pageProps?.hydrationData)
+    const eventHydration = asRecord(hydration?.eventHydration)
+    const event = asRecord(eventHydration?.event)
+    const address = asRecord(event?.eventsAddress)
+    const geo = asRecord(address?.geolocation)
+    if (!event) return base
+    return {
+      ...base,
+      titulo: text(event.name, base.titulo),
+      descricao: text(event.strippedDetail, event.detail, base.descricao),
+      startDate: text(event.startDate, base.startDate),
+      local_nome: text(address?.name, base.local_nome),
+      endereco: [text(address?.address), text(address?.addressNum), text(address?.neighborhood), text(address?.city)].filter(Boolean).join(', ') || base.endereco,
+      cidade: text(address?.city, base.cidade),
+      lat: number(geo?.latitude, base.lat),
+      lng: number(geo?.longitude, base.lng),
+    }
+  } catch { return base }
+}
+
+async function buscarSympla(html: string, fonte: Fonte, deadlineAt: number): Promise<EventoBruto[]> {
+  const eventos = parseSymplaListing(html).map(item => {
+    const local = asRecord(item.location)
+    return {
+      titulo: text(item.name),
+      startDate: text(item.start_date),
+      local_nome: text(local?.name),
+      endereco: [text(local?.address), text(local?.address_num), text(local?.neighborhood), text(local?.city)].filter(Boolean).join(', '),
+      cidade: text(local?.city),
+      lat: number(local?.lat),
+      lng: number(local?.lon),
+      fonte_url: text(item.url),
+      url: text(item.url),
+      categoria: fonte.categoria || 'Eventos',
+    } as EventoBruto
+  }).filter(ev => ev.fonte_url && pareceSerPraiaGrande(ev))
+
+  return mapConcurrent(eventos, 4, async evento => {
+    if (Date.now() >= deadlineAt || !evento.fonte_url) return evento
+    try {
+      const res = await fetchComRetry(evento.fonte_url, {
+        signal: AbortSignal.timeout(10000),
+        headers: { Accept: 'text/html,*/*', 'User-Agent': `PraiaGoCacaEventos/${ROBO_VERSION}` },
+      }, 1)
+      return res.ok ? extrairDetalheSympla(await res.text(), evento) : evento
+    } catch { return evento }
+  })
 }
 
 function extrairRoleAgoraNextData(html: string, fonte: Fonte) {
@@ -1061,8 +1134,8 @@ function extrairRoleAgoraNextData(html: string, fonte: Fonte) {
         titulo: text(ev.name, ev.title),
         descricao: resumo(text(ev.description, artistNames)) || undefined,
         startDate: text(ev.startsAt, ev.startDate),
-        local_nome: text(location?.name, fonte.local_nome, fonte.nome),
-        endereco: text(location?.addressFormatted, location?.address, fonte.nome),
+        local_nome: text(location?.name, fonte.local_nome),
+        endereco: text(location?.addressFormatted, location?.address),
         lat: number(location?.lat),
         lng: number(location?.lng),
         categoria: text(ev.eventTypeName, ev.categoryName, fonte.categoria, 'Evento'),
@@ -1085,7 +1158,7 @@ function eventosGuicheDoPayload(payload: unknown, fonte: Fonte) {
     guiche_id_evento: text(obj.id_evento) || undefined,
     titulo: text(obj.nome, obj.titulo, obj.title, obj.name),
     data: text(obj.data, obj.data_evento, obj.date, obj.startDate),
-    local_nome: text(obj.local, obj.local_nome, obj.venue, fonte.local_nome, fonte.nome),
+    local_nome: text(obj.local, obj.local_nome, obj.venue, fonte.local_nome),
     endereco: text(obj.cidade, obj.endereco, obj.address),
     categoria: text(obj.categoria, fonte.categoria, 'Ingressos'),
     fonte_url: absolutizarUrl(text(obj.url_amigavel, obj.fonte_url, obj.url, fonte.url), fonte.url),
@@ -1100,6 +1173,7 @@ async function postGuicheWeb(acao: string, offset?: number) {
 
   const res = await fetch('https://www.guicheweb.com.br/webservices/api/api.php', {
     method: 'POST',
+    signal: AbortSignal.timeout(10000),
     headers: {
       Accept: 'application/json, text/plain, */*',
       'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
@@ -1123,6 +1197,7 @@ async function buscarIngressosGuicheWeb(idEvento: string, fonteUrl: string): Pro
 
   const res = await fetch('https://www.guicheweb.com.br/webservices/api/services/ingressos.php', {
     method: 'POST',
+    signal: AbortSignal.timeout(8000),
     headers: {
       Accept: 'application/json, text/plain, */*',
       'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
@@ -1160,7 +1235,7 @@ async function buscarIngressosGuicheWeb(idEvento: string, fonteUrl: string): Pro
   return ingressos
 }
 
-async function buscarGuicheWeb(fonte: Fonte) {
+async function buscarGuicheWeb(fonte: Fonte, deadlineAt: number) {
   const eventos: EventoBruto[] = []
   const vistos = new Set<string>()
   const maxPaginas = Math.max(1, Math.min(50, number(env('GUICHEWEB_MAX_PAGES')) || 20))
@@ -1175,25 +1250,27 @@ async function buscarGuicheWeb(fonte: Fonte) {
 
   coletar(eventosGuicheDoPayload(await postGuicheWeb('carregar_home'), fonte))
 
-  for (let pagina = 0; pagina < maxPaginas; pagina++) {
-    const payload = await postGuicheWeb('carregar_eventos', pagina * 20)
-    const candidatos = eventosGuicheDoPayload(payload, fonte)
-    if (!candidatos.length) break
-    coletar(candidatos)
+  for (let pagina = 0; pagina < maxPaginas; pagina += 4) {
+    if (Date.now() >= deadlineAt - 10000) break
+    const paginas = Array.from({ length: Math.min(4, maxPaginas - pagina) }, (_, i) => pagina + i)
+    const lotes = await mapConcurrent(paginas, 4, async p => eventosGuicheDoPayload(await postGuicheWeb('carregar_eventos', p * 20), fonte))
+    for (const candidatos of lotes) coletar(candidatos)
+    if (lotes.some(candidatos => !candidatos.length)) break
   }
 
   // A listagem nao traz preco. Busca os lotes so de quem parece ser da regiao —
   // a fonte lista o Brasil inteiro e sao ~360 eventos por rodada.
-  for (const evento of eventos) {
+  await mapConcurrent(eventos.filter(pareceSerPraiaGrande), 4, async evento => {
+    if (Date.now() >= deadlineAt - 5000) return
     const idEvento = text(evento.guiche_id_evento)
-    if (!idEvento || !pareceSerPraiaGrande(evento)) continue
+    if (!idEvento) return
     try {
       const ingressos = await buscarIngressosGuicheWeb(idEvento, text(evento.fonte_url, evento.url, fonte.url))
       if (ingressos.length) evento.ingressos = [...(evento.ingressos || []), ...ingressos]
     } catch {
       // fonte fora do ar nao derruba a rodada; o evento entra sem preco
     }
-  }
+  })
 
   return eventos
 }
@@ -1204,19 +1281,24 @@ async function buscarFonte(
 ) {
   const parsedUrl = new URL(fonte.url)
   if (parsedUrl.hostname.includes('guicheweb.com.br') && (parsedUrl.pathname === '/' || parsedUrl.pathname === '')) {
-    return buscarGuicheWeb(fonte)
+    return buscarGuicheWeb(fonte, ctx.deadlineAt)
   }
 
   const res = await fetchComRetry(fonte.url, {
+    signal: AbortSignal.timeout(10000),
     headers: {
       Accept: 'application/json, text/html;q=0.9, */*;q=0.8',
       'User-Agent': `PraiaGoCacaEventos/${ROBO_VERSION}`,
     },
   })
-  if (!res.ok) throw new Error(`Fonte ${fonte.url} respondeu ${res.status}`)
+  if (!res.ok) throw new Error(`Fonte respondeu HTTP ${res.status}`)
 
   const contentType = res.headers.get('content-type') || ''
   const body = await res.text()
+
+  if (parsedUrl.hostname.includes('sympla.com.br') && parsedUrl.pathname.startsWith('/eventos/')) {
+    return buscarSympla(body, fonte, ctx.deadlineAt)
+  }
 
   if (contentType.includes('json') || body.trim().startsWith('{') || body.trim().startsWith('[')) {
     return extrairJson(JSON.parse(body), fonte)
@@ -1241,23 +1323,32 @@ async function localizarEvento(supabase: ReturnType<typeof createClient>, ev: Ev
   if (ev.fonte_url) {
     const { data } = await supabase
       .from('eventos')
-      .select('id')
+      .select('id,fonte')
       .eq('fonte_url', ev.fonte_url)
       .maybeSingle()
-    if (data?.id) return data.id as string
+    if (data?.id) return data.fonte === 'robo' ? data.id as string : null
   }
 
   if (ev.data) {
     const { data } = await supabase
       .from('eventos')
-      .select('id')
-      .eq('titulo', ev.titulo)
+      .select('id,titulo,fonte')
       .eq('data', ev.data)
-      .maybeSingle()
-    if (data?.id) return data.id as string
+      .limit(100)
+    const match = (data || []).find(row => eventIdentity(row.titulo, ev.data) === eventIdentity(ev.titulo, ev.data))
+    if (match) return match.fonte === 'robo' ? match.id as string : null
   }
 
   return null
+}
+
+async function atualizarPrecoVerificado(supabase: ReturnType<typeof createClient>, eventoId: string, ev: EventoNormalizado) {
+  if (ev.preco_situacao === 'a_confirmar') return
+  await supabase.from('eventos').update({
+    preco_situacao: ev.preco_situacao,
+    preco_verificado_em: ev.preco_verificado_em,
+    ...(ev.preco_situacao === 'pago' && ev.preco > 0 ? { preco: ev.preco } : {}),
+  }).eq('id', eventoId).eq('fonte', 'robo')
 }
 
 // Margem do PraiaGo na revenda do ingresso. Varia por metodo de pagamento
@@ -1289,7 +1380,7 @@ async function salvarIngressos(supabase: ReturnType<typeof createClient>, evento
     .from('event_ticket_lots')
     .select('lote_grupo')
     .eq('evento_id', eventoId)
-    .eq('status', 'disponivel')
+    .eq('aprovado_admin', true)
   const gruposAprovados = new Set((aprovadosAntes || []).map((l: { lote_grupo: string | null }) => l.lote_grupo || ''))
 
   for (const ingresso of ingressosValidos) {
@@ -1306,13 +1397,14 @@ async function salvarIngressos(supabase: ReturnType<typeof createClient>, evento
 
     let existenteId: string | null = null
     let existenteStatus: string | null = null
+    let pausadoAdmin = false
     if (ingresso.source_ticket_id) {
-      const { data } = await supabase.from('event_ticket_lots').select('id,status').eq('evento_id', eventoId).eq('source_ticket_id', ingresso.source_ticket_id).maybeSingle()
-      if (data) { existenteId = data.id as string; existenteStatus = data.status as string }
+      const { data } = await supabase.from('event_ticket_lots').select('id,status,pausado_admin').eq('evento_id', eventoId).eq('source_ticket_id', ingresso.source_ticket_id).maybeSingle()
+      if (data) { existenteId = data.id as string; existenteStatus = data.status as string; pausadoAdmin = data.pausado_admin === true }
     }
     if (!existenteId) {
-      const { data } = await supabase.from('event_ticket_lots').select('id,status').eq('evento_id', eventoId).eq('nome', ingresso.nome).eq('preco_origem', ingresso.preco_origem).maybeSingle()
-      if (data) { existenteId = data.id as string; existenteStatus = data.status as string }
+      const { data } = await supabase.from('event_ticket_lots').select('id,status,pausado_admin').eq('evento_id', eventoId).eq('nome', ingresso.nome).order('created_at', { ascending: true }).limit(1).maybeSingle()
+      if (data) { existenteId = data.id as string; existenteStatus = data.status as string; pausadoAdmin = data.pausado_admin === true }
     }
 
     const semEstoque = ingresso.esgotado_na_fonte || ingresso.estoque_disponivel === 0
@@ -1331,7 +1423,7 @@ async function salvarIngressos(supabase: ReturnType<typeof createClient>, evento
         metadata,
       }
       if (semEstoque) patch.status = 'esgotado'
-      else if (existenteStatus === 'esgotado') patch.status = 'disponivel'
+      else if (existenteStatus === 'esgotado') patch.status = pausadoAdmin ? 'pausado' : 'disponivel'
       const { error } = await supabase.from('event_ticket_lots').update(patch).eq('id', existenteId)
       if (!error) salvos++
     } else {
@@ -1348,6 +1440,8 @@ async function salvarIngressos(supabase: ReturnType<typeof createClient>, evento
         estoque_total: ingresso.estoque_disponivel,
         estoque_disponivel: ingresso.estoque_disponivel,
         status: semEstoque ? 'esgotado' : (gruposAprovados.has(ingresso.lote_grupo) ? 'disponivel' : 'pendente_aprovacao'),
+        aprovado_admin: gruposAprovados.has(ingresso.lote_grupo),
+        pausado_admin: false,
         fonte_url: ingresso.fonte_url,
         lote_ordem: ingresso.lote_ordem,
         lote_grupo: ingresso.lote_grupo,
@@ -1376,6 +1470,8 @@ async function salvarIngressos(supabase: ReturnType<typeof createClient>, evento
   if (salvos > 0) {
     const update: Record<string, unknown> = { ingressos_enabled: true }
     if (vigentes.menorPreco !== null) update.preco = vigentes.menorPreco
+    update.preco_situacao = 'pago'
+    update.preco_verificado_em = rodadaEm
     await supabase.from('eventos').update(update).eq('id', eventoId)
   }
 
@@ -1388,12 +1484,12 @@ async function salvarIngressos(supabase: ReturnType<typeof createClient>, evento
 async function aplicarVigenciaDeLotes(supabase: ReturnType<typeof createClient>, eventoId: string) {
   const { data: lotes } = await supabase
     .from('event_ticket_lots')
-    .select('id,status,lote_grupo,lote_ordem,preco_venda,estoque_disponivel')
+    .select('id,status,lote_grupo,lote_ordem,preco_venda,estoque_disponivel,pausado_admin')
     .eq('evento_id', eventoId)
     .eq('criado_por', 'robo')
     .in('status', ['disponivel', 'pausado', 'pendente_aprovacao'])
 
-  type Lote = { id: string; status: string; lote_grupo: string | null; lote_ordem: number | null; preco_venda: number; estoque_disponivel: number | null }
+  type Lote = { id: string; status: string; lote_grupo: string | null; lote_ordem: number | null; preco_venda: number; estoque_disponivel: number | null; pausado_admin: boolean }
   const abertos = (lotes || []) as Lote[]
   if (!abertos.length) return { total: 0, menorPreco: null as number | null }
 
@@ -1408,14 +1504,17 @@ async function aplicarVigenciaDeLotes(supabase: ReturnType<typeof createClient>,
   let total = 0
 
   for (const doGrupo of porGrupo.values()) {
-    // sem ordem de lote nao ha fila: todos convivem (ex.: "Pista" e "Camarote")
-    const comOrdem = doGrupo.filter(l => l.lote_ordem !== null)
+    // Apenas lotes já liberados podem participar da fila. Pendente exige
+    // aprovação, e pausa administrativa nunca é desfeita pelo robô.
+    const liberados = doGrupo.filter(l => l.status !== 'pendente_aprovacao' && !l.pausado_admin)
+    const comOrdem = liberados.filter(l => l.lote_ordem !== null)
     const vigentes = comOrdem.length
       ? [comOrdem.reduce((a, b) => (a.lote_ordem! <= b.lote_ordem! ? a : b))]
-      : doGrupo
+      : liberados
     const vigenteIds = new Set(vigentes.map(l => l.id))
 
     for (const lote of doGrupo) {
+      if (lote.status === 'pendente_aprovacao' || lote.pausado_admin) continue
       const ehVigente = vigenteIds.has(lote.id)
       const alvo = ehVigente ? (lote.status === 'pausado' ? 'disponivel' : lote.status) : 'pausado'
       if (alvo !== lote.status) {
@@ -1442,52 +1541,54 @@ async function revalidarLotesSalvos(
   const hojeSp = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
   const { data: eventos } = await supabase
     .from('eventos')
-    .select('id,fonte_url')
+    .select('id,fonte_url,status,data')
     .in('status', ['ativo', 'pendente'])
     .gte('data', hojeSp)
     .not('fonte_url', 'is', null)
     .order('data', { ascending: true })
-    .limit(80)
+    .limit(120)
 
-  type Ev = { id: string; fonte_url: string }
+  type Ev = { id: string; fonte_url: string; status: string; data: string }
   let revalidados = 0
   let encerrados = 0
   let semPreco = 0
 
-  for (const ev of ((eventos || []) as Ev[])) {
-    if (Date.now() >= deadlineAt) break
+  const prioritarios = ((eventos || []) as Ev[]).sort((a, b) =>
+    Number(b.status === 'ativo') - Number(a.status === 'ativo') || a.data.localeCompare(b.data))
+  await mapConcurrent(prioritarios, 4, async ev => {
+    if (Date.now() >= deadlineAt) return
     const url = ev.fonte_url
     let ingressos: IngressoBruto[] = []
 
     try {
       if (url.includes('guicheweb.com.br')) {
         const idEvento = url.match(/_(\d+)(?:[/?#]|$)/)?.[1]
-        if (!idEvento) continue
+        if (!idEvento) return
         ingressos = await buscarIngressosGuicheWeb(idEvento, url)
       } else if (url.includes('articket.com.br/e/')) {
         const res = await fetchComRetry(url, {
           headers: { Accept: 'text/html,*/*', 'User-Agent': `PraiaGoCacaEventos/${ROBO_VERSION}` },
         })
-        if (!res.ok) continue
+        if (!res.ok) return
         ingressos = extrairIngressosArticket(await res.text(), { url, nome: 'revalidacao' } as Fonte)
       } else {
-        continue
+        return
       }
     } catch {
-      continue // fonte instavel nao pode encerrar lote por engano
+      return // fonte instavel nao pode encerrar lote por engano
     }
 
     // Lista vazia é ambígua (bloqueio, layout novo, evento removido). Encerrar
     // tudo aqui apagaria um evento válido, então só reconfere quando veio algo.
-    if (!ingressos.length) { semPreco++; continue }
+    if (!ingressos.length) { semPreco++; return }
 
     const normalizados = normalizarIngressos(ingressos, url, null)
-    if (!normalizados.length) { semPreco++; continue }
+    if (!normalizados.length) { semPreco++; return }
 
     const resultado = await salvarIngressos(supabase, ev.id, normalizados)
     revalidados++
     encerrados += resultado.encerrados
-  }
+  })
 
   return { revalidados, encerrados, sem_preco: semPreco }
 }
@@ -1604,11 +1705,38 @@ Deno.serve(async (req: Request) => {
     auth: { persistSession: false },
   })
 
+  let runId: string | null = null
   try {
     const body = await req.json().catch(() => ({})) as Record<string, unknown>
+    if (body.acao === 'diagnostico') {
+      const fontes = fontesDoPedido(body)
+      const resultados = await mapConcurrent(fontes, 5, async fonte => {
+        const started = Date.now()
+        try {
+          const url = new URL(fonte.url)
+          const res = url.hostname.includes('guicheweb.com.br')
+            ? await postGuicheWeb('carregar_home')
+            : await fetchComRetry(fonte.url, { method: 'GET', signal: AbortSignal.timeout(7000) }, 1)
+          return { fonte: fontePublica(fonte), ok: res instanceof Response ? res.ok : !!res, http: res instanceof Response ? res.status : 200, tempo_ms: Date.now() - started }
+        } catch (error) {
+          return { fonte: fontePublica(fonte), ok: false, erro: error instanceof Error ? error.message : 'falha de rede', tempo_ms: Date.now() - started }
+        }
+      })
+      return json({ ok: true, version: ROBO_VERSION, fontes: resultados })
+    }
+    const modo = body.modo === 'precos' ? 'precos' : 'novos'
     const brutos: EventoBruto[] = Array.isArray(body.eventos) ? body.eventos as EventoBruto[] : []
-    const fontes = body.buscar ? fontesDoPedido(body) : []
-    const erros_fontes: Array<{ url: string; erro: string }> = []
+    const fontes = modo === 'novos' && body.buscar ? fontesDoPedido(body) : []
+    const erros_fontes: Array<{ fonte: string; erro: string }> = []
+    const fontes_resultado: Array<{ fonte: string; ok: boolean; eventos: number; tempo_ms: number }> = []
+    const hostsLimitados = new Set<string>()
+    const { data: run } = await supabase.from('event_crawler_runs').insert({
+      version: ROBO_VERSION, origem: adminOk ? 'admin' : 'cron', status: 'rodando', stats: { modo },
+    }).select('id').maybeSingle()
+    runId = run?.id || null
+    await supabase.from('event_crawler_runs').update({
+      status: 'falhou', finished_at: new Date().toISOString(), errors: [{ erro: 'Execução anterior interrompida por limite de recursos.' }],
+    }).eq('status', 'rodando').lt('started_at', new Date(Date.now() - 5 * 60 * 1000).toISOString())
     const vistos = new Set<string>()
     const stats: StatsEnriquecimento = {
       candidatos: 0,
@@ -1622,23 +1750,39 @@ Deno.serve(async (req: Request) => {
     const ctx = {
       supabase,
       vistos,
-      deadlineAt: Date.now() + Math.max(15000, Math.min(240000, number(env('CACA_EVENTOS_DEADLINE_MS')) || 180000)),
+      deadlineAt: Date.now() + Math.max(15000, Math.min(100000, number(env('CACA_EVENTOS_DEADLINE_MS')) || (modo === 'precos' ? 70000 : 85000))),
       stats,
     }
 
     // Reconfere os lotes dos eventos JA publicados antes de sair cacando evento
     // novo: preco errado no ar custa mais caro que evento novo que so entra na
     // proxima rodada. Orcamento proprio pra nao ficar sem tempo no fim.
-    const revalidacao = await revalidarLotesSalvos(
-      supabase,
-      Math.min(ctx.deadlineAt, Date.now() + Math.max(10000, Math.min(90000, number(env('CACA_EVENTOS_REVALIDACAO_MS')) || 45000))),
-    )
+    const revalidacao = modo === 'precos'
+      ? await revalidarLotesSalvos(supabase, ctx.deadlineAt)
+      : { revalidados: 0, encerrados: 0, sem_preco: 0 }
 
     for (const fonte of fontes) {
+      let host = 'fonte-invalida'
+      try { host = new URL(fonte.url).hostname } catch { /* erro tratado por buscarFonte */ }
+      if (hostsLimitados.has(host)) {
+        erros_fontes.push({ fonte: fontePublica(fonte), erro: 'Fonte pausada nesta rodada após HTTP 429.' })
+        continue
+      }
+      if (Date.now() >= ctx.deadlineAt - 8000) {
+        erros_fontes.push({ fonte: fontePublica(fonte), erro: 'Adiada para próxima rodada: limite de tempo.' })
+        continue
+      }
+      const started = Date.now()
       try {
-        brutos.push(...await buscarFonte(fonte, ctx))
+        const encontrados = await buscarFonte(fonte, ctx)
+        brutos.push(...encontrados)
+        fontes_resultado.push({ fonte: fontePublica(fonte), ok: true, eventos: encontrados.length, tempo_ms: Date.now() - started })
       } catch (error) {
-        erros_fontes.push({ url: fonte.url, erro: error instanceof Error ? error.message : 'falha desconhecida' })
+        const rotulo = fontePublica(fonte)
+        const erro = error instanceof Error ? error.message : 'falha desconhecida'
+        if (erro.includes('HTTP 429')) hostsLimitados.add(host)
+        erros_fontes.push({ fonte: rotulo, erro })
+        fontes_resultado.push({ fonte: rotulo, ok: false, eventos: 0, tempo_ms: Date.now() - started })
       }
     }
 
@@ -1658,22 +1802,21 @@ Deno.serve(async (req: Request) => {
     let ingressos_salvos = 0
 
     for (const ev of validos) {
-      const { ingressos, ...eventoRow } = ev
-      const { data: inserido, error } = await supabase
-        .from('eventos')
-        .insert(eventoRow)
-        .select('id')
-        .maybeSingle()
-
-      const eventoId = inserido?.id || await localizarEvento(supabase, ev)
+      const { ingressos, cidade: _cidade, ...eventoRow } = ev
+      const existente = await localizarEvento(supabase, ev)
+      const { data: inserido, error } = existente
+        ? { data: null, error: null }
+        : await supabase.from('eventos').insert(eventoRow).select('id').maybeSingle()
+      const eventoId = existente || inserido?.id || await localizarEvento(supabase, ev)
 
       if (error) {
         ignorados++
-      } else {
+      } else if (inserido?.id) {
         inseridos++
       }
 
       if (eventoId) {
+        await atualizarPrecoVerificado(supabase, eventoId, ev)
         const { salvos } = await salvarIngressos(supabase, eventoId, ingressos)
         ingressos_salvos += salvos
       }
@@ -1682,9 +1825,10 @@ Deno.serve(async (req: Request) => {
     // Ciclo automatico: destaca hoje/amanha, encerra passado e esgota lotes.
     const lifecycle = await aplicarCicloDeVidaEventos(supabase)
 
-    return json({
+    const resultado = {
       ok: true,
       version: ROBO_VERSION,
+      modo,
       markup_percent_padrao: markupPercent(),
       recebidos: validos.length + stats.salvosIncrementais,
       inseridos: inseridos + stats.salvosIncrementais,
@@ -1696,10 +1840,18 @@ Deno.serve(async (req: Request) => {
       status: 'pendente',
       fontes_consultadas: fontes.length,
       erros_fontes,
+      fontes_resultado,
       enriquecimento: stats,
       alvos_sugeridos: ALVOS_SUGERIDOS,
-    })
+    }
+    if (runId) await supabase.from('event_crawler_runs').update({
+      status: 'concluido', finished_at: new Date().toISOString(), stats: resultado, errors: erros_fontes,
+    }).eq('id', runId)
+    return json(resultado)
   } catch (error) {
+    if (runId) await supabase.from('event_crawler_runs').update({
+      status: 'falhou', finished_at: new Date().toISOString(), errors: [{ erro: error instanceof Error ? error.message : 'Erro no robo de eventos.' }],
+    }).eq('id', runId)
     return json({ error: error instanceof Error ? error.message : 'Erro no robo de eventos.' }, 500)
   }
 })

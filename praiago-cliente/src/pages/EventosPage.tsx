@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, type CSSProperties } from 'react'
-import { Calendar, MapPin, Navigation, Share2, Loader2, CalendarX, ShoppingCart, X } from 'lucide-react'
+import { Calendar, MapPin, Navigation, Share2, Loader2, CalendarX, ShoppingCart, X, ExternalLink } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
 import { comprarIngressoPix, type IngressoPix } from '../lib/eventTickets'
@@ -21,6 +21,8 @@ type Evento = {
   lat: number | null
   lng: number | null
   preco: number
+  preco_situacao?: 'a_confirmar' | 'gratuito' | 'pago'
+  fonte_url?: string | null
   categoria: string | null
   emoji: string | null
   imagem_url: string | null
@@ -496,10 +498,10 @@ export default function EventosPage() {
                           <span style={{
                             flexShrink: 0, padding: '4px 9px', borderRadius: 999,
                             fontSize: 11.5, fontWeight: 900,
-                            color: preco > 0 ? 'var(--pg-success)' : 'var(--pg-ocean-dark)',
-                            background: preco > 0 ? 'var(--pg-success-bg)' : 'var(--pg-brand-soft)',
+                            color: ev.preco_situacao === 'a_confirmar' || !ev.preco_situacao ? 'var(--pg-muted)' : preco > 0 ? 'var(--pg-success)' : 'var(--pg-ocean-dark)',
+                            background: ev.preco_situacao === 'a_confirmar' || !ev.preco_situacao ? 'var(--pg-surface-alt)' : preco > 0 ? 'var(--pg-success-bg)' : 'var(--pg-brand-soft)',
                           }}>
-                            {preco > 0 ? fmtMoney(preco) : 'Grátis'}
+                            {preco > 0 ? fmtMoney(preco) : ev.preco_situacao === 'gratuito' ? 'Grátis' : ev.preco_situacao === 'pago' ? 'Pago · confira valor' : 'Preço a confirmar'}
                           </span>
                         </div>
 
@@ -534,6 +536,13 @@ export default function EventosPage() {
                           >
                             <ShoppingCart size={16} strokeWidth={2.5} /> Comprar
                           </button>
+                        )}
+                        {!temIngresso && ev.fonte_url?.startsWith('https://') && (
+                          <a href={ev.fonte_url} target="_blank" rel="noopener noreferrer" style={{
+                            width: '100%', marginTop: 11, padding: '11px 0', borderRadius: 13,
+                            background: 'var(--pg-brand-soft)', color: 'var(--pg-ocean-dark)',
+                            fontSize: 13, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                          }}><ExternalLink size={15} /> Conferir ingressos na fonte</a>
                         )}
 
                         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
