@@ -148,7 +148,8 @@ type Fonte = {
 }
 
 const FONTES_PADRAO: Fonte[] = [
-  { url: 'https://www.sympla.com.br/eventos/praia-grande-sp/este-mes', nome: 'Sympla Praia Grande', categoria: 'Eventos' },
+  { url: 'https://www.sympla.com.br/eventos/praia-grande-sp', nome: 'Sympla Praia Grande', categoria: 'Eventos' },
+  { url: 'https://www.sympla.com.br/eventos/praia-grande-sp/este-mes', nome: 'Sympla mês atual', categoria: 'Eventos' },
   { url: 'https://www.guicheweb.com.br/', nome: 'Guiche Web Praia Grande', categoria: 'Ingressos' },
   { url: 'https://www.roleagora.com.br/', nome: 'RoleAgora Praia Grande', categoria: 'Agenda local' },
   { url: 'https://www.articket.com.br/', nome: 'ArTicket', categoria: 'Ingressos' },
