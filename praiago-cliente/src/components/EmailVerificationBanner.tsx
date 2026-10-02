@@ -100,8 +100,8 @@ export default function EmailVerificationBanner() {
         animate={{ height: 'auto', opacity: 1 }}
         exit={{ height: 0, opacity: 0 }}
         style={{
-          background: '#fffbeb',
-          borderBottom: '1px solid #fde68a',
+          background: 'var(--pg-warning-bg)',
+          borderBottom: '1px solid var(--pg-warning)',
           padding: '12px 20px',
           display: 'flex',
           flexDirection: 'column',
@@ -112,10 +112,10 @@ export default function EmailVerificationBanner() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, width: '100%', maxWidth: 460 }}>
-          <AlertCircle color="#d97706" size={20} style={{ flexShrink: 0, marginTop: 2 }} />
+          <AlertCircle color="var(--pg-warning)" size={20} style={{ flexShrink: 0, marginTop: 2 }} />
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 900, color: '#92400e', marginBottom: 2 }}>Confirme seu e-mail</div>
-            <div style={{ fontSize: 12, color: '#a16207', lineHeight: 1.4, fontWeight: 650 }}>
+            <div style={{ fontSize: 13, fontWeight: 900, color: 'var(--pg-warning)', marginBottom: 2 }}>Confirme seu e-mail</div>
+            <div style={{ fontSize: 12, color: 'var(--pg-warning)', lineHeight: 1.4, fontWeight: 650 }}>
               Enviamos um link para <b>{sessao.email}</b>. Voce precisa confirmar para fechar pedidos e usar cupons.
             </div>
           </div>
@@ -126,9 +126,9 @@ export default function EmailVerificationBanner() {
           onClick={reenviarVerificacao}
           disabled={loading}
           style={{
-            background: '#ffffff',
-            border: '1px solid #fbbf24',
-            color: '#92400e',
+            background: 'var(--pg-surface)',
+            border: '1px solid var(--pg-warning)',
+            color: 'var(--pg-warning)',
             padding: '9px 16px',
             borderRadius: 12,
             fontSize: 12,

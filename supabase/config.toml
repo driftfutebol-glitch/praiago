@@ -411,6 +411,13 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 # Set enabled = false to fall back to the legacy migra engine.
 [experimental.pgdelta]
 enabled = true
+
+[functions.app-update]
+verify_jwt = false
+
+[functions.admin-app-updates]
+# Authentication and active-owner authorization are enforced inside the handler.
+verify_jwt = false
 # Directory under `supabase/` where declarative files are written.
 # declarative_schema_path = "./database"
 # JSON string passed through to pg-delta SQL formatting.

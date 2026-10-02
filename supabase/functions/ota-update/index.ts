@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.108.2'
 import { corsHeaders, json, readJson } from '../_shared/cors.ts'
+import { compatibleNative } from '../_shared/store-update.ts'
 
 type UpdateRequest = {
   app_id?: string
@@ -18,6 +19,7 @@ type OtaRelease = {
   bundle_url: string
   checksum: string | null
   min_native_version: string | null
+  max_native_version: string | null
   notes: string | null
   created_at: string
 }
@@ -72,7 +74,7 @@ Deno.serve(async (req) => {
 
     const { data, error } = await serviceClient()
       .from('ota_releases')
-      .select('app_id,platform,channel,version,bundle_url,checksum,min_native_version,notes,created_at')
+      .select('app_id,platform,channel,version,bundle_url,checksum,min_native_version,max_native_version,notes,created_at')
       .eq('app_id', appId)
       .eq('channel', channel)
       .eq('enabled', true)
@@ -106,6 +108,13 @@ Deno.serve(async (req) => {
 
     if (!release || release.version === currentVersion) {
       void registrar(currentVersion, release ? 'ja_atualizado' : 'sem_release')
+      return upToDate(currentVersion)
+    }
+
+    // Never send a bootstrap from the old public app to a newer native build.
+    // Native version is version_build, NOT version_name (the OTA bundle).
+    if (!compatibleNative(body.version_build, release.min_native_version, release.max_native_version)) {
+      void registrar(currentVersion, 'nativo_incompativel')
       return upToDate(currentVersion)
     }
 

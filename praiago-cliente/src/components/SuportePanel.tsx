@@ -17,7 +17,7 @@ type Ticket = {
 }
 type Msg = { id: string; autor: string; mensagem: string; created_at: string }
 
-const ACCENT = 'linear-gradient(135deg,#0ea5e9,#22c55e)'
+const ACCENT = 'var(--pg-brand-gradient)'
 
 export default function SuportePanel({
   onClose, usuarioId, usuarioNome, usuarioEmail, plataforma,
@@ -118,39 +118,39 @@ export default function SuportePanel({
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 12000, background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
       <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 26, stiffness: 220 }}
-        style={{ width: '100%', maxWidth: 480, height: '82vh', background: '#ffffff', borderTopLeftRadius: 28, borderTopRightRadius: 28, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        style={{ width: '100%', maxWidth: 480, height: '82vh', background: 'var(--pg-surface)', borderTopLeftRadius: 28, borderTopRightRadius: 28, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 18px', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 18px', borderBottom: '1px solid var(--pg-line)' }}>
           {(aberto || novo)
-            ? <button onClick={() => { setAbertoId(null); setNovo(false) }} aria-label="Voltar" style={{ width: 36, height: 36, borderRadius: 12, border: 0, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ChevronLeft size={18} color="#334155" /></button>
-            : <div style={{ width: 36, height: 36, borderRadius: 12, background: ACCENT, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Headphones size={18} color="#fff" /></div>}
+            ? <button onClick={() => { setAbertoId(null); setNovo(false) }} aria-label="Voltar" style={{ width: 36, height: 36, borderRadius: 12, border: 0, background: 'var(--pg-surface-alt)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ChevronLeft size={18} color="var(--pg-ink)" /></button>
+            : <div style={{ width: 36, height: 36, borderRadius: 12, background: ACCENT, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Headphones size={18} color="var(--pg-on-brand)" /></div>}
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 16, fontWeight: 900, color: '#0f172a' }}>{aberto ? aberto.assunto : novo ? 'Novo atendimento' : 'Suporte PraiaGo'}</div>
-            <div style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>{aberto ? 'Converse com nosso time' : 'A gente te ajuda por aqui 💙'}</div>
+            <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--pg-ink)' }}>{aberto ? aberto.assunto : novo ? 'Novo atendimento' : 'Suporte PraiaGo'}</div>
+            <div style={{ fontSize: 12, color: 'var(--pg-muted)', fontWeight: 600 }}>{aberto ? 'Converse com nosso time' : 'A gente te ajuda por aqui 💙'}</div>
           </div>
-          <button onClick={onClose} aria-label="Fechar" style={{ width: 36, height: 36, borderRadius: 12, border: 0, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={18} color="#334155" /></button>
+          <button onClick={onClose} aria-label="Fechar" style={{ width: 36, height: 36, borderRadius: 12, border: 0, background: 'var(--pg-surface-alt)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={18} color="var(--pg-ink)" /></button>
         </div>
 
         {/* Lista de atendimentos */}
         {!aberto && !novo && (
           <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-            <button onClick={() => { setNovo(true); setTexto('') }} style={{ width: '100%', border: 0, background: ACCENT, color: '#fff', borderRadius: 16, padding: 14, fontSize: 15, fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 16 }}>
+            <button onClick={() => { setNovo(true); setTexto('') }} style={{ width: '100%', border: 0, background: ACCENT, color: 'var(--pg-on-brand)', borderRadius: 16, padding: 14, fontSize: 15, fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 16 }}>
               <Plus size={18} /> Abrir novo atendimento
             </button>
             {tickets.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px 20px', color: '#64748b' }}>
-                <MessageSquare size={30} color="#cbd5e1" style={{ margin: '0 auto 10px' }} />
+              <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--pg-muted)' }}>
+                <MessageSquare size={30} color="var(--pg-line)" style={{ margin: '0 auto 10px' }} />
                 <div style={{ fontSize: 14, fontWeight: 700 }}>Nenhum atendimento ainda</div>
                 <div style={{ fontSize: 12.5, marginTop: 4 }}>Precisa de ajuda? Toque no botão acima.</div>
               </div>
             ) : tickets.map(t => (
-              <button key={t.id} onClick={() => abrir(t)} style={{ width: '100%', textAlign: 'left', border: '1px solid rgba(0,0,0,0.06)', background: '#f8fafc', borderRadius: 16, padding: 14, marginBottom: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button key={t.id} onClick={() => abrir(t)} style={{ width: '100%', textAlign: 'left', border: '1px solid var(--pg-line)', background: 'var(--pg-input)', borderRadius: 16, padding: 14, marginBottom: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14.5, fontWeight: 800, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.assunto}</div>
-                  <div style={{ fontSize: 12, color: '#94a3b8', fontWeight: 600, marginTop: 2 }}>{new Date(t.created_at).toLocaleDateString('pt-BR')} · {t.status === 'resolvido' ? 'Resolvido' : t.status === 'aberto' ? 'Aberto' : 'Em andamento'}</div>
+                  <div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--pg-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.assunto}</div>
+                  <div style={{ fontSize: 12, color: 'var(--pg-faint)', fontWeight: 600, marginTop: 2 }}>{new Date(t.created_at).toLocaleDateString('pt-BR')} · {t.status === 'resolvido' ? 'Resolvido' : t.status === 'aberto' ? 'Aberto' : 'Em andamento'}</div>
                 </div>
-                {t.nao_lida_usuario && <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#ef4444', flexShrink: 0 }} />}
+                {t.nao_lida_usuario && <span style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--pg-danger)', flexShrink: 0 }} />}
               </button>
             ))}
           </div>
@@ -159,9 +159,9 @@ export default function SuportePanel({
         {/* Novo atendimento */}
         {novo && (
           <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <input value={assunto} onChange={e => setAssunto(e.target.value)} placeholder="Assunto (ex: problema no pedido)" style={{ width: '100%', boxSizing: 'border-box', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 14, padding: '14px', fontSize: 15, fontWeight: 600, color: '#0f172a', outline: 'none' }} />
-            <textarea value={texto} onChange={e => setTexto(e.target.value)} placeholder="Conte o que aconteceu…" rows={5} style={{ width: '100%', boxSizing: 'border-box', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 14, padding: '14px', fontSize: 15, fontWeight: 500, color: '#0f172a', outline: 'none', resize: 'none' }} />
-            <button onClick={criarTicket} disabled={enviando || !assunto.trim() || !texto.trim()} style={{ border: 0, background: ACCENT, color: '#fff', borderRadius: 14, padding: 15, fontSize: 15, fontWeight: 900, cursor: 'pointer', opacity: (enviando || !assunto.trim() || !texto.trim()) ? 0.5 : 1 }}>
+            <input value={assunto} onChange={e => setAssunto(e.target.value)} placeholder="Assunto (ex: problema no pedido)" style={{ width: '100%', boxSizing: 'border-box', background: 'var(--pg-input)', border: '1px solid var(--pg-line)', borderRadius: 14, padding: '14px', fontSize: 15, fontWeight: 600, color: 'var(--pg-ink)', outline: 'none' }} />
+            <textarea value={texto} onChange={e => setTexto(e.target.value)} placeholder="Conte o que aconteceu…" rows={5} style={{ width: '100%', boxSizing: 'border-box', background: 'var(--pg-input)', border: '1px solid var(--pg-line)', borderRadius: 14, padding: '14px', fontSize: 15, fontWeight: 500, color: 'var(--pg-ink)', outline: 'none', resize: 'none' }} />
+            <button onClick={criarTicket} disabled={enviando || !assunto.trim() || !texto.trim()} style={{ border: 0, background: ACCENT, color: 'var(--pg-on-brand)', borderRadius: 14, padding: 15, fontSize: 15, fontWeight: 900, cursor: 'pointer', opacity: (enviando || !assunto.trim() || !texto.trim()) ? 0.5 : 1 }}>
               {enviando ? 'Enviando…' : 'Enviar atendimento'}
             </button>
           </div>
@@ -178,7 +178,7 @@ export default function SuportePanel({
                 {mensagens.map(m => <Bolha key={m.id} autor={m.autor} texto={m.mensagem} quando={m.created_at} nome={m.autor === 'admin' ? 'Suporte PraiaGo' : usuarioNome} />)}
               </AnimatePresence>
               {resolvido && (
-                <div style={{ alignSelf: 'center', display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(34,197,94,0.1)', color: '#16a34a', border: '1px solid rgba(34,197,94,0.25)', borderRadius: 20, padding: '6px 14px', fontSize: 12.5, fontWeight: 800, margin: '4px 0' }}>
+                <div style={{ alignSelf: 'center', display: 'flex', alignItems: 'center', gap: 6, background: 'var(--pg-success-bg)', color: 'var(--pg-success)', border: '1px solid rgba(34,197,94,0.25)', borderRadius: 20, padding: '6px 14px', fontSize: 12.5, fontWeight: 800, margin: '4px 0' }}>
                   <CheckCircle2 size={14} /> Atendimento resolvido pelo suporte
                 </div>
               )}
@@ -187,16 +187,16 @@ export default function SuportePanel({
 
             {resolvido ? (
               aberto.avaliacao_nota ? (
-                <div style={{ padding: 16, borderTop: '1px solid rgba(0,0,0,0.06)', textAlign: 'center' }}>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: '#334155' }}>Você avaliou este atendimento</div>
+                <div style={{ padding: 16, borderTop: '1px solid var(--pg-line)', textAlign: 'center' }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--pg-ink)' }}>Você avaliou este atendimento</div>
                   <div style={{ display: 'flex', gap: 4, justifyContent: 'center', margin: '8px 0' }}>
-                    {[1, 2, 3, 4, 5].map(i => <Star key={i} size={22} color={i <= (aberto.avaliacao_nota || 0) ? '#f59e0b' : '#e2e8f0'} fill={i <= (aberto.avaliacao_nota || 0) ? '#f59e0b' : '#e2e8f0'} />)}
+                    {[1, 2, 3, 4, 5].map(i => <Star key={i} size={22} color={i <= (aberto.avaliacao_nota || 0) ? '#f59e0b' : 'var(--pg-line)'} fill={i <= (aberto.avaliacao_nota || 0) ? '#f59e0b' : 'var(--pg-line)'} />)}
                   </div>
-                  {aberto.avaliacao_comentario && <div style={{ fontSize: 12.5, color: '#64748b', fontStyle: 'italic' }}>"{aberto.avaliacao_comentario}"</div>}
+                  {aberto.avaliacao_comentario && <div style={{ fontSize: 12.5, color: 'var(--pg-muted)', fontStyle: 'italic' }}>"{aberto.avaliacao_comentario}"</div>}
                 </div>
               ) : (
-                <div style={{ padding: 16, borderTop: '1px solid rgba(0,0,0,0.06)' }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 800, color: '#0f172a', textAlign: 'center', marginBottom: 8 }}>Como foi o atendimento?</div>
+                <div style={{ padding: 16, borderTop: '1px solid var(--pg-line)' }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--pg-ink)', textAlign: 'center', marginBottom: 8 }}>Como foi o atendimento?</div>
                   <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginBottom: 10 }}>
                     {[1, 2, 3, 4, 5].map(i => (
                       <button
@@ -208,20 +208,20 @@ export default function SuportePanel({
                         aria-pressed={i <= nota}
                         style={{ border: 0, background: 'none', cursor: 'pointer', padding: 0 }}
                       >
-                        <Star size={30} color={i <= nota ? '#f59e0b' : '#e2e8f0'} fill={i <= nota ? '#f59e0b' : '#e2e8f0'} />
+                        <Star size={30} color={i <= nota ? '#f59e0b' : 'var(--pg-line)'} fill={i <= nota ? '#f59e0b' : 'var(--pg-line)'} />
                       </button>
                     ))}
                   </div>
-                  <input value={comentario} onChange={e => setComentario(e.target.value)} placeholder="Deixe um comentário (opcional)" style={{ width: '100%', boxSizing: 'border-box', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 14, padding: '12px 14px', fontSize: 14, fontWeight: 500, color: '#0f172a', outline: 'none', marginBottom: 10 }} />
-                  <button onClick={enviarAvaliacao} disabled={enviando || nota < 1} style={{ width: '100%', border: 0, background: ACCENT, color: '#fff', borderRadius: 14, padding: 13, fontSize: 14.5, fontWeight: 900, cursor: nota < 1 ? 'not-allowed' : 'pointer', opacity: (enviando || nota < 1) ? 0.5 : 1 }}>
+                  <input value={comentario} onChange={e => setComentario(e.target.value)} placeholder="Deixe um comentário (opcional)" style={{ width: '100%', boxSizing: 'border-box', background: 'var(--pg-input)', border: '1px solid var(--pg-line)', borderRadius: 14, padding: '12px 14px', fontSize: 14, fontWeight: 500, color: 'var(--pg-ink)', outline: 'none', marginBottom: 10 }} />
+                  <button onClick={enviarAvaliacao} disabled={enviando || nota < 1} style={{ width: '100%', border: 0, background: ACCENT, color: 'var(--pg-on-brand)', borderRadius: 14, padding: 13, fontSize: 14.5, fontWeight: 900, cursor: nota < 1 ? 'not-allowed' : 'pointer', opacity: (enviando || nota < 1) ? 0.5 : 1 }}>
                     {enviando ? 'Enviando…' : 'Enviar avaliação'}
                   </button>
                 </div>
               )
             ) : (
-              <div style={{ padding: 12, borderTop: '1px solid rgba(0,0,0,0.06)', display: 'flex', gap: 8 }}>
-                <input value={texto} onChange={e => setTexto(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') responder() }} placeholder="Escreva sua mensagem…" style={{ flex: 1, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 14, padding: '13px 14px', fontSize: 15, fontWeight: 500, color: '#0f172a', outline: 'none' }} />
-                <button onClick={responder} disabled={enviando || !texto.trim()} aria-label="Enviar" style={{ width: 50, borderRadius: 14, border: 0, background: ACCENT, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: (enviando || !texto.trim()) ? 0.5 : 1 }}><Send size={18} /></button>
+              <div style={{ padding: 12, borderTop: '1px solid var(--pg-line)', display: 'flex', gap: 8 }}>
+                <input value={texto} onChange={e => setTexto(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') responder() }} placeholder="Escreva sua mensagem…" style={{ flex: 1, background: 'var(--pg-input)', border: '1px solid var(--pg-line)', borderRadius: 14, padding: '13px 14px', fontSize: 15, fontWeight: 500, color: 'var(--pg-ink)', outline: 'none' }} />
+                <button onClick={responder} disabled={enviando || !texto.trim()} aria-label="Enviar" style={{ width: 50, borderRadius: 14, border: 0, background: ACCENT, color: 'var(--pg-on-brand)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: (enviando || !texto.trim()) ? 0.5 : 1 }}><Send size={18} /></button>
               </div>
             )}
           </>
@@ -236,7 +236,7 @@ function Bolha({ autor, texto, quando, nome }: { autor: string; texto: string; q
   const meu = autor === 'usuario'
   return (
     <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} style={{ display: 'flex', justifyContent: meu ? 'flex-end' : 'flex-start' }}>
-      <div style={{ maxWidth: '78%', padding: '10px 14px', borderRadius: 18, borderTopRightRadius: meu ? 4 : 18, borderTopLeftRadius: meu ? 18 : 4, background: meu ? ACCENT : '#f1f5f9', color: meu ? '#fff' : '#0f172a', fontSize: 14, fontWeight: 500, lineHeight: 1.4 }}>
+      <div style={{ maxWidth: '78%', padding: '10px 14px', borderRadius: 18, borderTopRightRadius: meu ? 4 : 18, borderTopLeftRadius: meu ? 18 : 4, background: meu ? ACCENT : 'var(--pg-surface-alt)', color: meu ? '#fff' : 'var(--pg-ink)', fontSize: 14, fontWeight: 500, lineHeight: 1.4 }}>
         {texto}
         <div style={{ fontSize: 10, marginTop: 4, opacity: 0.7 }}>{nome} · {new Date(quando).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
       </div>

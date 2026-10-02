@@ -22,6 +22,9 @@ export const PRODUCT_CATEGORIES: readonly ProductCategory[] = [
   { id: 'pastel', label: 'Pastel', color: '#ca8a04', sprite: [4, 1], aliases: ['pastel', 'pasteis'] },
   { id: 'padarias', label: 'Padarias', color: '#a16207', sprite: [0, 2], aliases: ['padaria', 'padarias', 'pao', 'paes', 'panificacao'] },
   { id: 'pizza', label: 'Pizza', color: '#e11d48', sprite: [1, 2], aliases: ['pizza', 'pizzas', 'pizzaria'] },
+  { id: 'pizzas_premium', label: 'Pizzas premium', color: '#be123c', sprite: [1, 2], aliases: ['pizza premium', 'pizzas premium'] },
+  { id: 'pizzas_salgadas', label: 'Pizzas salgadas', color: '#dc2626', sprite: [1, 2], aliases: ['pizza salgada', 'pizzas salgadas'] },
+  { id: 'pizzas_doces', label: 'Pizzas doces', color: '#c026d3', sprite: [1, 2], aliases: ['pizza doce', 'pizzas doces'] },
   { id: 'italiana', label: 'Italiana', color: '#dc2626', sprite: [2, 2], aliases: ['italiana', 'comida italiana', 'massa', 'massas', 'macarrao'] },
   { id: 'saudavel', label: 'Saudável', color: '#16a34a', sprite: [3, 2], aliases: ['saudavel', 'salada', 'saladas', 'fitness', 'fit'] },
   { id: 'carnes', label: 'Carnes', color: '#b91c1c', sprite: [4, 2], aliases: ['carne', 'carnes', 'churrascaria'] },
@@ -39,7 +42,7 @@ export const PRODUCT_CATEGORIES: readonly ProductCategory[] = [
   { id: 'outros', label: 'Outros', color: '#475569', sprite: [4, 5], aliases: ['outro', 'outros', 'ambulante', 'diversos', 'geral'] },
 ]
 
-const FEATURED_CATEGORY_IDS = new Set(['bebidas', 'bebidas_alcoolicas', 'espetos', 'salgados', 'porcoes', 'almoco', 'doces_bolos', 'acai'])
+const FEATURED_CATEGORY_IDS = new Set(['bebidas', 'bebidas_alcoolicas', 'pizzas_premium', 'pizzas_salgadas', 'pizzas_doces', 'pizza', 'espetos', 'salgados', 'porcoes', 'almoco', 'doces_bolos', 'acai'])
 
 export const FEATURED_PRODUCT_CATEGORIES = PRODUCT_CATEGORIES.filter(category => FEATURED_CATEGORY_IDS.has(category.id))
 

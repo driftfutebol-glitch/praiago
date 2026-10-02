@@ -20,8 +20,8 @@ type Previa = {
   antecipavel_credito: number; taxa_percent_credito: number
   taxa_valor_credito: number; receberia_credito: number; credito_ativo: boolean
 }
-type Payout = { id: string; valor: number; status: string; chave_pix: string | null; created_at: string }
-type Lancamento = { id: string; tipo: string; valor: number; status: string; created_at: string; disponivel_em: string | null }
+type Payout = { id: string; valor: number; status: string; provider: string | null; chave_pix: string | null; created_at: string }
+type Lancamento = { id: string; tipo: string; valor: number; status: string; provider: string | null; created_at: string; disponivel_em: string | null }
 
 const brl = (v: number) => (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
@@ -54,8 +54,8 @@ export default function CarteiraPage() {
     if (!sessao?.id) return
     const [{ data: espData }, { data: pays }, { data: led }, { data: vpa }, { data: prev }] = await Promise.all([
       supabase.rpc('carteira_espelho', { p_vendedor: sessao.id }),
-      supabase.from('payouts').select('id,valor,status,chave_pix,created_at').eq('vendedor_id', sessao.id).order('created_at', { ascending: false }).limit(10),
-      supabase.from('financial_ledger').select('id,tipo,valor,status,created_at,disponivel_em').eq('vendedor_id', sessao.id).order('created_at', { ascending: false }).limit(15),
+      supabase.from('payouts').select('id,valor,status,provider,chave_pix,created_at').eq('vendedor_id', sessao.id).order('created_at', { ascending: false }).limit(10),
+      supabase.from('financial_ledger').select('id,tipo,valor,status,provider,created_at,disponivel_em').eq('vendedor_id', sessao.id).order('created_at', { ascending: false }).limit(15),
       supabase.from('seller_recipients').select('recipient_id').eq('vendedor_id', sessao.id).maybeSingle(),
       supabase.rpc('previa_saque_rapido', { p_vendedor: sessao.id }),
     ])
@@ -68,6 +68,20 @@ export default function CarteiraPage() {
   }, [sessao?.id])
 
   useEffect(() => { carregar() }, [carregar])
+  useEffect(() => {
+    if (!sessao?.id) return
+    const filter = `vendedor_id=eq.${sessao.id}`
+    const channel = supabase.channel(`carteira-atualizada-${sessao.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'financial_ledger', filter }, () => void carregar())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'payouts', filter }, () => void carregar())
+      .subscribe()
+    const refresh = () => void carregar()
+    window.addEventListener('focus', refresh)
+    return () => {
+      void supabase.removeChannel(channel)
+      window.removeEventListener('focus', refresh)
+    }
+  }, [sessao?.id, carregar])
 
   // Credito liquida em D+30 e PIX/debito em D+1: prazos diferentes, taxas
   // diferentes. O grupo diz de qual saldo estamos falando.
@@ -149,7 +163,7 @@ export default function CarteiraPage() {
           <div style={{ fontSize: 12.5, color: '#64748b', fontWeight: 600, marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
             <Clock size={13} /> Pendente (liberando): <strong style={{ color: '#0f172a' }}>{brl(esp?.saldo_pendente ?? 0)}</strong>
           </div>
-          <button onClick={solicitarSaque} disabled={sacando || loading} style={{ width: '100%', border: 'none', borderRadius: 16, padding: 15, fontSize: 15, fontWeight: 900, color: '#fff', background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', cursor: sacando ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <button onClick={solicitarSaque} disabled={sacando || loading || (esp?.saldo_disponivel ?? 0) <= 0} style={{ width: '100%', border: 'none', borderRadius: 16, padding: 15, fontSize: 15, fontWeight: 900, color: '#fff', background: 'linear-gradient(135deg, #0ea5e9, #22c55e)', cursor: sacando ? 'wait' : (esp?.saldo_disponivel ?? 0) <= 0 ? 'not-allowed' : 'pointer', opacity: (esp?.saldo_disponivel ?? 0) <= 0 ? 0.55 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             {sacando ? <Loader2 size={18} className="animate-spin-slow" /> : <ArrowDownToLine size={18} />} Sacar pra minha conta
           </button>
           {!temConta && !loading && (
@@ -215,6 +229,7 @@ export default function CarteiraPage() {
             { icon: TrendingUp, label: 'Vendas brutas', v: esp?.vendas_brutas ?? 0, cor: '#0ea5e9' },
             { icon: Receipt, label: 'Comissão Praia Go', v: esp?.comissao_praiago ?? 0, cor: '#f97316' },
             { icon: Wallet, label: 'Seu líquido', v: esp?.valor_liquido ?? 0, cor: '#16a34a' },
+            { icon: ArrowDownToLine, label: 'Já recebido / retirado', v: esp?.transferido ?? 0, cor: '#16a34a' },
             { icon: Building2, label: 'Taxa do provedor', v: esp?.taxa_provedor ?? 0, cor: '#8b5cf6' },
           ].map(({ icon: Icon, label, v, cor }) => (
             <div key={label} className="glass-panel" style={{ ...cardBase, padding: 14 }}>
@@ -241,7 +256,7 @@ export default function CarteiraPage() {
               <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
                 <div>
                   <div style={{ fontSize: 13.5, fontWeight: 700, color: '#0f172a' }}>{TIPO_LABEL[l.tipo] || l.tipo}</div>
-                  <div style={{ fontSize: 11, color: '#94a3b8' }}>{new Date(l.created_at).toLocaleDateString('pt-BR')} · {l.status}</div>
+                  <div style={{ fontSize: 11, color: '#94a3b8' }}>{new Date(l.created_at).toLocaleDateString('pt-BR')} · {l.provider === 'repasse_externo' && l.status === 'pago' ? 'Já recebido por fora — baixa administrativa' : l.status}</div>
                 </div>
                 <div style={{ fontSize: 14, fontWeight: 800, color: ['saque', 'estorno', 'chargeback', 'taxa_plataforma', 'taxa_provedor'].includes(l.tipo) ? '#ef4444' : '#16a34a' }}>
                   {['saque', 'estorno', 'chargeback', 'taxa_plataforma', 'taxa_provedor'].includes(l.tipo) ? '−' : '+'}{brl(l.valor)}
@@ -253,9 +268,11 @@ export default function CarteiraPage() {
         {/* Saques */}
         {saques.length > 0 && (
           <div className="glass-panel" style={{ ...cardBase }}>
-            <div style={{ fontSize: 12, fontWeight: 900, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>Meus saques</div>
+            <div style={{ fontSize: 12, fontWeight: 900, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>Saques e repasses recebidos</div>
             {saques.map(s => {
-              const st = STATUS_SAQUE[s.status] || { label: s.status, cor: '#94a3b8' }
+              const st = s.provider === 'repasse_externo' && s.status === 'pago'
+                ? { label: 'Recebido por fora', cor: '#16a34a' }
+                : STATUS_SAQUE[s.status] || { label: s.status, cor: '#94a3b8' }
               return (
                 <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
                   <div>

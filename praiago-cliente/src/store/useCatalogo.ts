@@ -3,6 +3,9 @@ import { supabase } from '../lib/supabase'
 import type { Vendedor, VendedorTipo } from '../lib/catalogo'
 
 type ProdutoRow = {
+  menu_secao?: string | null
+  pizza_meio_a_meio?: boolean
+  pizza_tamanho?: string | null
   id: string
   vendedor_id: string | null
   vendedor_nome: string | null
@@ -94,7 +97,7 @@ function precoComPromocao(preco: number, promo?: PromocaoRow): number {
   }
   if (promo.desconto_tipo === 'percentual') {
     const percentual = Math.min(Math.max(Number(promo.desconto_valor) || 0, 0), 95)
-    return Math.max(0, preco * (1 - percentual / 100))
+    return Math.round(Math.max(0, preco * (1 - percentual / 100)) * 100) / 100
   }
   const valor = Math.max(Number(promo.desconto_valor) || 0, 0)
   return Math.max(0, preco - valor)
@@ -103,39 +106,62 @@ function precoComPromocao(preco: number, promo?: PromocaoRow): number {
 type State = {
   vendedores: Vendedor[]
   loading: boolean
+  refreshing: boolean
+  error: string | null
   carregar: () => Promise<void>
   getVendedor: (id?: string | null) => Vendedor | undefined
+}
+
+const PRODUTO_COLUNAS = 'id,vendedor_id,vendedor_nome,vendedor_categoria,vendedor_emoji,nome,descricao,preco,emoji,categoria,ativo,estoque,foto,menu_secao,pizza_meio_a_meio,pizza_tamanho'
+const PROMO_COLUNAS = 'id,titulo,descricao,produto_id,vendedor_id,desconto_tipo,desconto_valor,preco_promocional,selo,prioridade,data_fim'
+const VENDEDOR_COLUNAS = 'id,nome,categoria,emoji,role,avaliacao_media,total_avaliacoes,online,lat,lng,zona,endereco,horarios,verificado,status,horario_abre,horario_fecha,foto_perfil_path,foto_capa_path'
+let inFlight: Promise<void> | null = null
+
+async function todasPaginas<T>(page: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: unknown }>): Promise<T[]> {
+  const rows: T[] = []
+  for (let from = 0; ; from += 500) {
+    const { data, error } = await page(from, from + 499)
+    if (error) throw error
+    rows.push(...(data || []) as T[])
+    if (!data || data.length < 500) return rows
+  }
 }
 
 export const useCatalogo = create<State>((set, get) => ({
   vendedores: [],
   loading: true,
+  refreshing: false,
+  error: null,
 
-  carregar: async () => {
-    const { data: prods } = await supabase.from('produtos').select('*').eq('ativo', true)
-    const rows = (prods ?? []) as ProdutoRow[]
-
+  carregar: () => {
+    if (inFlight) return inFlight
+    set({ refreshing: true })
+    inFlight = (async () => {
+    try {
     const agora = new Date().toISOString()
-    const { data: promos } = await supabase
-      .from('promocoes')
-      .select('*')
-      .eq('ativo', true)
-      .eq('publico', true)
-      .lte('data_inicio', agora)
-      .or(`data_fim.is.null,data_fim.gte.${agora}`)
-      .order('prioridade', { ascending: false })
-      .order('created_at', { ascending: false })
+    const [rows, promos] = await Promise.all([
+      todasPaginas<ProdutoRow>((from, to) => supabase.from('produtos').select(PRODUTO_COLUNAS).eq('ativo', true).order('id').range(from, to)),
+      todasPaginas<PromocaoRow>((from, to) => supabase.from('promocoes').select(PROMO_COLUNAS)
+        .eq('ativo', true).eq('publico', true).lte('data_inicio', agora)
+        .or(`data_fim.is.null,data_fim.gte.${agora}`)
+        .order('prioridade', { ascending: false }).order('created_at', { ascending: false }).order('id').range(from, to)),
+    ])
 
+    const precoPorProduto = new Map(rows.map(row => [row.id, Number(row.preco)]))
     const promoPorProduto = new Map<string, PromocaoRow>()
     for (const promo of (promos ?? []) as PromocaoRow[]) {
-      if (!promoPorProduto.has(promo.produto_id)) promoPorProduto.set(promo.produto_id, promo)
+      const base = precoPorProduto.get(promo.produto_id)
+      if (base === undefined) continue
+      const current = promoPorProduto.get(promo.produto_id)
+      if (!current || precoComPromocao(base, promo) < precoComPromocao(base, current)) promoPorProduto.set(promo.produto_id, promo)
     }
 
     const ids = [...new Set(rows.map(r => r.vendedor_id).filter((v): v is string => !!v))]
     const profs: Record<string, ProfileRow> = {}
-    if (ids.length) {
+    for (let offset = 0; offset < ids.length; offset += 100) {
       // Tabela publica cacheada (so colunas seguras): profiles nao e legivel por outros.
-      const { data: p } = await supabase.from('vendedores_publicos').select('*').in('id', ids)
+      const { data: p, error } = await supabase.from('vendedores_publicos').select(VENDEDOR_COLUNAS).in('id', ids.slice(offset, offset + 100))
+      if (error) throw error
       for (const pr of (p ?? []) as ProfileRow[]) profs[pr.id] = pr
     }
 
@@ -197,6 +223,7 @@ export const useCatalogo = create<State>((set, get) => ({
       byVend.get(vid)!.produtos.push({
         id: r.id,
         nome: r.nome,
+        menu_secao: r.menu_secao, pizza_meio_a_meio: r.pizza_meio_a_meio, pizza_tamanho: r.pizza_tamanho,
         desc: r.descricao || '',
         preco: precoFinal,
         precoOriginal: temPromocao ? precoOriginal : undefined,
@@ -218,28 +245,61 @@ export const useCatalogo = create<State>((set, get) => ({
       })
     }
 
-    set({ vendedores: [...byVend.values()], loading: false })
+    set({ vendedores: [...byVend.values()], error: null })
+    } catch {
+      set({ error: 'Não foi possível atualizar o catálogo.' })
+    } finally {
+      set({ loading: false, refreshing: false })
+      inFlight = null
+    }
+    })()
+    return inFlight
   },
 
   getVendedor: (id) => get().vendedores.find(v => v.id === id),
 }))
 
-let iniciado = false
+let subscribers = 0
+let stopCatalog: (() => void) | null = null
 
 export function iniciarCatalogo() {
-  if (iniciado) return
-  iniciado = true
-  useCatalogo.getState().carregar()
-  supabase
+  subscribers += 1
+  if (subscribers === 1) {
+  void useCatalogo.getState().carregar()
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let disposed = false
+  const recarregar = () => {
+    clearTimeout(timer)
+    timer = setTimeout(async () => {
+      if (inFlight) await inFlight
+      if (!disposed) void useCatalogo.getState().carregar()
+    }, 450)
+  }
+  const channel = supabase
     .channel('catalogo_produtos')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'produtos' }, () => {
-      useCatalogo.getState().carregar()
+      recarregar()
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'vendedores_publicos' }, () => {
-      useCatalogo.getState().carregar()
+      recarregar()
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'promocoes' }, () => {
-      useCatalogo.getState().carregar()
+      recarregar()
     })
     .subscribe()
+  window.addEventListener('online', recarregar)
+  stopCatalog = () => {
+    disposed = true
+    clearTimeout(timer)
+    window.removeEventListener('online', recarregar)
+    void supabase.removeChannel(channel)
+  }
+  }
+  let stopped = false
+  return () => {
+    if (stopped) return
+    stopped = true
+    subscribers -= 1
+    if (!subscribers) { stopCatalog?.(); stopCatalog = null }
+  }
 }

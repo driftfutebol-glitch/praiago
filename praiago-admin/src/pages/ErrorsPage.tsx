@@ -1,3 +1,4 @@
+import ResponsiveTable from '../components/ResponsiveTable'
 import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, CheckCircle2, LockKeyhole, RefreshCw, Search, ShieldAlert, type LucideIcon } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -71,10 +72,16 @@ function fmtDate(value: string) {
 export default function ErrorsPage() {
   const [logs, setLogs] = useState<SecurityLog[]>([])
   const [busca, setBusca] = useState('')
+  const [severity, setSeverity] = useState('all')
+  const [review, setReview] = useState('all')
+  const [loadError, setLoadError] = useState(false)
+  const [actionError, setActionError] = useState('')
   const [loading, setLoading] = useState(true)
 
   async function carregar() {
     setLoading(true)
+    setLoadError(false)
+    try {
     const { data, error } = await supabase
       .from('security_audit_logs')
       .select('id,created_at,event_type,severity,platform,email,user_agent,route,metadata,resolved_at,resolution_notes')
@@ -82,7 +89,9 @@ export default function ErrorsPage() {
       .limit(250)
 
     if (!error && data) setLogs(data as SecurityLog[])
-    setLoading(false)
+    else setLoadError(true)
+    } catch { setLoadError(true) }
+    finally { setLoading(false) }
   }
 
   useEffect(() => {
@@ -95,8 +104,7 @@ export default function ErrorsPage() {
 
   const filtrados = useMemo(() => {
     const q = busca.trim().toLowerCase()
-    if (!q) return logs
-    return logs.filter(log => [
+    return logs.filter(log => (severity==='all'||log.severity===severity) && (review==='all'||(review==='pending'?!log.resolved_at:!!log.resolved_at)) && (!q||[
       log.event_type,
       EVENT_LABELS[log.event_type],
       log.severity,
@@ -105,8 +113,8 @@ export default function ErrorsPage() {
       log.route,
       log.user_agent,
       JSON.stringify(log.metadata ?? {}),
-    ].some(value => String(value ?? '').toLowerCase().includes(q)))
-  }, [logs, busca])
+    ].some(value => String(value ?? '').toLowerCase().includes(q))))
+  }, [logs, busca, severity, review])
 
   const abertos = logs.filter(log => !log.resolved_at)
   const criticos = abertos.filter(log => log.severity === 'critical').length
@@ -124,46 +132,32 @@ export default function ErrorsPage() {
       })
       .eq('id', log.id)
 
-    if (!error) carregar()
+    if (!error) {setActionError('');carregar()}
+    else setActionError('Não foi possível marcar este registro como revisado. Tente novamente.')
   }
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-black text-slate-100 tracking-tight">Seguranca & Logs</h1>
-          <p className="text-slate-400 font-medium">Auditoria de login, senha, fraude e acessos suspeitos.</p>
-        </div>
-      </header>
-
-      <IpsAutorizados />
-
-      <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between mb-2"><div style={{ display: 'none' }} />
-        <div className="flex gap-2">
-          <div className="relative">
-            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-            <input
-              value={busca}
-              onChange={e => setBusca(e.target.value)}
-              placeholder="Buscar evento, e-mail, rota..."
-              className="bg-slate-900/50 border border-slate-800 rounded-lg py-2 pl-10 pr-4 text-slate-200 outline-none focus:border-purple-500/50 w-72"
-            />
-          </div>
-          <button onClick={carregar} className="px-4 py-2 rounded-lg bg-slate-900/70 border border-slate-800 text-slate-300 hover:text-white inline-flex items-center gap-2 font-bold text-sm">
-            <RefreshCw size={16} /> Atualizar
-          </button>
-        </div>
-      </header>
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Metric icon={ShieldAlert} label="Alertas abertos" value={abertos.length} color="purple" />
-        <Metric icon={AlertTriangle} label="Criticos" value={criticos} color="red" />
-        <Metric icon={LockKeyhole} label="Alta severidade" value={altos} color="orange" />
-        <Metric icon={Search} label="Falhas de login" value={falhasLogin} color="amber" />
+      <header className="admin-hero"><div><div className="admin-hero-eyebrow"><ShieldAlert size={15}/>Proteção da operação</div><h1>Segurança & Logs</h1><p>Auditoria de acessos, ações administrativas e atividades suspeitas. Uma visão clara para decidir com segurança.</p></div><div className="admin-hero-aside"><button className="admin-secondary-button" disabled={loading} onClick={()=>void carregar()}><RefreshCw size={16}/>Atualizar registros</button><small>Resumo dos últimos 250 registros carregados</small></div></header>
+      {loadError&&<p className="admin-inline-warning" role="alert">Não foi possível atualizar os logs. Os registros anteriores, se houver, foram mantidos. Atualize para tentar novamente.</p>}
+      {actionError&&<p className="admin-inline-warning" role="alert">{actionError}</p>}
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+        <Metric icon={ShieldAlert} label="Não revisados" value={loading||loadError?'—':abertos.length} color="purple"/>
+        <Metric icon={AlertTriangle} label="Críticos pendentes" value={loading||loadError?'—':criticos} color="red"/>
+        <Metric icon={LockKeyhole} label="Alta severidade" value={loading||loadError?'—':altos} color="orange"/>
+        <Metric icon={Search} label="Falhas de login" value={loading||loadError?'—':falhasLogin} color="amber"/>
       </div>
-
+      <IpsAutorizados/>
+      <section className="admin-section-card">
+        <div className="admin-section-heading"><div><h2>Histórico de eventos</h2><p>Busca e filtros nos últimos 250 registros. Não revisado não significa necessariamente uma ameaça.</p></div></div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="relative"><Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input aria-label="Buscar nos logs" value={busca} onChange={event=>setBusca(event.target.value)} placeholder="Evento, usuário, IP ou rota" className="w-full bg-slate-950/50 border border-slate-700 rounded-xl py-3 pl-10 pr-3"/></div>
+          <select aria-label="Filtrar severidade" value={severity} onChange={event=>setSeverity(event.target.value)} className="bg-slate-950/50 border border-slate-700 rounded-xl p-3"><option value="all">Todas as severidades</option><option value="critical">Crítica</option><option value="high">Alta</option><option value="warning">Aviso</option><option value="info">Informação</option></select>
+          <select aria-label="Filtrar revisão" value={review} onChange={event=>setReview(event.target.value)} className="bg-slate-950/50 border border-slate-700 rounded-xl p-3"><option value="all">Todos os registros</option><option value="pending">Não revisados</option><option value="reviewed">Revisados</option></select>
+        </div>
+      </section>
       <div className="glass-panel rounded-2xl overflow-hidden border-slate-800">
-        <table className="w-full text-left border-collapse">
+        <ResponsiveTable label="Histórico de segurança" className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-slate-900/80 text-slate-400 text-xs font-bold uppercase tracking-wider border-b border-slate-800">
               <th className="p-4">Quando</th>
@@ -220,7 +214,7 @@ export default function ErrorsPage() {
                 <td className="p-4 text-right">
                   {log.resolved_at ? (
                     <span className="inline-flex items-center gap-1 text-emerald-400 text-xs font-bold">
-                      <CheckCircle2 size={14} /> Resolvido
+                      <CheckCircle2 size={14} /> Revisado
                     </span>
                   ) : (
                     <button onClick={() => resolver(log)} className="p-2 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 rounded-lg transition-colors inline-flex items-center gap-2 text-xs font-bold">
@@ -241,13 +235,13 @@ export default function ErrorsPage() {
               </tr>
             )}
           </tbody>
-        </table>
+        </ResponsiveTable>
       </div>
     </div>
   )
 }
 
-function Metric({ icon: Icon, label, value, color }: { icon: LucideIcon; label: string; value: number; color: 'purple' | 'red' | 'orange' | 'amber' }) {
+function Metric({ icon: Icon, label, value, color }: { icon: LucideIcon; label: string; value: number | string; color: 'purple' | 'red' | 'orange' | 'amber' }) {
   const colorMap = {
     purple: 'text-purple-400 bg-purple-500/10 border-purple-500/20',
     red: 'text-red-400 bg-red-500/10 border-red-500/20',
@@ -256,7 +250,7 @@ function Metric({ icon: Icon, label, value, color }: { icon: LucideIcon; label: 
   }
 
   return (
-    <div className="glass-panel p-5 rounded-2xl border-slate-800">
+    <div className="glass-panel p-4 sm:p-5 rounded-2xl border-slate-800">
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${colorMap[color]}`}>
         <Icon size={20} />
       </div>

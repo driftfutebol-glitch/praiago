@@ -1,3 +1,4 @@
+import ResponsiveTable from '../components/ResponsiveTable'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CheckCircle2, ExternalLink, Loader2, MapPin, RefreshCw, XCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -192,7 +193,7 @@ export default function LocalizacoesPage() {
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/50">
-        <table className="w-full min-w-[1050px] text-left">
+        <ResponsiveTable label="Correções de localização" className="w-full min-w-[1050px] text-left">
           <thead className="bg-slate-900 text-[10px] uppercase tracking-wider text-slate-500">
             <tr>
               <th className="px-4 py-3">Restaurante</th>
@@ -282,7 +283,7 @@ export default function LocalizacoesPage() {
               )
             })}
           </tbody>
-        </table>
+        </ResponsiveTable>
 
         {!carregando && exibidas.length === 0 && (
           <div className="py-14 text-center text-slate-500">

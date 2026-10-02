@@ -11,23 +11,23 @@ import LocalizacaoAoVivoBotao from '../components/LocalizacaoAoVivoBotao'
 import { supabase } from '../lib/supabase'
 
 const STATUS_CFG = {
-  aguardando_pagamento: { label: 'Verificando pagamento', cor: '#d97706', bg: 'rgba(245,158,11,0.12)', icon: CreditCard },
-  enviado: { label: 'Pedido enviado', cor: '#0ea5e9', bg: 'rgba(14,165,233,0.12)', icon: Send },
-  preparando: { label: 'Preparando', cor: '#f59e0b', bg: 'rgba(245,158,11,0.12)', icon: Clock },
-  a_caminho:  { label: 'A caminho',  cor: '#0ea5e9', bg: 'rgba(14,165,233,0.12)', icon: Bike },
-  entregue:   { label: 'Entregue',   cor: '#22c55e', bg: 'rgba(34,197,94,0.12)', icon: CheckCircle2 },
-  cancelado:  { label: 'Cancelado',  cor: '#ef4444', bg: 'rgba(239,68,68,0.10)', icon: XCircle },
+  aguardando_pagamento: { label: 'Verificando pagamento', cor: 'var(--pg-warning)', bg: 'var(--pg-warning-bg)', icon: CreditCard },
+  enviado: { label: 'Pedido enviado', cor: 'var(--pg-ocean-dark)', bg: 'var(--pg-brand-soft)', icon: Send },
+  preparando: { label: 'Preparando', cor: 'var(--pg-warning)', bg: 'var(--pg-warning-bg)', icon: Clock },
+  a_caminho:  { label: 'A caminho',  cor: 'var(--pg-ocean-dark)', bg: 'var(--pg-brand-soft)', icon: Bike },
+  entregue:   { label: 'Entregue',   cor: 'var(--pg-success)', bg: 'var(--pg-success-bg)', icon: CheckCircle2 },
+  cancelado:  { label: 'Cancelado',  cor: 'var(--pg-danger)', bg: 'var(--pg-danger-bg)', icon: XCircle },
 } as const
 
 // Enquanto a entrega está acontecendo, faz sentido oferecer o compartilhamento
 // de localização. Antes disso o vendedor nem viu o pedido; depois, acabou.
 const EM_ANDAMENTO = ['enviado', 'preparando', 'a_caminho'] as const
 
-const REEMBOLSO_CFG: Record<string, { rotulo: string; cor: string; bg: string }> = {
-  solicitado: { rotulo: 'Reembolso em análise', cor: '#b45309', bg: 'rgba(245,158,11,0.10)' },
-  aprovado:   { rotulo: 'Reembolso aprovado',   cor: '#15803d', bg: 'rgba(34,197,94,0.10)' },
-  concluido:  { rotulo: 'Reembolso concluído',  cor: '#15803d', bg: 'rgba(34,197,94,0.10)' },
-  rejeitado:  { rotulo: 'Reembolso recusado',   cor: '#b91c1c', bg: 'rgba(239,68,68,0.08)' },
+const REEMBOLSO_CFG: Record<string, { rotulo: string; cor: string; bg: string; borda: string }> = {
+  solicitado: { rotulo: 'Reembolso em análise', cor: 'var(--pg-warning)', bg: 'var(--pg-warning-bg)', borda: 'rgba(var(--pg-warning-rgb), 0.28)' },
+  aprovado:   { rotulo: 'Reembolso aprovado',   cor: 'var(--pg-success)', bg: 'var(--pg-success-bg)', borda: 'rgba(var(--pg-success-rgb), 0.28)' },
+  concluido:  { rotulo: 'Reembolso concluído',  cor: 'var(--pg-success)', bg: 'var(--pg-success-bg)', borda: 'rgba(var(--pg-success-rgb), 0.28)' },
+  rejeitado:  { rotulo: 'Reembolso recusado',   cor: 'var(--pg-danger)', bg: 'var(--pg-danger-bg)', borda: 'rgba(var(--pg-danger-rgb), 0.28)' },
 }
 
 function fmtData(ts: number) {
@@ -40,6 +40,9 @@ function fmtData(ts: number) {
 export default function MeusPedidosPage() {
   const navigate = useNavigate()
   const pedidos = useStore(s => s.pedidos)
+  const sessao = useStore(s => s.sessao)
+  const [filtro, setFiltro] = useState<'todos' | 'ativos' | 'historico'>('todos')
+  const pedidosVisiveis = pedidos.filter(p => filtro === 'todos' || (filtro === 'historico' ? ['entregue', 'cancelado'].includes(p.status) : !['entregue', 'cancelado'].includes(p.status)))
   const sincronizarPedidos = useStore(s => s.sincronizarPedidos)
   const cancelarPedido = useStore(s => s.cancelarPedido)
   // Codigo de entrega fica so em memoria: sai da tela quando o app fecha.
@@ -188,28 +191,31 @@ export default function MeusPedidosPage() {
   }
 
   return (
-    <div style={{ minHeight: '100dvh', background: theme.color.bg, paddingBottom: 90 }}>
+    <div style={{ minHeight: '100%', background: 'var(--pg-sand)', paddingBottom: 28 }}>
       <header style={{ padding: '20px 20px 8px' }}>
-        <h1 style={{ fontSize: 24, fontWeight: 900, color: theme.color.text }}>Meus Pedidos</h1>
+        <span className="pg-eyebrow">DO PEDIDO AO PRIMEIRO GOLE</span>
+        <h1 className="pg-heading">Meus pedidos</h1>
         <p style={{ fontSize: 13, color: theme.color.textMuted, marginTop: 2 }}>
-          {pedidos.length === 0 ? 'Nenhum pedido ainda' : `${pedidos.length} pedido${pedidos.length === 1 ? '' : 's'}`}
+          {pedidos.length === 0 ? 'Seu dia de praia, acompanhado por aqui.' : `${pedidos.length} pedido${pedidos.length === 1 ? '' : 's'} · acompanhe cada etapa`}
         </p>
       </header>
+      {pedidos.length > 0 && <div style={{ display: 'flex', gap: 8, padding: '12px 20px' }} aria-label="Filtrar pedidos">{([{ id: 'todos', label: 'Todos' }, { id: 'ativos', label: 'Em andamento' }, { id: 'historico', label: 'Histórico' }] as const).map(item => <button key={item.id} className="pg-chip" aria-pressed={filtro === item.id} onClick={() => setFiltro(item.id)}>{item.label}</button>)}</div>}
 
       {pedidos.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '64px 24px', color: theme.color.textMuted }}>
           <div style={{ width: 72, height: 72, borderRadius: 24, background: theme.color.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
             <ShoppingBag size={32} color={theme.color.textFaint} />
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: theme.color.text }}>Você ainda não pediu nada</div>
-          <div style={{ fontSize: 13, marginTop: 6 }}>Que tal uma água de coco geladinha? 🥥</div>
-          <button onClick={() => navigate('/pedir')} style={{ marginTop: 20, background: theme.gradient.brand, border: 'none', borderRadius: 16, padding: '14px 28px', color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer' }}>
-            Fazer um pedido
+          <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--pg-ink)' }}>{sessao ? 'Seu primeiro pedido vem aí' : 'Seus pedidos, num só lugar'}</div>
+          <div style={{ fontSize: 13, marginTop: 8, lineHeight: 1.6 }}>{sessao ? 'Explore os sabores da praia e escolha seu favorito.' : 'Entre na sua conta para acompanhar pedidos e consultar seu histórico.'}</div>
+          <button onClick={() => navigate(sessao ? '/pedir' : '/perfil')} className="pg-button pg-button-primary" style={{ marginTop: 20 }}>
+            {sessao ? 'Explorar lojas' : 'Entrar na minha conta'}
           </button>
         </div>
       ) : (
         <div style={{ padding: '8px 16px' }}>
-          {pedidos.map(p => {
+          {pedidosVisiveis.length === 0 && <div className="pg-card" style={{ textAlign: 'center', padding: 32 }}><p className="pg-section-title">{filtro === 'ativos' ? 'Tudo tranquilo por aqui' : 'Seu histórico está começando'}</p><p className="pg-caption">{filtro === 'ativos' ? 'Você não tem pedidos em andamento.' : 'Pedidos finalizados aparecerão nesta aba.'}</p></div>}
+          {pedidosVisiveis.map(p => {
             const cfg = STATUS_CFG[p.status]
             const Icon = cfg.icon
             const emAndamento = (EM_ANDAMENTO as readonly string[]).includes(p.status)
@@ -229,8 +235,8 @@ export default function MeusPedidosPage() {
 
             return (
               <div key={p.id} style={{ background: theme.color.surface, borderRadius: 20, padding: 16, marginBottom: 12, border: `1px solid ${theme.color.border}` }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-                  <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+                  <div style={{ flex: '1 1 150px', minWidth: 0, overflowWrap: 'anywhere' }}>
                     <div style={{ fontSize: 15, fontWeight: 800, color: theme.color.text }}>{p.vendedorNome}</div>
                     <div style={{ fontSize: 12, color: theme.color.textMuted, marginTop: 2 }}>{p.id} · {fmtData(p.data)}</div>
                   </div>
@@ -241,7 +247,7 @@ export default function MeusPedidosPage() {
 
                 <div style={{ background: theme.color.bg, borderRadius: 14, padding: '10px 14px', marginBottom: 12 }}>
                   {p.itens.map((it, i) => (
-                    <div key={i} style={{ fontSize: 13, color: '#334155', lineHeight: 1.7 }}>
+                    <div key={i} style={{ fontSize: 13, color: 'var(--pg-ink)', lineHeight: 1.7 }}>
                       <span style={{ color: theme.color.accent, fontWeight: 800 }}>·</span> {it.qtd}x {it.nome}
                     </div>
                   ))}
@@ -255,14 +261,14 @@ export default function MeusPedidosPage() {
                 </div>
 
                 {p.status === 'aguardando_pagamento' && (
-                  <div style={{ fontSize: 12, lineHeight: 1.45, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12, padding: '10px 12px', marginBottom: 12, fontWeight: 700 }}>
+                  <div style={{ fontSize: 12, lineHeight: 1.45, color: 'var(--pg-warning)', background: 'var(--pg-warning-bg)', border: '1px solid var(--pg-warning)', borderRadius: 12, padding: '10px 12px', marginBottom: 12, fontWeight: 700 }}>
                     Seu pedido so vai para o ambulante ou restaurante depois que o pagamento for aprovado.
                     Sem pagamento em 7 dias, ele sai do seu histórico automaticamente.
                   </div>
                 )}
 
                 {reembolso && (
-                  <div style={{ fontSize: 12, lineHeight: 1.45, color: reembolso.cor, background: reembolso.bg, border: `1px solid ${reembolso.cor}33`, borderRadius: 12, padding: '10px 12px', marginBottom: 12, fontWeight: 800 }}>
+                  <div style={{ fontSize: 12, lineHeight: 1.45, color: reembolso.cor, background: reembolso.bg, border: `1px solid ${reembolso.borda}`, borderRadius: 12, padding: '10px 12px', marginBottom: 12, fontWeight: 800 }}>
                     {reembolso.rotulo}
                   </div>
                 )}
@@ -281,16 +287,16 @@ export default function MeusPedidosPage() {
                     recebe o pedido na mao. E o que impede o vendedor de marcar
                     "entregue" sem ter entregado — e o que libera o dinheiro. */}
                 {p.status === 'a_caminho' && (
-                  <div style={{ marginBottom: 12, background: 'rgba(14,165,233,0.06)', border: '1px solid rgba(14,165,233,0.22)', borderRadius: 14, padding: 12 }}>
+                  <div style={{ marginBottom: 12, background: 'rgba(var(--pg-ocean-rgb), 0.06)', border: '1px solid rgba(var(--pg-ocean-rgb), 0.22)', borderRadius: 14, padding: 12 }}>
                     {codigos[p.id] ? (
                       <div style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: 11.5, fontWeight: 800, color: '#0369a1', textTransform: 'uppercase', letterSpacing: 1 }}>
+                        <div style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--pg-ocean-dark)', textTransform: 'uppercase', letterSpacing: 1 }}>
                           Código de entrega
                         </div>
-                        <div style={{ fontSize: 30, fontWeight: 950, letterSpacing: 8, color: '#0f172a', margin: '6px 0 4px' }}>
+                        <div style={{ fontSize: 30, fontWeight: 950, letterSpacing: 8, color: 'var(--pg-ink)', margin: '6px 0 4px' }}>
                           {codigos[p.id]}
                         </div>
-                        <div style={{ fontSize: 11.5, color: '#64748b', fontWeight: 600, lineHeight: 1.4 }}>
+                        <div style={{ fontSize: 11.5, color: 'var(--pg-muted)', fontWeight: 600, lineHeight: 1.4 }}>
                           Mostre só na hora de receber. Sem ele o pedido não é dado como entregue.
                         </div>
                       </div>
@@ -298,7 +304,7 @@ export default function MeusPedidosPage() {
                       <button
                         onClick={() => gerarCodigo(p.id)}
                         disabled={buscandoCodigo === p.id}
-                        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, background: 'transparent', border: 'none', color: '#0284c7', fontSize: 13, fontWeight: 800, cursor: 'pointer', padding: 2 }}
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, background: 'transparent', border: 'none', color: 'var(--pg-ocean-dark)', fontSize: 13, fontWeight: 800, cursor: 'pointer', padding: 2 }}
                       >
                         <KeyRound size={15} /> {buscandoCodigo === p.id ? 'Gerando…' : 'Ver código de entrega'}
                       </button>
@@ -307,7 +313,7 @@ export default function MeusPedidosPage() {
                 )}
 
                 {prazoAcabou && (
-                  <div style={{ fontSize: 11.5, lineHeight: 1.45, color: '#64748b', marginBottom: 10, fontWeight: 650 }}>
+                  <div style={{ fontSize: 11.5, lineHeight: 1.45, color: 'var(--pg-muted)', marginBottom: 10, fontWeight: 650 }}>
                     O prazo de {JANELA_REEMBOLSO_HORAS} horas para pedir reembolso deste pedido já passou.
                     Se ainda tiver algo errado, fale com a gente pelo botão Ajuda.
                   </div>
@@ -315,7 +321,7 @@ export default function MeusPedidosPage() {
 
                 <div style={{ display: 'grid', gridTemplateColumns: podeReembolso ? '1fr 1fr' : '1fr', gap: 8 }}>
                   {p.status === 'aguardando_pagamento' && (
-                    <button disabled={verificandoId === p.id} onClick={() => verificarPagamento(p.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.24)', borderRadius: 12, padding: '10px 12px', color: '#b45309', fontSize: 12, fontWeight: 800, cursor: verificandoId === p.id ? 'default' : 'pointer' }}>
+                    <button disabled={verificandoId === p.id} onClick={() => verificarPagamento(p.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(var(--pg-warning-rgb), 0.08)', border: '1px solid rgba(var(--pg-warning-rgb), 0.24)', borderRadius: 12, padding: '10px 12px', color: 'var(--pg-warning)', fontSize: 12, fontWeight: 800, cursor: verificandoId === p.id ? 'default' : 'pointer' }}>
                       <CreditCard size={14} /> {verificandoId === p.id ? 'Verificando...' : 'Verificar pagamento'}
                     </button>
                   )}
@@ -324,19 +330,19 @@ export default function MeusPedidosPage() {
                       preparar. Depois disso ele ja gastou insumo e tempo —
                       cancelar ali seria prejuizo dele, nao arrependimento. */}
                   {p.status === 'enviado' && (
-                    <button onClick={() => cancelar(p.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.22)', borderRadius: 12, padding: '10px 12px', color: '#dc2626', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
+                    <button onClick={() => cancelar(p.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(var(--pg-danger-rgb), 0.08)', border: '1px solid rgba(var(--pg-danger-rgb), 0.22)', borderRadius: 12, padding: '10px 12px', color: 'var(--pg-danger)', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
                       <XCircle size={14} /> Cancelar
                     </button>
                   )}
 
                   {p.status !== 'aguardando_pagamento' && (
-                    <button disabled={pedindoAjuda === p.id} onClick={() => pedirAjuda(p.id, 'ajuda')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(14,165,233,0.08)', border: '1px solid rgba(14,165,233,0.2)', borderRadius: 12, padding: '10px 12px', color: '#0284c7', fontSize: 12, fontWeight: 800, cursor: pedindoAjuda === p.id ? 'default' : 'pointer' }}>
+                    <button disabled={pedindoAjuda === p.id} onClick={() => pedirAjuda(p.id, 'ajuda')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(var(--pg-ocean-rgb), 0.08)', border: '1px solid rgba(var(--pg-ocean-rgb), 0.2)', borderRadius: 12, padding: '10px 12px', color: 'var(--pg-ocean-dark)', fontSize: 12, fontWeight: 800, cursor: pedindoAjuda === p.id ? 'default' : 'pointer' }}>
                       <LifeBuoy size={14} /> Ajuda
                     </button>
                   )}
 
                   {podeReembolso && (
-                    <button disabled={pedindoAjuda === p.id} onClick={() => pedirAjuda(p.id, 'reembolso')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.24)', borderRadius: 12, padding: '10px 12px', color: '#b45309', fontSize: 12, fontWeight: 800, cursor: pedindoAjuda === p.id ? 'default' : 'pointer' }}>
+                    <button disabled={pedindoAjuda === p.id} onClick={() => pedirAjuda(p.id, 'reembolso')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(var(--pg-warning-rgb), 0.08)', border: '1px solid rgba(var(--pg-warning-rgb), 0.24)', borderRadius: 12, padding: '10px 12px', color: 'var(--pg-warning)', fontSize: 12, fontWeight: 800, cursor: pedindoAjuda === p.id ? 'default' : 'pointer' }}>
                       <Undo2 size={14} /> Reembolso · {tempoRestante(p)}
                     </button>
                   )}

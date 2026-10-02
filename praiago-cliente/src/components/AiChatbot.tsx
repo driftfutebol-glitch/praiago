@@ -10,8 +10,9 @@ type Message = {
   text: string
 }
 
-export default function AiChatbot({ plataforma = 'cliente' }: { plataforma?: string }) {
-  const [isOpen, setIsOpen] = useState(false)
+export default function AiChatbot({ plataforma = 'cliente', open, onClose }: { plataforma?: string; open?: boolean; onClose?: () => void }) {
+  const [internalOpen, setIsOpen] = useState(false)
+  const isOpen = open ?? internalOpen
   const [messages, setMessages] = useState<Message[]>([
     { id: 'welcome', role: 'bot', text: 'Olá! Aqui é o atendimento do PraiaGo. Como posso ajudar você hoje na praia?' }
   ])
@@ -23,6 +24,12 @@ export default function AiChatbot({ plataforma = 'cliente' }: { plataforma?: str
   const endRef = useRef<HTMLDivElement>(null)
   
   const sessao = useStore(s => s.sessao)
+  useEffect(() => {
+    if (!isOpen) return
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') { setIsOpen(false); onClose?.() } }
+    window.addEventListener('keydown', escape)
+    return () => window.removeEventListener('keydown', escape)
+  }, [isOpen, onClose])
 
   useEffect(() => {
     if (endRef.current) {
@@ -148,13 +155,14 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
   return (
     <>
       <AnimatePresence>
-        {!isOpen && (
+        {!isOpen && !onClose && (
           <motion.button
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0, opacity: 0 }}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
+            aria-label="Abrir atendimento PraiaGo"
             onClick={() => setIsOpen(true)}
             style={{
               position: 'fixed',
@@ -169,9 +177,9 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
               width: 64,
               height: 64,
               borderRadius: 32,
-              background: 'linear-gradient(135deg, #0ea5e9, #3b82f6)',
+              background: 'var(--pg-brand-gradient)',
               border: 'none',
-              boxShadow: '0 10px 25px rgba(14,165,233,0.5)',
+              boxShadow: 'var(--pg-shadow)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -179,7 +187,7 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
               zIndex: 9999
             }}
           >
-            <MessageCircle size={32} color="#fff" />
+            <MessageCircle size={32} color="var(--pg-on-brand)" />
           </motion.button>
         )}
       </AnimatePresence>
@@ -187,6 +195,8 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
       <AnimatePresence>
         {isOpen && (
           <motion.div
+            role="dialog"
+            aria-label="Atendimento PraiaGo"
             initial={{ y: 20, opacity: 0, scale: 0.95 }}
             animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: 20, opacity: 0, scale: 0.95 }}
@@ -203,10 +213,10 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
               width: 'min(350px, calc(100vw - 24px))',
               height: 'min(500px, 70dvh)',
               borderRadius: 24,
-              background: 'rgba(255,255,255,0.92)',
+              background: 'var(--pg-surface)',
               backdropFilter: 'blur(20px)',
-              border: '1px solid rgba(0,0,0,0.08)',
-              boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+              border: '1px solid var(--pg-line)',
+              boxShadow: 'var(--pg-shadow)',
               display: 'flex',
               flexDirection: 'column',
               zIndex: 9999,
@@ -216,32 +226,33 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
             {/* Header */}
             <div style={{
               padding: '16px 20px',
-              background: 'linear-gradient(90deg, rgba(14,165,233,0.1), rgba(59,130,246,0.1))',
-              borderBottom: '1px solid rgba(0,0,0,0.05)',
+              background: 'var(--pg-brand-soft)',
+              borderBottom: '1px solid var(--pg-line)',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center'
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{
-                  width: 40, height: 40, borderRadius: '50%', background: '#0ea5e9',
+                  width: 40, height: 40, borderRadius: '50%', background: 'var(--pg-action)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center'
                 }}>
-                  <Bot size={20} color="#fff" />
+                  <Bot size={20} color="var(--pg-action-ink)" />
                 </div>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#0f172a' }}>Assistente PraiaGo</h3>
-                  <span style={{ fontSize: 12, color: '#4ade80', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <div style={{ width: 6, height: 6, borderRadius: 3, background: '#4ade80', boxShadow: '0 0 5px #4ade80' }} />
+                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: 'var(--pg-ink)' }}>Assistente PraiaGo</h3>
+                  <span style={{ fontSize: 12, color: 'var(--pg-success)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <div style={{ width: 6, height: 6, borderRadius: 3, background: 'var(--pg-success)' }} />
                     Online
                   </span>
                 </div>
               </div>
               <button
-                onClick={() => setIsOpen(false)}
+                aria-label="Fechar atendimento"
+                onClick={() => { setIsOpen(false); onClose?.() }}
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4 }}
               >
-                <X size={24} color="#94a3b8" />
+                <X size={24} color="var(--pg-faint)" />
               </button>
             </div>
 
@@ -255,11 +266,11 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
                     borderRadius: 20,
                     borderBottomLeftRadius: msg.role === 'bot' ? 4 : 20,
                     borderBottomRightRadius: msg.role === 'user' ? 4 : 20,
-                    background: msg.role === 'bot' ? 'rgba(0,0,0,0.05)' : '#0ea5e9',
-                    color: msg.role === 'bot' ? '#0f172a' : '#fff',
+                    background: msg.role === 'bot' ? 'var(--pg-surface-alt)' : 'var(--pg-action)',
+                    color: msg.role === 'bot' ? 'var(--pg-ink)' : 'var(--pg-action-ink)',
                     fontSize: 14,
                     lineHeight: 1.5,
-                    border: msg.role === 'bot' ? '1px solid rgba(0,0,0,0.08)' : 'none'
+                    border: msg.role === 'bot' ? '1px solid var(--pg-line)' : 'none'
                   }}>
                     {msg.text}
                   </div>
@@ -273,19 +284,19 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
               <div style={{ padding: '0 20px 10px', display: 'flex', gap: 8, overflowX: 'auto' }} className="hide-scrollbar">
                 <button
                   onClick={() => setInput('Onde está meu pedido?')}
-                  style={{ whiteSpace: 'nowrap', padding: '6px 12px', borderRadius: 12, background: 'rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.08)', color: '#334155', fontSize: 12, cursor: 'pointer' }}
+                  style={{ whiteSpace: 'nowrap', padding: '6px 12px', borderRadius: 12, background: 'var(--pg-surface-alt)', border: '1px solid var(--pg-line)', color: 'var(--pg-ink)', fontSize: 12, cursor: 'pointer' }}
                 >
                   Onde está meu pedido?
                 </button>
                 <button
                   onClick={() => startTicketFlow()}
-                  style={{ whiteSpace: 'nowrap', padding: '6px 12px', borderRadius: 12, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
+                  style={{ whiteSpace: 'nowrap', padding: '6px 12px', borderRadius: 12, background: 'var(--pg-danger-bg)', border: '1px solid var(--pg-line)', color: 'var(--pg-danger)', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
                 >
                   <Headphones size={14} /> Falar com Suporte
                 </button>
                 <button
                   onClick={() => startTicketFlow('Solicitacao de reembolso')}
-                  style={{ whiteSpace: 'nowrap', padding: '6px 12px', borderRadius: 12, background: 'rgba(14,165,233,0.1)', border: '1px solid rgba(14,165,233,0.2)', color: '#0284c7', fontSize: 12, cursor: 'pointer' }}
+                  style={{ whiteSpace: 'nowrap', padding: '6px 12px', borderRadius: 12, background: 'var(--pg-surface-alt)', border: '1px solid var(--pg-line)', color: 'var(--pg-ocean)', fontSize: 12, cursor: 'pointer' }}
                 >
                   Reembolso
                 </button>
@@ -294,32 +305,34 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
 
             {/* Input Area */}
             <form onSubmit={mode === 'ai' ? handleSendAI : handleSendTicket} style={{
-              padding: 16, borderTop: '1px solid rgba(0,0,0,0.05)', display: 'flex', gap: 8
+              padding: 16, borderTop: '1px solid var(--pg-line)', display: 'flex', gap: 8
             }}>
               <input
+                aria-label="Mensagem para o atendimento"
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 placeholder={mode === 'ticket' ? "Escreva sua mensagem..." : "Escreva sua dúvida..."}
                 disabled={loading}
                 style={{
                   flex: 1, minWidth: 0, padding: '12px 16px', borderRadius: 16,
-                  background: '#f1f5f9', border: '1px solid rgba(0,0,0,0.08)',
+                  background: 'var(--pg-surface-alt)', border: '1px solid var(--pg-line)',
                   // 16px e o minimo: abaixo disso o Safari do iPhone da zoom
                   // sozinho ao focar o campo, e a tela inteira "pula".
-                  color: '#0f172a', fontSize: 16, outline: 'none'
+                  color: 'var(--pg-ink)', fontSize: 16, outline: 'none'
                 }}
               />
               <button
                 type="submit"
+                aria-label="Enviar mensagem"
                 disabled={!input.trim() || loading}
                 style={{
                   width: 44, height: 44, borderRadius: 16,
-                  background: input.trim() && !loading ? '#0ea5e9' : 'rgba(0,0,0,0.05)',
+                  background: input.trim() && !loading ? 'var(--pg-action)' : 'var(--pg-surface-alt)',
                   border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
                   cursor: input.trim() && !loading ? 'pointer' : 'default', transition: 'background 0.2s'
                 }}
               >
-                {loading ? <Loader2 size={20} color="#fff" style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={20} color={input.trim() ? '#fff' : '#64748b'} />}
+                {loading ? <Loader2 size={20} color="var(--pg-muted)" style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={20} color={input.trim() ? 'var(--pg-action-ink)' : 'var(--pg-muted)'} />}
               </button>
             </form>
           </motion.div>

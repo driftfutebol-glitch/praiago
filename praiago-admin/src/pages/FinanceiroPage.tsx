@@ -1,8 +1,11 @@
+import ResponsiveTable from '../components/ResponsiveTable'
 import { useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
 import { AlertCircle, BellRing, CheckCircle2, CreditCard, DollarSign, Percent, RefreshCw, Search, WalletCards, XCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { confirmDialog, alertDialog } from '../lib/dialog'
+import { confirmDialog, alertDialog, promptDialog } from '../lib/dialog'
+import { canRegisterExternalRepasse, parseRepasseAmount } from '../lib/adminExceptions'
+import { askExceptionReason } from '../lib/adminExceptionDialogs'
 
 type PedidoFinanceiro = {
   id: string
@@ -63,6 +66,7 @@ export default function FinanceiroPage() {
   const [processandoSaque, setProcessandoSaque] = useState<string | null>(null)
   const [paymentNotifications, setPaymentNotifications] = useState<PaymentNotification[]>([])
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('todos')
+  const [registrandoRepasse, setRegistrandoRepasse] = useState<string | null>(null)
 
   async function loadSaques() {
     const { data } = await supabase
@@ -194,13 +198,32 @@ export default function FinanceiroPage() {
   }
 
   async function marcarRepassePago(pedido: PedidoFinanceiro) {
-    if (!await confirmDialog({ title: 'Confirmar repasse', message: `Marcar o repasse de ${money(pedido.vendor_amount)} para ${pedido.vendedor_nome || 'vendedor'} como pago?`, confirmText: 'Marcar pago', tone: 'success' })) return
-    const now = new Date().toISOString()
-    await Promise.all([
-      supabase.from('pedidos').update({ settlement_status: 'repasse_manual_pago' }).eq('id', pedido.id),
-      supabase.from('financial_ledger').update({ status: 'pago', settled_at: now, provider: 'repasse_manual' }).eq('pedido_id', pedido.id).eq('tipo', 'repasse_vendedor'),
-    ])
-    load()
+    if (registrandoRepasse) return
+    setRegistrandoRepasse(pedido.id)
+    try {
+      const informado = await promptDialog({ title: 'Valor recebido pela loja', message: `Pedido ${pedido.id.slice(0, 8)} · ${pedido.vendedor_nome || 'vendedor'}. Líquido registrado: ${money(pedido.vendor_amount)}. Informe o valor realmente entregue por fora. Esta ação não transfere dinheiro.`, placeholder: 'Valor recebido, ex.: 96,48', confirmText: 'Conferir valor' })
+      if (informado === null) return
+      const valor = parseRepasseAmount(informado)
+      if (valor === null || Math.round(valor * 100) !== Math.round(Number(pedido.vendor_amount) * 100)) {
+        await alertDialog({ title: 'Confira o repasse', message: 'O valor precisa corresponder exatamente ao líquido da loja. Se foi pago o bruto ou outro valor, concilie a diferença antes da baixa.', tone: 'danger' })
+        return
+      }
+      const referencia = await promptDialog({ title: 'Referência da conferência', message: 'Informe responsável, data ou identificador do comprovante. Não inclua dados bancários completos.', placeholder: 'Responsável / data / referência', confirmText: 'Continuar' })
+      if (referencia === null) return
+      if (referencia.trim().length < 3 || referencia.trim().length > 160) { await alertDialog({ title: 'Referência obrigatória', message: 'Use de 3 a 160 caracteres.', tone: 'danger' }); return }
+      const comissaoRecebida = Number(pedido.platform_fee_amount) > 0 && await confirmDialog({ title: 'A comissão também já foi recebida por fora?', message: `Comissão deste pedido: ${money(pedido.platform_fee_amount)}. Só marque como recebida se ela já foi conferida. Não haverá nova cobrança.`, confirmText: 'Sim, já recebemos', cancelText: 'Não registrar comissão' })
+      const motivo = await askExceptionReason('Motivo da baixa externa', 'Registre quem fez o repasse e como o recebimento foi conferido. Não inclua senha ou dados bancários completos.')
+      if (!motivo || !await confirmDialog({ title: 'Registrar pagamento já realizado?', message: `${money(valor)} para ${pedido.vendedor_nome || 'a loja'}, pedido ${pedido.id.slice(0, 8)}. A baixa quitará este repasse e impedirá nova retirada desse saldo. ${comissaoRecebida ? ` Comissão já recebida: ${money(pedido.platform_fee_amount)}.` : ' Comissão não será alterada.'} Nenhum pagamento será enviado ao banco.`, confirmText: 'Registrar baixa externa', tone: 'success' })) return
+      const { data, error } = await supabase.rpc('admin_baixa_externa_completa', { p_pedido: pedido.id, p_valor: valor, p_comissao: comissaoRecebida ? Number(pedido.platform_fee_amount) : 0, p_motivo: motivo, p_referencia: referencia.trim(), p_ticket: null })
+      if (error || data?.ok !== true) throw new Error(error?.message || 'O servidor não confirmou a baixa.')
+      await load()
+      await loadSaques()
+      await alertDialog({ title: 'Repasse externo registrado', message: 'Carteira e histórico atualizados. Não foi enviado outro saque.', tone: 'success' })
+    } catch (error) {
+      await alertDialog({ title: 'Baixa não registrada', message: error instanceof Error ? error.message : 'Falha ao registrar. Recarregue e confira o histórico antes de tentar novamente.', tone: 'danger' })
+    } finally {
+      setRegistrandoRepasse(null)
+    }
   }
 
   const reembolsos = useMemo(() => pedidos.filter(p => p.reembolso_status === 'solicitado'), [pedidos])
@@ -401,7 +424,7 @@ export default function FinanceiroPage() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1180px] text-left border-collapse">
+          <ResponsiveTable label="Pedidos e repasses" className="w-full min-w-[1180px] text-left border-collapse">
             <thead>
               <tr className="bg-slate-900/80 text-slate-400 text-xs font-bold uppercase tracking-wider border-b border-slate-800">
                 <th className="p-4">Pedido</th>
@@ -441,9 +464,9 @@ export default function FinanceiroPage() {
                     <span className={`px-2 py-1 rounded-md text-xs font-bold uppercase border ${statusClass(p.settlement_status)}`}>{p.settlement_status || 'pendente'}</span>
                   </td>
                   <td className="p-4 text-right">
-                    {p.settlement_status === 'repasse_manual_pendente' ? (
-                      <button onClick={() => marcarRepassePago(p)} className="inline-flex items-center gap-2 bg-green-500/10 text-green-400 hover:bg-green-500/20 border border-green-500/20 rounded-lg px-3 py-2 transition-colors text-xs font-black">
-                        <CheckCircle2 size={14} /> Marcar pago
+                    {canRegisterExternalRepasse(p) ? (
+                      <button disabled={!!registrandoRepasse} onClick={() => void marcarRepassePago(p)} className="inline-flex items-center gap-2 bg-green-500/10 text-green-400 hover:bg-green-500/20 border border-green-500/20 rounded-lg px-3 py-2 transition-colors text-xs font-black disabled:opacity-40">
+                        <CheckCircle2 size={14} /> {registrandoRepasse === p.id ? 'Conferindo…' : 'Registrar repasse externo'}
                       </button>
                     ) : p.payment_checkout_url ? (
                       <a href={p.payment_checkout_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg px-3 py-2 transition-colors text-xs font-black">
@@ -461,7 +484,7 @@ export default function FinanceiroPage() {
                 </tr>
               )}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
       </section>
     </div>

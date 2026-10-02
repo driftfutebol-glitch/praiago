@@ -41,8 +41,8 @@ export default function LocalizacaoAoVivoBotao({
     return (
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12,
-        background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 12,
-        padding: '10px 12px', color: '#9a3412', fontSize: 11.5, fontWeight: 700, lineHeight: 1.4,
+        background: 'var(--pg-warning-bg)', border: '1px solid var(--pg-warning-bg)', borderRadius: 12,
+        padding: '10px 12px', color: 'var(--pg-warning)', fontSize: 11.5, fontWeight: 700, lineHeight: 1.4,
       }}>
         <MapPinOff size={15} style={{ flexShrink: 0 }} />
         Sem permissão de localização. Libere nos ajustes do aparelho para o
@@ -58,9 +58,9 @@ export default function LocalizacaoAoVivoBotao({
       style={{
         width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
         marginBottom: 12, borderRadius: 12, padding: '11px 12px', cursor: 'pointer',
-        background: ativo ? 'rgba(34,197,94,0.10)' : 'rgba(14,165,233,0.08)',
-        border: `1px solid ${ativo ? 'rgba(34,197,94,0.30)' : 'rgba(14,165,233,0.22)'}`,
-        color: ativo ? '#15803d' : '#0284c7',
+        background: ativo ? 'var(--pg-success-bg)' : 'var(--pg-surface-alt)',
+        border: '1px solid var(--pg-line)',
+        color: ativo ? 'var(--pg-success)' : 'var(--pg-ocean)',
         fontSize: 12.5, fontWeight: 800,
       }}
     >

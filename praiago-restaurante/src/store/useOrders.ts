@@ -125,7 +125,10 @@ export const useOrders = create<State>((set, get) => ({
 
 let connected = false
 export function connectRealtime() {
-  if (connected) return
+  if (connected) {
+    void useOrders.getState().fetchOrders()
+    return
+  }
   connected = true
   useOrders.getState().fetchOrders()
 

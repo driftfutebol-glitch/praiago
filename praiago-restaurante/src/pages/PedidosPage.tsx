@@ -93,10 +93,10 @@ export default function PedidosPage() {
   }
 
   return (
-    <div style={{ padding: '32px 40px 48px', minHeight: '100vh', position: 'relative' }}>
+    <div className="restaurant-page" style={{ padding: '32px 40px 48px', minHeight: '100vh', position: 'relative' }}>
 
       {/* ── Header ─────────────────────────────────────────── */}
-      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 32 }}>
+      <motion.div className="restaurant-page-header" initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 32 }}>
         <div>
           <h1 style={{ fontSize: 38, fontWeight: 900, color: '#0f172a', letterSpacing: -1, margin: '0 0 8px', textShadow: '0 0 30px rgba(0,0,0,0.08)' }}>
             Gerenciar Pedidos
@@ -110,11 +110,12 @@ export default function PedidosPage() {
         </div>
 
         {/* Busca */}
-        <div style={{ position: 'relative' }}>
+        <div className="restaurant-search" style={{ position: 'relative' }}>
           <Search size={18} color="#94a3b8" style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }} />
           <input
             value={busca} onChange={e => setBusca(e.target.value)}
             placeholder="Buscar cliente, zona..."
+            aria-label="Buscar pedidos por cliente ou zona"
             style={{
               padding: '14px 16px 14px 44px', borderRadius: 16,
               border: '1px solid rgba(0,0,0,0.08)', background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(12px)',
@@ -128,16 +129,16 @@ export default function PedidosPage() {
       </motion.div>
 
       {/* ── Tabs ───────────────────────────────────────────── */}
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} style={{ display: 'flex', gap: 10, marginBottom: 32, flexWrap: 'wrap' }}>
+      <motion.div className="restaurant-order-filters" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} style={{ display: 'flex', gap: 10, marginBottom: 32, flexWrap: 'wrap' }}>
         {TABS.map(t => {
           const active = tab === t.key
           const cnt = count(t.key as any)
           return (
-            <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} key={t.key} onClick={() => setTab(t.key as any)} style={{
+            <motion.button aria-pressed={active} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} key={t.key} onClick={() => setTab(t.key as any)} style={{
               display: 'flex', alignItems: 'center', gap: 8,
               padding: '10px 20px', borderRadius: 16, border: active ? '1px solid rgba(249,115,22,0.4)' : '1px solid rgba(0,0,0,0.05)',
               background: active ? 'linear-gradient(135deg,rgba(249,115,22,0.15),rgba(234,88,12,0.05))' : 'rgba(255,255,255,0.02)',
-              color: active ? '#f97316' : '#94a3b8',
+              color: active ? '#c2410c' : '#475569',
               fontWeight: 800, fontSize: 14, cursor: 'pointer',
               boxShadow: active ? '0 0 20px rgba(249,115,22,0.15)' : 'none',
               transition: 'all 0.2s',
@@ -157,7 +158,7 @@ export default function PedidosPage() {
       </motion.div>
 
       {/* ── Cards de pedidos ───────────────────────────────── */}
-      <motion.div layout style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))', gap: 24 }}>
+      <motion.div className="restaurant-orders-grid" layout style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 420px), 1fr))', gap: 24 }}>
         <AnimatePresence>
           {filtrados.length === 0 && (
             <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} style={{ gridColumn: '1/-1', textAlign: 'center', padding: '80px 0', color: '#64748b' }}>
@@ -174,7 +175,7 @@ export default function PedidosPage() {
             const canAdv = NEXT[p.status] != null
 
             return (
-              <motion.div layout initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }} transition={{ duration: 0.3 }} key={p.id} className="glass-panel" style={{
+              <motion.div layout initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }} transition={{ duration: 0.3 }} key={p.id} className="glass-panel restaurant-order-card" style={{
                 borderRadius: 24, padding: '24px',
                 border: p.status === 'novo' ? '1px solid rgba(239,68,68,0.4)' : '1px solid rgba(0,0,0,0.06)',
                 boxShadow: p.status === 'novo'
@@ -186,8 +187,8 @@ export default function PedidosPage() {
                 <div style={{ position: 'absolute', top: -50, right: -50, width: 150, height: 150, background: s.cor, opacity: 0.05, filter: 'blur(40px)', borderRadius: '50%' }} />
 
                 {/* Header do card */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, position: 'relative', zIndex: 1 }}>
-                  <div>
+                <div className="restaurant-order-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, position: 'relative', zIndex: 1 }}>
+                  <div className="restaurant-order-customer">
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
                       <div className={p.status === 'novo' || p.status === 'preparando' ? "animate-pulse-neon" : ""} style={{ width: 44, height: 44, borderRadius: 14, background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${s.cor}40`, boxShadow: `0 0 15px ${s.glow}` }}>
                         <SIcon size={22} color={s.cor} />
@@ -202,7 +203,7 @@ export default function PedidosPage() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.05)', padding: '6px 12px', borderRadius: 12 }}>
                         <MapPin size={14} color="#a855f7" />
-                        <span style={{ fontSize: 13, color: '#e9d5ff', fontWeight: 700 }}>{p.zona}</span>
+                        <span style={{ fontSize: 13, color: '#7e22ce', fontWeight: 700 }}>{p.zona}</span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,0.05)', padding: '6px 12px', borderRadius: 12 }}>
                         {p.pagamento === 'pix' && <QrCode size={14} color="#22c55e" />}
@@ -226,11 +227,14 @@ export default function PedidosPage() {
 
                 {/* Itens */}
                 <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(0,0,0,0.05)', borderRadius: 16, padding: '16px', marginBottom: 20, position: 'relative', zIndex: 1 }}>
-                  {p.itens.map((item, i) => (
-                    <div key={i} style={{ fontSize: 14, color: '#334155', lineHeight: '1.8', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 500 }}>
-                      <div style={{ width: 6, height: 6, borderRadius: '50%', background: s.cor, boxShadow: `0 0 5px ${s.cor}` }} /> {item}
-                    </div>
-                  ))}
+                  {p.itens.map((item, i) => {
+                    const instrucao = item.startsWith('Talheres:') || item.startsWith('Observação:')
+                    return (
+                      <div key={i} style={{ fontSize: 14, color: instrucao ? '#9a3412' : '#334155', lineHeight: '1.8', display: 'flex', alignItems: 'center', gap: 8, fontWeight: instrucao ? 800 : 500, background: instrucao ? '#fff7ed' : 'transparent', borderRadius: 8, padding: instrucao ? '2px 8px' : 0 }}>
+                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: instrucao ? '#ea580c' : s.cor, boxShadow: `0 0 5px ${instrucao ? '#ea580c' : s.cor}` }} /> {item}
+                      </div>
+                    )
+                  })}
                 </div>
 
                 {/* Entregador */}
