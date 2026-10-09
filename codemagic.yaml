@@ -207,6 +207,11 @@ workflows:
     scripts:
       - *validate_public_env
       - *prepare_capacitor_ios
+      - name: Set Ambulante iOS marketing version
+        script: |
+          set -euo pipefail
+          cd "$APP_DIR/ios/App"
+          agvtool new-marketing-version 1.1
       - *configure_ios_signing
       - *resolve_apple_app_id
       - *increment_ios_build_number
