@@ -357,12 +357,13 @@ export default function AmbulantesPage() {
     </div>
     {/* Continua montado ao alternar a lista: preserva zoom, pinos e tiles já carregados. */}
     <section id="map-region" className="pg-map-stage" aria-label="Mapa da região" hidden={viewMode !== 'map'} data-expanded={expanded}>
-      <MapView clientePos={pos} accuracy={fonte === 'gps' ? gpsData?.accuracy : undefined} items={items} onOpen={openSeller} onAjustarPos={definirPosicaoManual}/>
+      <MapView clientePos={pos} accuracy={fonte === 'gps' ? gpsData?.accuracy : undefined} items={items} onOpen={openSeller} onAjustarPos={definirPosicaoManual} expanded={expanded}/>
       <div className="pg-map-style-switch" role="group" aria-label="Estilo do mapa">
         <button aria-label="Estilo Praia" aria-pressed={mapStyle === 'praia'} onClick={() => setMapStyle('praia')}><Waves size={17}/><span>Praia<small>Areia e zonas</small></span></button>
         <button aria-label="Estilo Cidade" aria-pressed={mapStyle === 'ruas'} onClick={() => setMapStyle('ruas')}><Building2 size={17}/><span>Cidade<small>Ruas e endereços</small></span></button>
       </div>
     </section>
+    <a className="pg-map-results-link" href="#map-results-title">Ver lojas por perto <ChevronRight size={16}/></a>
     <div className="pg-map-location" role="status" aria-label="Status da localização"><LocateFixed size={15}/><span>{locationText}</span>{fonte === 'manual' && <button onClick={limparPosicaoManual}>Voltar ao GPS</button>}</div>
     {(foraDaArea || modoRevisao) && <div className="pg-map-area-note"><span>{modoRevisao ? 'Cenário de revisão em Praia Grande. Esta conta não aparece para usuários reais.' : `Exploração livre. Pedidos a até ${RAIO_PEDIDO_KM} km da loja em ${TEXTO_AREA_ATENDIDA}.`}</span>{foraDaArea && fonte !== 'manual' && <button onClick={() => definirPosicaoManual(CLIENTE_FALLBACK[0], CLIENTE_FALLBACK[1])}>Explorar Praia Grande</button>}</div>}
     <CatalogFeedback/>
@@ -381,9 +382,9 @@ const StoreMarker = memo(function StoreMarker({ item, onOpen }: { item: MapResul
   </Marker>
 })
 
-function MapView({ clientePos, accuracy, items, onOpen, onAjustarPos }: {
+function MapView({ clientePos, accuracy, items, onOpen, onAjustarPos, expanded }: {
   clientePos: [number, number]; accuracy?: number; items: MapResult[]
-  onOpen: (item: MapResult) => void; onAjustarPos: (lat: number, lng: number) => void
+  onOpen: (item: MapResult) => void; onAjustarPos: (lat: number, lng: number) => void; expanded: boolean
 }) {
   const [mapa, setMapa] = useState<LeafletMap | null>(null)
   const mapStyle = usePreferences(s => s.mapStyle)
@@ -403,6 +404,20 @@ function MapView({ clientePos, accuracy, items, onOpen, onAjustarPos }: {
     if (isBeach && !beach) { setMapStyle('ruas'); return }
     mapa?.setView(clientePos, isBeach ? 16 : 15, { animate: !reduceMotion })
   }
+  // No celular, o gesto vertical deve rolar a página. O mapa só captura
+  // arrasto quando o usuário escolhe explicitamente "Ampliar mapa".
+  useEffect(() => {
+    if (!mapa) return
+    const media = window.matchMedia('(max-width: 719px)')
+    const updateGestures = () => {
+      const interactive = expanded || !media.matches
+      if (interactive) { mapa.dragging.enable(); mapa.touchZoom.enable() }
+      else { mapa.dragging.disable(); mapa.touchZoom.disable() }
+    }
+    updateGestures()
+    media.addEventListener('change', updateGestures)
+    return () => media.removeEventListener('change', updateGestures)
+  }, [mapa, expanded])
   return <div className={mapStyle === 'ruas' ? 'pg-map-surface pg-map-standard' : 'pg-map-surface pg-map-beach'}>
     <div className="pg-beach-context">
       {isBeach ? <><Waves size={20}/><label><span>EXPLORANDO A PRAIA</span><select aria-label="Praia em exibição" value={viewedBeach} onChange={e => chooseBeach(e.target.value)}>{BEACH_ZONES.map(zone => <option key={zone.id} value={zone.id}>{zone.nome}</option>)}</select></label><span className="pg-beach-city">Praia Grande</span></> : <><Building2 size={20}/><div><span>ESTILO CIDADE</span><strong>Ruas e endereços</strong></div></>}

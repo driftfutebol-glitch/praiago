@@ -34,15 +34,15 @@ export default class ErrorBoundary extends Component<Props, State> {
         display: 'grid',
         placeItems: 'center',
         padding: 24,
-        background: '#ffffff',
-        color: '#0f172a',
+        background: 'var(--surface)',
+        color: 'var(--ink-strong)',
       }}>
         <div style={{
           width: '100%',
           maxWidth: 520,
           borderRadius: 22,
           border: '1px solid rgba(34,197,94,0.20)',
-          background: '#ffffff',
+          background: 'var(--surface)',
           boxShadow: '0 24px 80px rgba(15,23,42,0.14)',
           padding: 28,
         }}>
@@ -60,13 +60,13 @@ export default class ErrorBoundary extends Component<Props, State> {
             </div>
             <div>
               <h1 style={{ margin: 0, fontSize: 22, fontWeight: 900 }}>Nao foi possivel carregar esta tela</h1>
-              <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: 14 }}>
+              <p style={{ margin: '4px 0 0', color: 'var(--muted)', fontSize: 14 }}>
                 {this.props.appName || 'PraiaGo'} encontrou um erro de interface.
               </p>
             </div>
           </div>
 
-          <p style={{ color: '#334155', lineHeight: 1.6, margin: '16px 0 20px' }}>
+          <p style={{ color: 'var(--ink)', lineHeight: 1.6, margin: '16px 0 20px' }}>
             Recarregue a tela ou volte ao inicio. O erro tambem foi registrado no console para correcao.
           </p>
 
@@ -79,7 +79,7 @@ export default class ErrorBoundary extends Component<Props, State> {
             </button>
             <button onClick={() => { window.location.href = homePath }} style={{
               display: 'inline-flex', alignItems: 'center', gap: 8, border: '1px solid rgba(148,163,184,0.28)',
-              borderRadius: 12, padding: '12px 16px', color: '#0f172a', background: '#f8fafc', fontWeight: 800, cursor: 'pointer',
+              borderRadius: 12, padding: '12px 16px', color: 'var(--ink-strong)', background: 'var(--surface-soft)', fontWeight: 800, cursor: 'pointer',
             }}>
               <Home size={16} /> Inicio
             </button>
@@ -88,7 +88,7 @@ export default class ErrorBoundary extends Component<Props, State> {
           {import.meta.env.DEV && this.state.message && (
             <pre style={{
               marginTop: 18, padding: 12, borderRadius: 12, whiteSpace: 'pre-wrap',
-              color: '#b91c1c', background: '#fef2f2', fontSize: 12,
+              color: 'var(--danger)', background: 'var(--surface-red)', fontSize: 12,
             }}>{this.state.message}</pre>
           )}
         </div>

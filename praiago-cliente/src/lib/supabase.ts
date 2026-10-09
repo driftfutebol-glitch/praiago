@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { persistentAuthFetch } from '../../../mobile/authFetch'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || ''
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
@@ -15,6 +16,7 @@ export const VEIO_DE_RECOVERY =
   && /(?:^|[?&#])(?:access_token|token_hash|code)=/.test(recoveryUrl)
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  global: { fetch: persistentAuthFetch(supabaseUrl) },
   auth: {
     storageKey: 'praiago-cliente-auth',
     persistSession: true,

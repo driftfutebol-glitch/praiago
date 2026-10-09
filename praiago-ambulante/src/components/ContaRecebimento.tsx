@@ -17,12 +17,12 @@ import {
 type PedidoTroca = { id: string; status: string; created_at: string; parecer: string | null; liberado_ate: string | null }
 
 const inputBase: React.CSSProperties = {
-  width: '100%', border: '1px solid #dfe6ed', borderRadius: 8,
-  padding: '11px 12px', fontSize: 14, fontWeight: 600, color: '#0f172a',
-  background: '#f8fafc', outline: 'none',
+  width: '100%', border: '1px solid var(--line)', borderRadius: 8,
+  padding: '11px 12px', fontSize: 14, fontWeight: 600, color: 'var(--ink-strong)',
+  background: 'var(--surface-soft)', outline: 'none',
 }
 const labelBase: React.CSSProperties = {
-  fontSize: 11, fontWeight: 800, color: '#64748b', textTransform: 'uppercase',
+  fontSize: 11, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase',
   letterSpacing: 0.6, marginBottom: 4, display: 'block',
 }
 
@@ -132,13 +132,13 @@ export default function ContaRecebimento({ onMudou }: { onMudou?: () => void }) 
   })
 
   return (
-    <div className="surface" style={{ borderRadius: 8, padding: 16, border: '1px solid #dfe6ed', marginBottom: 14, boxShadow: 'none' }}>
+    <div className="surface" style={{ borderRadius: 8, padding: 16, border: '1px solid var(--line)', marginBottom: 14, boxShadow: 'none' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 12, fontWeight: 900, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ fontSize: 12, fontWeight: 900, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
             <Landmark size={13} /> Conta que recebe suas vendas
           </div>
-          <div style={{ fontSize: 14, fontWeight: 800, color: cadastrado ? '#0f172a' : '#ef4444', marginTop: 4 }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: cadastrado ? 'var(--ink-strong)' : '#ef4444', marginTop: 4 }}>
             {carregando ? '—' : cadastrado
               ? `${conta?.banco_nome ?? 'Banco'} · ${conta?.conta_mascarada ?? 'conta cadastrada'}`
               : 'Não cadastrada'}
@@ -147,7 +147,7 @@ export default function ContaRecebimento({ onMudou }: { onMudou?: () => void }) 
         {!editando && !pedindoTroca && !carregando && (
           <button
             onClick={() => { if (podeEditar) { setEditando(true) } else { setPedindoTroca(true) } }}
-            style={{ border: '1px solid rgba(14,165,233,0.3)', background: '#eff6ff', color: '#0284c7', borderRadius: 12, padding: '8px 14px', fontSize: 13, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}
+            style={{ border: '1px solid var(--info-line)', background: 'var(--surface-blue)', color: 'var(--info)', borderRadius: 12, padding: '8px 14px', fontSize: 13, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}
           >
             {cadastrado ? (janelaAberta ? 'Trocar agora' : 'Trocar conta') : 'Cadastrar'}
           </button>
@@ -156,17 +156,17 @@ export default function ContaRecebimento({ onMudou }: { onMudou?: () => void }) 
 
       {/* Estado do pedido de troca */}
       {!editando && !pedindoTroca && troca && ['pendente', 'em_analise'].includes(troca.status) && (
-        <div style={{ marginTop: 12, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 12, padding: 12, fontSize: 12.5, fontWeight: 700, color: '#b45309' }}>
+        <div style={{ marginTop: 12, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 12, padding: 12, fontSize: 12.5, fontWeight: 700, color: 'var(--warning)' }}>
           Pedido de troca em análise. Nossa equipe vai falar com você pelo chat do app.
         </div>
       )}
       {!editando && !pedindoTroca && troca?.status === 'recusado' && (
-        <div style={{ marginTop: 12, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 12, padding: 12, fontSize: 12.5, fontWeight: 700, color: '#dc2626' }}>
+        <div style={{ marginTop: 12, background: 'var(--surface-red)', border: '1px solid var(--danger-line)', borderRadius: 12, padding: 12, fontSize: 12.5, fontWeight: 700, color: 'var(--danger)' }}>
           Troca não aprovada.{troca.parecer ? ` ${troca.parecer}` : ' Fale com a equipe pelo chat do app.'}
         </div>
       )}
       {!editando && janelaAberta && (
-        <div style={{ marginTop: 12, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: 12, padding: 12, fontSize: 12.5, fontWeight: 700, color: '#15803d', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ marginTop: 12, background: 'var(--surface-green)', border: '1px solid var(--success-line)', borderRadius: 12, padding: 12, fontSize: 12.5, fontWeight: 700, color: 'var(--success)', display: 'flex', alignItems: 'center', gap: 6 }}>
           <ShieldCheck size={14} /> Troca liberada. Cadastre a nova conta antes de {new Date(troca!.liberado_ate!).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}.
         </div>
       )}
@@ -174,7 +174,7 @@ export default function ContaRecebimento({ onMudou }: { onMudou?: () => void }) 
       {(editando || pedindoTroca) && (
         <div style={{ marginTop: 14, display: 'grid', gap: 10 }}>
           {pedindoTroca && (
-            <div style={{ background: 'rgba(14,165,233,0.08)', border: '1px solid rgba(14,165,233,0.25)', borderRadius: 12, padding: 12, fontSize: 12.5, fontWeight: 600, color: '#0369a1' }}>
+            <div style={{ background: 'var(--surface-blue)', border: '1px solid var(--info-line)', borderRadius: 12, padding: 12, fontSize: 12.5, fontWeight: 600, color: 'var(--info)' }}>
               Trocar a conta que recebe seu dinheiro passa por conferência da nossa equipe — é assim que protegemos seu faturamento caso alguém acesse sua conta.
             </div>
           )}
@@ -229,7 +229,7 @@ export default function ContaRecebimento({ onMudou }: { onMudou?: () => void }) 
             <label style={labelBase}>Nome do titular</label>
             <input {...campo('titular_nome')} placeholder="Como está no banco" style={inputBase} />
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 4 }}>
-              <span style={{ fontSize: 11.5, fontWeight: 700, color: titularLongo ? '#dc2626' : '#64748b' }}>
+              <span style={{ fontSize: 11.5, fontWeight: 700, color: titularLongo ? '#dc2626' : 'var(--muted)' }}>
                 {form.titular_nome.trim().length}/{MAX_TITULAR} letras
               </span>
               {/* O banco confere o 1o e o ultimo nome; os do meio podem ir
@@ -239,7 +239,7 @@ export default function ContaRecebimento({ onMudou }: { onMudou?: () => void }) 
                 <button
                   type="button"
                   onClick={() => setForm(f => ({ ...f, titular_nome: abreviarTitular(f.titular_nome) }))}
-                  style={{ border: '1px solid rgba(14,165,233,0.3)', background: '#eff6ff', color: '#0284c7', borderRadius: 10, padding: '5px 10px', fontSize: 11.5, fontWeight: 800, cursor: 'pointer' }}
+                  style={{ border: '1px solid var(--info-line)', background: 'var(--surface-blue)', color: 'var(--info)', borderRadius: 10, padding: '5px 10px', fontSize: 11.5, fontWeight: 800, cursor: 'pointer' }}
                 >
                   Abreviar automaticamente
                 </button>
@@ -250,7 +250,7 @@ export default function ContaRecebimento({ onMudou }: { onMudou?: () => void }) 
           <div>
             <label style={labelBase}>CPF ou CNPJ do titular</label>
             <input {...campo('titular_documento')} inputMode="numeric" placeholder="Só números" style={inputBase} />
-            <div style={{ fontSize: 11.5, color: '#64748b', fontWeight: 600, marginTop: 4 }}>
+            <div style={{ fontSize: 11.5, color: 'var(--muted)', fontWeight: 600, marginTop: 4 }}>
               Precisa ser o mesmo documento do seu cadastro — conta de terceiro não é aceita.
             </div>
           </div>
@@ -271,7 +271,7 @@ export default function ContaRecebimento({ onMudou }: { onMudou?: () => void }) 
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               onClick={() => { setEditando(false); setPedindoTroca(false); setErro('') }}
-              style={{ flex: 1, border: '1px solid #dfe6ed', background: '#fff', color: '#64748b', borderRadius: 8, padding: '12px', fontSize: 14, fontWeight: 800, cursor: 'pointer' }}
+              style={{ flex: 1, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--muted)', borderRadius: 8, padding: '12px', fontSize: 14, fontWeight: 800, cursor: 'pointer' }}
             >
               Cancelar
             </button>

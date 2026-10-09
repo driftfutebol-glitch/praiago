@@ -27,6 +27,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useRoute } from '../hooks/useRoute'
+import { usePushOrderFocus } from '../hooks/usePushOrderFocus'
 import { useOrderNotifications, type IncomingOrder } from '../hooks/useOrderNotifications'
 import { useLocalizacaoCliente } from '../hooks/useLocalizacaoCliente'
 import ChatPedidoModal from '../components/ChatPedidoModal'
@@ -61,10 +62,10 @@ const tabs = ['Todos', 'Novos', 'Preparando', 'Em rota', 'Entregues'] as const
 type Tab = typeof tabs[number]
 
 const statusConfig: Record<Status, { label: string; color: string; background: string; icon: typeof Clock3 }> = {
-  novo: { label: 'Novo', color: '#9a6700', background: '#fff6d8', icon: Clock3 },
-  preparando: { label: 'Preparando', color: '#007fa6', background: '#eaf6fa', icon: Timer },
-  saiu_entrega: { label: 'Em rota', color: '#b54708', background: '#fff4e5', icon: Navigation },
-  entregue: { label: 'Entregue', color: '#148447', background: '#eaf8ef', icon: CheckCircle2 },
+  novo: { label: 'Novo', color: 'var(--warning)', background: 'var(--surface-amber)', icon: Clock3 },
+  preparando: { label: 'Preparando', color: 'var(--info)', background: 'var(--surface-blue)', icon: Timer },
+  saiu_entrega: { label: 'Em rota', color: 'var(--warning)', background: 'var(--surface-amber)', icon: Navigation },
+  entregue: { label: 'Entregue', color: 'var(--success)', background: 'var(--surface-green)', icon: CheckCircle2 },
 }
 
 const money = (value: number) => value.toLocaleString('pt-BR', {
@@ -231,18 +232,18 @@ function LocationModal({ order, onClose }: { order: Pedido; onClose: () => void 
   }
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', flexDirection: 'column', background: '#f4f7fa' }}>
-      <header style={{ minHeight: 68, display: 'flex', alignItems: 'center', gap: 12, padding: '10px 15px', borderBottom: '1px solid #dfe6ed', background: '#fff' }}>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', flexDirection: 'column', background: 'var(--page-bg)' }}>
+      <header style={{ minHeight: 68, display: 'flex', alignItems: 'center', gap: 12, padding: '10px 15px', borderBottom: '1px solid var(--line)', background: 'var(--surface)' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ color: '#132238', fontSize: 15, fontWeight: 900 }}>{shortOrderId(order.id)}</span>
+            <span style={{ color: 'var(--ink-strong)', fontSize: 15, fontWeight: 900 }}>{shortOrderId(order.id)}</span>
             {clienteAoVivoAtivo && (
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 999, background: '#eaf8ef', border: '1px solid #a7dfbd', color: '#148447', fontSize: 10, fontWeight: 900, letterSpacing: 0.4 }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 999, background: 'var(--surface-green)', border: '1px solid var(--success-line)', color: 'var(--success)', fontSize: 10, fontWeight: 900, letterSpacing: 0.4 }}>
                 <Radio size={11} /> AO VIVO
               </span>
             )}
           </div>
-          <div style={{ marginTop: 3, overflow: 'hidden', color: '#617089', fontSize: 12, fontWeight: 650, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{meetingPoint(order)}</div>
+          <div style={{ marginTop: 3, overflow: 'hidden', color: 'var(--muted)', fontSize: 12, fontWeight: 650, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{meetingPoint(order)}</div>
         </div>
         <button type="button" className="icon-button" onClick={onClose} aria-label="Fechar mapa"><X size={19} /></button>
       </header>
@@ -266,34 +267,34 @@ function LocationModal({ order, onClose }: { order: Pedido; onClose: () => void 
               <Circle
                 center={[clienteAoVivo.lat, clienteAoVivo.lng]}
                 radius={Math.min(clienteAoVivo.precisao, 120)}
-                pathOptions={{ color: '#148447', fillColor: '#148447', fillOpacity: 0.12, weight: 1 }}
+                pathOptions={{ color: 'var(--success)', fillColor: 'var(--success)', fillOpacity: 0.12, weight: 1 }}
               />
             )}
             {myPosition && customerPosition && (
               <Polyline
                 positions={route?.coords?.length ? route.coords : [myPosition, customerPosition]}
-                pathOptions={{ color: '#148447', weight: route ? 5 : 3, dashArray: route ? undefined : '8 8', opacity: 0.82 }}
+                pathOptions={{ color: 'var(--success)', weight: route ? 5 : 3, dashArray: route ? undefined : '8 8', opacity: 0.82 }}
               />
             )}
           </MapContainer>
         ) : (
           <div style={{ height: '100%', display: 'grid', placeItems: 'center', padding: 24, textAlign: 'center' }}>
             <div>
-              <MapPin size={36} color="#8793a5" style={{ margin: '0 auto 12px' }} />
-              <div style={{ color: '#132238', fontSize: 15, fontWeight: 900 }}>Localização não enviada</div>
-              <p style={{ maxWidth: 280, margin: '6px auto 0', color: '#617089', fontSize: 13, lineHeight: 1.45, fontWeight: 600 }}>Use a reta e a barraca informadas no pedido para encontrar o cliente.</p>
+              <MapPin size={36} color="var(--faint)" style={{ margin: '0 auto 12px' }} />
+              <div style={{ color: 'var(--ink-strong)', fontSize: 15, fontWeight: 900 }}>Localização não enviada</div>
+              <p style={{ maxWidth: 280, margin: '6px auto 0', color: 'var(--muted)', fontSize: 13, lineHeight: 1.45, fontWeight: 600 }}>Use a reta e a barraca informadas no pedido para encontrar o cliente.</p>
             </div>
           </div>
         )}
 
         {direction === 'contramao' && (
-          <div style={{ position: 'absolute', zIndex: 1000, top: 12, left: 12, right: 12, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 8, background: '#fff0f2', border: '1px solid #f0b6bd', color: '#b42335', fontSize: 12, fontWeight: 850 }}>
+          <div style={{ position: 'absolute', zIndex: 1000, top: 12, left: 12, right: 12, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 8, background: 'var(--surface-red)', border: '1px solid var(--danger-line)', color: 'var(--danger)', fontSize: 12, fontWeight: 850 }}>
             <AlertTriangle size={18} />
             Confira o sentido antes de continuar.
           </div>
         )}
         {direction === 'fora_da_rota' && (
-          <div style={{ position: 'absolute', zIndex: 1000, top: 12, left: 12, right: 12, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 8, background: '#fff4e5', border: '1px solid #f4d39f', color: '#b54708', fontSize: 12, fontWeight: 850 }}>
+          <div style={{ position: 'absolute', zIndex: 1000, top: 12, left: 12, right: 12, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 8, background: 'var(--surface-amber)', border: '1px solid var(--warning-line)', color: 'var(--warning)', fontSize: 12, fontWeight: 850 }}>
             <RouteOff size={18} />
             Fora da rota. O trajeto será recalculado.
           </div>
@@ -301,22 +302,22 @@ function LocationModal({ order, onClose }: { order: Pedido; onClose: () => void 
 
         {route && (
           <div className="surface" style={{ position: 'absolute', zIndex: 1000, left: 12, bottom: 12, display: 'flex', gap: 14, padding: '10px 12px', boxShadow: '0 8px 20px rgba(23,45,74,0.14)' }}>
-            <div><div style={{ color: '#132238', fontSize: 15, fontWeight: 900 }}>{route.distancia}</div><div style={{ color: '#718096', fontSize: 10, fontWeight: 700 }}>distância</div></div>
-            <div><div style={{ color: '#132238', fontSize: 15, fontWeight: 900 }}>{route.tempo}</div><div style={{ color: '#718096', fontSize: 10, fontWeight: 700 }}>estimativa</div></div>
+            <div><div style={{ color: 'var(--ink-strong)', fontSize: 15, fontWeight: 900 }}>{route.distancia}</div><div style={{ color: 'var(--faint)', fontSize: 10, fontWeight: 700 }}>distância</div></div>
+            <div><div style={{ color: 'var(--ink-strong)', fontSize: 15, fontWeight: 900 }}>{route.tempo}</div><div style={{ color: 'var(--faint)', fontSize: 10, fontWeight: 700 }}>estimativa</div></div>
           </div>
         )}
       </div>
 
-      <footer style={{ padding: 14, borderTop: '1px solid #dfe6ed', background: '#fff' }}>
-        {gpsUnavailable && canNavigate && <div style={{ marginBottom: 9, color: '#b54708', fontSize: 11, fontWeight: 700 }}>Seu GPS não está disponível; a localização do cliente continua visível.</div>}
+      <footer style={{ padding: 14, borderTop: '1px solid var(--line)', background: 'var(--surface)' }}>
+        {gpsUnavailable && canNavigate && <div style={{ marginBottom: 9, color: 'var(--warning)', fontSize: 11, fontWeight: 700 }}>Seu GPS não está disponível; a localização do cliente continua visível.</div>}
         {canNavigate && (
           clienteAoVivoAtivo
-            ? <div style={{ marginBottom: 9, color: '#148447', fontSize: 11, fontWeight: 750 }}>Posição do cliente ao vivo, atualizada agora (±{clienteAoVivo?.precisao} m).</div>
-            : <div style={{ marginBottom: 9, color: '#617089', fontSize: 11, fontWeight: 700 }}>Ponto do momento do pedido. Peça ao cliente para ligar a localização em tempo real no app dele.</div>
+            ? <div style={{ marginBottom: 9, color: 'var(--success)', fontSize: 11, fontWeight: 750 }}>Posição do cliente ao vivo, atualizada agora (±{clienteAoVivo?.precisao} m).</div>
+            : <div style={{ marginBottom: 9, color: 'var(--muted)', fontSize: 11, fontWeight: 700 }}>Ponto do momento do pedido. Peça ao cliente para ligar a localização em tempo real no app dele.</div>
         )}
         <div style={{ display: 'flex', gap: 8 }}>
           {order.clienteTelefone && (
-            <a href={`tel:${order.clienteTelefone.replace(/\D/g, '')}`} className="secondary-button" style={{ flex: 1, color: '#132238', textDecoration: 'none' }}>
+            <a href={`tel:${order.clienteTelefone.replace(/\D/g, '')}`} className="secondary-button" style={{ flex: 1, color: 'var(--ink-strong)', textDecoration: 'none' }}>
               <Phone size={17} />
               Ligar
             </a>
@@ -335,6 +336,7 @@ export default function PedidosPage() {
   const sessao = getSessao()
   const [tab, setTab] = useState<Tab>('Todos')
   const [orders, setOrders] = useState<Pedido[]>([])
+  const pushTarget = usePushOrderFocus(orders.map(order=>order.id),()=>setTab('Todos'))
   const [loading, setLoading] = useState(true)
   const [locationOrder, setLocationOrder] = useState<Pedido | null>(null)
   const [chatOrder, setChatOrder] = useState<Pedido | null>(null)
@@ -357,12 +359,14 @@ export default function PedidosPage() {
     }
 
     void load()
+    window.addEventListener('praiago:refresh-orders', load)
     const channel = supabase
       .channel(`pedidos_page_${sessao.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos', filter: `vendedor_id=eq.${sessao.id}` }, load)
       .subscribe()
     return () => {
       active = false
+      window.removeEventListener('praiago:refresh-orders', load)
       void supabase.removeChannel(channel)
     }
   }, [sessao?.id])
@@ -447,16 +451,16 @@ export default function PedidosPage() {
           <h1>Pedidos</h1>
           <p>Acompanhe cada atendimento em tempo real.</p>
         </div>
-        {newCount > 0 && <span className="status-pill" style={{ color: '#9a6700', background: '#fff6d8' }}>{newCount} {newCount === 1 ? 'novo' : 'novos'}</span>}
+        {newCount > 0 && <span className="status-pill" style={{ color: 'var(--warning)', background: 'var(--surface-amber)' }}>{newCount} {newCount === 1 ? 'novo' : 'novos'}</span>}
       </div>
 
       <AnimatePresence>
         {latestOrder && (
-          <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="surface" style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 12, padding: 12, borderColor: '#b9e0ed', background: '#f2fbfd', boxShadow: 'none' }}>
-            <div style={{ width: 40, height: 40, display: 'grid', placeItems: 'center', flex: '0 0 40px', borderRadius: 8, background: '#e4f5fa', color: '#008fc0' }}><Bell size={19} /></div>
+          <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="surface" style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 12, padding: 12, borderColor: 'var(--info-line)', background: 'var(--surface-blue)', boxShadow: 'none' }}>
+            <div style={{ width: 40, height: 40, display: 'grid', placeItems: 'center', flex: '0 0 40px', borderRadius: 8, background: 'var(--surface-blue)', color: 'var(--info)' }}><Bell size={19} /></div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ color: '#132238', fontSize: 13, fontWeight: 900 }}>Novo pedido recebido</div>
-              <div style={{ marginTop: 2, overflow: 'hidden', color: '#617089', fontSize: 11, fontWeight: 650, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{latestOrder.clienteNome} · {money(latestOrder.total)}</div>
+              <div style={{ color: 'var(--ink-strong)', fontSize: 13, fontWeight: 900 }}>Novo pedido recebido</div>
+              <div style={{ marginTop: 2, overflow: 'hidden', color: 'var(--muted)', fontSize: 11, fontWeight: 650, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{latestOrder.clienteNome} · {money(latestOrder.total)}</div>
             </div>
             <button type="button" className="text-command" onClick={() => { setTab('Novos'); dismissLatest() }}>Ver</button>
             <button type="button" className="icon-button" style={{ width: 34, height: 34, flexBasis: 34 }} onClick={dismissLatest} aria-label="Fechar aviso"><X size={16} /></button>
@@ -464,7 +468,7 @@ export default function PedidosPage() {
         )}
       </AnimatePresence>
 
-      <div role="tablist" aria-label="Filtrar pedidos" style={{ display: 'flex', gap: 7, marginBottom: 14, overflowX: 'auto' }} className="hide-scrollbar">
+      <div role="tablist" aria-label="Filtrar pedidos" style={{ display: 'flex', gap: 7, marginBottom: 18, overflowX: 'auto', padding: '2px 1px 5px' }} className="hide-scrollbar">
         {tabs.map(item => (
           <button
             type="button"
@@ -472,7 +476,7 @@ export default function PedidosPage() {
             aria-selected={tab === item}
             key={item}
             onClick={() => setTab(item)}
-            style={{ minHeight: 38, flex: '0 0 auto', padding: '0 13px', border: `1px solid ${tab === item ? '#79bfd4' : '#dfe6ed'}`, borderRadius: 999, background: tab === item ? '#eaf6fa' : '#fff', color: tab === item ? '#007fa6' : '#617089', fontSize: 11, fontWeight: 850, cursor: 'pointer' }}
+            style={{ minHeight: 42, flex: '0 0 auto', padding: '0 15px', border: `1px solid ${tab === item ? '#087f95' : 'var(--line)'}`, borderRadius: 12, background: tab === item ? '#087f95' : 'var(--surface)', color: tab === item ? '#fff' : 'var(--muted)', boxShadow: tab === item ? '0 5px 13px rgba(8,127,149,.16)' : 'none', fontSize: 12, fontWeight: 850, cursor: 'pointer' }}
           >
             {item}
           </button>
@@ -483,9 +487,9 @@ export default function PedidosPage() {
         <div className="surface shimmer" style={{ height: 180 }} />
       ) : filteredOrders.length === 0 ? (
         <div className="surface" style={{ padding: '34px 20px', textAlign: 'center', boxShadow: 'none' }}>
-          <ShoppingBag size={34} color="#8793a5" style={{ margin: '0 auto 12px' }} />
-          <div style={{ color: '#132238', fontSize: 15, fontWeight: 900 }}>Nenhum pedido nesta etapa</div>
-          <p style={{ margin: '6px 0 0', color: '#617089', fontSize: 12, fontWeight: 600 }}>Os pedidos confirmados aparecerão aqui.</p>
+          <ShoppingBag size={34} color="var(--faint)" style={{ margin: '0 auto 12px' }} />
+          <div style={{ color: 'var(--ink-strong)', fontSize: 15, fontWeight: 900 }}>Nenhum pedido nesta etapa</div>
+          <p style={{ margin: '6px 0 0', color: 'var(--muted)', fontSize: 12, fontWeight: 600 }}>Os pedidos confirmados aparecerão aqui.</p>
         </div>
       ) : (
         <div style={{ display: 'grid', gap: 10 }}>
@@ -500,42 +504,42 @@ export default function PedidosPage() {
                 : 'Confirmar entrega'
 
             return (
-              <motion.article layout key={order.id} className="surface" style={{ padding: 14, boxShadow: 'none', borderLeft: order.status === 'novo' ? '4px solid #e2ae22' : '1px solid #dfe6ed' }}>
+              <motion.article layout key={order.id} id={'push-order-'+order.id} tabIndex={pushTarget===order.id?-1:undefined} className="surface" style={{ padding: 17, boxShadow: 'none', borderLeft: order.status === 'novo' ? '4px solid #e2ae22' : '1px solid var(--line)',outline:pushTarget===order.id?'2px solid #007fa6':undefined,scrollMarginTop:90 }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-                      <h2 style={{ margin: 0, color: '#132238', fontSize: 15, fontWeight: 900 }}>{shortOrderId(order.id)}</h2>
+                      <h2 style={{ margin: 0, color: 'var(--ink-strong)', fontSize: 15, fontWeight: 900 }}>{shortOrderId(order.id)}</h2>
                       <span className="status-pill" style={{ minHeight: 24, color: config.color, background: config.background }}><StatusIcon size={12} />{config.label}</span>
-                      {order.isLive && <span style={{ color: '#007fa6', fontSize: 9, fontWeight: 850 }}>Agora</span>}
+                      {order.isLive && <span style={{ color: 'var(--info)', fontSize: 9, fontWeight: 850 }}>Agora</span>}
                     </div>
-                    <div style={{ marginTop: 5, color: '#617089', fontSize: 11, fontWeight: 650 }}>{order.hora}</div>
+                    <div style={{ marginTop: 5, color: 'var(--muted)', fontSize: 11, fontWeight: 650 }}>{order.hora}</div>
                   </div>
-                  <div style={{ color: '#148447', fontSize: 16, fontWeight: 900 }}>{money(order.total)}</div>
+                  <div style={{ color: 'var(--success)', fontSize: 16, fontWeight: 900 }}>{money(order.total)}</div>
                 </div>
 
                 <div style={{ display: 'grid', gap: 8, marginTop: 13 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 9, color: '#40506a', fontSize: 12, fontWeight: 700 }}><UserRound size={16} color="#718096" />{order.cliente}</div>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9, color: '#40506a', fontSize: 12, lineHeight: 1.4, fontWeight: 700 }}><MapPin size={16} color="#718096" style={{ flexShrink: 0 }} />{meetingPoint(order)}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 9, color: 'var(--ink)', fontSize: 12, fontWeight: 700 }}><UserRound size={16} color="var(--faint)" />{order.cliente}</div>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9, color: 'var(--ink)', fontSize: 12, lineHeight: 1.4, fontWeight: 700 }}><MapPin size={16} color="var(--faint)" style={{ flexShrink: 0 }} />{meetingPoint(order)}</div>
                   {order.clienteTelefone && (
-                    <a href={`tel:${order.clienteTelefone.replace(/\D/g, '')}`} style={{ display: 'flex', alignItems: 'center', gap: 9, color: '#007fa6', fontSize: 12, fontWeight: 800, textDecoration: 'none' }}><Phone size={16} />{formatPhone(order.clienteTelefone)}</a>
+                    <a href={`tel:${order.clienteTelefone.replace(/\D/g, '')}`} style={{ display: 'flex', alignItems: 'center', gap: 9, color: 'var(--info)', fontSize: 12, fontWeight: 800, textDecoration: 'none' }}><Phone size={16} />{formatPhone(order.clienteTelefone)}</a>
                   )}
                 </div>
 
-                <div style={{ marginTop: 12, padding: 11, borderRadius: 8, background: '#f6f8fb' }}>
+                <div style={{ marginTop: 12, padding: 12, borderRadius: 13, background: 'var(--surface-soft)' }}>
                   {order.itens.length ? order.itens.map((item, index) => (
-                    <div key={`${order.id}-${index}`} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, paddingTop: index ? 6 : 0, color: '#40506a', fontSize: 12, lineHeight: 1.4, fontWeight: 650 }}>
-                      <PackageCheck size={14} color="#8793a5" style={{ marginTop: 1, flexShrink: 0 }} />
+                    <div key={`${order.id}-${index}`} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, paddingTop: index ? 6 : 0, color: 'var(--ink)', fontSize: 12, lineHeight: 1.4, fontWeight: 650 }}>
+                      <PackageCheck size={14} color="var(--faint)" style={{ marginTop: 1, flexShrink: 0 }} />
                       {item}
                     </div>
-                  )) : <div style={{ color: '#718096', fontSize: 12, fontWeight: 650 }}>Itens não informados</div>}
+                  )) : <div style={{ color: 'var(--faint)', fontSize: 12, fontWeight: 650 }}>Itens não informados</div>}
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 11, color: '#617089', fontSize: 11, fontWeight: 750 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 11, color: 'var(--muted)', fontSize: 11, fontWeight: 750 }}>
                   <PaymentIcon payment={order.pagamento} />
                   {paymentLabel(order.pagamento)}
                 </div>
 
-                <div style={{ display: 'flex', gap: 8, marginTop: 13, paddingTop: 11, borderTop: '1px solid #e7ecf1' }}>
+                <div style={{ display: 'flex', gap: 8, marginTop: 13, paddingTop: 11, borderTop: '1px solid var(--line)' }}>
                   <button type="button" className="secondary-button" disabled={!hasLocation} onClick={() => setLocationOrder(order)} style={{ minHeight: 40, width: 46, padding: 0 }} aria-label={hasLocation ? 'Abrir localização do pedido' : 'Pedido sem coordenadas'}>
                     <MapPin size={17} />
                   </button>

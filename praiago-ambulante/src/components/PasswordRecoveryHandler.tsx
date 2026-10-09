@@ -38,16 +38,16 @@ export default function PasswordRecoveryHandler() {
   }
 
   const inputStyle: React.CSSProperties = {
-    width: '100%', boxSizing: 'border-box', background: '#f8fafc',
+    width: '100%', boxSizing: 'border-box', background: 'var(--surface-soft)',
     border: '1px solid rgba(0,0,0,0.1)', borderRadius: 14, padding: '14px',
-    fontSize: 15, fontWeight: 600, color: '#0f172a', outline: 'none', marginBottom: 10,
+    fontSize: 15, fontWeight: 600, color: 'var(--ink-strong)', outline: 'none', marginBottom: 10,
   }
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div style={{ width: '100%', maxWidth: 420, background: '#ffffff', borderRadius: 24, padding: 26, boxShadow: '0 24px 60px rgba(15,23,42,0.35)' }}>
-        <div style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', marginBottom: 6 }}>Criar nova senha</div>
-        <div style={{ fontSize: 13.5, color: '#64748b', fontWeight: 600, marginBottom: 18, lineHeight: 1.45 }}>
+      <div style={{ width: '100%', maxWidth: 420, background: 'var(--surface)', borderRadius: 24, padding: 26, boxShadow: '0 24px 60px rgba(15,23,42,0.35)' }}>
+        <div style={{ fontSize: 20, fontWeight: 900, color: 'var(--ink-strong)', marginBottom: 6 }}>Criar nova senha</div>
+        <div style={{ fontSize: 13.5, color: 'var(--muted)', fontWeight: 600, marginBottom: 18, lineHeight: 1.45 }}>
           Você abriu o link de redefinição do PraiaGo. Escolha a nova senha da sua conta.
         </div>
         {!ok && (
@@ -68,7 +68,7 @@ export default function PasswordRecoveryHandler() {
         )}
         <button
           onClick={() => setAberto(false)}
-          style={{ width: '100%', border: 'none', background: 'transparent', color: '#64748b', padding: '12px 0 0', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}
+          style={{ width: '100%', border: 'none', background: 'transparent', color: 'var(--muted)', padding: '12px 0 0', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}
         >
           {ok ? 'Fechar e fazer login' : 'Cancelar'}
         </button>

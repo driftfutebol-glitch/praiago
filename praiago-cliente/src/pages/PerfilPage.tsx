@@ -1,3 +1,5 @@
+import PushNotificationSetting from '../components/PushNotificationSetting'
+import { disconnectPush } from '../lib/pushNotifications'
 import VersaoDoApp from '../components/VersaoDoApp'
 import { useCallback, useEffect, useState } from 'react'
 import { Eye, EyeOff, LogIn, LogOut, User, Package, MapPin, ChevronRight, Bell, HelpCircle, Star, Shield, Mail, CheckCircle2, AlertCircle, Edit3, Loader2, Trash2, Ticket, Volume2, Sparkles, LockKeyhole } from 'lucide-react'
@@ -292,13 +294,15 @@ function TelaLogada() {
           ))}
           <a className="pg-menu-row" href="https://www.praiago.com.br/privacidade.html" target="_blank" rel="noopener noreferrer"><span className="pg-menu-icon"><Shield size={19}/></span><span className="pg-menu-copy">Privacidade e seus dados<small>Saiba como suas informações são tratadas</small></span><ChevronRight size={17}/></a>
         </div></section>
+        <PushNotificationSetting />
+
         <section className="pg-profile-section"><h2 className="pg-section-title">Seu jeito de usar</h2><div className="pg-card pg-menu">
           <AppearanceSetting />
           <div className="pg-menu-row"><span className="pg-menu-icon"><Volume2 size={19}/></span><span className="pg-menu-copy" id="sound-label">Sons de avisos<small>Não altera as notificações do celular</small></span><button role="switch" aria-labelledby="sound-label" aria-checked={preferences.notificationSounds} className="pg-toggle" onClick={() => preferences.setNotificationSounds(!preferences.notificationSounds)}/></div>
           <div className="pg-menu-row"><span className="pg-menu-icon"><Sparkles size={19}/></span><span className="pg-menu-copy" id="motion-label">Reduzir movimento<small>Transições mais discretas neste aparelho</small></span><button role="switch" aria-labelledby="motion-label" aria-checked={preferences.reducedMotion} className="pg-toggle" onClick={() => preferences.setReducedMotion(!preferences.reducedMotion)}/></div>
         </div></section>
 
-        <motion.button whileTap={{ scale: 0.96 }} onClick={async () => { await supabase.auth.signOut(); logout() }} style={{ width: '100%', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 20, padding: '18px 20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, boxShadow: '0 4px 15px rgba(239,68,68,0.1)' }}>
+        <motion.button whileTap={{ scale: 0.96 }} onClick={async () => { await disconnectPush(); await supabase.auth.signOut(); logout() }} style={{ width: '100%', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 20, padding: '18px 20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, boxShadow: '0 4px 15px rgba(239,68,68,0.1)' }}>
           <LogOut size={20} color="var(--pg-danger)" />
           <span style={{ fontSize: 15, fontWeight: 800, color: 'var(--pg-danger)' }}>Sair da conta</span>
         </motion.button>

@@ -16,6 +16,7 @@ import CategoryTabs from '../components/CategoryTabs'
 import PizzaBuilder from '../components/PizzaBuilder'
 import { cartProducts, resolveCartProduct, stockError } from '../lib/pizzaCart'
 import { productMenuSection, visibleProductDescription } from '../lib/menuSection'
+import { menuCategoryKey } from '../../../mobile/menuCategoryPolicy'
 import CatalogFeedback from '../components/CatalogFeedback'
 import { checarPedido, RAIO_PEDIDO_KM } from '../lib/serviceArea'
 import { criarPix, isPagamentoOnline, pagarComCartao, mensagemRecusaCartao, type PixCobranca } from '../lib/pagamento'
@@ -1686,7 +1687,7 @@ const darkInput: React.CSSProperties = {
 /* ─── PÁGINA PRINCIPAL ──────────────────────────────────── */
 type Step = 'menu' | 'checkout' | 'rastreando'
 
-/* ─── LISTA DE LOJAS (estilo iFood) ─────────────────────── */
+/* ─── LISTA DE LOJAS ─────────────────────────────────────── */
 function tempoMinutos(tempo: string) {
   const n = Number(String(tempo).match(/\d+/)?.[0] ?? 999)
   return Number.isFinite(n) ? n : 999
@@ -1697,58 +1698,43 @@ function LojaCard({ v, index, onOpen }: { v: Vendedor; index: number; onOpen: ()
   const temPromocao = v.produtos.some(p => p.promocao || (p.precoOriginal && p.precoOriginal > p.preco))
   return (
     <motion.button
-      initial={{ opacity: 0, y: 24 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: Math.min(index * 0.06, 0.4), type: 'spring', damping: 22, stiffness: 260 }}
-      whileTap={{ scale: 0.97 }}
+      transition={{ delay: Math.min(index * 0.04, 0.24), type: 'spring', damping: 24, stiffness: 280 }}
+      whileTap={{ scale: 0.99 }}
       onClick={onOpen}
-      style={{ width: '100%', textAlign: 'left', background: 'var(--pg-surface)', border: '1px solid var(--pg-line)', borderRadius: 26, overflow: 'hidden', cursor: 'pointer', padding: 0, boxShadow: '0 10px 30px rgba(15,23,42,0.07)' }}
+      className="pg-store-card"
     >
-      <div style={{ position: 'relative', height: 132 }}>
-        <img src={v.image} alt={v.nome} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: v.aberto ? 'none' : 'grayscale(0.9) brightness(0.9)' }} />
-        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(var(--pg-surface-rgb), 0.95), transparent 55%)' }} />
-        {/* Badge aberto/fechado com horário */}
-        <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', alignItems: 'center', gap: 6, background: !v.localizacaoConfirmada ? 'var(--pg-warning-bg)' : v.aberto ? 'var(--pg-success-bg)' : 'var(--pg-surface-alt)', color: !v.localizacaoConfirmada ? 'var(--pg-warning)' : v.aberto ? 'var(--pg-success)' : 'var(--pg-muted)', borderRadius: 999, padding: '6px 12px', fontSize: 11, fontWeight: 900, boxShadow: '0 6px 16px rgba(0,0,0,0.18)' }}>
-          {!v.localizacaoConfirmada ? <MapPin size={12} /> : <Clock size={12} />}
-          {!v.localizacaoConfirmada ? 'Local em ajuste' : labelHorario(v.aberto, v.horarioAbre, v.horarioFecha)}
-        </div>
-        {(temPromocao || rapido) && (
-          <div style={{ position: 'absolute', top: 12, left: 12, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(var(--pg-surface-rgb), 0.96)', color: temPromocao ? 'var(--pg-success)' : 'var(--pg-ocean-dark)', borderRadius: 999, padding: '6px 11px', fontSize: 11, fontWeight: 900, boxShadow: 'var(--pg-shadow)' }}>
-            {temPromocao ? <TicketPercent size={12} /> : <Zap size={12} />} {temPromocao ? 'Promo ativa' : 'Rápida'}
-          </div>
-        )}
-        <div style={{ position: 'absolute', left: 16, bottom: -22, width: 56, height: 56, overflow: 'hidden', borderRadius: 18, background: v.gradiente, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, border: '3px solid var(--pg-surface)', boxShadow: '0 8px 20px rgba(var(--pg-ocean-rgb), 0.35)' }}>
-          {v.avatar ? <img src={v.avatar} alt={v.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : v.emoji}
-        </div>
+      <div className="pg-store-photo">
+        <img className={v.aberto ? '' : 'pg-store-photo-closed'} src={v.image} alt="" loading="lazy" decoding="async" />
+        <span className="pg-store-avatar" style={{ background: v.gradiente }} aria-hidden="true">
+          {v.avatar ? <img src={v.avatar} alt="" loading="lazy" decoding="async" /> : v.emoji}
+        </span>
       </div>
-      <div style={{ padding: '30px 16px 16px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-          <div style={{ fontSize: 17, fontWeight: 900, color: 'var(--pg-ink)', letterSpacing: -0.3 }}>{v.nome}</div>
-          {v.tipo === 'restaurante'
-            ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 900, color: 'var(--pg-warning)', background: 'rgba(var(--pg-warning-rgb), 0.1)', border: '1px solid rgba(var(--pg-warning-rgb), 0.25)', borderRadius: 999, padding: '4px 10px', textTransform: 'uppercase', letterSpacing: 0.5 }}><UtensilsCrossed size={11} /> Restaurante</span>
-            : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 900, color: 'var(--pg-success)', background: 'rgba(var(--pg-success-rgb), 0.1)', border: '1px solid rgba(var(--pg-success-rgb), 0.25)', borderRadius: 999, padding: '4px 10px', textTransform: 'uppercase', letterSpacing: 0.5 }}><Umbrella size={11} /> Ambulante</span>}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 12.5, color: 'var(--pg-muted)', fontWeight: 600 }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--pg-warning)', fontWeight: 800 }}>
-            <Star size={13} fill="#fbbf24" color="#fbbf24" /> {v.avaliacao > 0 ? v.avaliacao.toFixed(1) : 'Novo'}
+      <div className="pg-store-details">
+        <div className="pg-store-heading">
+          <strong>{v.nome}</strong>
+          <span className="pg-store-type">
+            {v.tipo === 'restaurante' ? <UtensilsCrossed size={12} /> : <Umbrella size={12} />}
+            {v.tipo === 'restaurante' ? 'Restaurante' : 'Ambulante'}
           </span>
-          <span style={{ width: 3, height: 3, borderRadius: '50%', background: 'var(--pg-line)' }} />
+        </div>
+        <div className="pg-store-meta">
           <span>{v.categoria}</span>
-          <span style={{ width: 3, height: 3, borderRadius: '50%', background: 'var(--pg-line)' }} />
+          <span className="pg-store-dot" aria-hidden="true" />
+          <span className="pg-store-rating"><Star size={12} fill="currentColor" /> {v.avaliacao > 0 ? v.avaliacao.toFixed(1) : 'Novo'}</span>
+          <span className="pg-store-dot" aria-hidden="true" />
           <span>{v.tempo}</span>
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 12 }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--pg-success-bg)', color: 'var(--pg-success)', border: '1px solid var(--pg-success)', borderRadius: 999, padding: '5px 9px', fontSize: 11, fontWeight: 900 }}>
-            <CreditCard size={11} /> Pix/cartão no app
+        <div className="pg-store-footer">
+          <span className={`pg-store-status ${!v.localizacaoConfirmada ? 'pg-store-status-pending' : v.aberto ? 'pg-store-status-open' : 'pg-store-status-closed'}`}>
+            {!v.localizacaoConfirmada ? <MapPin size={12} /> : <Clock size={12} />}
+            {!v.localizacaoConfirmada ? 'Local em ajuste' : labelHorario(v.aberto, v.horarioAbre, v.horarioFecha)}
           </span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--pg-brand-soft)', color: 'var(--pg-ocean-dark)', border: '1px solid var(--pg-line)', borderRadius: 999, padding: '5px 9px', fontSize: 11, fontWeight: 900 }}>
-            <TicketPercent size={11} /> BEMVINDO20
-          </span>
-        </div>
-        <div style={{ marginTop: 10, fontSize: 12, fontWeight: 800, color: !v.localizacaoConfirmada ? 'var(--pg-warning)' : v.aberto ? 'var(--pg-ocean-dark)' : 'var(--pg-faint)' }}>
-          {!v.localizacaoConfirmada
-            ? 'Localizacao sendo configurada - cardapio disponivel'
-            : v.aberto ? `Ver cardápio · ${v.produtos.length} ite${v.produtos.length === 1 ? 'm' : 'ns'} →` : 'Loja fechada — toque pra espiar o cardápio'}
+          {(temPromocao || (rapido && v.aberto)) && <span className="pg-store-offer">
+            {temPromocao ? <TicketPercent size={12} /> : <Zap size={12} />}
+            {temPromocao ? 'Oferta' : 'Rápida'}
+          </span>}
         </div>
       </div>
     </motion.button>
@@ -1804,7 +1790,7 @@ function LojasList({ vendedores, loading, tipoInicial, foraDaArea, modoRevisao, 
   return (
     <div className="pg-explore" style={{ minHeight: '100%', background: 'var(--pg-sand)', paddingBottom: 28 }}>
       {/* Header */}
-      <div style={{ background: 'var(--pg-brand-gradient)', padding: '24px 20px 48px', borderBottomLeftRadius: 28, borderBottomRightRadius: 28, position: 'relative', overflow: 'hidden' }}>
+      <div className="pg-explore-header" style={{ background: 'var(--pg-brand-gradient)', padding: '24px 20px 48px', borderBottomLeftRadius: 28, borderBottomRightRadius: 28, position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', top: -60, right: -40, width: 190, height: 190, borderRadius: '50%', background: 'rgba(255,255,255,0.05)', filter: 'blur(2px)' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button aria-label="Voltar" onClick={() => navigate('/')} style={{ width: 42, height: 42, borderRadius: 14, background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
@@ -1821,7 +1807,7 @@ function LojasList({ vendedores, loading, tipoInicial, foraDaArea, modoRevisao, 
       </div>
 
       {/* Busca flutuante */}
-      <div style={{ padding: '0 20px', marginTop: -26, position: 'relative', zIndex: 5 }}>
+      <div className="pg-explore-search" style={{ padding: '0 20px', marginTop: -26, position: 'relative', zIndex: 5 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--pg-surface)', borderRadius: 18, padding: '14px 16px', border: '1px solid var(--pg-line)', boxShadow: '0 14px 34px rgba(15,23,42,0.12)' }}>
           <Search size={18} color="var(--pg-faint)" />
           <input
@@ -1868,7 +1854,7 @@ function LojasList({ vendedores, loading, tipoInicial, foraDaArea, modoRevisao, 
       )}
 
       {/* Beneficio PraiaGo */}
-      <div style={{ padding: '14px 20px 0' }}>
+      <div className="pg-explore-benefit" style={{ padding: '14px 20px 0' }}>
         <motion.button
           whileTap={{ scale: 0.98 }}
           onClick={() => navigate('/?painel=cupons')}
@@ -1889,7 +1875,7 @@ function LojasList({ vendedores, loading, tipoInicial, foraDaArea, modoRevisao, 
 
       {/* Chips de filtro */}
       <CatalogFeedback/>
-      <div style={{ display: 'flex', gap: 8, padding: '16px 20px 6px', overflowX: 'auto' }}>
+      <div className="pg-explore-filters" style={{ display: 'flex', gap: 8, padding: '16px 20px 6px', overflowX: 'auto' }}>
         {chips.map(c => (
           <motion.button key={c.key} aria-pressed={filtro === c.key} whileTap={{ scale: 0.98 }} onClick={() => setFiltro(c.key)} className="pg-chip">
             {c.icon} {c.label}
@@ -1897,7 +1883,7 @@ function LojasList({ vendedores, loading, tipoInicial, foraDaArea, modoRevisao, 
         ))}
       </div>
 
-      <div style={{ display: 'flex', gap: 8, padding: '6px 20px 4px', overflowX: 'auto' }}>
+      <div className="pg-explore-shortcuts" style={{ display: 'flex', gap: 8, padding: '6px 20px 4px', overflowX: 'auto' }}>
         {atalhos.map(c => (
           <motion.button key={c.key} aria-pressed={atalho === c.key} whileTap={{ scale: 0.98 }} onClick={() => setAtalho(c.key)} className="pg-chip">
             {c.icon} {c.label}
@@ -1906,9 +1892,9 @@ function LojasList({ vendedores, loading, tipoInicial, foraDaArea, modoRevisao, 
       </div>
 
       {/* Lista */}
-      <div style={{ padding: '12px 20px 0', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="pg-explore-list" style={{ padding: '12px 20px 0', display: 'flex', flexDirection: 'column', gap: 16 }}>
         {loading && vendedores.length === 0 && [0, 1, 2].map(i => (
-          <div key={i} style={{ height: 210, borderRadius: 26, background: 'linear-gradient(100deg, var(--pg-surface-alt) 40%, var(--pg-surface) 50%, var(--pg-surface-alt) 60%)', backgroundSize: '200% 100%', animation: 'shimmer 1.4s linear infinite' }} />
+          <div key={i} className="pg-store-skeleton" style={{ height: 210, borderRadius: 26, background: 'linear-gradient(100deg, var(--pg-surface-alt) 40%, var(--pg-surface) 50%, var(--pg-surface-alt) 60%)', backgroundSize: '200% 100%', animation: 'shimmer 1.4s linear infinite' }} />
         ))}
         {!loading && !catalogError && filtrados.length === 0 && (
           <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} style={{ textAlign: 'center', padding: '56px 24px', background: 'var(--pg-surface)', borderRadius: 26, border: '1px dashed var(--pg-line)' }}>
@@ -1966,20 +1952,30 @@ export default function PedirPage() {
   const sectionElements = useRef(new Map<string, HTMLElement>())
   const menuSections = useMemo(() => {
     if (!vendedor) return []
-    const grouped = new Map<string, Vendedor['produtos']>()
+    const grouped = new Map<string, { name: string; products: Vendedor['produtos'] }>()
     for (const product of vendedor.produtos) {
       if (menuSearch && !semAcento(product.nome + ' ' + visibleProductDescription(product.desc)).includes(semAcento(menuSearch))) continue
+      if (product.tipoProduto === 'combo' || product.promocao) {
+        const key = menuCategoryKey('Combos e promoções')
+        const featured = grouped.get(key) || { name: 'Combos e promoções', products: [] }
+        featured.products.push(product)
+        grouped.set(key, featured)
+      }
       const category = productMenuSection(product.categoria?.trim() || 'Outros', product.desc, product.menu_secao)
-      const section = grouped.get(category) || []
-      section.push(product)
-      grouped.set(category, section)
+      if (category === 'Combos e promoções' && (product.tipoProduto === 'combo' || product.promocao)) continue
+      const key = menuCategoryKey(category)
+      const section = grouped.get(key) || { name: category, products: [] }
+      section.products.push(product)
+      grouped.set(key, section)
     }
-    return [...grouped].sort(([a], [b]) => {
+    return [...grouped.values()].sort(({ name: a }, { name: b }) => {
+      if (a === 'Combos e promoções') return -1
+      if (b === 'Combos e promoções') return 1
       const aOrder = MENU_CATEGORY_ORDER.indexOf(a)
       const bOrder = MENU_CATEGORY_ORDER.indexOf(b)
       if (aOrder !== bOrder) return (aOrder < 0 ? 999 : aOrder) - (bOrder < 0 ? 999 : bOrder)
       return a.localeCompare(b, 'pt-BR')
-    }).map(([name, products]) => ({ name, products }))
+    })
   }, [vendedor, menuSearch])
   const pizzaSizes = new Map<string, number>()
   for (const product of vendedor?.produtos || []) if (product.pizza_meio_a_meio && product.pizza_tamanho && product.categoria === 'Pizza') pizzaSizes.set(product.pizza_tamanho, (pizzaSizes.get(product.pizza_tamanho) || 0) + 1)
@@ -1996,6 +1992,7 @@ export default function PedirPage() {
     return () => observer.disconnect()
   }, [menuSections, vendedor?.id])
   const selectedMenuCategory = menuSections.some(section => section.name === menuCategory) ? menuCategory : 'Todos'
+  const featuredProducts = vendedor?.produtos.filter(product => product.tipoProduto === 'combo' || product.promocao).slice(0, 8) || []
 
   // Sem loja escolhida → lista de lojas disponíveis (estilo iFood).
   if (!vendedor) {
@@ -2131,6 +2128,16 @@ export default function PedirPage() {
       <div style={{ padding: '32px 24px 140px' }}>
         <h3 style={{ fontSize: 20, fontWeight: 900, color: 'var(--pg-ink)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>Cardápio <span style={{ fontSize: 24 }}>🔥</span></h3>
         <label style={{ display: 'block', marginBottom: 16 }}><span style={{ fontSize: 13, color: 'var(--pg-muted)' }}>Buscar no cardápio</span><input aria-label="Buscar no cardápio" value={menuSearch} onChange={event => setMenuSearch(event.target.value)} placeholder="Produto ou ingrediente" style={{ width: '100%', padding: '13px 16px', marginTop: 6, border: '1px solid var(--pg-line)', borderRadius: 16, background: 'var(--pg-surface)', color: 'var(--pg-ink)', fontSize: 16 }} /></label>
+        {!menuSearch && featuredProducts.length > 0 && <section aria-label="Ofertas em destaque" style={{ marginBottom: 22, padding: '16px 0', borderTop: '1px solid var(--pg-line)', borderBottom: '1px solid var(--pg-line)' }}>
+          <h4 style={{ fontSize: 17, fontWeight: 900, margin: '0 0 12px', color: 'var(--pg-ink)' }}>Combos e promoções <span aria-hidden="true">✨</span></h4>
+          <div style={{ display: 'flex', gap: 12, overflowX: 'auto', scrollSnapType: 'x mandatory', paddingBottom: 6 }}>
+            {featuredProducts.map(product => <button key={product.id} type="button" onClick={() => sectionElements.current.get('Combos e promoções')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} style={{ flex: '0 0 150px', textAlign: 'left', scrollSnapAlign: 'start', border: '1px solid var(--pg-line)', borderRadius: 18, background: 'var(--pg-surface)', color: 'var(--pg-ink)', padding: 9, cursor: 'pointer' }}>
+              <div style={{ height: 108, borderRadius: 13, background: 'var(--pg-surface-alt)', overflow: 'hidden', display: 'grid', placeItems: 'center', fontSize: 38 }}>{product.foto ? <img src={product.foto} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : product.emoji}</div>
+              <span style={{ display: 'block', marginTop: 8, fontWeight: 850, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{product.nome}</span>
+              <span style={{ display: 'block', marginTop: 4, color: 'var(--pg-success)', fontWeight: 900, fontSize: 13 }}>R$ {dinheiro(product.preco)}</span>
+            </button>)}
+          </div>
+        </section>}
         <div style={{ position: 'sticky', top: 0, zIndex: 30, background: 'var(--pg-surface)' }}>
           <CategoryTabs categories={['Todos', ...(hasHalfPizza ? ['Pizzas meio a meio'] : []), ...menuSections.map(section => section.name)]} value={menuCategory === 'Pizzas meio a meio' ? menuCategory : selectedMenuCategory} onChange={category => { setMenuCategory(category); sectionElements.current.get(category === 'Todos' ? menuSections[0]?.name : category)?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }) }} />
         </div>
@@ -2147,7 +2154,7 @@ export default function PedirPage() {
             <h4 style={{ fontSize: 17, fontWeight: 900, color: 'var(--pg-ink)', margin: '22px 0 18px' }}>{section.name} <span style={{ color: 'var(--pg-muted)', fontSize: 13 }}>({section.products.length})</span></h4>
             {section.products.map(p => {
           const qtd = meuCarrinho[p.id] ?? 0
-          const exigeMaioridade = pertenceACategoria(p.categoria, 'bebidas_alcoolicas')
+          const exigeMaioridade = pertenceACategoria(p.categoria, 'bebidas_alcoolicas') || !!p.combo?.itens.some(item => pertenceACategoria(item.categoria || '', 'bebidas_alcoolicas'))
           const precoOriginal = p.precoOriginal && p.precoOriginal > p.preco ? p.precoOriginal : null
           const promocaoLabel = p.promocao?.selo || (precoOriginal ? 'Oferta PraiaGo' : null)
           // `estoque` NULO = a loja nao controla: o produto segue exatamente como
@@ -2169,6 +2176,7 @@ export default function PedirPage() {
                     <TicketPercent size={11} /> {promocaoLabel}
                   </div>
                 )}
+                {p.tipoProduto === 'combo' && <div style={{ display: 'inline-flex', alignItems: 'center', marginBottom: 8, marginLeft: 5, padding: '4px 9px', borderRadius: 999, background: 'var(--pg-warning-bg)', color: 'var(--pg-warning)', fontSize: 10.5, fontWeight: 950 }}>COMBO DA CASA</div>}
                 {esgotado && (
                   <div style={{ display: 'inline-flex', alignItems: 'center', marginBottom: 8, marginLeft: 6, padding: '4px 9px', borderRadius: 999, background: 'var(--pg-surface-alt)', border: '1px solid var(--pg-line)', color: 'var(--pg-muted)', fontSize: 10.5, fontWeight: 950, textTransform: 'uppercase', letterSpacing: 0.35 }}>
                     Esgotado
@@ -2181,10 +2189,12 @@ export default function PedirPage() {
                 )}
                 <h4 style={{ fontSize: 17, fontWeight: 800, color: 'var(--pg-ink)' }}>{p.nome}</h4>
                 <p style={{ fontSize: 14, color: 'var(--pg-muted)', marginTop: 6, lineHeight: 1.5 }}>{visibleProductDescription(p.desc)}</p>
+                {p.combo && <p style={{ fontSize: 12, color: 'var(--pg-muted)', marginTop: 5, lineHeight: 1.45 }}>Inclui {p.combo.itens.map(item => `${item.qtd}× ${item.nome}`).join(' + ')}</p>}
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 10 }}>
                   <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--pg-success)', textShadow: '0 0 10px rgba(74,222,128,0.16)' }}>R$ {p.preco.toFixed(2).replace('.', ',')}</div>
                   {precoOriginal && <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--pg-faint)', textDecoration: 'line-through' }}>R$ {precoOriginal.toFixed(2).replace('.', ',')}</div>}
                 </div>
+                {p.combo && p.combo.precoSeparado > p.preco && <div style={{ fontSize: 11, color: 'var(--pg-muted)', marginTop: 4 }}>Itens separados: R$ {dinheiro(p.combo.precoSeparado)}</div>}
               </div>
               <div style={{ position: 'relative', flexShrink: 0 }}>
                 <div style={{ width: 100, height: 100, borderRadius: 24, background: 'var(--pg-surface-alt)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 44, border: '1px solid var(--pg-line)', boxShadow: 'inset 0 4px 20px rgba(0,0,0,0.2)', overflow: 'hidden' }}>{p.foto ? <img src={p.foto} alt={p.nome} loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : p.emoji}</div>

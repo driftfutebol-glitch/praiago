@@ -50,7 +50,7 @@ export default function ChatPedidoModal({
         role="dialog"
         aria-label={`Conversa com ${clienteNome}`}
         style={{
-          width: '100%', maxWidth: 560, background: '#fff',
+          width: '100%', maxWidth: 560, background: 'var(--surface)',
           borderRadius: '24px 24px 0 0',
           // dvh acompanha o teclado do iOS. Com vh, o campo de escrever some
           // atras do teclado no exato momento em que se vai usar ele.
@@ -58,22 +58,22 @@ export default function ChatPedidoModal({
           display: 'flex', flexDirection: 'column',
         }}
       >
-        <header style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '16px 18px', borderBottom: '1px solid #dfe6ed' }}>
-          <div style={{ width: 38, height: 38, borderRadius: 12, background: '#eaf6fa', display: 'grid', placeItems: 'center', color: '#007fa6' }}>
+        <header style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '16px 18px', borderBottom: '1px solid var(--line)' }}>
+          <div style={{ width: 38, height: 38, borderRadius: 12, background: 'var(--surface-blue)', display: 'grid', placeItems: 'center', color: 'var(--info)' }}>
             <MessageCircle size={19} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ color: '#132238', fontSize: 15, fontWeight: 900, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{clienteNome}</div>
-            <div style={{ marginTop: 2, color: '#617089', fontSize: 11.5, fontWeight: 700 }}>Mensagens deste pedido</div>
+            <div style={{ color: 'var(--ink-strong)', fontSize: 15, fontWeight: 900, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{clienteNome}</div>
+            <div style={{ marginTop: 2, color: 'var(--muted)', fontSize: 11.5, fontWeight: 700 }}>Mensagens deste pedido</div>
           </div>
           <button type="button" className="icon-button" onClick={onClose} aria-label="Fechar conversa"><X size={18} /></button>
         </header>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {carregando && <div style={{ margin: 'auto', color: '#8793a5', fontSize: 12.5, fontWeight: 750 }}>Abrindo conversa…</div>}
+          {carregando && <div style={{ margin: 'auto', color: 'var(--faint)', fontSize: 12.5, fontWeight: 750 }}>Abrindo conversa…</div>}
 
           {!carregando && mensagens.length === 0 && (
-            <div style={{ margin: 'auto', maxWidth: 260, textAlign: 'center', color: '#617089', fontSize: 13, fontWeight: 650, lineHeight: 1.5 }}>
+            <div style={{ margin: 'auto', maxWidth: 260, textAlign: 'center', color: 'var(--muted)', fontSize: 13, fontWeight: 650, lineHeight: 1.5 }}>
               Nenhuma mensagem ainda. O que você escrever aqui aparece no app
               do cliente na hora.
             </div>
@@ -86,8 +86,8 @@ export default function ChatPedidoModal({
                 key={m.id}
                 style={{
                   alignSelf: meu ? 'flex-end' : 'flex-start', maxWidth: '78%',
-                  background: meu ? '#148447' : '#f1f5f9',
-                  color: meu ? '#fff' : '#132238',
+                  background: meu ? 'var(--green-solid)' : 'var(--surface-soft)',
+                  color: meu ? '#fff' : 'var(--ink-strong)',
                   padding: '10px 14px', borderRadius: 18,
                   borderBottomRightRadius: meu ? 4 : 18, borderBottomLeftRadius: meu ? 18 : 4,
                   fontSize: 13.5, lineHeight: 1.45, wordBreak: 'break-word',
@@ -103,9 +103,9 @@ export default function ChatPedidoModal({
           <div ref={fim} />
         </div>
 
-        {erro && <div style={{ padding: '0 18px 8px', color: '#b42335', fontSize: 12, fontWeight: 750 }}>{erro}</div>}
+        {erro && <div style={{ padding: '0 18px 8px', color: 'var(--danger)', fontSize: 12, fontWeight: 750 }}>{erro}</div>}
 
-        <div style={{ display: 'flex', gap: 9, padding: '14px 18px calc(14px + env(safe-area-inset-bottom))', borderTop: '1px solid #dfe6ed' }}>
+        <div style={{ display: 'flex', gap: 9, padding: '14px 18px calc(14px + env(safe-area-inset-bottom))', borderTop: '1px solid var(--line)' }}>
           <input
             value={texto}
             onChange={e => setTexto(e.target.value)}
@@ -114,8 +114,8 @@ export default function ChatPedidoModal({
             aria-label="Mensagem"
             maxLength={1000}
             style={{
-              flex: 1, minWidth: 0, background: '#f6f8fb', color: '#132238',
-              border: '1px solid #dfe6ed', borderRadius: 14,
+              flex: 1, minWidth: 0, background: 'var(--surface-soft)', color: 'var(--ink-strong)',
+              border: '1px solid var(--line)', borderRadius: 14,
               // 16px evita o zoom automatico do Safari ao focar o campo.
               padding: '13px 16px', fontSize: 16, outline: 'none',
             }}
@@ -127,8 +127,8 @@ export default function ChatPedidoModal({
             aria-label="Enviar"
             style={{
               width: 48, flexShrink: 0, borderRadius: 14, border: 'none',
-              background: (!texto.trim() || enviando) ? '#e3e9f0' : '#148447',
-              color: (!texto.trim() || enviando) ? '#8793a5' : '#fff',
+              background: (!texto.trim() || enviando) ? 'var(--line)' : 'var(--green-solid)',
+              color: (!texto.trim() || enviando) ? 'var(--faint)' : '#fff',
               cursor: (!texto.trim() || enviando) ? 'default' : 'pointer',
               display: 'grid', placeItems: 'center',
             }}

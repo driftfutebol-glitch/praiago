@@ -17,7 +17,7 @@ function Stars({ value, size = 14 }: { value: number; size?: number }) {
   return (
     <span aria-label={`${value} de 5 estrelas`} style={{ display: 'inline-flex', gap: 2 }}>
       {[1, 2, 3, 4, 5].map(item => (
-        <Star key={item} size={size} color={item <= value ? '#d99a00' : '#dfe6ed'} fill={item <= value ? '#d99a00' : '#dfe6ed'} />
+        <Star key={item} size={size} color={item <= value ? '#d99a00' : 'var(--line)'} fill={item <= value ? '#d99a00' : 'var(--line)'} />
       ))}
     </span>
   )
@@ -71,21 +71,21 @@ export default function AvaliacoesPage() {
         </div>
       </div>
 
-      <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="surface" style={{ display: 'flex', alignItems: 'center', gap: 18, marginBottom: 14, padding: 16, boxShadow: 'none' }}>
+      <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="surface" style={{ display: 'flex', alignItems: 'center', gap: 18, marginBottom: 17, padding: 19, boxShadow: 'none', background: 'linear-gradient(130deg,var(--surface-amber),var(--surface) 76%)', borderColor: 'var(--warning-line)' }}>
         <div style={{ width: 88, flex: '0 0 88px', textAlign: 'center' }}>
-          <div style={{ color: '#132238', fontSize: 34, lineHeight: 1, fontWeight: 900 }}>{loading ? '-' : summary.average.toFixed(1).replace('.', ',')}</div>
+          <div style={{ color: 'var(--ink-strong)', fontSize: 34, lineHeight: 1, fontWeight: 900 }}>{loading ? '-' : summary.average.toFixed(1).replace('.', ',')}</div>
           <div style={{ marginTop: 6 }}><Stars value={Math.round(summary.average)} size={13} /></div>
-          <div style={{ marginTop: 4, color: '#718096', fontSize: 10, fontWeight: 700 }}>{summary.total} {summary.total === 1 ? 'avaliação' : 'avaliações'}</div>
+          <div style={{ marginTop: 4, color: 'var(--faint)', fontSize: 10, fontWeight: 700 }}>{summary.total} {summary.total === 1 ? 'avaliação' : 'avaliações'}</div>
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           {summary.distribution.map(item => (
             <div key={item.value} style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: item.value === 5 ? 0 : 5 }}>
-              <span style={{ width: 9, color: '#617089', fontSize: 10, fontWeight: 800 }}>{item.value}</span>
+              <span style={{ width: 9, color: 'var(--muted)', fontSize: 10, fontWeight: 800 }}>{item.value}</span>
               <Star size={10} color="#d99a00" fill="#d99a00" />
-              <div style={{ height: 6, flex: 1, overflow: 'hidden', borderRadius: 3, background: '#edf1f5' }}>
+              <div style={{ height: 6, flex: 1, overflow: 'hidden', borderRadius: 3, background: 'var(--surface-soft)' }}>
                 <motion.div initial={{ width: 0 }} animate={{ width: `${summary.total ? item.total / summary.total * 100 : 0}%` }} style={{ height: '100%', borderRadius: 3, background: '#d99a00' }} />
               </div>
-              <span style={{ width: 18, color: '#8793a5', fontSize: 10, fontWeight: 700, textAlign: 'right' }}>{item.total}</span>
+              <span style={{ width: 18, color: 'var(--faint)', fontSize: 10, fontWeight: 700, textAlign: 'right' }}>{item.total}</span>
             </div>
           ))}
         </div>
@@ -95,23 +95,23 @@ export default function AvaliacoesPage() {
         <div className="surface shimmer" style={{ height: 130 }} />
       ) : reviews.length === 0 ? (
         <div className="surface" style={{ padding: '34px 20px', textAlign: 'center', boxShadow: 'none' }}>
-          <MessageSquare size={34} color="#8793a5" style={{ margin: '0 auto 12px' }} />
-          <div style={{ color: '#132238', fontSize: 15, fontWeight: 900 }}>Ainda não há avaliações</div>
-          <p style={{ margin: '6px auto 0', maxWidth: 270, color: '#617089', fontSize: 12, lineHeight: 1.45, fontWeight: 600 }}>As avaliações de pedidos entregues aparecerão aqui.</p>
+          <MessageSquare size={34} color="var(--faint)" style={{ margin: '0 auto 12px' }} />
+          <div style={{ color: 'var(--ink-strong)', fontSize: 15, fontWeight: 900 }}>Ainda não há avaliações</div>
+          <p style={{ margin: '6px auto 0', maxWidth: 270, color: 'var(--muted)', fontSize: 12, lineHeight: 1.45, fontWeight: 600 }}>As avaliações de pedidos entregues aparecerão aqui.</p>
         </div>
       ) : (
         <div style={{ display: 'grid', gap: 9 }}>
           {reviews.map((review, index) => (
             <motion.article key={review.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(index * 0.04, 0.24) }} className="surface" style={{ padding: 13, boxShadow: 'none' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 38, height: 38, display: 'grid', placeItems: 'center', flex: '0 0 38px', borderRadius: 8, background: '#edf5f8', color: '#008fc0' }}><UserRound size={19} /></div>
+                <div style={{ width: 38, height: 38, display: 'grid', placeItems: 'center', flex: '0 0 38px', borderRadius: 8, background: 'var(--surface-blue)', color: 'var(--info)' }}><UserRound size={19} /></div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ overflow: 'hidden', color: '#132238', fontSize: 13, fontWeight: 900, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{review.cliente_nome || 'Cliente PraiaGo'}</div>
+                  <div style={{ overflow: 'hidden', color: 'var(--ink-strong)', fontSize: 13, fontWeight: 900, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{review.cliente_nome || 'Cliente PraiaGo'}</div>
                   <div style={{ marginTop: 3 }}><Stars value={Math.round(review.nota)} size={12} /></div>
                 </div>
-                <time dateTime={review.created_at} style={{ color: '#8793a5', fontSize: 10, fontWeight: 650 }}>{new Date(review.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</time>
+                <time dateTime={review.created_at} style={{ color: 'var(--faint)', fontSize: 10, fontWeight: 650 }}>{new Date(review.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</time>
               </div>
-              {review.comentario && <p style={{ margin: '10px 0 0 48px', color: '#526178', fontSize: 12, lineHeight: 1.5, fontWeight: 600 }}>{review.comentario}</p>}
+              {review.comentario && <p style={{ margin: '10px 0 0 48px', color: 'var(--muted)', fontSize: 12, lineHeight: 1.5, fontWeight: 600 }}>{review.comentario}</p>}
             </motion.article>
           ))}
         </div>

@@ -39,7 +39,7 @@ export const PRODUCT_CATEGORIES: readonly ProductCategory[] = [
   { id: 'outros', label: 'Outros', color: '#475569', sprite: [4, 5], aliases: ['outro', 'outros', 'ambulante', 'diversos', 'geral'] },
 ]
 
-const FEATURED_CATEGORY_IDS = new Set(['bebidas', 'bebidas_alcoolicas', 'espetos', 'salgados', 'porcoes', 'almoco', 'doces_bolos', 'acai'])
+const FEATURED_CATEGORY_IDS = new Set(['bebidas', 'bebidas_alcoolicas', 'espetos', 'salgados', 'porcoes', 'almoco', 'doces_bolos', 'acai', 'pizza', 'lanches'])
 
 export const FEATURED_PRODUCT_CATEGORIES = PRODUCT_CATEGORIES.filter(category => FEATURED_CATEGORY_IDS.has(category.id))
 

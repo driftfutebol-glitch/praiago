@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, lazy, Suspense } from 'react'
-import { Routes, Route, NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { Bell, Home, ClipboardList, ShoppingBag, MapPin, User, X, WifiOff, CircleHelp } from 'lucide-react'
+import { Routes, Route, useLocation, useNavigate } from 'react-router-dom'
+import { Bell, X, WifiOff, CircleHelp } from 'lucide-react'
 import { iniciarCatalogo } from './store/useCatalogo'
 import { useStore } from './store/useStore'
 import { supabase } from './lib/supabase'
@@ -15,6 +15,7 @@ import HomePage from './pages/HomePage'
 const MeusPedidosPage = lazy(() => import('./pages/MeusPedidosPage'))
 const PedirPage = lazy(() => import('./pages/PedirPage'))
 const EventosPage = lazy(() => import('./pages/EventosPage'))
+const MeusIngressosPage = lazy(() => import('./pages/MeusIngressosPage'))
 const AmbulantesPage = lazy(() => import('./pages/AmbulantesPage'))
 const PerfilPage = lazy(() => import('./pages/PerfilPage'))
 import EmailVerificationBanner from './components/EmailVerificationBanner'
@@ -28,6 +29,9 @@ import IntroSplash from './components/IntroSplash'
 import { deveMostrarIntro } from './lib/introSession'
 import BrandLogo from './components/BrandLogo'
 import AppearanceSync from './components/AppearanceSync'
+import CollapsibleNavigation from './components/CollapsibleNavigation'
+import { startPush, hasNativePushSound, disconnectPush } from './lib/pushNotifications'
+import { probeSession } from '../../mobile/sessionGuard'
 
 function playNotifySound() {
   try {
@@ -63,7 +67,7 @@ function NotificationToast() {
     if (!ultima) return
     if (ultima.id === initialNotifIdRef.current) return
     setVisivel(true)
-    if (usePreferences.getState().notificationSounds) playNotifySound()
+    if (usePreferences.getState().notificationSounds && !hasNativePushSound()) playNotifySound()
     const t = window.setTimeout(() => setVisivel(false), 6500)
     return () => window.clearTimeout(t)
   }, [ultima?.id])
@@ -136,23 +140,9 @@ export default function App() {
   const mainRef = useRef<HTMLElement>(null)
   useEffect(() => { document.documentElement.dataset.reducedMotion = String(reducedMotion) }, [reducedMotion])
   useEffect(() => { mainRef.current?.scrollTo({ top: 0 }); setHelpOpen(false) }, [location.pathname])
-  // Cinco destinos cabem com rótulo legível em celulares de 320 px.
-  //
-  // A quarta aba já foi camaleão: mostrava "Radar" quando o usuário estava no
-  // radar e "Eventos" no resto do app. Na prática isso trancava a porta por
-  // dentro — o mapa ao vivo só aparecia na barra para quem já estava nele, e
-  // não havia por onde chegar.
-  //
-  // Agora é fixa no mapa. Eventos não ficou órfão: a tela inicial leva para
-  // lá pelo banner e pelo atalho de eventos da região.
-  const navItems = [
-    { to: '/',            icon: Home,          label: 'Início' },
-    { to: '/pedidos',     icon: ClipboardList, label: 'Pedidos' },
-    { to: '/pedir',       icon: ShoppingBag,   label: 'Explorar' },
-    { to: '/ambulantes',  icon: MapPin,        label: 'Mapa' },
-    { to: '/perfil',      icon: User,          label: 'Perfil' },
-  ]
   const sessao = useStore(s => s.sessao)
+  useEffect(() => startPush(sessao?.id||null, id=>navigate('/pedidos?pedido='+id), ()=>{if(useStore.getState().sessao)void useStore.getState().sincronizarPedidos()}, destination=>navigate(destination==='orders'?'/pedidos':'/')),[sessao?.id,navigate])
+  useEffect(()=>{const {data}=supabase.auth.onAuthStateChange(event=>{if(event==='SIGNED_OUT')void disconnectPush()});return()=>data.subscription.unsubscribe()},[])
   const limparNotificacoesTeste = useStore(s => s.limparNotificacoesTeste)
   // Decide na montagem: assim a abertura nao reaparece a cada re-render.
   const [mostrarIntro, setMostrarIntro] = useState(deveMostrarIntro)
@@ -221,20 +211,16 @@ export default function App() {
     // ("User from sub claim in JWT does not exist"), não como usuário nulo —
     // então caía no mesmo `return` da falha de rede.
     //
-    // A separação é o código HTTP: 4xx é o servidor DIZENDO que este token não
-    // vale; sem código é a rede que não chegou lá. Só o primeiro derruba.
-    const respostaNegativa = (erro: unknown) => {
-      const status = (erro as { status?: number } | null)?.status
-      return typeof status === 'number' && status >= 400 && status < 500
-    }
-
+    // HTTP 4xx sozinho não prova revogação (429 é limite temporário).
+    // O probe mantém a sessão em falhas temporárias e renova tokens expirados.
+    let checking = false
     const checarStatus = async () => {
-      const { data: authData, error: erroAuth } = await supabase.auth.getUser()
-      if (erroAuth) {
-        if (respostaNegativa(erroAuth)) validarAcesso(undefined, null)
-        return
-      }
-      if (!authData.user) {
+      if (checking || !ativo) return
+      checking = true
+      try {
+      const auth = await probeSession(supabase.auth)
+      if (!ativo || auth.state === 'temporary') return
+      if (auth.state === 'invalid') {
         validarAcesso(undefined, null)
         return
       }
@@ -250,7 +236,8 @@ export default function App() {
         validarAcesso(undefined, null)
         return
       }
-      validarAcesso(authData.user.id, data)
+      validarAcesso(auth.userId, data)
+      } finally { checking = false }
     }
     checarStatus()
     // 30s era herança de quando isso derrubava a sessão e queria pegar o
@@ -283,10 +270,7 @@ export default function App() {
   }, [])
 
   return (
-    // `height` fixo (não só `minHeight`) porque é ele que dá altura DEFINIDA
-    // pro `main` logo abaixo — sem isso, `height: 100%` dentro das páginas não
-    // tem contra o que resolver e o mapa do Radar colapsa pra 0px.
-    // Quem rola agora é o `main`, não a janela.
+    // O main é o único scroller da página; a coluna mantém uma altura definida.
     <MotionConfig reducedMotion={reducedMotion ? 'always' : 'user'}>
     <AppearanceSync />
     <div className="pg-shell" style={{ display: 'flex', flexDirection: 'column', height: '100dvh', minHeight: '100dvh', background: 'var(--pg-sand)' }}>
@@ -309,15 +293,10 @@ export default function App() {
       {/* Page Content with Transitions */}
       {/* `minHeight: 0` deixa o main encolher até a sobra da coluna em vez de
           crescer com o conteúdo — é o que torna a altura dele definida. */}
-      {/* A barra de baixo e uma pilula flutuante: 68px de altura, apoiada em
-          `bottom: 14px + env(safe-area-inset-bottom)`. No iPhone com barra de
-          gestos esse inset e ~34px, entao ela ocupa ~116px a partir do fundo —
-          e o padding aqui era 90px fixo. A ultima linha de conteudo ficava
-          DEBAIXO da barra, que foi o que o Bruno viu.
-          Agora a conta acompanha a propria barra: altura + apoio + inset real,
-          mais 16px de folga. Em aparelho sem inset o env() vale 0 e sobram
-          98px, ainda mais do que os 90 de antes. */}
-      <main ref={mainRef} id="conteudo" style={{ flex: 1, minHeight: 0, overflowY: 'auto', paddingBottom: 'calc(68px + 14px + env(safe-area-inset-bottom) + 16px)', position: 'relative' }}>
+      {/* A folga inclui menu, botão e safe area; não muda ao recolher para não
+          deslocar a página. O conteúdo precisa crescer no fluxo, não transbordar
+          um wrapper de altura fixa que perde o padding no fim da rolagem. */}
+      <main ref={mainRef} id="conteudo" className="pg-main-scroll">
         {/* Transição enxuta de propósito.
             Antes: `mode="wait"` + 0.38s + `scale`. Com `mode="wait"` a tela nova
             só COMEÇA a entrar depois de a antiga terminar de sair — 0.38 + 0.38
@@ -338,13 +317,7 @@ export default function App() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, transition: { duration: 0.14 } }}
             transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-            // `height` (e não só `minHeight`) porque telas que precisam caber
-            // exatamente numa tela — o Radar — usam `height: 100%` e flex pra
-            // o mapa ocupar a sobra. Com `minHeight` a porcentagem do filho não
-            // tem contra o que resolver e o mapa colapsava pra 0.
-            // Páginas mais altas que isso continuam rolando: o `main` é quem
-            // tem `overflowY: auto`.
-            style={{ height: '100%', minHeight: '100%' }}
+            className="pg-route-content"
           >
             {/* O fallback é propositalmente discreto: a troca de aba já tem a
                 própria animação, e um spinner grande piscando por 100ms entre
@@ -356,6 +329,7 @@ export default function App() {
                 <Route path="/pedir"       element={<PedirPage />} />
                 <Route path="/ambulantes"  element={<AmbulantesPage />} />
                 <Route path="/eventos"     element={<EventosPage />} />
+                <Route path="/ingressos"   element={<MeusIngressosPage />} />
                 <Route path="/perfil"      element={<PerfilPage />} />
               </Routes>
             </Suspense>
@@ -369,85 +343,7 @@ export default function App() {
       </AnimatePresence>
       <DialogHost />
 
-      {/* Barra inferior com cinco destinos e rótulos sempre visíveis.
-          `translateZ(0)` + `willChange` prendem a barra na própria camada de
-          composição. Sem isso ela sumia no iPhone ao rolar telas longas com
-          muitas imagens (Eventos era a pior): o WKWebView parava de repintar a
-          camada fixa e ela ficava em branco. */}
-      <div style={{
-        position: 'fixed',
-        bottom: 'calc(14px + env(safe-area-inset-bottom))',
-        left: '50%', transform: 'translateX(-50%) translateZ(0)',
-        willChange: 'transform',
-        width: 'calc(100% - 24px)', maxWidth: 440, zIndex: 100,
-      }}>
-        <nav aria-label="Navegação principal" style={{
-          display: 'flex',
-          height: 68,
-          borderRadius: 26,
-          padding: '0 4px',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          // Sem `backdrop-filter` de proposito. Ele e a metade fragil do bug
-          // acima, e com o fundo a 96% de opacidade nao se via diferenca —
-          // pagavamos o risco por um efeito que ninguem enxergava.
-          background: 'var(--pg-topbar)',
-          border: '1px solid var(--pg-line)',
-          boxShadow: '0 2px 6px rgba(15,23,42,0.05), 0 16px 36px -14px rgba(15,23,42,0.28)',
-        }}>
-          {navItems.map(({ to, icon: Icon, label }) => {
-            const active = to === '/' ? location.pathname === '/' : location.pathname.startsWith(to)
-            return (
-              <NavLink
-                key={to}
-                to={to}
-                aria-label={label}
-                style={{
-                  flex: 1,
-                  minWidth: 0,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 3,
-                  color: active ? 'var(--pg-ocean-dark)' : 'var(--pg-muted)',
-                  textDecoration: 'none',
-                  position: 'relative',
-                  height: '100%',
-                }}
-              >
-                {active && (
-                  <motion.div
-                    layoutId="navBubble"
-                    style={{
-                      position: 'absolute', inset: '7px 3px', borderRadius: 18,
-                      background: 'var(--pg-brand-soft)', zIndex: 0,
-                    }}
-                    transition={{ type: 'spring', stiffness: 320, damping: 30 }}
-                  />
-                )}
-
-                <motion.div
-                  whileTap={{ scale: 0.88 }}
-                  style={{ zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}
-                >
-                  <Icon size={21} color={active ? 'var(--pg-ocean-dark)' : 'var(--pg-muted)'} strokeWidth={active ? 2.5 : 1.9} />
-                  <span
-                    style={{
-                      fontSize: 10.5,
-                      fontWeight: active ? 900 : 700,
-                      letterSpacing: 0,
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {label}
-                  </span>
-                </motion.div>
-              </NavLink>
-            )
-          })}
-        </nav>
-      </div>
+      <CollapsibleNavigation scrollRef={mainRef} />
     </div>
     </MotionConfig>
   )

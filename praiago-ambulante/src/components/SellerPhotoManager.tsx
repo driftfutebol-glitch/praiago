@@ -10,6 +10,7 @@ type Props = {
   profilePath: string | null
   coverPath: string | null
   accent?: string
+  allowRemove?: boolean
   onChanged?: (paths: { profilePath: string | null; coverPath: string | null }) => void
 }
 
@@ -42,7 +43,7 @@ function extension(file: File) {
   return 'jpg'
 }
 
-export default function SellerPhotoManager({ userId, profilePath, coverPath, accent = '#008fc0', onChanged }: Props) {
+export default function SellerPhotoManager({ userId, profilePath, coverPath, accent = '#008fc0', allowRemove = true, onChanged }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [paths, setPaths] = useState({ profilePath, coverPath })
   const [target, setTarget] = useState<PhotoKind>('perfil')
@@ -137,7 +138,7 @@ export default function SellerPhotoManager({ userId, profilePath, coverPath, acc
       <input ref={inputRef} type="file" accept={ACCEPT} onChange={upload} style={{ display: 'none' }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
         <Camera size={18} color={accent} />
-        <div style={{ color: '#132238', fontSize: 14, fontWeight: 900 }}>Fotos públicas</div>
+        <div style={{ color: 'var(--ink-strong)', fontSize: 14, fontWeight: 900 }}>Fotos públicas</div>
       </div>
       {/* `maxWidth` no bloco todo: as caixas usam proporção fixa (1/1 e 16/9),
           e sem teto de largura elas crescem junto com a tela — num monitor
@@ -149,16 +150,16 @@ export default function SellerPhotoManager({ userId, profilePath, coverPath, acc
           const url = entry.path ? supabase.storage.from(SELLER_PHOTO_BUCKET).getPublicUrl(entry.path).data.publicUrl : null
           return (
             <div key={entry.kind}>
-              <div style={{ marginBottom: 6, color: '#617089', fontSize: 10.5, fontWeight: 800 }}>{entry.label}</div>
-              <button type="button" onClick={() => choose(entry.kind)} disabled={busy !== null} aria-label={`Alterar ${entry.label.toLowerCase()}`} style={{ width: '100%', aspectRatio: entry.ratio, display: 'grid', placeItems: 'center', overflow: 'hidden', padding: 0, border: '1px dashed #b9c8d6', borderRadius: 8, background: '#f7fafc', color: accent, cursor: busy ? 'wait' : 'pointer' }}>
+              <div style={{ marginBottom: 6, color: 'var(--muted)', fontSize: 10.5, fontWeight: 800 }}>{entry.label}</div>
+              <button type="button" onClick={() => choose(entry.kind)} disabled={busy !== null} aria-label={`Alterar ${entry.label.toLowerCase()}`} style={{ width: '100%', aspectRatio: entry.ratio, display: 'grid', placeItems: 'center', overflow: 'hidden', padding: 0, border: '1px dashed var(--line-strong)', borderRadius: 8, background: 'var(--surface-soft)', color: accent, cursor: busy ? 'wait' : 'pointer' }}>
                 {busy === entry.kind
                   ? <Loader2 size={22} className="animate-spin-slow" />
                   : url
                     ? <img src={url} alt={entry.label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     : <ImagePlus size={24} />}
               </button>
-              {entry.path && (
-                <button type="button" title={`Remover ${entry.label.toLowerCase()}`} aria-label={`Remover ${entry.label.toLowerCase()}`} onClick={() => void remove(entry.kind)} disabled={busy !== null} style={{ width: '100%', minHeight: 34, marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, border: 0, background: 'transparent', color: '#b42335', fontSize: 11, fontWeight: 800, cursor: busy ? 'wait' : 'pointer' }}>
+              {allowRemove && entry.path && (
+                <button type="button" title={`Remover ${entry.label.toLowerCase()}`} aria-label={`Remover ${entry.label.toLowerCase()}`} onClick={() => void remove(entry.kind)} disabled={busy !== null} style={{ width: '100%', minHeight: 34, marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, border: 0, background: 'transparent', color: 'var(--danger)', fontSize: 11, fontWeight: 800, cursor: busy ? 'wait' : 'pointer' }}>
                   <Trash2 size={14} /> Remover
                 </button>
               )}
@@ -166,7 +167,7 @@ export default function SellerPhotoManager({ userId, profilePath, coverPath, acc
           )
         })}
       </div>
-      {message && <div style={{ marginTop: 9, color: message.error ? '#b42335' : '#148447', fontSize: 11, fontWeight: 750 }}>{message.text}</div>}
+      {message && <div style={{ marginTop: 9, color: message.error ? 'var(--danger)' : 'var(--success)', fontSize: 11, fontWeight: 750 }}>{message.text}</div>}
     </section>
   )
 }

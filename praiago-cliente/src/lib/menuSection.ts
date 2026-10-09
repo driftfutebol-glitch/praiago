@@ -1,6 +1,11 @@
+import { validateMenuCategory } from '../../../mobile/menuCategoryPolicy'
+
 export function productMenuSection(category: string, description: string, section?: string | null): string {
-  if (section?.trim()) return section.trim()
-  if (category !== 'Pizza') return category
+  if (section?.trim()) {
+    const valid = validateMenuCategory(section)
+    if (!valid.error) return valid.name
+  }
+  if (category !== 'Pizza') return validateMenuCategory(category).error ? 'Outros' : category
   return (description || '').match(/\n\nSeção do cardápio: (Pizzas (?:premium|salgadas|doces))\s*$/u)?.[1] || category
 }
 

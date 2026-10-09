@@ -44,6 +44,8 @@ export function stockError(products: Produto[], cart: Record<string, number>): s
     if (!product) return 'Um item ficou indisponível. Remova-o do carrinho.'
     for (const id of [product.produtoId, ...(product.segundoSaborId ? [product.segundoSaborId] : [])])
       usage.set(id, (usage.get(id) || 0) + quantity * (product.segundoSaborId ? 0.5 : 1))
+    for (const item of product.combo?.itens || [])
+      usage.set(item.produto_id, (usage.get(item.produto_id) || 0) + quantity * item.qtd)
   }
   for (const product of products) {
     if (product.estoque != null && Math.ceil(usage.get(product.id) || 0) > product.estoque)

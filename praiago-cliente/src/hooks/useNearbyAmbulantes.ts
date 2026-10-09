@@ -92,6 +92,7 @@ function sellerPhoto(path?: string | null) {
 export function useNearbyAmbulantes(clientePos: [number, number]) {
   const [ambulantes, setAmbulantes] = useState<AmbulanteLive[]>([])
   const mapRef = useRef<Map<string, AmbulanteLive>>(new Map())
+  const approvedIds = useRef<Set<string>>(new Set())
   const clientePosRef = useRef(clientePos)
   clientePosRef.current = clientePos
 
@@ -118,10 +119,13 @@ export function useNearbyAmbulantes(clientePos: [number, number]) {
 
   const upsertProfile = useCallback((row: ProfileAmbulanteRow) => {
     if (row.role !== 'ambulante' || row.status === 'banido' || row.verificado !== true || !row.online || typeof row.lat !== 'number' || typeof row.lng !== 'number') {
+      approvedIds.current.delete(row.id)
       mapRef.current.delete(row.id)
       recalcAndSort()
       return
     }
+
+    approvedIds.current.add(row.id)
 
     mapRef.current.set(row.id, {
       id: row.id,
@@ -146,6 +150,9 @@ export function useNearbyAmbulantes(clientePos: [number, number]) {
 
     const unsub = ch.subscribe((payload) => {
       if (!payload?.id || typeof payload.lat !== 'number' || typeof payload.lng !== 'number') return
+      // O broadcast não é prova de aprovação: só perfis públicos verificados
+      // podem aparecer no radar do Cliente.
+      if (!approvedIds.current.has(payload.id)) return
       if (payload.aberto === false) {
         mapRef.current.delete(payload.id)
         recalcAndSort()
@@ -153,11 +160,14 @@ export function useNearbyAmbulantes(clientePos: [number, number]) {
       }
 
       const existing = mapRef.current.get(payload.id)
+      if (!existing) return
       const entry: AmbulanteLive = {
         id: payload.id,
-        nome: payload.nome ?? 'Ambulante',
-        emoji: emojiValido(payload.emoji),
-        categoria: payload.categoria ?? '',
+        // Nome, especialidade e fotos vêm do perfil público aprovado. Um
+        // broadcast de GPS não pode substituí-los por texto antigo ou falso.
+        nome: existing.nome,
+        emoji: existing.emoji,
+        categoria: existing.categoria,
         lat: payload.lat,
         lng: payload.lng,
         accuracy: payload.accuracy ?? 999,
@@ -165,8 +175,8 @@ export function useNearbyAmbulantes(clientePos: [number, number]) {
         aberto: payload.aberto ?? true,
         zona: payload.zona ?? '',
         distancia: 0,
-        fotoPerfil: existing?.fotoPerfil ?? null,
-        fotoCapa: existing?.fotoCapa ?? null,
+        fotoPerfil: existing.fotoPerfil,
+        fotoCapa: existing.fotoCapa,
       }
 
       mapRef.current.set(payload.id, entry)
@@ -203,6 +213,7 @@ export function useNearbyAmbulantes(clientePos: [number, number]) {
       .channel('cliente_ambulantes_publicos')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'vendedores_publicos' }, payload => {
         if (payload.eventType === 'DELETE') {
+          approvedIds.current.delete((payload.old as { id?: string }).id || '')
           mapRef.current.delete((payload.old as { id?: string }).id || '')
           recalcAndSort()
           return

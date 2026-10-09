@@ -3,6 +3,8 @@
 import type { DiaHorario } from './horario'
 
 export type Produto = {
+  tipoProduto?: 'simples' | 'combo'
+  combo?: { itens: { produto_id: string; qtd: number; nome: string; categoria?: string | null }[]; precoSeparado: number }
   menu_secao?: string | null
   pizza_meio_a_meio?: boolean
   pizza_tamanho?: string | null
@@ -58,6 +60,7 @@ export type Vendedor = {
 }
 
 export const CATEGORIAS = [
+  { id: 'combos', nome: 'Combos', cor: '#ea580c', sprite: [0, 0], aliases: ['combo', 'combos', 'combos e promoções', 'promocoes'] },
   { id: 'bebidas',       nome: 'Bebidas',        cor: '#0891b2', sprite: [0, 0], aliases: ['bebida', 'bebidas', 'agua', 'aguas', 'suco', 'sucos', 'refrigerante', 'refrigerantes'] },
   { id: 'bebidas_alcoolicas', nome: 'Bebidas alcoólicas', cor: '#b45309', sprite: [0, 0], image: '/images/bebidas-alcoolicas-v2.webp', ageRestricted: true, aliases: ['bebida alcoolica', 'bebidas alcoolicas', 'cerveja', 'cervejas', 'chopp', 'chope', 'vinho', 'vinhos', 'drink', 'drinks', 'caipirinha', 'destilado', 'destilados', 'vodka', 'gin', 'whisky'] },
   { id: 'espetos',       nome: 'Espetos',        cor: '#ea580c', sprite: [1, 0], aliases: ['espeto', 'espetos', 'espetinho', 'espetinhos', 'churrasco'] },

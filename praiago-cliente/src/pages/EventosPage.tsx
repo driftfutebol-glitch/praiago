@@ -1,11 +1,13 @@
-import { useState, useEffect, useCallback, type CSSProperties } from 'react'
-import { Calendar, MapPin, Navigation, Share2, Loader2, CalendarX, ShoppingCart, X, ExternalLink } from 'lucide-react'
+import { useState, useEffect, useCallback, lazy, Suspense, type CSSProperties } from 'react'
+import { Calendar, MapPin, Navigation, Share2, Loader2, CalendarX, ShoppingCart, Ticket } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '../lib/supabase'
-import { comprarIngressoPix, type IngressoPix } from '../lib/eventTickets'
-import { useStore, type Sessao } from '../store/useStore'
+import { useStore } from '../store/useStore'
 import { alertDialog } from '../lib/dialog'
 import { CIDADES_ATENDIDAS, estaNaAreaAtendida } from '../lib/serviceArea'
+
+const OwnedTicketsWallet = lazy(() => import('../components/OwnedTicketsWallet'))
+const EventTicketCheckout = lazy(() => import('../components/EventTicketCheckout'))
 
 type Periodo = 'manha' | 'tarde' | 'noite' | 'madrugada'
 
@@ -80,7 +82,7 @@ function fmtMoney(value: number) {
 
 function lotesDisponiveis(ev: Evento) {
   return [...(ev.event_ticket_lots || [])]
-    .filter(l => l.status === 'disponivel')
+    .filter(l => l.status === 'disponivel' && (l.estoque_disponivel == null || l.estoque_disponivel > 0))
     .sort((a, b) => Number(a.preco_venda) - Number(b.preco_venda))
 }
 
@@ -171,192 +173,13 @@ async function compartilharEvento(ev: Evento) {
   await copiarFallback()
 }
 
-function ComprarIngressoModal({ evento, onClose, sessao }: { evento: Evento; onClose: () => void; sessao: Sessao }) {
-  const lotes = lotesDisponiveis(evento)
-  const [lotId, setLotId] = useState(lotes[0]?.id || '')
-  const [quantidade, setQuantidade] = useState(1)
-  const [nome, setNome] = useState(sessao?.nome || '')
-  const [email, setEmail] = useState(sessao?.email || '')
-  const [telefone, setTelefone] = useState(sessao?.telefone || '')
-  const [loading, setLoading] = useState(false)
-  const [erro, setErro] = useState('')
-  const [metodo, setMetodo] = useState<'pix' | 'credito'>('pix')
-  const [pix, setPix] = useState<IngressoPix | null>(null)
-  const [copiado, setCopiado] = useState(false)
-  const lote = lotes.find(l => l.id === lotId) || lotes[0]
-  // O credito ja vem com o preco maior do banco; o cliente ve so o total.
-  const precoUnit = lote ? Number(metodo === 'credito' ? lote.preco_venda_credito : lote.preco_venda) : 0
-  const total = precoUnit * quantidade
-
-  async function comprar() {
-    if (!lote) return
-    if (!nome.trim()) { setErro('Informe seu nome para entrega do ingresso.'); return }
-    if (!/^\S+@\S+\.\S+$/.test(email.trim())) { setErro('Informe um e-mail valido para entrega.'); return }
-    if (metodo === 'credito') { setErro('Pagamento com cartao chega em breve. Use o PIX por enquanto.'); return }
-    setErro('')
-    setLoading(true)
-    try {
-      const cobranca = await comprarIngressoPix({
-        ticket_lot_id: lote.id,
-        quantidade,
-        cliente_nome: nome.trim(),
-        cliente_telefone: telefone.trim(),
-      })
-      setPix(cobranca)
-    } catch (e) {
-      setErro(e instanceof Error ? e.message : 'Nao foi possivel iniciar a compra.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function copiarPix() {
-    if (!pix) return
-    try {
-      await navigator.clipboard.writeText(pix.qr_code)
-      setCopiado(true)
-      setTimeout(() => setCopiado(false), 2500)
-    } catch {
-      setErro('Nao foi possivel copiar. Selecione o codigo e copie na mao.')
-    }
-  }
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 2500, background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-      <motion.div initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }} style={{ width: '100%', maxWidth: 460, background: 'var(--pg-surface)', borderRadius: '24px 24px 0 0', padding: 20, boxShadow: '0 -20px 60px rgba(15,23,42,0.25)' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-          <div>
-            <div style={{ fontSize: 12, color: 'var(--pg-ocean-dark)', fontWeight: 900, textTransform: 'uppercase' }}>Ingressos PraiaGo</div>
-            <h3 style={{ margin: '4px 0 0', fontSize: 20, lineHeight: 1.15, color: 'var(--pg-ink)', fontWeight: 900 }}>{evento.titulo}</h3>
-            <p style={{ margin: '6px 0 0', color: 'var(--pg-muted)', fontSize: 13, fontWeight: 600 }}>{evento.local_nome || 'Praia Grande'} {evento.data ? `· ${fmtData(evento.data)}` : ''}</p>
-          </div>
-          <button onClick={onClose} style={{ width: 36, height: 36, border: 0, borderRadius: 12, background: 'var(--pg-surface-alt)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <X size={18} color="var(--pg-muted)" />
-          </button>
-        </div>
-
-        {pix ? (
-          <div style={{ marginTop: 18, display: 'grid', gap: 12 }}>
-            <div style={{ background: 'var(--pg-success-bg)', border: '1px solid var(--pg-success)', borderRadius: 16, padding: 14 }}>
-              <div style={{ fontSize: 13, fontWeight: 900, color: 'var(--pg-success)' }}>PIX gerado · {fmtMoney(pix.total)}</div>
-              <div style={{ marginTop: 4, fontSize: 12, color: 'var(--pg-success)', lineHeight: 1.4 }}>
-                Pague no app do seu banco. Assim que cair, o ingresso vai pro seu e-mail.
-              </div>
-            </div>
-            {pix.qr_code_url && (
-              <img src={pix.qr_code_url} alt="QR Code do PIX" style={{ width: 200, height: 200, alignSelf: 'center', borderRadius: 12 }} />
-            )}
-            <div>
-              <label style={modalLabel}>Codigo copia e cola</label>
-              <div style={{ ...modalInput, fontSize: 11, wordBreak: 'break-all', height: 'auto', minHeight: 64, padding: 10, color: 'var(--pg-ink)' }}>
-                {pix.qr_code}
-              </div>
-            </div>
-            {erro && <div style={{ color: 'var(--pg-danger)', fontSize: 13, fontWeight: 800 }}>{erro}</div>}
-            <button onClick={copiarPix} style={{ border: 0, borderRadius: 16, padding: '14px 16px', background: 'var(--pg-action)', color: 'var(--pg-action-ink)', fontSize: 15, fontWeight: 900 }}>
-              {copiado ? 'Codigo copiado!' : 'Copiar codigo PIX'}
-            </button>
-          </div>
-        ) : (
-        <div style={{ marginTop: 18, display: 'grid', gap: 12 }}>
-          <label style={modalLabel}>Tipo de ingresso</label>
-          <select value={lotId} onChange={e => setLotId(e.target.value)} style={modalInput}>
-            {lotes.map(l => (
-              <option key={l.id} value={l.id}>{l.nome} · {fmtMoney(Number(metodo === 'credito' ? l.preco_venda_credito : l.preco_venda))}</option>
-            ))}
-          </select>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 112px', gap: 10 }}>
-            <div>
-              <label style={modalLabel}>Nome</label>
-              <input value={nome} onChange={e => setNome(e.target.value)} style={modalInput} placeholder="Nome completo" />
-            </div>
-            <div>
-              <label style={modalLabel}>Qtd</label>
-              <input type="number" min={1} max={20} value={quantidade} onChange={e => setQuantidade(Math.max(1, Math.min(20, Number(e.target.value) || 1)))} style={modalInput} />
-            </div>
-          </div>
-
-          <div>
-            <label style={modalLabel}>E-mail para entrega</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={modalInput} placeholder="voce@email.com" />
-          </div>
-          <div>
-            <label style={modalLabel}>Telefone/WhatsApp</label>
-            <input value={telefone} onChange={e => setTelefone(e.target.value)} style={modalInput} placeholder="(13) 99999-9999" />
-          </div>
-
-          <div>
-            <label style={modalLabel}>Forma de pagamento</label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              {(['pix', 'credito'] as const).map(m => (
-                <button
-                  key={m}
-                  onClick={() => setMetodo(m)}
-                  style={{
-                    border: metodo === m ? '2px solid var(--pg-ocean)' : '1px solid var(--pg-line)',
-                    background: metodo === m ? 'var(--pg-brand-soft)' : 'var(--pg-surface)',
-                    borderRadius: 14, padding: '11px 10px', fontSize: 13, fontWeight: 900,
-                    color: metodo === m ? 'var(--pg-ocean-dark)' : 'var(--pg-muted)',
-                  }}
-                >
-                  {m === 'pix' ? 'PIX' : 'Cartão de crédito'}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div style={{ background: 'var(--pg-surface-alt)', border: '1px solid var(--pg-line)', borderRadius: 16, padding: 14 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--pg-muted)', fontSize: 13, fontWeight: 700 }}>
-              <span>{quantidade}x {lote?.nome}</span>
-              <span>{fmtMoney(total)}</span>
-            </div>
-            <div style={{ marginTop: 6, fontSize: 11, color: 'var(--pg-faint)', lineHeight: 1.35 }}>
-              Entrega do ingresso é conferida por admin após o pagamento.
-            </div>
-          </div>
-
-          {erro && <div style={{ color: 'var(--pg-danger)', fontSize: 13, fontWeight: 800 }}>{erro}</div>}
-
-          <button disabled={loading || !lote} onClick={comprar} style={{ border: 0, borderRadius: 16, padding: '14px 16px', background: 'var(--pg-action)', color: 'var(--pg-action-ink)', fontSize: 15, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: loading ? 0.6 : 1 }}>
-            {loading ? <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> : <ShoppingCart size={18} />}
-            Comprar ingresso
-          </button>
-        </div>
-        )}
-      </motion.div>
-    </div>
-  )
-}
-
-const modalLabel: CSSProperties = {
-  display: 'block',
-  fontSize: 11,
-  fontWeight: 900,
-  color: 'var(--pg-muted)',
-  textTransform: 'uppercase',
-  letterSpacing: 0.4,
-  marginBottom: 6,
-}
-
-const modalInput: CSSProperties = {
-  width: '100%',
-  border: '1px solid var(--pg-line)',
-  background: 'var(--pg-surface-alt)',
-  borderRadius: 12,
-  padding: '11px 12px',
-  color: 'var(--pg-ink)',
-  fontSize: 14,
-  fontWeight: 700,
-  outline: 'none',
-}
-
 export default function EventosPage() {
   const [eventos, setEventos] = useState<Evento[]>([])
   const [loading, setLoading] = useState(true)
   const [erroLista, setErroLista] = useState(false)
   const [filtro, setFiltro] = useState<Periodo | 'todos'>('todos')
   const [comprando, setComprando] = useState<Evento | null>(null)
+  const [carteiraAberta, setCarteiraAberta] = useState(false)
   const sessao = useStore(s => s.sessao)
 
   const carregar = useCallback(async () => {
@@ -385,8 +208,9 @@ export default function EventosPage() {
   return (
     <div className="pg-events" style={{ minHeight: '100%', background: 'var(--pg-sand)', paddingBottom: 28 }}>
       <AnimatePresence>
-        {comprando && <ComprarIngressoModal evento={comprando} sessao={sessao} onClose={() => setComprando(null)} />}
+        {comprando ? <Suspense fallback={<div role="status" style={{ position: 'fixed', inset: 0, zIndex: 11000, background: 'var(--pg-surface)', display: 'grid', placeItems: 'center' }}>Abrindo compra de ingresso…</div>}><EventTicketCheckout key={sessao?.id || 'anon'} evento={comprando} sessao={sessao} onClose={() => setComprando(null)} onWallet={() => { setComprando(null); setCarteiraAberta(true) }} /></Suspense> : null}
       </AnimatePresence>
+      {carteiraAberta ? <Suspense fallback={<div role="status" style={{ position: 'fixed', inset: 0, zIndex: 11000, background: 'var(--pg-surface)', display: 'grid', placeItems: 'center' }}>Abrindo seus ingressos…</div>}><OwnedTicketsWallet userId={sessao?.id || null} onClose={() => setCarteiraAberta(false)} /></Suspense> : null}
 
       {/* Cabeçalho com a cena de praia atrás, igual ao da Home — é o que
           amarra as duas telas como sendo do mesmo app. */}
@@ -405,6 +229,10 @@ export default function EventosPage() {
           </p>
         </div>
       </header>
+
+      <button type="button" onClick={() => setCarteiraAberta(true)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, width: 'calc(100% - 40px)', margin: '0 20px 20px', padding: '16px 17px', border: '1px solid var(--pg-line)', borderRadius: 18, background: 'var(--pg-surface)', color: 'var(--pg-ink)', textAlign: 'left' }}>
+        <Ticket size={25} color="var(--pg-ocean-dark)" /><span style={{ flex: 1 }}><strong style={{ display: 'block', fontSize: 15 }}>Meus ingressos</strong><span style={{ display: 'block', marginTop: 4, color: 'var(--pg-muted)', fontSize: 12 }}>Confira seus QRs de entrada e o histórico.</span></span><span aria-hidden="true" style={{ color: 'var(--pg-ocean-dark)', fontSize: 22 }}>›</span>
+      </button>
 
       {/* Filtros por período */}
       <div style={{ padding: '0 20px 18px', display: 'flex', gap: 8, overflowX: 'auto' }} className="hide-scrollbar">
@@ -445,7 +273,7 @@ export default function EventosPage() {
               <AnimatePresence>
                 {[...destaques, ...outros].map(ev => {
                   const preco = menorPrecoIngresso(ev)
-                  const temIngresso = lotesDisponiveis(ev).length > 0
+                  const temIngresso = ev.ingressos_enabled === true && lotesDisponiveis(ev).length > 0
                   return (
                     <motion.article
                       className="pg-event-card"
@@ -537,14 +365,6 @@ export default function EventosPage() {
                             <ShoppingCart size={16} strokeWidth={2.5} /> Comprar
                           </button>
                         )}
-                        {!temIngresso && ev.fonte_url?.startsWith('https://') && (
-                          <a href={ev.fonte_url} target="_blank" rel="noopener noreferrer" style={{
-                            width: '100%', marginTop: 11, padding: '11px 0', borderRadius: 13,
-                            background: 'var(--pg-brand-soft)', color: 'var(--pg-ocean-dark)',
-                            fontSize: 13, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                          }}><ExternalLink size={15} /> Conferir ingressos na fonte</a>
-                        )}
-
                         <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                           <button
                             type="button"

@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase'
 import { cartProducts, cartDetail, resolveCartProduct, stockError } from '../lib/pizzaCart'
 import { useCatalogo } from './useCatalogo'
 import { dentroDoPrazo, JANELA_REEMBOLSO_HORAS } from '../lib/reembolso'
+import { mensagemErroPedido } from '../lib/checkoutError'
 
 /** O que a tela precisa saber depois de pedir ajuda ou reembolso. */
 export type ResultadoAjuda = { ok: boolean; erro?: string }
@@ -167,23 +168,6 @@ function mesmosItens(a: unknown, b: ItemDetalhe[]) {
       && item.qtd === esperado[index].qtd
       && item.segundo_sabor_id === esperado[index].segundo_sabor_id
     ))
-}
-
-function mensagemErroPedido(message?: string) {
-  const texto = String(message || '')
-  if (/cupom ja usado|duplicate key|cupom_usos/i.test(texto)) {
-    return 'Este cupom já está reservado em outro pedido pendente. Cancele esse pedido em Meus Pedidos ou conclua o pagamento.'
-  }
-  // Estoque: o trigger `validar_preco_pedido` ja devolve a frase pronta e util
-  // ("X esgotou. Tire do carrinho pra fechar o pedido." / "Restam so N de X.").
-  // Trocar isso por um erro generico esconde justamente o que a pessoa precisa
-  // fazer pra conseguir fechar o pedido.
-  if (/esgotou|restam s[oó]|estoque/i.test(texto)) return texto
-  if (/produto invalido|pedido sem itens|pedido sem valor/i.test(texto)) {
-    return 'Um item do carrinho mudou ou ficou indisponível. Atualize o carrinho e tente de novo.'
-  }
-  if (/cupom/i.test(texto)) return texto
-  return 'Não foi possível criar o pedido agora. Tente novamente.'
 }
 
 function mapDbStatusToPedidoStatus(status?: string): Pedido['status'] {
@@ -379,7 +363,7 @@ export const useStore = create<State>()(
 
         if (error || !inserted) {
           console.error('Erro ao criar pedido', { code: error?.code || 'sem_retorno' })
-          throw new Error(mensagemErroPedido(error?.message))
+          throw new Error(mensagemErroPedido(error))
         }
 
         const pedido: Pedido = {

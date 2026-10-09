@@ -9,6 +9,7 @@ import { aguardarPagamento } from '../lib/aguardarPagamento'
 import { dentroDoPrazo, tempoRestante, JANELA_REEMBOLSO_HORAS } from '../lib/reembolso'
 import LocalizacaoAoVivoBotao from '../components/LocalizacaoAoVivoBotao'
 import { supabase } from '../lib/supabase'
+import { usePushOrderFocus } from '../hooks/usePushOrderFocus'
 
 const STATUS_CFG = {
   aguardando_pagamento: { label: 'Verificando pagamento', cor: 'var(--pg-warning)', bg: 'var(--pg-warning-bg)', icon: CreditCard },
@@ -42,6 +43,7 @@ export default function MeusPedidosPage() {
   const pedidos = useStore(s => s.pedidos)
   const sessao = useStore(s => s.sessao)
   const [filtro, setFiltro] = useState<'todos' | 'ativos' | 'historico'>('todos')
+  const pushTarget = usePushOrderFocus(pedidos.map(p=>p.id),()=>setFiltro('todos'))
   const pedidosVisiveis = pedidos.filter(p => filtro === 'todos' || (filtro === 'historico' ? ['entregue', 'cancelado'].includes(p.status) : !['entregue', 'cancelado'].includes(p.status)))
   const sincronizarPedidos = useStore(s => s.sincronizarPedidos)
   const cancelarPedido = useStore(s => s.cancelarPedido)
@@ -195,6 +197,7 @@ export default function MeusPedidosPage() {
       <header style={{ padding: '20px 20px 8px' }}>
         <span className="pg-eyebrow">DO PEDIDO AO PRIMEIRO GOLE</span>
         <h1 className="pg-heading">Meus pedidos</h1>
+        <button type="button" className="pg-button pg-button-secondary" style={{ marginTop: 12 }} onClick={() => navigate('/ingressos')}>Meus ingressos de eventos</button>
         <p style={{ fontSize: 13, color: theme.color.textMuted, marginTop: 2 }}>
           {pedidos.length === 0 ? 'Seu dia de praia, acompanhado por aqui.' : `${pedidos.length} pedido${pedidos.length === 1 ? '' : 's'} · acompanhe cada etapa`}
         </p>
@@ -234,7 +237,7 @@ export default function MeusPedidosPage() {
               && !dentroDoPrazo(p)
 
             return (
-              <div key={p.id} style={{ background: theme.color.surface, borderRadius: 20, padding: 16, marginBottom: 12, border: `1px solid ${theme.color.border}` }}>
+              <div key={p.id} id={'push-order-'+p.id} tabIndex={pushTarget===p.id?-1:undefined} style={{ background: theme.color.surface, borderRadius: 20, padding: 16, marginBottom: 12, border: `1px solid ${theme.color.border}`, outline:pushTarget===p.id?'2px solid var(--pg-ocean-dark)':undefined,scrollMarginTop:90 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
                   <div style={{ flex: '1 1 150px', minWidth: 0, overflowWrap: 'anywhere' }}>
                     <div style={{ fontSize: 15, fontWeight: 800, color: theme.color.text }}>{p.vendedorNome}</div>

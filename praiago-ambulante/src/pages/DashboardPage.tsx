@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   ChevronRight,
   CircleAlert,
+  ClipboardList,
   MapPin,
   Navigation,
   Package,
@@ -56,6 +57,7 @@ export default function DashboardPage() {
   const [verified, setVerified] = useState<boolean | null>(null)
   const [stats, setStats] = useState<DashboardStats>(initialStats)
   const [loadingStats, setLoadingStats] = useState(true)
+  const [radarError, setRadarError] = useState('')
 
   const zoneName = useMemo(() => {
     if (!data) return 'Aguardando localização'
@@ -76,7 +78,7 @@ export default function DashboardPage() {
       const start = new Date()
       start.setHours(0, 0, 0, 0)
 
-      const [{ data: profile }, { data: orders }, { count: activeProducts }] = await Promise.all([
+      const [{ data: profile, error: profileError }, { data: orders }, { count: activeProducts }] = await Promise.all([
         supabase.from('profiles').select('verificado').eq('id', session.id).maybeSingle(),
         supabase
           .from('pedidos')
@@ -97,7 +99,8 @@ export default function DashboardPage() {
         'pagamento_recusado',
       ].includes(String(order.status)))
 
-      setVerified(profile?.verificado === true)
+      // A temporary profile failure is not proof the approved account changed.
+      if (!profileError) setVerified(profile?.verificado === true)
       setStats({
         ordersToday: validOrders.length,
         revenueToday: validOrders.reduce((sum, order) => sum + (Number(order.total) || 0), 0),
@@ -122,12 +125,9 @@ export default function DashboardPage() {
   }, [session?.id])
 
   useEffect(() => {
-    if (!podeAtender && online) setOnline(false)
-  }, [online, podeAtender])
-
-  useEffect(() => {
     try {
-      localStorage.setItem(ONLINE_STORAGE, atendendo ? 'true' : 'false')
+      // Persist the user's power choice, not a temporary GPS/loading state.
+      localStorage.setItem(ONLINE_STORAGE, online ? 'true' : 'false')
       window.dispatchEvent(new Event(ONLINE_EVENT))
     } catch {
       // The database update below is still the source of truth.
@@ -140,24 +140,30 @@ export default function DashboardPage() {
       patch.lng = longitude
       patch.zona = zoneName
     }
-    void supabase.from('profiles').update(patch).eq('id', session.id)
-  }, [atendendo, latitude, longitude, session?.id, zoneName])
+    let active = true
+    void supabase.from('profiles').update(patch).eq('id', session.id).then(({ error }) => {
+      if (active) setRadarError(error ? 'Não foi possível confirmar o radar no servidor. Confira a conexão.' : '')
+    })
+    return () => { active = false }
+  }, [online, atendendo, latitude, longitude, session?.id, zoneName])
 
   const locationStatus = modoRevisao
-    ? { label: 'Cenario de revisao em Praia Grande', color: '#6d28d9', bg: '#f5f3ff', icon: CheckCircle2 }
+    ? { label: 'Cenario de revisao em Praia Grande', color: 'var(--purple)', bg: 'var(--surface-purple)', icon: CheckCircle2 }
     : foraDaArea
-      ? { label: 'Fora da area atendida', color: '#b54708', bg: '#fff4e5', icon: CircleAlert }
+      ? { label: 'Fora da area atendida', color: 'var(--warning)', bg: 'var(--surface-amber)', icon: CircleAlert }
       : status === 'active'
-        ? { label: `Localizacao ativa em ${zoneName}`, color: '#148447', bg: '#eaf8ef', icon: CheckCircle2 }
+        ? { label: `Localizacao ativa em ${zoneName}`, color: 'var(--success)', bg: 'var(--surface-green)', icon: CheckCircle2 }
     : status === 'denied' || status === 'error'
-      ? { label: 'Localizacao precisa de atencao', color: '#b54708', bg: '#fff4e5', icon: CircleAlert }
-      : { label: 'Buscando sua localizacao', color: '#526178', bg: '#edf1f5', icon: Navigation }
+      ? { label: 'Localizacao precisa de atencao', color: 'var(--warning)', bg: 'var(--surface-amber)', icon: CircleAlert }
+      : { label: 'Buscando sua localizacao', color: 'var(--muted)', bg: 'var(--surface-soft)', icon: Navigation }
   const LocationIcon = locationStatus.icon
 
   const quickActions = [
-    { label: 'Pedidos', detail: stats.openOrders ? `${stats.openOrders} aguardando acao` : 'Nenhum em andamento', icon: Package, color: '#008fc0', to: '/pedidos' },
-    { label: 'Produtos', detail: `${stats.activeProducts} disponiveis`, icon: Store, color: '#8b5cf6', to: '/cardapio' },
-    { label: 'Carteira', detail: 'Saldo e recebimentos', icon: Wallet, color: '#d97706', to: '/carteira' },
+    { label: 'Pedidos', detail: stats.openOrders ? `${stats.openOrders} aguardando ação` : 'Nenhum em andamento', icon: Package, color: 'var(--brand-blue)', to: '/pedidos' },
+    { label: 'Cardápio', detail: `${stats.activeProducts} ${stats.activeProducts === 1 ? 'produto disponível' : 'produtos disponíveis'}`, icon: Store, color: 'var(--brand-green)', to: '/cardapio' },
+    { label: 'Carteira', detail: 'Saldo e recebimentos', icon: Wallet, color: 'var(--warning)', to: '/carteira' },
+    { label: 'Mapa', detail: 'Sua posição e movimento', icon: MapPin, color: 'var(--purple)', to: '/zonas' },
+    { label: 'Vendas', detail: 'Resumo e histórico', icon: ClipboardList, color: 'var(--warning)', to: '/vendas' },
   ]
 
   return (
@@ -167,28 +173,30 @@ export default function DashboardPage() {
         animate={{ opacity: 1, y: 0 }}
         className="surface"
         style={{
-          minHeight: 188,
+          minHeight: 215,
           position: 'relative',
           overflow: 'hidden',
-          marginBottom: 14,
-          padding: 20,
-          backgroundImage: 'linear-gradient(90deg, rgba(255,255,255,0.99) 0%, rgba(255,255,255,0.93) 48%, rgba(255,255,255,0.18) 100%), url(/images/ambulante-beach-header-v1.webp)',
+          marginBottom: 16,
+          padding: 22,
+          border: '1px solid rgba(13,114,118,.23)',
+          boxShadow: '0 14px 34px rgba(7,101,113,.12)',
+          backgroundImage: 'var(--dashboard-art), url(/images/ambulante-beach-header-v1.webp)',
           backgroundPosition: 'center, 67% center',
           backgroundSize: 'cover',
         }}
       >
-        <div style={{ maxWidth: '72%', position: 'relative', zIndex: 1 }}>
+        <div style={{ maxWidth: '76%', position: 'relative', zIndex: 1 }}>
           <div className="eyebrow">{getGreeting()}</div>
-          <h1 style={{ margin: '5px 0 7px', color: '#132238', fontSize: 27, lineHeight: 1.08, fontWeight: 900 }}>
+          <h1 style={{ margin: '8px 0 9px', color: 'var(--ink-strong)', fontSize: 'clamp(27px, 5vw, 36px)', lineHeight: 1.08, fontWeight: 900 }}>
             {session?.nome || 'Sua operacao'}
           </h1>
-          <p style={{ margin: 0, color: '#526178', fontSize: 13, lineHeight: 1.45, fontWeight: 650 }}>
-            Controle pedidos, produtos e sua presenca na praia.
+          <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13, lineHeight: 1.5, fontWeight: 650 }}>
+            Sua operação na praia, em um só lugar.
           </p>
         </div>
 
-        <div style={{ position: 'absolute', left: 20, bottom: 18 }}>
-          <span className="status-pill" style={{ color: locationStatus.color, background: locationStatus.bg }}>
+        <div style={{ position: 'absolute', left: 22, right: 22, bottom: 18 }}>
+          <span className="status-pill" style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', color: locationStatus.color, background: locationStatus.bg }}>
             <LocationIcon size={14} />
             {locationStatus.label}
           </span>
@@ -196,11 +204,11 @@ export default function DashboardPage() {
       </motion.section>
 
       {(foraDaArea || modoRevisao) && (
-        <section role="status" className="surface" style={{ marginBottom: 14, padding: 14, borderColor: modoRevisao ? '#c4b5fd' : '#f4d39f', background: modoRevisao ? '#f5f3ff' : '#fffaf0', boxShadow: 'none' }}>
-          <div style={{ color: modoRevisao ? '#6d28d9' : '#92400e', fontSize: 13, fontWeight: 900 }}>
+        <section role="status" className="surface" style={{ marginBottom: 14, padding: 14, borderColor: modoRevisao ? 'var(--purple-line)' : 'var(--warning-line)', background: modoRevisao ? 'var(--surface-purple)' : 'var(--surface-amber)', boxShadow: 'none' }}>
+          <div style={{ color: modoRevisao ? 'var(--purple)' : 'var(--warning)', fontSize: 13, fontWeight: 900 }}>
             {modoRevisao ? 'Conta oficial de revisão' : 'Atendimento indisponível nesta localização'}
           </div>
-          <div style={{ marginTop: 4, color: modoRevisao ? '#6d28d9' : '#92400e', fontSize: 12, lineHeight: 1.45, fontWeight: 650 }}>
+          <div style={{ marginTop: 4, color: modoRevisao ? 'var(--purple)' : 'var(--warning)', fontSize: 12, lineHeight: 1.45, fontWeight: 650 }}>
             {modoRevisao
               ? 'O aparelho está distante e usa um cenário demonstrativo em Praia Grande. Esta conta não aparece no radar dos clientes reais.'
               : `Para ficar online, esteja fisicamente em ${TEXTO_AREA_ATENDIDA}. Perfil, suporte e demais dados continuam acessíveis.`}
@@ -213,7 +221,7 @@ export default function DashboardPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.04 }}
         className="surface"
-        style={{ marginBottom: 14, padding: 16 }}
+        style={{ marginBottom: 20, padding: 18, borderColor: atendendo ? 'var(--success-line)' : 'var(--line)' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
           <div style={{
@@ -222,17 +230,17 @@ export default function DashboardPage() {
             display: 'grid',
             placeItems: 'center',
             flex: '0 0 45px',
-            borderRadius: 12,
-            background: atendendo ? '#e9f8ef' : '#edf1f5',
-            color: atendendo ? '#148447' : '#6a788e',
+            borderRadius: 15,
+            background: atendendo ? 'var(--surface-green)' : 'var(--surface-soft)',
+            color: atendendo ? 'var(--success)' : 'var(--muted)',
           }}>
             <Power size={22} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ color: '#132238', fontSize: 15, fontWeight: 850 }}>
-              {atendendo ? 'Voce esta atendendo' : 'Voce esta fora do radar'}
+            <div style={{ color: 'var(--ink-strong)', fontSize: 15, fontWeight: 850 }}>
+              {atendendo ? 'Radar ligado · atendendo' : online ? 'Radar ligado · aguardando localização válida' : 'Radar desligado'}
             </div>
-            <div style={{ marginTop: 3, color: verified === false ? '#b54708' : '#617089', fontSize: 12, lineHeight: 1.35, fontWeight: 600 }}>
+            <div style={{ marginTop: 3, color: verified === false ? 'var(--warning)' : 'var(--muted)', fontSize: 12, lineHeight: 1.35, fontWeight: 600 }}>
               {foraDaArea
                 ? `O radar funciona em ${TEXTO_AREA_ATENDIDA}.`
                 : verified === false
@@ -245,9 +253,9 @@ export default function DashboardPage() {
           <button
             type="button"
             role="switch"
-            aria-checked={atendendo}
-            aria-label={atendendo ? 'Desativar atendimento' : 'Ativar atendimento'}
-            disabled={!podeAtender}
+            aria-checked={online}
+            aria-label={online ? 'Desligar radar' : 'Ligar radar'}
+            disabled={!podeAtender && !online}
             onClick={() => setOnline(current => !current)}
             style={{
               width: 54,
@@ -257,8 +265,8 @@ export default function DashboardPage() {
               padding: 0,
               border: 0,
               borderRadius: 999,
-              background: atendendo ? '#18a957' : '#cbd4df',
-              cursor: podeAtender ? 'pointer' : 'not-allowed',
+              background: online ? '#18a957' : '#cbd4df',
+              cursor: podeAtender || online ? 'pointer' : 'not-allowed',
             }}
           >
             <span style={{
@@ -266,34 +274,35 @@ export default function DashboardPage() {
               height: 24,
               position: 'absolute',
               top: 4,
-              left: atendendo ? 26 : 4,
+              left: online ? 26 : 4,
               borderRadius: '50%',
-              background: '#fff',
+              background: 'var(--surface)',
               boxShadow: '0 2px 7px rgba(23,45,74,0.22)',
               transition: 'left 180ms ease',
             }} />
           </button>
         </div>
+        {radarError && <p role="alert" style={{ color: 'var(--danger)', fontSize: 12, margin: '12px 0 0' }}>{radarError}</p>}
       </motion.section>
 
       <section style={{ marginBottom: 18 }}>
         <div className="section-label" style={{ marginBottom: 9 }}>Hoje</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          <div className="surface" style={{ padding: 15, boxShadow: 'none' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#008fc0' }}>
+          <div className="surface" style={{ padding: 17, boxShadow: 'none', background: 'var(--surface-blue)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--brand-blue)' }}>
               <Package size={17} />
               <span style={{ fontSize: 11, fontWeight: 800 }}>Pedidos</span>
             </div>
-            <div style={{ marginTop: 10, color: '#132238', fontSize: 25, lineHeight: 1, fontWeight: 900 }}>
+            <div style={{ marginTop: 10, color: 'var(--ink-strong)', fontSize: 25, lineHeight: 1, fontWeight: 900 }}>
               {loadingStats ? '-' : stats.ordersToday}
             </div>
           </div>
-          <div className="surface" style={{ padding: 15, boxShadow: 'none' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#148447' }}>
+          <div className="surface" style={{ padding: 17, boxShadow: 'none', background: 'var(--surface-green)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--brand-green)' }}>
               <Wallet size={17} />
               <span style={{ fontSize: 11, fontWeight: 800 }}>Vendas</span>
             </div>
-            <div style={{ marginTop: 10, color: '#132238', fontSize: 21, lineHeight: 1, fontWeight: 900 }}>
+            <div style={{ marginTop: 10, color: 'var(--ink-strong)', fontSize: 21, lineHeight: 1, fontWeight: 900 }}>
               {loadingStats ? '-' : money(stats.revenueToday)}
             </div>
           </div>
@@ -301,7 +310,7 @@ export default function DashboardPage() {
       </section>
 
       <section>
-        <div className="section-label" style={{ marginBottom: 9 }}>Acesso rapido</div>
+        <div className="section-label" style={{ marginBottom: 9 }}>Acesso rápido</div>
         <div className="surface" style={{ overflow: 'hidden', boxShadow: 'none' }}>
           {quickActions.map((action, index) => {
             const Icon = action.icon
@@ -312,15 +321,15 @@ export default function DashboardPage() {
                 onClick={() => navigate(action.to)}
                 style={{
                   width: '100%',
-                  minHeight: 68,
+                  minHeight: 72,
                   display: 'flex',
                   alignItems: 'center',
                   gap: 12,
-                  padding: '11px 14px',
+                  padding: '12px 16px',
                   border: 0,
-                  borderTop: index ? '1px solid #e7ecf1' : 0,
-                  background: '#fff',
-                  color: '#132238',
+                  borderTop: index ? '1px solid var(--line)' : 0,
+                  background: 'var(--surface)',
+                  color: 'var(--ink-strong)',
                   textAlign: 'left',
                   cursor: 'pointer',
                 }}
@@ -331,17 +340,17 @@ export default function DashboardPage() {
                   display: 'grid',
                   placeItems: 'center',
                   flex: '0 0 40px',
-                  borderRadius: 10,
+                  borderRadius: 13,
                   color: action.color,
-                  background: `${action.color}12`,
+                  background: `color-mix(in srgb, ${action.color} 10%, var(--surface))`,
                 }}>
                   <Icon size={20} />
                 </span>
                 <span style={{ flex: 1, minWidth: 0 }}>
                   <span style={{ display: 'block', fontSize: 14, fontWeight: 850 }}>{action.label}</span>
-                  <span style={{ display: 'block', marginTop: 2, color: '#6a788e', fontSize: 12, fontWeight: 600 }}>{action.detail}</span>
+                  <span style={{ display: 'block', marginTop: 2, color: 'var(--muted)', fontSize: 12, fontWeight: 600 }}>{action.detail}</span>
                 </span>
-                <ChevronRight size={18} color="#8793a5" />
+                <ChevronRight size={18} color="var(--faint)" />
               </button>
             )
           })}

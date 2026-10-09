@@ -10,8 +10,9 @@ const config: CapacitorConfig = {
   appName: 'PraiaGo',
   webDir: 'dist',
   plugins: {
+    PushNotifications: { presentationOptions: ['badge', 'sound', 'alert'] },
     CapacitorUpdater: {
-      autoUpdate: 'atBackground',
+      autoUpdate: process.env.CAPACITOR_DISABLE_OTA === 'true' ? false : 'atBackground',
       updateUrl: otaUpdateUrl,
       statsUrl: '',
       channelUrl: '',

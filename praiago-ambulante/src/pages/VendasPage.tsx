@@ -100,53 +100,53 @@ export default function VendasPage() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-        <div className="surface" style={{ padding: 14, boxShadow: 'none' }}>
-          <TrendingUp size={18} color="#148447" />
-          <div style={{ marginTop: 10, color: '#132238', fontSize: 20, fontWeight: 900 }}>{loading ? '-' : money(metrics.revenue)}</div>
-          <div style={{ marginTop: 3, color: '#617089', fontSize: 11, fontWeight: 700 }}>Vendas brutas</div>
+        <div className="surface" style={{ padding: 16, boxShadow: 'none', background: 'var(--surface-green)' }}>
+          <TrendingUp size={18} color="var(--success)" />
+          <div style={{ marginTop: 10, color: 'var(--ink-strong)', fontSize: 20, fontWeight: 900 }}>{loading ? '-' : money(metrics.revenue)}</div>
+          <div style={{ marginTop: 3, color: 'var(--muted)', fontSize: 11, fontWeight: 700 }}>Vendas brutas</div>
         </div>
-        <div className="surface" style={{ padding: 14, boxShadow: 'none' }}>
-          <ShoppingBag size={18} color="#008fc0" />
-          <div style={{ marginTop: 10, color: '#132238', fontSize: 22, fontWeight: 900 }}>{loading ? '-' : metrics.totalOrders}</div>
-          <div style={{ marginTop: 3, color: '#617089', fontSize: 11, fontWeight: 700 }}>Pedidos entregues</div>
+        <div className="surface" style={{ padding: 16, boxShadow: 'none', background: 'var(--surface-blue)' }}>
+          <ShoppingBag size={18} color='var(--info)' />
+          <div style={{ marginTop: 10, color: 'var(--ink-strong)', fontSize: 22, fontWeight: 900 }}>{loading ? '-' : metrics.totalOrders}</div>
+          <div style={{ marginTop: 3, color: 'var(--muted)', fontSize: 11, fontWeight: 700 }}>Pedidos entregues</div>
         </div>
-        <div className="surface" style={{ padding: 14, boxShadow: 'none' }}>
+        <div className="surface" style={{ padding: 16, boxShadow: 'none', background: 'var(--surface-purple)' }}>
           <Receipt size={18} color="#8b5cf6" />
-          <div style={{ marginTop: 10, color: '#132238', fontSize: 18, fontWeight: 900 }}>{loading ? '-' : money(metrics.averageTicket)}</div>
-          <div style={{ marginTop: 3, color: '#617089', fontSize: 11, fontWeight: 700 }}>Ticket médio</div>
+          <div style={{ marginTop: 10, color: 'var(--ink-strong)', fontSize: 18, fontWeight: 900 }}>{loading ? '-' : money(metrics.averageTicket)}</div>
+          <div style={{ marginTop: 3, color: 'var(--muted)', fontSize: 11, fontWeight: 700 }}>Ticket médio</div>
         </div>
-        <div className="surface" style={{ padding: 14, boxShadow: 'none' }}>
-          <CalendarDays size={18} color="#b54708" />
-          <div style={{ marginTop: 10, color: '#132238', fontSize: 18, fontWeight: 900 }}>{loading ? '-' : money(metrics.todayRevenue)}</div>
-          <div style={{ marginTop: 3, color: '#617089', fontSize: 11, fontWeight: 700 }}>Hoje</div>
+        <div className="surface" style={{ padding: 16, boxShadow: 'none', background: 'var(--surface-amber)' }}>
+          <CalendarDays size={18} color="var(--warning)" />
+          <div style={{ marginTop: 10, color: 'var(--ink-strong)', fontSize: 18, fontWeight: 900 }}>{loading ? '-' : money(metrics.todayRevenue)}</div>
+          <div style={{ marginTop: 3, color: 'var(--muted)', fontSize: 11, fontWeight: 700 }}>Hoje</div>
         </div>
       </div>
 
-      <section className="surface" style={{ marginBottom: 14, padding: 14, boxShadow: 'none' }}>
+      <section className="surface" style={{ marginBottom: 17, padding: 17, boxShadow: 'none' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <BarChart3 size={18} color="#008fc0" />
-          <div className="section-label" style={{ color: '#40506a' }}>Últimos 7 dias</div>
+          <BarChart3 size={18} color='var(--info)' />
+          <div className="section-label" style={{ color: 'var(--ink)' }}>Últimos 7 dias</div>
         </div>
         <div style={{ height: 150, display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', alignItems: 'end', gap: 7, marginTop: 14 }}>
           {dailyData.map(day => {
             const height = day.revenue > 0 ? Math.max(12, (day.revenue / chartMaximum) * 112) : 4
             return (
               <div key={day.date.toISOString()} style={{ minWidth: 0, textAlign: 'center' }} title={`${day.date.toLocaleDateString('pt-BR')}: ${money(day.revenue)}`}>
-                <motion.div initial={{ height: 0 }} animate={{ height }} style={{ width: '100%', maxWidth: 28, minHeight: 4, margin: '0 auto', borderRadius: '5px 5px 2px 2px', background: day.revenue > 0 ? '#18a957' : '#dfe6ed' }} />
-                <div style={{ marginTop: 7, overflow: 'hidden', color: '#718096', fontSize: 9, fontWeight: 750, textTransform: 'capitalize', textOverflow: 'clip' }}>{day.label}</div>
+                <motion.div initial={{ height: 0 }} animate={{ height }} style={{ width: '100%', maxWidth: 28, minHeight: 4, margin: '0 auto', borderRadius: '5px 5px 2px 2px', background: day.revenue > 0 ? '#18a957' : 'var(--line)' }} />
+                <div style={{ marginTop: 7, overflow: 'hidden', color: 'var(--faint)', fontSize: 9, fontWeight: 750, textTransform: 'capitalize', textOverflow: 'clip' }}>{day.label}</div>
               </div>
             )
           })}
         </div>
       </section>
 
-      <button type="button" className="surface" onClick={() => navigate('/carteira')} style={{ width: '100%', minHeight: 68, display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, padding: '11px 13px', border: '1px solid #cce9d8', background: '#f5fbf7', color: '#132238', textAlign: 'left', cursor: 'pointer', boxShadow: 'none' }}>
-        <span style={{ width: 40, height: 40, display: 'grid', placeItems: 'center', flex: '0 0 40px', borderRadius: 8, background: '#e4f5eb', color: '#148447' }}><Wallet size={20} /></span>
+      <button type="button" className="surface" onClick={() => navigate('/carteira')} style={{ width: '100%', minHeight: 68, display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, padding: '11px 13px', border: '1px solid var(--success-line)', background: 'var(--surface-green)', color: 'var(--ink-strong)', textAlign: 'left', cursor: 'pointer', boxShadow: 'none' }}>
+        <span style={{ width: 40, height: 40, display: 'grid', placeItems: 'center', flex: '0 0 40px', borderRadius: 8, background: 'var(--surface-green)', color: 'var(--success)' }}><Wallet size={20} /></span>
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ display: 'block', fontSize: 13, fontWeight: 900 }}>Abrir Carteira</span>
-          <span style={{ display: 'block', marginTop: 2, color: '#617089', fontSize: 11, lineHeight: 1.35, fontWeight: 600 }}>Consulte líquido, taxas, conta de recebimento e saques.</span>
+          <span style={{ display: 'block', marginTop: 2, color: 'var(--muted)', fontSize: 11, lineHeight: 1.35, fontWeight: 600 }}>Consulte líquido, taxas, conta de recebimento e saques.</span>
         </span>
-        <ChevronRight size={17} color="#718096" />
+        <ChevronRight size={17} color="var(--faint)" />
       </button>
 
       <section>
@@ -154,17 +154,17 @@ export default function VendasPage() {
         {loading ? (
           <div className="surface shimmer" style={{ height: 120 }} />
         ) : orders.length === 0 ? (
-          <div className="surface" style={{ padding: '24px 18px', color: '#617089', fontSize: 12, fontWeight: 650, textAlign: 'center', boxShadow: 'none' }}>Nenhum pedido entregue nos últimos 30 dias.</div>
+          <div className="surface" style={{ padding: '24px 18px', color: 'var(--muted)', fontSize: 12, fontWeight: 650, textAlign: 'center', boxShadow: 'none' }}>Nenhum pedido entregue nos últimos 30 dias.</div>
         ) : (
           <div className="surface" style={{ overflow: 'hidden', boxShadow: 'none' }}>
             {orders.slice(0, 10).map((order, index) => (
-              <div key={order.id} style={{ minHeight: 58, display: 'flex', alignItems: 'center', gap: 11, padding: '9px 12px', borderTop: index ? '1px solid #e7ecf1' : 0 }}>
-                <div style={{ width: 35, height: 35, display: 'grid', placeItems: 'center', flex: '0 0 35px', borderRadius: 8, background: '#eaf8ef', color: '#148447' }}><Receipt size={17} /></div>
+              <div key={order.id} style={{ minHeight: 58, display: 'flex', alignItems: 'center', gap: 11, padding: '9px 12px', borderTop: index ? '1px solid var(--line)' : 0 }}>
+                <div style={{ width: 35, height: 35, display: 'grid', placeItems: 'center', flex: '0 0 35px', borderRadius: 8, background: 'var(--surface-green)', color: 'var(--success)' }}><Receipt size={17} /></div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ color: '#132238', fontSize: 12, fontWeight: 900 }}>{shortId(order.id)}</div>
-                  <div style={{ marginTop: 2, color: '#718096', fontSize: 10, fontWeight: 650 }}>{new Date(order.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</div>
+                  <div style={{ color: 'var(--ink-strong)', fontSize: 12, fontWeight: 900 }}>{shortId(order.id)}</div>
+                  <div style={{ marginTop: 2, color: 'var(--faint)', fontSize: 10, fontWeight: 650 }}>{new Date(order.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</div>
                 </div>
-                <div style={{ color: '#148447', fontSize: 13, fontWeight: 900 }}>{money(Number(order.total) || 0)}</div>
+                <div style={{ color: 'var(--success)', fontSize: 13, fontWeight: 900 }}>{money(Number(order.total) || 0)}</div>
               </div>
             ))}
           </div>

@@ -2,10 +2,13 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import './index.css'
+import './profile.css'
 import App from './App.tsx'
 import ErrorBoundary from './components/ErrorBoundary'
 import { markOtaBundleReady } from './lib/ota'
+import { initializeTheme } from './lib/theme'
 
+initializeTheme()
 markOtaBundleReady()
 
 createRoot(document.getElementById('root')!).render(
