@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { CheckCircle2, Eye, EyeOff, Loader2, LogIn, MapPin, Search, Store } from 'lucide-react'
+import { CheckCircle2, ChevronLeft, ChevronRight, Clock, Eye, EyeOff, ImagePlus, Loader2, LogIn, MapPin, Search, Store } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { login } from '../lib/auth'
-import { promptDialog } from '../lib/dialog'
+import { alertDialog, promptDialog } from '../lib/dialog'
 import { logSecurityEvent } from '../lib/securityAudit'
 import { origemDoCadastro } from '../lib/origemCadastro'
 import { motion } from 'framer-motion'
@@ -12,6 +12,67 @@ import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-lea
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { MAPA_TILES, MAPA_ATRIBUICAO, MAPA_ZOOM_MAX } from '../lib/mapa'
+import { BUSINESS_CATEGORIES } from '../lib/businessCategories'
+import { SELLER_PHOTO_BUCKET } from '../lib/sellerPhotos'
+
+const SIGNUP_STEPS = ['Loja', 'Localização', 'Horários', 'Fotos', 'Conta'] as const
+const SIGNUP_TITLES = ['Cadastre sua loja', 'Defina a localização', 'Escolha os horários', 'Adicione fotos', 'Crie sua conta'] as const
+const WEEK_DAYS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0]
+
+type SignupDay = { dia: number; aberto: boolean; abre: string; fecha: string; vinte_quatro_horas: boolean }
+
+function initialSignupHours(): SignupDay[] {
+  return Array.from({ length: 7 }, (_, dia) => ({ dia, aberto: false, abre: '', fecha: '', vinte_quatro_horas: false }))
+}
+
+function legacyHours(days: SignupDay[]) {
+  const today = new Date().getDay()
+  const reference = days.find(day => day.dia === today && day.aberto)
+    ?? days.find(day => day.aberto)
+  return reference?.vinte_quatro_horas
+    ? { horario_abre: '00:00', horario_fecha: '00:00' }
+    : { horario_abre: reference?.abre ?? null, horario_fecha: reference?.fecha ?? null }
+}
+
+function validateSignupPhoto(file: File): string | null {
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) return 'Use uma imagem JPG, PNG ou WebP.'
+  if (file.size > 5 * 1024 * 1024) return 'Cada imagem deve ter no máximo 5 MB.'
+  return null
+}
+
+function signupProfileFromMetadata(metadata: Record<string, unknown> | undefined) {
+  if (metadata?.role !== 'restaurante') return null
+  const nome = typeof metadata.nome === 'string' ? metadata.nome.trim() : ''
+  const categoria = typeof metadata.categoria === 'string' ? metadata.categoria : ''
+  const endereco = typeof metadata.endereco === 'string' ? metadata.endereco.trim() : ''
+  const lat = metadata.lat
+  const lng = metadata.lng
+  const rawHours = Array.isArray(metadata.horarios) ? metadata.horarios : []
+  const horarios: SignupDay[] = rawHours.map((entry: unknown) => {
+    const day = entry && typeof entry === 'object' ? entry as Record<string, unknown> : {}
+    return {
+      dia: Number(day.dia), aberto: day.aberto === true,
+      abre: typeof day.abre === 'string' ? day.abre : '',
+      fecha: typeof day.fecha === 'string' ? day.fecha : '',
+      vinte_quatro_horas: day.vinte_quatro_horas === true,
+    }
+  })
+  if (!nome || !BUSINESS_CATEGORIES.some(item => item === categoria) || !endereco || typeof lat !== 'number' || typeof lng !== 'number' || !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180 || (lat === 0 && lng === 0)) return null
+  if (horarios.length !== 7 || horarios.some((day, index) => day.dia !== index)) return null
+  if (!horarios.some(day => day.aberto) || horarios.some(day => day.aberto && !day.vinte_quatro_horas && (!/^\d{2}:\d{2}$/.test(day.abre) || !/^\d{2}:\d{2}$/.test(day.fecha) || day.abre === day.fecha))) return null
+  return {
+    nome, role: 'restaurante', categoria, endereco, lat, lng,
+    cnpj: typeof metadata.cnpj === 'string' && /^\d{14}$/.test(metadata.cnpj) ? metadata.cnpj : null,
+    razao_social: typeof metadata.razao_social === 'string' ? metadata.razao_social : null,
+    horarios: horarios.map(day => day.aberto
+      ? day.vinte_quatro_horas
+        ? { dia: day.dia, aberto: true, vinte_quatro_horas: true }
+        : { dia: day.dia, aberto: true, abre: day.abre, fecha: day.fecha }
+      : { dia: day.dia, aberto: false }),
+    ...legacyHours(horarios),
+  }
+}
 
 const restaurantLocationIcon = L.divIcon({
   className: '',
@@ -89,6 +150,7 @@ export default function LoginPage() {
   // Cadastro: dados reais do negócio
   const [nomePessoa, setNomePessoa] = useState('')
   const [nomeLoja, setNomeLoja] = useState('')
+  const [categoriaNegocio, setCategoriaNegocio] = useState('Restaurante')
   const [cnpj, setCnpj] = useState('')
   const [cnpjStatus, setCnpjStatus] = useState<'idle' | 'buscando' | 'ok' | 'invalido' | 'nao_encontrado' | 'duplicado'>('idle')
   const [razaoSocial, setRazaoSocial] = useState('')
@@ -100,6 +162,125 @@ export default function LoginPage() {
   const [enderecoStatus, setEnderecoStatus] = useState<'idle' | 'buscando' | 'confirmado' | 'erro' | 'gps'>('idle')
   const [sugestoesEndereco, setSugestoesEndereco] = useState<EnderecoSugestao[]>([])
   const [emailStatus, setEmailStatus] = useState<'idle' | 'checando' | 'ok' | 'invalido' | 'duplicado'>('idle')
+  const [signupStep, setSignupStep] = useState(0)
+  const [signupHours, setSignupHours] = useState<SignupDay[]>(initialSignupHours)
+  const [profilePhoto, setProfilePhoto] = useState<File | null>(null)
+  const [coverPhoto, setCoverPhoto] = useState<File | null>(null)
+  const [profilePreview, setProfilePreview] = useState<string | null>(null)
+  const [coverPreview, setCoverPreview] = useState<string | null>(null)
+  const [pendingSignupUserId, setPendingSignupUserId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!profilePhoto) { setProfilePreview(null); return }
+    const url = URL.createObjectURL(profilePhoto)
+    setProfilePreview(url)
+    return () => URL.revokeObjectURL(url)
+  }, [profilePhoto])
+
+  useEffect(() => {
+    if (!coverPhoto) { setCoverPreview(null); return }
+    const url = URL.createObjectURL(coverPhoto)
+    setCoverPreview(url)
+    return () => URL.revokeObjectURL(url)
+  }, [coverPhoto])
+
+  function updateSignupDay(dia: number, patch: Partial<SignupDay>) {
+    setSignupHours(current => current.map(day => day.dia === dia ? { ...day, ...patch } : day))
+    setErro('')
+  }
+
+  function validateSignupStep(step: number): string | null {
+    if (step === 0) {
+      if (!nomeLoja.trim()) return 'Informe o nome da loja para continuar.'
+      if (!BUSINESS_CATEGORIES.some(category => category === categoriaNegocio)) return 'Selecione o tipo de negócio.'
+    }
+    if (step === 1) {
+      if (!coords || !['confirmado', 'gps'].includes(enderecoStatus)) return 'Confirme a localização no mapa antes de continuar.'
+      if (!endereco.trim()) return 'Informe o endereço da loja.'
+    }
+    if (step === 2) {
+      if (!signupHours.some(day => day.aberto)) return 'Selecione pelo menos um dia em que a loja funciona.'
+      const invalid = signupHours.find(day => day.aberto && !day.vinte_quatro_horas && (!day.abre || !day.fecha || day.abre === day.fecha))
+      if (invalid) return `Confira o horário de ${WEEK_DAYS[invalid.dia].toLowerCase()}. Informe abertura e fechamento diferentes ou marque 24h.`
+    }
+    return null
+  }
+
+  function advanceSignup() {
+    const validationError = validateSignupStep(signupStep)
+    if (validationError) { setErro(validationError); return }
+    setErro('')
+    setSignupStep(step => Math.min(step + 1, SIGNUP_STEPS.length - 1))
+  }
+
+  function chooseSignupPhoto(kind: 'perfil' | 'capa', file?: File) {
+    if (!file) return
+    const validationError = validateSignupPhoto(file)
+    if (validationError) { setErro(validationError); return }
+    setErro('')
+    if (kind === 'perfil') setProfilePhoto(file)
+    else setCoverPhoto(file)
+  }
+
+  async function uploadSignupPhoto(userId: string, kind: 'perfil' | 'capa', file: File) {
+    const ext = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg'
+    const path = `${userId}/${kind}-${Date.now()}-${crypto.randomUUID()}.${ext}`
+    const { error } = await supabase.storage.from(SELLER_PHOTO_BUCKET).upload(path, file, { contentType: file.type, upsert: false })
+    if (error) throw error
+    const field = kind === 'perfil' ? 'foto_perfil_path' : 'foto_capa_path'
+    const { error: profileError } = await supabase.from('profiles').update({ [field]: path }).eq('id', userId)
+    if (profileError) {
+      await supabase.storage.from(SELLER_PHOTO_BUCKET).remove([path])
+      throw profileError
+    }
+  }
+
+  async function confirmSignupEmail(userId: string) {
+    const emailNormalizado = normalizarEmail()
+    const { data: activeSession } = await supabase.auth.getUser()
+    if (activeSession.user?.id !== userId) {
+      const codigo = await promptDialog({ title: 'Confirme seu e-mail 📧', message: `Enviamos um código de 6 dígitos para ${emailNormalizado}. Digite para ativar sua loja.`, placeholder: '000000' })
+      if (!codigo?.trim()) { setErro('Conta criada! Digite o código do e-mail para concluir o cadastro e enviar as fotos.'); return }
+      const { data: otp, error: otpError } = await supabase.auth.verifyOtp({ email: emailNormalizado, token: codigo.trim(), type: 'signup' })
+      if (otpError || !otp.user || otp.user.id !== userId) { setErro('Código inválido ou expirado. Solicite um novo código se precisar.'); return }
+    }
+    setLoading(true)
+    try {
+      const { error: profileError } = await supabase.from('profiles').update({
+        nome: nomeLoja.trim(), role: 'restaurante', email: emailNormalizado, categoria: categoriaNegocio,
+        cnpj: cnpj.replace(/\D/g, '') || null,
+        razao_social: razaoSocial || nomePessoa.trim(),
+        endereco: endereco.trim(), lat: coords?.lat ?? null, lng: coords?.lng ?? null,
+        horarios: signupHours.map(day => day.aberto
+          ? day.vinte_quatro_horas
+            ? { dia: day.dia, aberto: true, vinte_quatro_horas: true }
+            : { dia: day.dia, aberto: true, abre: day.abre, fecha: day.fecha }
+          : { dia: day.dia, aberto: false }),
+        ...legacyHours(signupHours),
+      }).eq('id', userId)
+      if (profileError) throw new Error('Conta confirmada, mas não foi possível salvar os dados da loja. Entre em contato com o suporte antes de vender.')
+      const { data: perfil } = await supabase.from('profiles').select('role,status').eq('id', userId).maybeSingle()
+      if (perfil?.role !== 'restaurante' || perfil?.status === 'banido') {
+        await supabase.auth.signOut()
+        throw new Error('Esta conta não pode acessar o painel de restaurante.')
+      }
+      let photoError = false
+      for (const [kind, file] of [['perfil', profilePhoto], ['capa', coverPhoto]] as const) {
+        if (!file) continue
+        try { await uploadSignupPhoto(userId, kind, file) }
+        catch { photoError = true }
+      }
+      login(userId, emailNormalizado, nomeLoja.trim())
+      if (photoError) {
+        await alertDialog({ title: 'Conta criada', message: 'A loja e os horários foram salvos, mas uma foto não terminou de enviar. Adicione-a em Perfil → Fotos públicas.' })
+        navigate('/perfil')
+      } else navigate('/')
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : 'Não foi possível confirmar a conta agora.')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   function normalizarEmail(v = email) {
     return v.trim().toLowerCase()
@@ -223,33 +404,25 @@ export default function LoginPage() {
     setSugestoesEndereco([])
     setCoords(null)
 
-    const cidadeBase = ['Praia Grande', 'Sao Paulo', 'Brasil']
-    const consultas = [
-      [rua, numeroEndereco.trim(), cepEndereco.replace(/\D/g, ''), ...cidadeBase].filter(Boolean),
-      [rua, cepEndereco.replace(/\D/g, ''), ...cidadeBase].filter(Boolean),
-      [rua, ...cidadeBase].filter(Boolean),
-    ]
-
     try {
-      let resultado: EnderecoSugestao[] = []
-      for (const partes of consultas) {
-        const url = new URL('/api/geocode/search', window.location.origin)
-        url.searchParams.set('format', 'jsonv2')
-        url.searchParams.set('addressdetails', '1')
-        url.searchParams.set('limit', '5')
-        url.searchParams.set('countrycodes', 'br')
-        url.searchParams.set('q', partes.join(', '))
-
-        const r = await fetch(url.toString(), { headers: { Accept: 'application/json' } })
-        if (!r.ok) throw new Error('consulta indisponivel')
-        const data = (await r.json()) as EnderecoSugestao[]
-        const praiaGrande = data.filter(item => {
-          const texto = `${item.display_name} ${item.address?.city ?? ''} ${item.address?.town ?? ''}`.toLowerCase()
-          return texto.includes('praia grande')
-        })
-        resultado = praiaGrande.length ? praiaGrande : data
-        if (resultado.length) break
-      }
+      // Uma consulta por clique: o serviço público de geocodificação tem
+      // limite de uso. O número é preservado no endereço final e o dono
+      // ajusta o marcador no mapa para indicar a porta exata.
+      const url = new URL('/api/geocode/search', window.location.origin)
+      url.searchParams.set('q', [rua, 'Praia Grande', 'São Paulo', 'Brasil'].join(', '))
+      // O proxy do Vite usa estes parâmetros; em produção a função fixa os
+      // mesmos valores no servidor e ignora parâmetros adicionais.
+      url.searchParams.set('format', 'jsonv2')
+      url.searchParams.set('addressdetails', '1')
+      url.searchParams.set('limit', '5')
+      url.searchParams.set('countrycodes', 'br')
+      const r = await fetch(url.toString(), { headers: { Accept: 'application/json' } })
+      if (!r.ok) throw new Error('consulta indisponivel')
+      const data = (await r.json()) as EnderecoSugestao[]
+      const resultado = data.filter(item => {
+        const texto = `${item.display_name} ${item.address?.city ?? ''} ${item.address?.town ?? ''}`.toLowerCase()
+        return texto.includes('praia grande')
+      })
 
       if (!resultado.length) {
         setEnderecoStatus('erro')
@@ -293,6 +466,7 @@ export default function LoginPage() {
   }
 
   async function entrar() {
+    if (!isLogin && pendingSignupUserId) { await confirmSignupEmail(pendingSignupUserId); return }
     const emailNormalizado = normalizarEmail()
     if (!emailValido(emailNormalizado)) { setErro('Informe um e-mail valido e real.'); setEmailStatus('invalido'); return }
     if (senha.length < 6) { setErro('A senha precisa ter ao menos 6 caracteres.'); return }
@@ -312,11 +486,24 @@ export default function LoginPage() {
         }
         
         if (data.user) {
-          const { data: perfil } = await supabase
+          let { data: perfil } = await supabase
             .from('profiles')
             .select('status,ban_motivo,nome,email,role')
             .eq('id', data.user.id)
             .maybeSingle()
+
+          // O link de confirmação pode ser aberto em outra aba. Nesse caso o
+          // rascunho não está em memória, mas os campos não sensíveis da loja
+          // estão nos metadados criados pelo fluxo de cadastro deste painel.
+          if (perfil?.role === 'cliente' && perfil.status !== 'banido') {
+            const draft = signupProfileFromMetadata(data.user.user_metadata)
+            if (draft) {
+              const { error: completionError } = await supabase.from('profiles').update(draft).eq('id', data.user.id)
+              if (completionError) throw new Error('Seu e-mail foi confirmado, mas não consegui concluir a loja. Entre em contato com o suporte.')
+              const refreshed = await supabase.from('profiles').select('status,ban_motivo,nome,email,role').eq('id', data.user.id).maybeSingle()
+              perfil = refreshed.data
+            }
+          }
 
           if (perfil?.role !== 'restaurante') {
             await supabase.auth.signOut()
@@ -336,12 +523,16 @@ export default function LoginPage() {
 
       } else {
         // validações do cadastro real
+        for (let step = 0; step < SIGNUP_STEPS.length - 1; step++) {
+          const validationError = validateSignupStep(step)
+          if (validationError) { setSignupStep(step); throw new Error(validationError) }
+        }
         if (!aceitouTermos) throw new Error('Você precisa aceitar os Termos de Uso e a Política de Privacidade.')
         if (!nomePessoa.trim()) throw new Error('Informe o seu nome.')
         if (cnpj.trim() && cnpjStatus === 'invalido') throw new Error('CNPJ inválido — confira os números.')
         if (!nomeLoja.trim()) throw new Error('Informe o nome do restaurante ou loja.')
         if (!coords || (enderecoStatus !== 'confirmado' && enderecoStatus !== 'gps')) throw new Error('Verifique o endereco e selecione uma sugestao no mapa antes de cadastrar.')
-        if (!endereco.trim() && !coords) throw new Error('Informe a localização da loja (endereço ou GPS).')
+        if (!endereco.trim()) throw new Error('Informe o endereço da loja.')
 
         // Cadastro via edge function 'cadastro' (regra de 1 conta por IP).
         const { data, error } = await supabase.functions.invoke('cadastro', {
@@ -349,10 +540,16 @@ export default function LoginPage() {
             email: emailNormalizado, senha,
             metadata: {
               role: 'restaurante', nome: nomeLoja.trim(),
+              categoria: categoriaNegocio,
               cnpj: cnpj.replace(/\D/g, '') || null,
               razao_social: razaoSocial || nomePessoa.trim(),
               endereco: endereco.trim() || null,
               lat: coords?.lat ?? null, lng: coords?.lng ?? null,
+              horarios: signupHours.map(day => day.aberto
+                ? day.vinte_quatro_horas
+                  ? { dia: day.dia, aberto: true, vinte_quatro_horas: true }
+                  : { dia: day.dia, aberto: true, abre: day.abre, fecha: day.fecha }
+                : { dia: day.dia, aberto: false }),
             },
             emailRedirectTo: `${window.location.origin}/`,
             origem: origemDoCadastro(),
@@ -365,36 +562,11 @@ export default function LoginPage() {
         }
         const resp = data as { error?: string; user_id?: string } | null
         if (resp?.error) throw new Error(resp.error)
-        // completa os dados do negócio (o trigger já criou o profile básico)
-        if (resp?.user_id) {
-          await supabase.from('profiles').update({
-            nome: nomeLoja.trim(), role: 'restaurante', email: emailNormalizado,
-            cnpj: cnpj.replace(/\D/g, '') || null,
-            razao_social: razaoSocial || nomePessoa.trim(),
-            endereco: endereco.trim() || null,
-            lat: coords?.lat ?? null, lng: coords?.lng ?? null, status: 'ativo',
-          }).eq('id', resp.user_id)
-        }
+        if (!resp?.user_id) throw new Error('Não foi possível identificar a conta criada. Tente novamente mais tarde.')
         await logSecurityEvent('signup_created', emailNormalizado, { email_confirmation_required: true })
+        setPendingSignupUserId(resp.user_id)
         setLoading(false)
-        // Pede o código de 6 dígitos que foi pro e-mail (confirma via OTP).
-        const codigo = await promptDialog({ title: 'Confirme seu e-mail 📧', message: `Enviamos um código de 6 dígitos para ${emailNormalizado}. Digite pra ativar sua conta.`, placeholder: '000000' })
-        if (!codigo?.trim()) { setErro('Conta criada! Confirme com o código do e-mail (ou clique no link) e faça login.'); setIsLogin(true); return }
-        const { data: otp, error: otpErr } = await supabase.auth.verifyOtp({ email: emailNormalizado, token: codigo.trim(), type: 'signup' })
-        if (otpErr) { setErro('Código inválido ou expirado. Quando confirmar, entre em "Tenho código".'); setIsLogin(true); return }
-        if (otp.user) {
-          const { data: perfil } = await supabase.from('profiles').select('role,status').eq('id', otp.user.id).maybeSingle()
-          if (perfil?.role !== 'restaurante' || perfil?.status === 'banido') {
-            await supabase.auth.signOut()
-            setErro('Esta conta nao pode acessar o painel de restaurante.')
-            setIsLogin(true)
-            return
-          }
-          login(otp.user.id, emailNormalizado, nomeLoja.trim() || undefined)
-          navigate('/')
-          return
-        }
-        setIsLogin(true)
+        await confirmSignupEmail(resp.user_id)
         return
       }
 
@@ -418,7 +590,7 @@ export default function LoginPage() {
         filter: 'blur(60px)', zIndex: 0, pointerEvents: 'none'
       }} />
 
-      <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ duration: 0.5, ease: "easeOut" }} style={{ width: '100%', maxWidth: 420, position: 'relative', zIndex: 1 }}>
+      <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ duration: 0.5, ease: "easeOut" }} style={{ width: '100%', maxWidth: isLogin ? 420 : 560, position: 'relative', zIndex: 1 }}>
         <div className="restaurant-login-brand" style={{ textAlign: 'center', marginBottom: 40 }}>
           {/* Marca oficial, mesmo recorte do app do cliente (PNG quadrado com
               margem: a caixa recorta so o brasao). */}
@@ -443,15 +615,32 @@ export default function LoginPage() {
         </div>
 
         <div className="glass-panel restaurant-login-card" style={{ borderRadius: 28, padding: '40px 32px', border: '1px solid rgba(249,115,22,0.2)', boxShadow: '0 24px 48px rgba(0,0,0,0.4), inset 0 0 20px rgba(249,115,22,0.05)' }}>
-          <h2 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>{isLogin ? 'Entrar no Sistema' : 'Criar Conta'}</h2>
-          <p style={{ fontSize: 14, color: '#64748b', marginBottom: 32, fontWeight: 500 }}>{isLogin ? 'Acesse sua central para gerenciar seu negócio' : 'Crie sua conta de Restaurante e gerencie pedidos'}</p>
+          <h2 style={{ fontSize: 24, fontWeight: 800, color: '#0f172a', marginBottom: 8 }}>{isLogin ? 'Entrar no Sistema' : SIGNUP_TITLES[signupStep]}</h2>
+          <p style={{ fontSize: 14, color: '#64748b', marginBottom: isLogin ? 32 : 20, fontWeight: 500 }}>{isLogin ? 'Acesse sua central para gerenciar seu negócio' : 'Configure a vitrine antes de criar a conta.'}</p>
+
+          {!isLogin && (
+            <div aria-label="Etapas do cadastro" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 5, marginBottom: 24 }}>
+              {SIGNUP_STEPS.map((label, index) => (
+                <div key={label} aria-current={signupStep === index ? 'step' : undefined} style={{ minWidth: 0, textAlign: 'center' }}>
+                  <div style={{ height: 5, borderRadius: 99, background: index <= signupStep ? '#f97316' : '#e2e8f0', marginBottom: 6 }} />
+                  <span style={{ fontSize: 10, fontWeight: signupStep === index ? 900 : 700, color: signupStep === index ? '#c2410c' : '#64748b' }}>{label}</span>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            {!isLogin && (
+            {!isLogin && signupStep === 0 && (
               <>
                 <div>
-                  <label htmlFor="rest-nome" style={{ fontSize: 12, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 8, letterSpacing: 1 }}>SEU NOME</label>
-                  <input id="rest-nome" value={nomePessoa} onChange={e => setNomePessoa(e.target.value)} placeholder="Maria da Silva" style={inputStyle} />
+                  <label htmlFor="rest-loja" style={{ fontSize: 12, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 8, letterSpacing: 1 }}>NOME DA LOJA</label>
+                  <input id="rest-loja" value={nomeLoja} onChange={e => { setNomeLoja(e.target.value); setErro('') }} placeholder="Ex.: Minha Pizzaria" style={inputStyle} />
+                </div>
+                <div>
+                  <label htmlFor="rest-categoria" style={{ fontSize: 12, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 8, letterSpacing: 1 }}>TIPO DE NEGÓCIO</label>
+                  <select id="rest-categoria" value={categoriaNegocio} onChange={e => { setCategoriaNegocio(e.target.value); setErro('') }} style={inputStyle}>
+                    {BUSINESS_CATEGORIES.map(category => <option key={category} value={category}>{category}</option>)}
+                  </select>
                 </div>
                 <div>
                   <label htmlFor="rest-cnpj" style={{ fontSize: 12, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 8, letterSpacing: 1 }}>CNPJ (SE TIVER)</label>
@@ -462,13 +651,12 @@ export default function LoginPage() {
                   {cnpjStatus === 'duplicado' && <div style={{ fontSize: 12, color: '#ef4444', fontWeight: 700, marginTop: 6 }}>Este CNPJ ja esta cadastrado no PraiaGo.</div>}
                   {cnpjStatus === 'nao_encontrado' && <div style={{ fontSize: 12, color: '#d97706', fontWeight: 700, marginTop: 6 }}>CNPJ ok, mas não achei o cadastro — digite o nome da empresa abaixo</div>}
                 </div>
-                <div>
-                  <label htmlFor="rest-loja" style={{ fontSize: 12, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 8, letterSpacing: 1 }}>NOME DO RESTAURANTE / LOJA</label>
-                  <input id="rest-loja" value={nomeLoja} onChange={e => setNomeLoja(e.target.value)} placeholder="Quiosque da Praia" style={inputStyle} />
-                </div>
-                <div>
+              </>
+            )}
+            {!isLogin && signupStep === 1 && (
+              <div>
                   <label htmlFor="rest-end" style={{ fontSize: 12, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 8, letterSpacing: 1 }}>LOCALIZAÇÃO DA LOJA</label>
-                  <input id="rest-end" value={endereco} onChange={e => setEndereco(e.target.value)} placeholder="Av. Presidente Castelo Branco, 1000 - Boqueirão" style={inputStyle} />
+                  <input id="rest-end" value={endereco} onChange={e => { setEndereco(e.target.value); setEnderecoStatus(status => status === 'gps' ? status : 'idle') }} placeholder="Av. Presidente Castelo Branco, 1000 - Boqueirão" style={inputStyle} />
                   <button onClick={usarMinhaLocalizacao} style={{ marginTop: 8, background: 'rgba(14,165,233,0.1)', border: '1px solid rgba(14,165,233,0.3)', borderRadius: 12, padding: '10px 14px', color: '#0284c7', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
                     📍 Usar minha localização (GPS)
                   </button>
@@ -507,15 +695,73 @@ export default function LoginPage() {
                       <AddressPreviewMap pos={[coords.lat, coords.lng]} onPick={ajustarPontoMapa} />
                     </>
                   )}
-                </div>
-              </>
+              </div>
             )}
+            {!isLogin && signupStep === 2 && (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: '#132238', fontWeight: 900, fontSize: 14 }}><Clock size={17} color="#f97316" /> Horário de funcionamento</div>
+                  <button type="button" onClick={() => { const monday = signupHours[1]; setSignupHours(current => current.map(day => ({ ...day, aberto: monday.aberto, abre: monday.abre, fecha: monday.fecha, vinte_quatro_horas: monday.vinte_quatro_horas }))) }} style={{ border: '1px solid #e2e8f0', borderRadius: 9, background: '#fff', padding: '7px 8px', color: '#475569', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>Repetir segunda</button>
+                </div>
+                <p style={{ margin: '0 0 12px', fontSize: 12, color: '#64748b' }}>Marque os dias em que a loja abre. Para fechar depois da meia-noite, por exemplo, use 22:00 às 04:00.</p>
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {WEEK_ORDER.map(number => {
+                    const day = signupHours[number]
+                    return (
+                      <div key={number} style={{ border: '1px solid #e2e8f0', borderRadius: 12, padding: 10, background: day.aberto ? '#fff' : '#f8fafc' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#132238', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
+                          <input type="checkbox" checked={day.aberto} onChange={event => updateSignupDay(number, { aberto: event.target.checked })} style={{ width: 17, height: 17, accentColor: '#f97316' }} />
+                          {WEEK_DAYS[number]}
+                        </label>
+                        {day.aberto && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginTop: 9 }}>
+                            {!day.vinte_quatro_horas && (
+                              <>
+                                <input aria-label={`${WEEK_DAYS[number]} abre`} type="time" value={day.abre} onChange={event => updateSignupDay(number, { abre: event.target.value })} style={signupTimeStyle} />
+                                <span style={{ color: '#64748b', fontSize: 12 }}>às</span>
+                                <input aria-label={`${WEEK_DAYS[number]} fecha`} type="time" value={day.fecha} onChange={event => updateSignupDay(number, { fecha: event.target.value })} style={signupTimeStyle} />
+                              </>
+                            )}
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 5, marginLeft: 'auto', fontSize: 12, color: '#475569', fontWeight: 800, cursor: 'pointer' }}>
+                              <input type="checkbox" checked={day.vinte_quatro_horas} onChange={event => updateSignupDay(number, { vinte_quatro_horas: event.target.checked })} style={{ accentColor: '#16a34a' }} />24h
+                            </label>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+            {!isLogin && signupStep === 3 && (
+              <div style={{ display: 'grid', gap: 18 }}>
+                <p style={{ margin: 0, color: '#64748b', fontSize: 12, lineHeight: 1.5 }}>Escolha imagens reais da sua loja. A foto do perfil deve ser quadrada; a capa fica melhor em 16:9. JPG, PNG ou WebP, até 5 MB cada. Você também pode adicionar depois.</p>
+                {([
+                  { kind: 'perfil' as const, label: 'Logo ou foto do perfil', file: profilePhoto, preview: profilePreview, ratio: '1 / 1' },
+                  { kind: 'capa' as const, label: 'Banner da vitrine', file: coverPhoto, preview: coverPreview, ratio: '16 / 9' },
+                ]).map(entry => (
+                  <div key={entry.kind}>
+                    <label htmlFor={`signup-${entry.kind}`} style={{ display: 'block', fontSize: 12, color: '#475569', fontWeight: 900, marginBottom: 8 }}>{entry.label}</label>
+                    <label htmlFor={`signup-${entry.kind}`} style={{ display: 'grid', placeItems: 'center', width: entry.kind === 'perfil' ? 150 : '100%', maxWidth: entry.kind === 'perfil' ? 150 : 400, aspectRatio: entry.ratio, borderRadius: 14, border: '1px dashed #b9c8d6', background: '#f8fafc', overflow: 'hidden', cursor: 'pointer', color: '#f97316' }}>
+                      {entry.preview ? <img src={entry.preview} alt={`Prévia de ${entry.label.toLowerCase()}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <ImagePlus size={25} />}
+                    </label>
+                    <input id={`signup-${entry.kind}`} type="file" accept="image/jpeg,image/png,image/webp" onChange={event => { chooseSignupPhoto(entry.kind, event.target.files?.[0]); event.target.value = '' }} style={{ width: '100%', marginTop: 7, fontSize: 12 }} />
+                    {entry.file && <div style={{ color: '#148447', fontSize: 12, fontWeight: 800, marginTop: 5 }}>{entry.file.name}</div>}
+                  </div>
+                ))}
+                <p style={{ margin: 0, color: '#64748b', fontSize: 11 }}>As fotos serão enviadas depois que você confirmar o e-mail. Mantenha esta página aberta até terminar.</p>
+              </div>
+            )}
+            {(isLogin || signupStep === 4) && (
+              <>
+                {!isLogin && <div><label htmlFor="rest-nome" style={{ fontSize: 12, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 8, letterSpacing: 1 }}>SEU NOME</label><input id="rest-nome" value={nomePessoa} onChange={e => setNomePessoa(e.target.value)} disabled={!!pendingSignupUserId} placeholder="Maria da Silva" style={inputStyle} /></div>}
             <div>
               <label htmlFor="rest-email" style={{ fontSize: 12, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 8, letterSpacing: 1 }}>E-MAIL</label>
               <input
                 id="rest-email"
                 type="email"
                 value={email}
+                disabled={!isLogin && !!pendingSignupUserId}
                 onChange={e => { setEmail(e.target.value); setEmailStatus('idle') }}
                 placeholder="restaurante@exemplo.com"
                 style={inputStyle}
@@ -523,14 +769,14 @@ export default function LoginPage() {
                 onBlur={(e) => { e.target.style.border = '1px solid rgba(0,0,0,0.08)'; checarEmail() }}
               />
               {emailStatus === 'checando' && <div style={{ fontSize: 12, color: '#0284c7', fontWeight: 700, marginTop: 6 }}>Verificando e-mail...</div>}
-              {emailStatus === 'ok' && !isLogin && <div style={{ fontSize: 12, color: '#16a34a', fontWeight: 700, marginTop: 6 }}>E-mail disponivel.</div>}
+              {emailStatus === 'ok' && !isLogin && <div style={{ fontSize: 12, color: '#16a34a', fontWeight: 700, marginTop: 6 }}>Formato de e-mail válido.</div>}
               {emailStatus === 'invalido' && <div style={{ fontSize: 12, color: '#ef4444', fontWeight: 700, marginTop: 6 }}>Use um e-mail valido e real.</div>}
               {emailStatus === 'duplicado' && !isLogin && <div style={{ fontSize: 12, color: '#ef4444', fontWeight: 700, marginTop: 6 }}>Este e-mail ja esta cadastrado.</div>}
             </div>
             <div>
               <label htmlFor="rest-senha" style={{ fontSize: 12, fontWeight: 800, color: '#64748b', display: 'block', marginBottom: 8, letterSpacing: 1 }}>SENHA</label>
               <div style={{ position: 'relative' }}>
-                <input id="rest-senha" type={verSenha ? 'text' : 'password'} value={senha} onChange={e => setSenha(e.target.value)} onKeyDown={e => e.key === 'Enter' && entrar()} placeholder="••••••••" style={{ ...inputStyle, padding: '16px 48px 16px 20px' }} onFocus={(e) => e.target.style.border = '1px solid rgba(249,115,22,0.5)'} onBlur={(e) => e.target.style.border = '1px solid rgba(0,0,0,0.08)'} />
+                <input id="rest-senha" type={verSenha ? 'text' : 'password'} value={senha} disabled={!isLogin && !!pendingSignupUserId} onChange={e => setSenha(e.target.value)} onKeyDown={e => e.key === 'Enter' && entrar()} placeholder="••••••••" style={{ ...inputStyle, padding: '16px 48px 16px 20px' }} onFocus={(e) => e.target.style.border = '1px solid rgba(249,115,22,0.5)'} onBlur={(e) => e.target.style.border = '1px solid rgba(0,0,0,0.08)'} />
                 <button aria-label={verSenha ? 'Ocultar senha' : 'Mostrar senha'} onClick={() => setVerSenha(!verSenha)} style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: 4 }}>
                   {verSenha ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
@@ -545,14 +791,19 @@ export default function LoginPage() {
                 </span>
               </label>
             )}
+              </>
+            )}
+            {!isLogin && pendingSignupUserId && <p role="status" style={{ margin: 0, padding: 12, borderRadius: 12, background: '#fff7ed', color: '#9a3412', fontSize: 12, fontWeight: 700 }}>Sua conta já foi criada. Confirme o código recebido por e-mail para salvar o perfil completo e enviar as fotos. Não feche esta página.</p>}
 
             {erro && <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} style={{ fontSize: 13, color: erro.includes('sucesso') ? '#4ade80' : '#f87171', fontWeight: 600, background: erro.includes('sucesso') ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)', border: erro.includes('sucesso') ? '1px solid rgba(34,197,94,0.2)' : '1px solid rgba(239,68,68,0.2)', padding: '10px 14px', borderRadius: 12 }}>{erro}</motion.div>}
 
-            <motion.button disabled={loading} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={entrar} style={{ background: 'linear-gradient(135deg, #f97316, #ea580c)', border: 'none', borderRadius: 16, padding: '18px 0', color: '#fff', fontSize: 16, fontWeight: 900, letterSpacing: 1, cursor: loading ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 12, boxShadow: '0 8px 30px rgba(249,115,22,0.4)', textShadow: '0 1px 2px rgba(0,0,0,0.2)', opacity: loading ? 0.7 : 1 }}>
-              <LogIn size={20} /> {loading ? 'AGUARDE...' : (isLogin ? 'ACESSAR PAINEL' : 'CADASTRAR')}
+            {!isLogin && signupStep > 0 && !pendingSignupUserId && <button type="button" onClick={() => { setSignupStep(step => step - 1); setErro('') }} style={{ border: '1px solid #cbd5e1', background: '#fff', color: '#475569', borderRadius: 12, padding: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, cursor: 'pointer', fontWeight: 800 }}><ChevronLeft size={16} /> Voltar uma etapa</button>}
+            <motion.button disabled={loading} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={isLogin || signupStep === SIGNUP_STEPS.length - 1 ? entrar : advanceSignup} style={{ background: 'linear-gradient(135deg, #f97316, #ea580c)', border: 'none', borderRadius: 16, padding: '18px 0', color: '#fff', fontSize: 16, fontWeight: 900, letterSpacing: 1, cursor: loading ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 12, boxShadow: '0 8px 30px rgba(249,115,22,0.4)', textShadow: '0 1px 2px rgba(0,0,0,0.2)', opacity: loading ? 0.7 : 1 }}>
+              {isLogin || signupStep === SIGNUP_STEPS.length - 1 ? <LogIn size={20} /> : <ChevronRight size={20} />}
+              {loading ? 'AGUARDE...' : isLogin ? 'ACESSAR PAINEL' : pendingSignupUserId ? 'CONFIRMAR E-MAIL' : signupStep === SIGNUP_STEPS.length - 1 ? 'CRIAR CONTA' : 'CONTINUAR'}
             </motion.button>
             
-            <button onClick={() => { setIsLogin(!isLogin); setErro('') }} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginTop: -4 }}>
+            <button onClick={() => { const nextLogin = !isLogin; setIsLogin(nextLogin); setSignupStep(!nextLogin && pendingSignupUserId ? 4 : 0); setErro('') }} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 13, fontWeight: 700, cursor: 'pointer', marginTop: -4 }}>
               {isLogin ? 'Não tem conta? Crie uma aqui' : 'Já tem conta? Fazer Login'}
             </button>
             {isLogin && (
@@ -574,4 +825,9 @@ const inputStyle: React.CSSProperties = {
   border: '1px solid rgba(0,0,0,0.08)', fontSize: 16, outline: 'none',
   color: '#0f172a', background: '#ffffff', boxSizing: 'border-box',
   transition: 'border 0.2s', fontFamily: 'inherit'
+}
+
+const signupTimeStyle: React.CSSProperties = {
+  minWidth: 116, padding: '9px 7px', borderRadius: 9,
+  border: '1px solid #cbd5e1', color: '#132238', background: '#fff', fontSize: 13, fontWeight: 800,
 }

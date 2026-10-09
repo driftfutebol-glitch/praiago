@@ -142,6 +142,8 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
       <AnimatePresence>
         {!isOpen && (
           <motion.button
+            className="restaurant-assistant-toggle"
+            aria-label="Abrir suporte PraiaGo"
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0, opacity: 0 }}
@@ -173,6 +175,7 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
       <AnimatePresence>
         {isOpen && (
           <motion.div
+            className="restaurant-assistant-panel"
             initial={{ y: 20, opacity: 0, scale: 0.95 }}
             animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: 20, opacity: 0, scale: 0.95 }}

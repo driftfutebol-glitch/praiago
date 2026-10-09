@@ -1,3 +1,4 @@
+import ResponsiveTable from '../components/ResponsiveTable'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { format } from 'date-fns'
@@ -329,7 +330,7 @@ export default function NovosUsuariosPage() {
       {filtradas.length > 0 && (
         <div className="glass-panel border-slate-800 rounded-2xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <ResponsiveTable label="Novos usuários" className="w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-800 text-[10px] uppercase tracking-wider text-slate-600 font-bold">
                   <th className="text-left px-5 py-3">Quando</th>
@@ -382,7 +383,7 @@ export default function NovosUsuariosPage() {
                   </motion.tr>
                 ))}
               </tbody>
-            </table>
+            </ResponsiveTable>
           </div>
         </div>
       )}

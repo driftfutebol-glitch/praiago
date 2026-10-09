@@ -1,3 +1,4 @@
+import { hasNativePushSound } from '../lib/pushNotifications'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getSessao } from '../lib/auth'
 import { supabase } from '../lib/supabase'
@@ -107,7 +108,7 @@ function emitOrder(row: PedidoRow) {
   notifiedRecently.add(order.id)
   window.setTimeout(() => notifiedRecently.delete(order.id), 8000)
 
-  playNotificationBeep()
+  if (!hasNativePushSound()) playNotificationBeep()
   listeners.forEach(listener => listener(order))
 }
 

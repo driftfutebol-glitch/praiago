@@ -29,22 +29,22 @@ type Estado = {
 
 const APRESENTACAO: Record<string, { cor: string; fundo: string; borda: string; titulo: string; texto: string }> = {
   ativo: {
-    cor: '#148447', fundo: '#eaf8ef', borda: '#a7dfbd',
+    cor: 'var(--success)', fundo: 'var(--surface-green)', borda: 'var(--success-line)',
     titulo: 'Conta verificada',
     texto: 'Tudo certo. Você já pode vender e sacar o seu dinheiro.',
   },
   pendente: {
-    cor: '#b54708', fundo: '#fff4e5', borda: '#f4d39f',
+    cor: 'var(--warning)', fundo: 'var(--surface-amber)', borda: 'var(--warning-line)',
     titulo: 'Falta liberar a movimentação',
     texto: 'Sua conta está cadastrada, mas o banco ainda não libera saque. É uma verificação rápida, feita pelo titular da conta.',
   },
   recusado: {
-    cor: '#b42335', fundo: '#fff0f2', borda: '#f0b6bd',
+    cor: 'var(--danger)', fundo: 'var(--surface-red)', borda: 'var(--danger-line)',
     titulo: 'Verificação não aprovada',
     texto: 'A verificação da sua conta não passou. Confira os dados cadastrados e tente de novo.',
   },
   bloqueado: {
-    cor: '#b42335', fundo: '#fff0f2', borda: '#f0b6bd',
+    cor: 'var(--danger)', fundo: 'var(--surface-red)', borda: 'var(--danger-line)',
     titulo: 'Conta bloqueada',
     texto: 'A conta de recebimento está bloqueada. Fale com a gente pelo chat do app.',
   },
@@ -214,7 +214,7 @@ export default function VerificacaoRecebedor() {
           disabled={gerando}
           style={{
             width: '100%', marginTop: 12, padding: '11px 0', borderRadius: 12,
-            border: 'none', background: v.cor, color: '#fff',
+            border: 'none', background: chave === 'recusado' ? 'var(--danger-solid)' : 'var(--brand-solid)', color: '#fff',
             fontSize: 13, fontWeight: 900, cursor: gerando ? 'wait' : 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
           }}

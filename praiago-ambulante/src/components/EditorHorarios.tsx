@@ -133,16 +133,16 @@ export default function EditorHorarios({
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 4 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Clock size={18} color={accent} />
-          <div style={{ color: '#132238', fontSize: 14, fontWeight: 900 }}>Horário de funcionamento</div>
+          <div style={{ color: 'var(--ink-strong)', fontSize: 14, fontWeight: 900 }}>Horário de funcionamento</div>
         </div>
         <button
           type="button" onClick={repetirParaTodos}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid #e2e8f0', background: '#fff', color: '#475569', borderRadius: 10, padding: '7px 11px', fontSize: 11.5, fontWeight: 800, cursor: 'pointer' }}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--muted)', borderRadius: 10, padding: '7px 11px', fontSize: 11.5, fontWeight: 800, cursor: 'pointer' }}
         >
           <Copy size={13} /> Repetir segunda em todos
         </button>
       </div>
-      <p style={{ margin: '0 0 14px', fontSize: 12, color: '#617089', fontWeight: 600 }}>
+      <p style={{ margin: '0 0 14px', fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>
         É isso que decide se o cliente vê sua loja como aberta agora.
       </p>
 
@@ -155,8 +155,8 @@ export default function EditorHorarios({
               style={{
                 display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
                 padding: '10px 12px', borderRadius: 13,
-                background: d.aberto ? '#f8fafc' : '#f1f5f9',
-                border: `1px solid ${d.aberto ? '#e2e8f0' : '#e2e8f0'}`,
+                background: d.aberto ? 'var(--surface-soft)' : 'var(--surface-soft)',
+                border: `1px solid ${d.aberto ? 'var(--line)' : 'var(--line)'}`,
                 opacity: d.aberto ? 1 : 0.72,
               }}
             >
@@ -166,11 +166,11 @@ export default function EditorHorarios({
                   onChange={e => mudar(num, { aberto: e.target.checked })}
                   style={{ width: 17, height: 17, accentColor: accent, cursor: 'pointer' }}
                 />
-                <span style={{ fontSize: 13.5, fontWeight: 800, color: '#132238' }}>{NOMES[num]}</span>
+                <span style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--ink-strong)' }}>{NOMES[num]}</span>
               </label>
 
               {!d.aberto ? (
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: '#94a3b8' }}>Fechado</span>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--faint)' }}>Fechado</span>
               ) : d.vinte_quatro_horas ? (
                 <span style={{ fontSize: 12.5, fontWeight: 800, color: '#16a34a' }}>Aberto 24 horas</span>
               ) : (
@@ -179,7 +179,7 @@ export default function EditorHorarios({
                     type="time" value={d.abre ?? ''} onChange={e => mudar(num, { abre: e.target.value })}
                     style={campoHora}
                   />
-                  <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 700 }}>às</span>
+                  <span style={{ fontSize: 12, color: 'var(--faint)', fontWeight: 700 }}>às</span>
                   <input
                     type="time" value={d.fecha ?? ''} onChange={e => mudar(num, { fecha: e.target.value })}
                     style={campoHora}
@@ -194,7 +194,7 @@ export default function EditorHorarios({
                     onChange={e => mudar(num, { vinte_quatro_horas: e.target.checked })}
                     style={{ width: 15, height: 15, accentColor: '#16a34a', cursor: 'pointer' }}
                   />
-                  <span style={{ fontSize: 11.5, fontWeight: 800, color: '#617089' }}>24h</span>
+                  <span style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--muted)' }}>24h</span>
                 </label>
               )}
             </div>
@@ -203,13 +203,13 @@ export default function EditorHorarios({
       </div>
 
       {/* Aviso do caso que mais confunde: fechar depois da meia-noite. */}
-      <p style={{ margin: '11px 0 0', fontSize: 11.5, color: '#617089', fontWeight: 600, lineHeight: 1.45 }}>
+      <p style={{ margin: '11px 0 0', fontSize: 11.5, color: 'var(--muted)', fontWeight: 600, lineHeight: 1.45 }}>
         Fecha de madrugada? Coloque, por exemplo, <strong>22:00 às 04:00</strong> — o app entende que o
         turno atravessa a meia-noite e mantém a loja aberta.
       </p>
 
       {msg && (
-        <div style={{ marginTop: 10, fontSize: 12, fontWeight: 800, color: msg.erro ? '#b42335' : '#148447' }}>
+        <div style={{ marginTop: 10, fontSize: 12, fontWeight: 800, color: msg.erro ? 'var(--danger)' : 'var(--success)' }}>
           {msg.texto}
         </div>
       )}
@@ -231,6 +231,6 @@ export default function EditorHorarios({
 }
 
 const campoHora: React.CSSProperties = {
-  border: '1px solid #e2e8f0', borderRadius: 10, padding: '7px 9px',
-  fontSize: 13.5, fontWeight: 800, color: '#132238', background: '#fff',
+  border: '1px solid var(--line)', borderRadius: 10, padding: '7px 9px',
+  fontSize: 13.5, fontWeight: 800, color: 'var(--ink-strong)', background: 'var(--surface)',
 }

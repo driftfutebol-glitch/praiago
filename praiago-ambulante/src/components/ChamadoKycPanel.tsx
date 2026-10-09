@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, ExternalLink, CheckCircle2, Clock, AlertTriangle, RefreshCw } from 'lucide-react'
+import { ChevronDown, ChevronRight, ExternalLink, CheckCircle2, Clock, AlertTriangle, RefreshCw } from 'lucide-react'
 import { useChamadoKyc } from '../hooks/useChamadoKyc'
 
 // Painel do chamado de verificacao. Copiado identico no ambulante e no
@@ -79,50 +79,42 @@ export default function ChamadoKycPanel() {
   const naoLidas = mensagens.filter(m => m.autor === 'admin').length
 
   if (minimizado) {
-    // Fica ACIMA do botao do assistente, que mora em `bottom: 80, right: 24`
-    // com zIndex 9999. Na primeira versao este aqui usava bottom 88 e zIndex
-    // 1400: caia em cima do outro e ainda por baixo — sumia da tela.
-    //
-    // E vermelho de proposito. A bolinha verde do assistente e convite; esta
-    // e pendencia: enquanto ela estiver ali, o vendedor nao consegue sacar.
+    // O aviso faz parte do fluxo da página, logo abaixo do cabeçalho. Assim
+    // nunca tapa um produto, ação de pedido ou botão do assistente no celular.
     return (
       <button
         type="button"
+        className="kyc-mini-banner"
         onClick={() => { setMinimizado(false); void recarregar() }}
         aria-label="Abrir o chamado de verificação"
         style={{
-          position: 'fixed', right: 20,
-          bottom: 'calc(150px + env(safe-area-inset-bottom))',
-          zIndex: 10000, border: 'none', cursor: 'pointer',
-          padding: '10px 14px', borderRadius: 26,
-          background: resolvido ? '#148447' : '#c81e3a', color: '#fff',
-          display: 'flex', alignItems: 'center', gap: 8,
-          fontSize: 12.5, fontWeight: 900,
-          boxShadow: resolvido
-            ? '0 8px 24px rgba(15,23,42,.28)'
-            : '0 8px 26px rgba(200,30,58,.45)',
-          animation: resolvido ? undefined : 'pulsarChamado 2.2s ease-in-out infinite',
+          width: 'calc(100% - 34px)', maxWidth: 1086, minHeight: 52,
+          margin: '12px auto 0', padding: '10px 13px',
+          border: `1px solid ${resolvido ? 'var(--success-line)' : 'var(--danger-line)'}`,
+          borderRadius: 16, cursor: 'pointer',
+          background: resolvido ? 'var(--surface-green)' : 'var(--surface-red)',
+          color: resolvido ? 'var(--success)' : 'var(--danger)',
+          display: 'flex', alignItems: 'center', gap: 9,
+          textAlign: 'left', fontSize: 13, fontWeight: 850,
+          boxShadow: '0 4px 15px rgba(31,76,77,.05)',
         }}
       >
         {resolvido ? <CheckCircle2 size={19} /> : <AlertTriangle size={19} />}
-        {resolvido ? 'Conta liberada'
-          : linkVerificacao ? 'Faça a verificação · ' + relogio(restaMs)
-          : linkVencido ? 'O link venceu'
-          : 'Verificação pendente'}
+        <span style={{ flex: 1 }}>
+          {resolvido ? 'Conta liberada'
+            : linkVerificacao ? 'Faça a verificação · ' + relogio(restaMs)
+            : linkVencido ? 'O link venceu · peça outro aqui'
+            : 'Verificação pendente · acompanhe aqui'}
+        </span>
         {!resolvido && naoLidas > 0 && (
           <span style={{
             minWidth: 20, height: 20, borderRadius: 10,
-            background: '#fff', color: '#c81e3a',
+            background: 'var(--surface)', color: 'var(--danger)',
             fontSize: 11, fontWeight: 900, display: 'flex',
             alignItems: 'center', justifyContent: 'center', padding: '0 5px',
           }}>{naoLidas}</span>
         )}
-        <style>{`
-          @keyframes pulsarChamado {
-            0%, 100% { box-shadow: 0 8px 26px rgba(200,30,58,.45); }
-            50%      { box-shadow: 0 8px 26px rgba(200,30,58,.80); }
-          }
-        `}</style>
+        <ChevronRight size={17} aria-hidden="true" />
       </button>
     )
   }
@@ -133,8 +125,8 @@ export default function ChamadoKycPanel() {
         position: 'fixed', left: 10, right: 10,
         bottom: 'calc(84px + env(safe-area-inset-bottom))',
         zIndex: 1400, maxWidth: 460, margin: '0 auto',
-        background: '#fff', borderRadius: 16,
-        border: '1px solid #e2e8f0', boxShadow: '0 14px 44px rgba(15,23,42,.20)',
+        background: 'var(--surface)', borderRadius: 16,
+        border: '1px solid var(--line)', boxShadow: '0 14px 44px rgba(15,23,42,.20)',
         overflow: 'hidden',
       }}
     >
@@ -143,20 +135,20 @@ export default function ChamadoKycPanel() {
           proprio dinheiro. Em amarelo, ela se confundia com aviso comum. */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 9, padding: '12px 14px',
-        background: resolvido ? '#eaf8ef' : '#fff0f2',
-        borderBottom: `1px solid ${resolvido ? '#a7dfbd' : '#f0b6bd'}`,
+        background: resolvido ? 'var(--surface-green)' : 'var(--surface-red)',
+        borderBottom: `1px solid ${resolvido ? 'var(--success-line)' : 'var(--danger-line)'}`,
       }}>
-        <div style={{ color: resolvido ? '#148447' : '#c81e3a', display: 'flex' }}>
+        <div style={{ color: resolvido ? 'var(--success)' : 'var(--danger)', display: 'flex' }}>
           {resolvido ? <CheckCircle2 size={18} /> : <AlertTriangle size={18} />}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13.5, fontWeight: 900, color: resolvido ? '#148447' : '#c81e3a' }}>
+          <div style={{ fontSize: 13.5, fontWeight: 900, color: resolvido ? 'var(--success)' : 'var(--danger)' }}>
             {resolvido ? 'Verificação concluída' : 'Importante · saque bloqueado'}
           </div>
-          <div style={{ fontSize: 11.5, fontWeight: 650, color: resolvido ? '#148447' : '#c81e3a', opacity: .88 }}>
+          <div style={{ fontSize: 11.5, fontWeight: 650, color: resolvido ? 'var(--success)' : 'var(--danger)', opacity: .88 }}>
             {resolvido
               ? 'Sua conta está liberada'
-              : linkVerificacao ? 'Seu link chegou — faça agora' : 'Chamado aberto, preparando o seu link'}
+              : linkVerificacao ? 'Seu link chegou — faça agora' : linkVencido ? 'O link anterior venceu. Peça outro abaixo.' : 'Chamado aberto, preparando o seu link'}
           </div>
         </div>
         <button
@@ -165,14 +157,14 @@ export default function ChamadoKycPanel() {
           aria-label="Minimizar"
           style={{
             border: 'none', background: 'transparent', cursor: 'pointer',
-            color: resolvido ? '#148447' : '#c81e3a', padding: 4, display: 'flex',
+            color: resolvido ? 'var(--success)' : 'var(--danger)', padding: 4, display: 'flex',
           }}
         >
           <ChevronDown size={19} />
         </button>
       </div>
 
-      <div style={{ maxHeight: '38dvh', overflowY: 'auto', padding: '12px 14px', background: '#f8fafc' }}>
+      <div style={{ maxHeight: '38dvh', overflowY: 'auto', padding: '12px 14px', background: 'var(--surface-soft)' }}>
         {mensagens.map(m => {
           const daGente = m.autor === 'admin'
           const doSistema = m.autor === 'sistema'
@@ -180,24 +172,24 @@ export default function ChamadoKycPanel() {
             <div key={m.id} style={{ marginBottom: 9 }}>
               <div style={{
                 display: 'inline-block', maxWidth: '92%',
-                background: doSistema ? '#eef2ff' : daGente ? '#fff' : '#dcfce7',
-                border: `1px solid ${doSistema ? '#c7d2fe' : daGente ? '#e2e8f0' : '#bbf7d0'}`,
+                background: doSistema ? 'var(--surface-purple)' : daGente ? 'var(--surface)' : 'var(--surface-green)',
+                border: `1px solid ${doSistema ? 'var(--purple-line)' : daGente ? 'var(--line)' : 'var(--success-line)'}`,
                 borderRadius: 12, padding: '9px 11px',
-                fontSize: 13, lineHeight: 1.5, color: '#334155',
+                fontSize: 13, lineHeight: 1.5, color: 'var(--ink)',
                 fontWeight: 600, wordBreak: 'break-word',
               }}>
                 {doSistema && (
-                  <div style={{ fontSize: 10.5, fontWeight: 900, color: '#4338ca', marginBottom: 3, letterSpacing: .4 }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 900, color: 'var(--purple)', marginBottom: 3, letterSpacing: .4 }}>
                     PRAIAGO
                   </div>
                 )}
                 {daGente && (
-                  <div style={{ fontSize: 10.5, fontWeight: 900, color: '#0f172a', marginBottom: 3, letterSpacing: .4 }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 900, color: 'var(--ink-strong)', marginBottom: 3, letterSpacing: .4 }}>
                     ATENDIMENTO
                   </div>
                 )}
                 {m.mensagem}
-                <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4, fontWeight: 700 }}>
+                <div style={{ fontSize: 10, color: 'var(--faint)', marginTop: 4, fontWeight: 700 }}>
                   {horaCurta(m.criadaEm)}
                 </div>
               </div>
@@ -207,14 +199,14 @@ export default function ChamadoKycPanel() {
         <div ref={fim} />
       </div>
 
-      <div style={{ padding: '11px 14px', borderTop: '1px solid #eef2f7' }}>
+      <div style={{ padding: '11px 14px', borderTop: '1px solid var(--surface-soft)' }}>
         {resolvido ? (
           <button
             type="button"
             onClick={() => setDispensado(true)}
             style={{
               width: '100%', padding: '11px 0', borderRadius: 12, border: 'none',
-              background: '#148447', color: '#fff', fontSize: 13.5, fontWeight: 900, cursor: 'pointer',
+              background: 'var(--green-solid)', color: '#fff', fontSize: 13.5, fontWeight: 900, cursor: 'pointer',
             }}
           >
             Entendi, pode fechar
@@ -226,13 +218,13 @@ export default function ChamadoKycPanel() {
               onClick={() => window.open(linkVerificacao, '_blank', 'noopener,noreferrer')}
               style={{
                 width: '100%', padding: '12px 0', borderRadius: 12, border: 'none',
-                background: '#c81e3a', color: '#fff', fontSize: 13.5, fontWeight: 900,
+                background: 'var(--danger-solid)', color: '#fff', fontSize: 13.5, fontWeight: 900,
                 cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
               }}
             >
               <ExternalLink size={16} /> Fazer a verificação · {relogio(restaMs)}
             </button>
-            <div style={{ marginTop: 7, fontSize: 11, fontWeight: 650, color: '#c81e3a', lineHeight: 1.45 }}>
+            <div style={{ marginTop: 7, fontSize: 11, fontWeight: 650, color: 'var(--danger)', lineHeight: 1.45 }}>
               O link vence em {relogio(restaMs)}. Quem preenche é o titular da conta, com documento
               em mãos — se não der tempo, peça outro aqui mesmo.
             </div>
@@ -252,21 +244,21 @@ export default function ChamadoKycPanel() {
               }}
               style={{
                 width: '100%', padding: '12px 0', borderRadius: 12, border: 'none',
-                background: '#0f172a', color: '#fff', fontSize: 13.5, fontWeight: 900,
+                background: 'var(--brand-solid)', color: '#fff', fontSize: 13.5, fontWeight: 900,
                 cursor: pedindo ? 'wait' : 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
               }}
             >
               <RefreshCw size={15} /> {pedindo ? 'Pedindo…' : 'Pedir outro link'}
             </button>
-            <div style={{ marginTop: 7, fontSize: 11, fontWeight: 650, color: '#64748b', lineHeight: 1.45 }}>
+            <div style={{ marginTop: 7, fontSize: 11, fontWeight: 650, color: 'var(--muted)', lineHeight: 1.45 }}>
               {falhou
                 ? 'Não deu pra avisar agora. Tente de novo em instantes.'
                 : 'O link anterior venceu — eles duram 5 minutos. Toque acima que a gente gera outro e ele chega aqui.'}
             </div>
           </>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#64748b' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--muted)' }}>
             <Clock size={15} />
             <div style={{ fontSize: 12, fontWeight: 650, lineHeight: 1.45 }}>
               Pode fechar esta janela e continuar trabalhando. O chamado não se perde, e quando o

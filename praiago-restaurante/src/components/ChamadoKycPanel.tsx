@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown, ExternalLink, CheckCircle2, Clock, AlertTriangle, RefreshCw } from 'lucide-react'
 import { useChamadoKyc } from '../hooks/useChamadoKyc'
 
@@ -18,7 +19,7 @@ import { useChamadoKyc } from '../hooks/useChamadoKyc'
 const CHAVE_MIN = 'praiago:vendedor:chamado-kyc-min'
 
 function leMinimizado() {
-  try { return localStorage.getItem(CHAVE_MIN) === '1' } catch { return false }
+  try { return localStorage.getItem(CHAVE_MIN) !== '0' } catch { return true }
 }
 
 function horaCurta(ms: number) {
@@ -41,7 +42,19 @@ export default function ChamadoKycPanel() {
   const [pedindo, setPedindo] = useState(false)
   const [falhou, setFalhou] = useState(false)
   const [assistenteAberto, setAssistenteAberto] = useState(false)
+  const [mobileTarget, setMobileTarget] = useState<HTMLElement | null>(null)
   const fim = useRef<HTMLDivElement | null>(null)
+  const lista = useRef<HTMLDivElement | null>(null)
+
+  // No celular o acesso fica no cabeçalho, sem cobrir vendas ou controles.
+  // No desktop conservamos o aviso completo no canto da tela.
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 1023px)')
+    const update = () => setMobileTarget(media.matches ? document.getElementById('restaurant-mobile-verification') : null)
+    update()
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [])
 
   // O assistente e este painel dividem o canto inferior direito. Enquanto a
   // janela dele esta aberta, esta some — na primeira versao ficava por cima
@@ -69,7 +82,8 @@ export default function ChamadoKycPanel() {
   }, [mensagens])
 
   useEffect(() => {
-    if (!minimizado) fim.current?.scrollIntoView({ block: 'end' })
+    // scrollIntoView no painel fixo também rolava a página de Pedidos inteira.
+    if (!minimizado && lista.current) lista.current.scrollTop = lista.current.scrollHeight
   }, [mensagens, minimizado])
 
   if (!chamado || dispensado) return null
@@ -85,32 +99,36 @@ export default function ChamadoKycPanel() {
     //
     // E vermelho de proposito. A bolinha verde do assistente e convite; esta
     // e pendencia: enquanto ela estiver ali, o vendedor nao consegue sacar.
-    return (
+    const label = resolvido ? 'Conta liberada'
+      : linkVerificacao ? 'Faça a verificação · ' + relogio(restaMs)
+      : linkVencido ? 'O link venceu' : 'Verificação pendente'
+    const button = (
       <button
         type="button"
+        className={mobileTarget ? 'restaurant-kyc-toggle is-inline' : 'restaurant-kyc-toggle'}
         onClick={() => { setMinimizado(false); void recarregar() }}
         aria-label="Abrir o chamado de verificação"
+        aria-describedby="restaurant-kyc-status"
+        title={label}
         style={{
-          position: 'fixed', right: 20,
-          bottom: 'calc(150px + env(safe-area-inset-bottom))',
+          position: mobileTarget ? 'relative' : 'fixed', right: mobileTarget ? undefined : 20,
+          bottom: mobileTarget ? undefined : 'calc(150px + env(safe-area-inset-bottom))',
+          width: mobileTarget ? 44 : undefined, height: mobileTarget ? 44 : undefined,
           zIndex: 10000, border: 'none', cursor: 'pointer',
-          padding: '10px 14px', borderRadius: 26,
+          padding: mobileTarget ? 0 : '10px 14px', borderRadius: mobileTarget ? 14 : 26,
           background: resolvido ? '#148447' : '#c81e3a', color: '#fff',
-          display: 'flex', alignItems: 'center', gap: 8,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
           fontSize: 12.5, fontWeight: 900,
           boxShadow: resolvido
             ? '0 8px 24px rgba(15,23,42,.28)'
             : '0 8px 26px rgba(200,30,58,.45)',
-          animation: resolvido ? undefined : 'pulsarChamado 2.2s ease-in-out infinite',
+          animation: resolvido || mobileTarget ? undefined : 'pulsarChamado 2.2s ease-in-out infinite',
         }}
       >
         {resolvido ? <CheckCircle2 size={19} /> : <AlertTriangle size={19} />}
-        {resolvido ? 'Conta liberada'
-          : linkVerificacao ? 'Faça a verificação · ' + relogio(restaMs)
-          : linkVencido ? 'O link venceu'
-          : 'Verificação pendente'}
+        <span id="restaurant-kyc-status" className="restaurant-kyc-label">{label}</span>
         {!resolvido && naoLidas > 0 && (
-          <span style={{
+          <span className="restaurant-kyc-count" style={{
             minWidth: 20, height: 20, borderRadius: 10,
             background: '#fff', color: '#c81e3a',
             fontSize: 11, fontWeight: 900, display: 'flex',
@@ -125,6 +143,7 @@ export default function ChamadoKycPanel() {
         `}</style>
       </button>
     )
+    return mobileTarget ? createPortal(button, mobileTarget) : button
   }
 
   return (
@@ -172,7 +191,7 @@ export default function ChamadoKycPanel() {
         </button>
       </div>
 
-      <div style={{ maxHeight: '38dvh', overflowY: 'auto', padding: '12px 14px', background: '#f8fafc' }}>
+      <div ref={lista} style={{ maxHeight: '38dvh', overflowY: 'auto', padding: '12px 14px', background: '#f8fafc' }}>
         {mensagens.map(m => {
           const daGente = m.autor === 'admin'
           const doSistema = m.autor === 'sistema'

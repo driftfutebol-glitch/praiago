@@ -10,6 +10,7 @@ const config: CapacitorConfig = {
   appName: 'PraiaGo Ambulante',
   webDir: 'dist',
   plugins: {
+    PushNotifications: { presentationOptions: ['badge', 'sound', 'alert'] },
     SplashScreen: {
       launchShowDuration: 350,
       launchAutoHide: true,
@@ -19,7 +20,7 @@ const config: CapacitorConfig = {
       showSpinner: false,
     },
     CapacitorUpdater: {
-      autoUpdate: 'atBackground',
+      autoUpdate: process.env.CAPACITOR_DISABLE_OTA === 'true' ? false : 'atBackground',
       updateUrl: otaUpdateUrl,
       statsUrl: '',
       channelUrl: '',

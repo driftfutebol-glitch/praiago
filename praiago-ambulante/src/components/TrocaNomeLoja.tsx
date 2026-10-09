@@ -23,10 +23,10 @@ const campo: React.CSSProperties = {
   minHeight: 44,
   marginTop: 6,
   padding: '11px 10px',
-  border: '1px solid #dfe6ed',
+  border: '1px solid var(--line)',
   borderRadius: 8,
-  background: '#f8fafc',
-  color: '#132238',
+  background: 'var(--surface-soft)',
+  color: 'var(--ink-strong)',
   fontSize: 14,
   fontWeight: 700,
 }
@@ -96,28 +96,28 @@ export default function TrocaNomeLoja({ vendedorId, nomeAtual, onNomeAprovado }:
   return (
     <section className="surface" style={{ marginBottom: 14, padding: 15, boxShadow: 'none' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <Signature size={18} color="#008fc0" />
+        <Signature size={18} color='var(--info)' />
         <div>
-          <div style={{ color: '#132238', fontSize: 14, fontWeight: 900 }}>Nome da banca</div>
-          <div style={{ marginTop: 2, color: '#617089', fontSize: 11, fontWeight: 600 }}>
+          <div style={{ color: 'var(--ink-strong)', fontSize: 14, fontWeight: 900 }}>Nome da banca</div>
+          <div style={{ marginTop: 2, color: 'var(--muted)', fontSize: 11, fontWeight: 600 }}>
             E o nome que o cliente reconhece no app, entao a troca passa pela equipe PraiaGo.
           </div>
         </div>
       </div>
 
-      <div style={{ marginTop: 12, padding: 11, borderRadius: 8, background: '#f2f5f7' }}>
+      <div style={{ marginTop: 12, padding: 11, borderRadius: 8, background: 'var(--surface-soft)' }}>
         <span className="field-label">Nome atual</span>
-        <div style={{ marginTop: 3, color: '#132238', fontSize: 15, fontWeight: 900 }}>{nomeAtual || '—'}</div>
+        <div style={{ marginTop: 3, color: 'var(--ink-strong)', fontSize: 15, fontWeight: 900 }}>{nomeAtual || '—'}</div>
       </div>
 
       {carregando && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 12, color: '#617089', fontSize: 12, fontWeight: 700 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 12, color: 'var(--muted)', fontSize: 12, fontWeight: 700 }}>
           <Loader2 size={15} className="animate-spin-slow" /> Conferindo se voce ja tem um pedido...
         </div>
       )}
 
       {!carregando && pendente && solicitacao && (
-        <div style={{ ...faixa, flexDirection: 'column', gap: 10, background: '#fff4e5', border: '1px solid rgba(181,71,8,0.2)', color: '#b54708' }}>
+        <div style={{ ...faixa, flexDirection: 'column', gap: 10, background: 'var(--surface-amber)', border: '1px solid rgba(181,71,8,0.2)', color: 'var(--warning)' }}>
           <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start' }}>
             <Clock3 size={16} style={{ flexShrink: 0 }} />
             <div>
@@ -135,7 +135,7 @@ export default function TrocaNomeLoja({ vendedorId, nomeAtual, onNomeAprovado }:
       )}
 
       {!carregando && solicitacao?.status === 'aprovada' && (
-        <div style={{ ...faixa, background: '#eaf8ef', border: '1px solid rgba(20,132,71,0.2)', color: '#148447' }}>
+        <div style={{ ...faixa, background: 'var(--surface-green)', border: '1px solid rgba(20,132,71,0.2)', color: 'var(--success)' }}>
           <CheckCircle2 size={16} style={{ flexShrink: 0 }} />
           <div>
             <div style={{ fontSize: 12.5, fontWeight: 900 }}>Troca aprovada</div>
@@ -148,7 +148,7 @@ export default function TrocaNomeLoja({ vendedorId, nomeAtual, onNomeAprovado }:
       )}
 
       {!carregando && solicitacao?.status === 'recusada' && (
-        <div style={{ ...faixa, background: '#fff1f3', border: '1px solid rgba(180,35,53,0.2)', color: '#b42335' }}>
+        <div style={{ ...faixa, background: 'var(--surface-red)', border: '1px solid var(--danger-line)', color: 'var(--danger)' }}>
           <XCircle size={16} style={{ flexShrink: 0 }} />
           <div>
             <div style={{ fontSize: 12.5, fontWeight: 900 }}>Troca nao aprovada</div>
@@ -190,11 +190,11 @@ export default function TrocaNomeLoja({ vendedorId, nomeAtual, onNomeAprovado }:
       )}
 
       {erro && (
-        <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 9, color: '#b42335', fontSize: 11.5, fontWeight: 750 }}>
+        <div role="alert" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 9, color: 'var(--danger)', fontSize: 11.5, fontWeight: 750 }}>
           <AlertCircle size={14} /> {erro}
         </div>
       )}
-      {aviso && <div role="status" style={{ marginTop: 9, color: '#148447', fontSize: 11.5, fontWeight: 750 }}>{aviso}</div>}
+      {aviso && <div role="status" style={{ marginTop: 9, color: 'var(--success)', fontSize: 11.5, fontWeight: 750 }}>{aviso}</div>}
     </section>
   )
 }

@@ -6,8 +6,15 @@ import { getSessao } from '../lib/auth'
 import { alertDialog, confirmDialog } from '../lib/dialog'
 import ProductCategoryPicker, { CategoryPhoto } from '../components/ProductCategoryPicker'
 import { getProductCategory } from '../lib/productCategories'
+import CategoryTabs from '../components/CategoryTabs'
+import ProductMenuOptions, { type MenuOptions } from '../components/ProductMenuOptions'
+import BulkProductImport from '../components/BulkProductImport'
+import { baseProductCategory, descriptionWithMenuSection, productMenuSection, visibleProductDescription } from '../lib/menuSection'
 
 type Produto = {
+  menu_secao?: string | null
+  pizza_meio_a_meio?: boolean
+  pizza_tamanho?: string | null
   id: string
   vendedor_id?: string
   nome: string
@@ -21,7 +28,7 @@ type Produto = {
   estoque: number | null
 }
 
-type NovoForm = {
+type NovoForm = MenuOptions & {
   nome: string
   preco: string
   descricao: string
@@ -32,6 +39,7 @@ type NovoForm = {
 }
 
 const NOVO_INICIAL: NovoForm = {
+  menu_secao: '', pizza_meio_a_meio: false, pizza_tamanho: '',
   nome: '',
   preco: '',
   descricao: '',
@@ -69,7 +77,11 @@ export default function CardapioPage() {
   const [editPreco, setEditPreco] = useState('')
   const [editCategoria, setEditCategoria] = useState('')
   const [editEstoque, setEditEstoque] = useState('')
+  const [editDescricao, setEditDescricao] = useState('')
+  const [editOptions, setEditOptions] = useState<MenuOptions>({ menu_secao: '', pizza_meio_a_meio: false, pizza_tamanho: '' })
+  const [salvandoEdicao, setSalvandoEdicao] = useState(false)
   const [adicionando, setAdicionando] = useState(false)
+  const [importando, setImportando] = useState(false)
   const [loading, setLoading] = useState(true)
   const [verificado, setVerificado] = useState<boolean | null>(null)
   const [novo, setNovo] = useState<NovoForm>(NOVO_INICIAL)
@@ -229,8 +241,7 @@ export default function CardapioPage() {
 
   async function salvarEdicao(id: string) {
     const p = produtos.find(p => p.id === id)
-    if (!p) return
-
+    if (!p || salvandoEdicao) return
     const newNome = editNome || p.nome
     const precoNum = parseFloat(editPreco)
     if (editPreco.trim() !== '' && (!Number.isFinite(precoNum) || precoNum <= 0 || precoNum > 100000)) {
@@ -238,22 +249,25 @@ export default function CardapioPage() {
     }
     const newPreco = editPreco.trim() !== '' ? precoNum : p.preco
 
-    const newCategoria = getProductCategory(editCategoria || p.categoria).label
+    const newSection = getProductCategory(editCategoria || p.categoria).label
+    const newCategoria = baseProductCategory(newSection)
+    const newDescricao = descriptionWithMenuSection(editDescricao, newSection)
+    const pizza = baseProductCategory(newSection) === 'Pizza' && editOptions.pizza_meio_a_meio
+    if (pizza && !editOptions.pizza_tamanho) { await alertDialog({ title: 'Tamanho obrigatório', message: 'Selecione o tamanho para combinar sabores.', tone: 'danger' }); return }
     // Campo vazio grava NULO de proposito: "sem numero" quer dizer "nao
     // controlo estoque", que e diferente de zero (zero e esgotado).
     const newEstoque = editEstoque.trim() === ''
       ? null
       : Math.max(0, Math.floor(Number(editEstoque) || 0))
 
-    setProdutos(prev => prev.map(p => p.id === id
-      ? { ...p, nome: newNome, preco: newPreco, categoria: newCategoria, estoque: newEstoque }
-      : p
-    ))
+    const payload = { nome: newNome.trim(), preco: newPreco, categoria: newCategoria, descricao: newDescricao, estoque: newEstoque,
+      menu_secao: editOptions.menu_secao.trim() || null, pizza_meio_a_meio: pizza, pizza_tamanho: pizza ? editOptions.pizza_tamanho : null }
+    setSalvandoEdicao(true)
+    const { error } = await supabase.from('produtos').update(payload).eq('id', id).eq('vendedor_id', sessao?.id)
+    setSalvandoEdicao(false)
+    if (error) { await alertDialog({ title: 'Não foi possível salvar', message: error.message, tone: 'danger' }); return }
+    setProdutos(prev => prev.map(item => item.id === id ? { ...item, ...payload } : item))
     setEditando(null)
-
-    await supabase.from('produtos')
-      .update({ nome: newNome, preco: newPreco, categoria: newCategoria, estoque: newEstoque })
-      .eq('id', id)
   }
 
   async function adicionarProduto() {
@@ -269,6 +283,8 @@ export default function CardapioPage() {
       return
     }
 
+    const pizza = baseProductCategory(novo.categoria) === 'Pizza' && novo.pizza_meio_a_meio
+    if (pizza && !novo.pizza_tamanho) { await alertDialog({ title: 'Tamanho obrigatório', message: 'Selecione o tamanho para combinar sabores.', tone: 'danger' }); return }
     setSalvando(true)
     let caminhoEnviado: string | null = null
     try {
@@ -283,8 +299,9 @@ export default function CardapioPage() {
         vendedor_id: sessao.id,
         nome: novo.nome.trim(),
         preco: precoNum,
-        descricao: novo.descricao.trim(),
-        categoria: novo.categoria,
+        descricao: descriptionWithMenuSection(novo.descricao, novo.categoria),
+        categoria: baseProductCategory(novo.categoria),
+        menu_secao: novo.menu_secao.trim() || null, pizza_meio_a_meio: pizza, pizza_tamanho: pizza ? novo.pizza_tamanho : null,
         ativo: true,
         emoji: novo.emoji,
         foto: fotoUrl,
@@ -309,13 +326,15 @@ export default function CardapioPage() {
     }
   }
 
-  const todasCategorias = ['Todos', ...Array.from(new Set(produtos.map(p => getProductCategory(p.categoria).label)))]
-  const filtrados = categoriaFiltro === 'Todos'
+  const todasCategorias = ['Todos', ...Array.from(new Set(produtos.map(p => productMenuSection(p.categoria, p.descricao, p.menu_secao))))]
+  const selectedCategory = todasCategorias.includes(categoriaFiltro) ? categoriaFiltro : 'Todos'
+  const filtrados = selectedCategory === 'Todos'
     ? produtos
-    : produtos.filter(p => getProductCategory(p.categoria).label === categoriaFiltro)
+    : produtos.filter(p => productMenuSection(p.categoria, p.descricao, p.menu_secao) === selectedCategory)
+  const sections = todasCategorias.filter(category => category !== 'Todos')
 
   return (
-    <div style={{ padding: '32px 0 48px', minHeight: '100vh', position: 'relative' }}>
+    <div className="restaurant-page" style={{ padding: '32px 0 48px', minHeight: '100vh', position: 'relative' }}>
       <input
         ref={trocarFotoRef}
         type="file"
@@ -325,20 +344,22 @@ export default function CardapioPage() {
       />
 
       {/* Header */}
-      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} style={{ padding: '0 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
+      <motion.div className="restaurant-page-header restaurant-inset-section" initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} style={{ padding: '0 40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
         <div>
           <h1 style={{ fontSize: 32, fontWeight: 900, color: '#0f172a', letterSpacing: -1, marginBottom: 8 }}>Cardápio</h1>
           <p style={{ color: '#64748b', fontSize: 16 }}>Gerencie seus pratos, bebidas e combos.</p>
         </div>
-        <button onClick={() => { if (verificado) setAdicionando(true) }} disabled={!verificado} style={{ display: 'flex', alignItems: 'center', gap: 8, background: verificado ? 'linear-gradient(135deg, #f97316, #ea580c)' : '#cbd5e1', color: '#fff', border: 'none', padding: '12px 24px', borderRadius: 16, fontSize: 15, fontWeight: 700, cursor: verificado ? 'pointer' : 'not-allowed', boxShadow: verificado ? '0 10px 25px rgba(249,115,22,0.3)' : 'none', transition: 'transform 0.2s, box-shadow 0.2s' }} onMouseOver={e => { if (verificado) e.currentTarget.style.transform = 'translateY(-2px)' }} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
-          <Plus size={20} />
-          Adicionar Item
-        </button>
+        <div className="restaurant-header-actions" style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+          <button type="button" onClick={() => setImportando(true)} disabled={!verificado} style={{ padding: '12px 18px', borderRadius: 16, border: '1px solid #fdba74', background: '#fff7ed', color: '#c2410c', fontWeight: 800, cursor: verificado ? 'pointer' : 'not-allowed' }}>Importar cardápio</button>
+          <button onClick={() => { if (verificado) setAdicionando(true) }} disabled={!verificado} style={{ display: 'flex', alignItems: 'center', gap: 8, background: verificado ? 'linear-gradient(135deg, #f97316, #ea580c)' : '#cbd5e1', color: '#fff', border: 'none', padding: '12px 24px', borderRadius: 16, fontSize: 15, fontWeight: 700, cursor: verificado ? 'pointer' : 'not-allowed', boxShadow: verificado ? '0 10px 25px rgba(249,115,22,0.3)' : 'none', transition: 'transform 0.2s, box-shadow 0.2s' }} onMouseOver={e => { if (verificado) e.currentTarget.style.transform = 'translateY(-2px)' }} onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}>
+            <Plus size={20} /> Adicionar Item
+          </button>
+        </div>
       </motion.div>
 
       {/* Gate de verificação: sem CNPJ aprovado, não anuncia produto e não aparece pro cliente */}
       {verificado === false && (
-        <div style={{ margin: '0 40px 24px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 16, padding: '16px 20px' }}>
+        <div className="restaurant-menu-gate" style={{ margin: '0 40px 24px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 16, padding: '16px 20px' }}>
           <div style={{ fontSize: 15, fontWeight: 800, color: '#b45309', marginBottom: 4 }}>⚠️ Verificação pendente</div>
           <p style={{ fontSize: 14, color: '#92400e', margin: 0, lineHeight: 1.5 }}>
             Você precisa <strong>completar a verificação (CNPJ + documento)</strong> antes de anunciar produtos.
@@ -347,23 +368,17 @@ export default function CardapioPage() {
         </div>
       )}
 
-      {/* Tabs / Filters */}
-      <div style={{ padding: '0 40px', marginBottom: 32, display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 8 }} className="hide-scrollbar">
-        {todasCategorias.map(cat => (
-          <button key={cat} onClick={() => setCategoriaFiltro(cat)} style={{ minHeight: 54, padding: cat === 'Todos' ? '8px 20px' : '6px 15px 6px 8px', borderRadius: 14, fontSize: 13, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.2s', background: categoriaFiltro === cat ? '#fff7ed' : '#ffffff', color: categoriaFiltro === cat ? '#ea580c' : '#475569', border: `1px solid ${categoriaFiltro === cat ? '#fdba74' : '#e2e8f0'}`, display: 'inline-flex', alignItems: 'center', gap: 8, boxShadow: categoriaFiltro === cat ? '0 7px 18px rgba(234,88,12,0.12)' : 'none' }}>
-            {cat !== 'Todos' && <CategoryPhoto category={getProductCategory(cat)} size={40} />}
-            <span>{cat}</span>
-          </button>
-        ))}
+      <div className="restaurant-inset-section" style={{ padding: '0 40px', marginBottom: 24 }}>
+        <CategoryTabs categories={todasCategorias} value={selectedCategory} onChange={setCategoriaFiltro} />
       </div>
 
       {/* Grid */}
-      <div style={{ padding: '0 40px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 24 }}>
+      <div className="restaurant-menu-grid" style={{ padding: '0 40px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 320px), 1fr))', gap: 24 }}>
         <AnimatePresence>
           {loading ? (
             <div style={{ color: '#64748b', padding: 20 }}>Carregando cardápio do servidor...</div>
           ) : filtrados.map(p => (
-            <motion.div key={p.id} layout initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} transition={{ duration: 0.2 }} style={{ background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(10px)', borderRadius: 24, padding: 20, border: '1px solid rgba(0,0,0,0.05)', position: 'relative', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' }}>
+            <motion.div className="restaurant-product-card" key={p.id} layout initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} transition={{ duration: 0.2 }} style={{ background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(10px)', borderRadius: 24, padding: 20, border: '1px solid rgba(0,0,0,0.05)', position: 'relative', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' }}>
               {/* Badge Ativo */}
               <button onClick={() => toggleAtivo(p.id)} style={{ position: 'absolute', top: 20, right: 20, background: p.ativo ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)', border: `1px solid ${p.ativo ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`, color: p.ativo ? '#4ade80' : '#f87171', padding: '4px 12px', borderRadius: 12, fontSize: 12, fontWeight: 800, cursor: 'pointer', transition: 'all 0.2s' }}>
                 {p.ativo ? 'ATIVO' : 'PAUSADO'}
@@ -372,7 +387,7 @@ export default function CardapioPage() {
               <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
                 <div style={{ width: 72, height: 72, borderRadius: 16, background: 'rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, position: 'relative', overflow: 'hidden' }}>
                   {p.foto
-                    ? <img src={p.foto} alt={p.nome} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ? <img src={p.foto} alt={p.nome} loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     : <CategoryPhoto category={getProductCategory(p.categoria)} size={72} />}
                   <button
                     type="button"
@@ -394,9 +409,9 @@ export default function CardapioPage() {
                     {enviandoFotoId === p.id ? <Loader2 size={15} className="animate-spin-slow" /> : <Camera size={15} />}
                   </button>
                 </div>
-                <div style={{ flex: 1, paddingTop: 4 }}>
+                <div style={{ flex: 1, minWidth: 0, paddingTop: 4, overflowWrap: 'anywhere' }}>
                   <div style={{ fontSize: 12, color: '#f97316', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
-                    {getProductCategory(p.categoria).label}
+                    {productMenuSection(p.categoria, p.descricao, p.menu_secao)}
                   </div>
                   {/* So aparece pra quem controla estoque: produto de estoque
                       nulo nao deve ganhar rotulo nenhum. */}
@@ -440,12 +455,15 @@ export default function CardapioPage() {
               </div>
 
               <p style={{ fontSize: 14, color: '#64748b', lineHeight: 1.5, margin: '0 0 20px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                {p.descricao}
+                {visibleProductDescription(p.descricao)}
+                {p.pizza_meio_a_meio && <span style={{ display: 'block', color: '#c2410c', fontWeight: 800 }}>Meio a meio · {p.pizza_tamanho}</span>}
               </p>
 
               {editando === p.id && (
                 <div style={{ margin: '0 0 18px' }}>
                   <ProductCategoryPicker value={editCategoria || p.categoria} onChange={category => setEditCategoria(category.label)} />
+                  <label style={{ display: 'block', margin: '12px 0', color: '#475569', fontSize: 13 }}>Descrição / ingredientes<textarea aria-label="Descrição do produto" value={editDescricao} maxLength={2000} onChange={event => setEditDescricao(event.target.value)} rows={3} style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid #cbd5e1', fontSize: 16 }} /></label>
+                  <ProductMenuOptions value={editOptions} onChange={setEditOptions} pizza={baseProductCategory(editCategoria || p.categoria) === 'Pizza'} sections={sections} />
                 </div>
               )}
 
@@ -453,7 +471,7 @@ export default function CardapioPage() {
               <div style={{ display: 'flex', gap: 8, borderTop: '1px solid rgba(0,0,0,0.05)', paddingTop: 16 }}>
                 {editando === p.id ? (
                   <>
-                    <button onClick={() => salvarEdicao(p.id)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: '#10b981', color: '#fff', border: 'none', padding: '8px', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+                    <button disabled={salvandoEdicao} onClick={() => salvarEdicao(p.id)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: '#10b981', color: '#fff', border: 'none', padding: '8px', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
                       <Check size={16} /> Salvar
                     </button>
                     <button onClick={() => setEditando(null)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', padding: '8px', borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
@@ -462,7 +480,7 @@ export default function CardapioPage() {
                   </>
                 ) : (
                   <>
-                    <button onClick={() => { setEditando(p.id); setEditNome(p.nome); setEditPreco(p.preco.toString()); setEditCategoria(getProductCategory(p.categoria).label); setEditEstoque(p.estoque == null ? '' : String(p.estoque)) }} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(0,0,0,0.05)', color: '#334155', border: 'none', padding: '8px', borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                    <button onClick={() => { setEditando(p.id); setEditNome(p.nome); setEditPreco(p.preco.toString()); setEditCategoria(productMenuSection(p.categoria, p.descricao)); setEditDescricao(visibleProductDescription(p.descricao)); setEditOptions({ menu_secao: p.menu_secao || '', pizza_meio_a_meio: p.pizza_meio_a_meio === true, pizza_tamanho: p.pizza_tamanho || '' }); setEditEstoque(p.estoque == null ? '' : String(p.estoque)) }} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(0,0,0,0.05)', color: '#334155', border: 'none', padding: '8px', borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
                       <Edit2 size={16} /> Editar
                     </button>
                     <button onClick={() => deletar(p.id)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)', padding: '8px', borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
@@ -524,6 +542,7 @@ export default function CardapioPage() {
                 </div>
 
                 <ProductCategoryPicker value={novo.categoria} onChange={category => setNovo({ ...novo, categoria: category.label })} />
+                <ProductMenuOptions value={novo} onChange={value => setNovo(current => ({ ...current, ...value }))} pizza={baseProductCategory(novo.categoria) === 'Pizza'} sections={sections} />
 
                 <div>
                   <label style={{ display: 'block', fontSize: 14, color: '#64748b', fontWeight: 600, marginBottom: 8 }}>Descrição</label>
@@ -582,6 +601,7 @@ export default function CardapioPage() {
           </div>
         )}
       </AnimatePresence>
+      {importando && verificado && sessao && <BulkProductImport sellerId={sessao.id} existingProducts={produtos.map(item => ({ id: item.id, nome: item.nome, categoria: item.categoria, descricao: item.descricao, foto: item.foto }))} onClose={() => setImportando(false)} onImported={fetchProdutos} />}
     </div>
   )
 }

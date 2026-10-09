@@ -1,6 +1,9 @@
+import ResponsiveTable from '../components/ResponsiveTable'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
+import { alertDialog, confirmDialog } from '../lib/dialog'
+import { askExceptionReason } from '../lib/adminExceptionDialogs'
 import { supabase } from '../lib/supabase'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -83,6 +86,7 @@ export default function AtendimentoPage() {
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null)
   const [mensagens, setMensagens] = useState<Record<string, { id: string; autor: string; mensagem: string; created_at: string }[]>>({})
   const [aba, setAba] = useState<'todos' | 'triagem'>('todos')
+  const [regenerando, setRegenerando] = useState<string | null>(null)
   const [decidindo, setDecidindo] = useState<string | null>(null)
   const fimRef = useRef<HTMLDivElement>(null)
 
@@ -90,6 +94,23 @@ export default function AtendimentoPage() {
     const { data } = await supabase.from('ticket_mensagens').select('*').eq('ticket_id', ticketId).order('created_at', { ascending: true })
     setMensagens(prev => ({ ...prev, [ticketId]: (data as { id: string; autor: string; mensagem: string; created_at: string }[]) ?? [] }))
   }, [])
+
+  async function regenerarCodigo(ticket: Ticket) {
+    if (regenerando) return
+    const fromSubject = ticket.assunto.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)?.[0]
+    const orderId = ticket.pedido_ref || fromSubject
+    if (!orderId) { await alertDialog({ title: 'Pedido não vinculado', message: 'Este chamado precisa identificar o pedido completo. Não é possível gerar código para um pedido por aproximação.', tone: 'danger' }); return }
+    const motivo = await askExceptionReason('Motivo do novo código', 'Confira o erro relatado e os participantes do pedido. O novo código ficará disponível somente para o cliente autorizado.')
+    if (!motivo || !await confirmDialog({ title: 'Invalidar o código anterior?', message: `Pedido ${orderId}. O cliente deverá abrir Meus Pedidos para consultar o novo código. A entrega não será concluída e nenhum saldo será alterado.`, confirmText: 'Gerar novo código', tone: 'danger' })) return
+    setRegenerando(ticket.id)
+    try {
+      const { data, error } = await supabase.rpc('admin_regenerar_codigo_por_ticket', { p_ticket: ticket.id, p_pedido: orderId, p_motivo: motivo })
+      if (error || data?.ok !== true) throw new Error(error?.message || 'O servidor não confirmou a alteração.')
+      await carregarMensagens(ticket.id)
+      await alertDialog({ title: 'Código atualizado', message: 'O aviso foi registrado no chamado. Peça ao cliente para abrir Meus Pedidos. O código não foi exposto na conversa de suporte.', tone: 'success' })
+    } catch (error) { await alertDialog({ title: 'Código não alterado', message: error instanceof Error ? error.message : 'Confira o chamado e tente novamente.', tone: 'danger' }) }
+    finally { setRegenerando(null) }
+  }
 
   async function abrirTicket(ticketId: string) {
     const abrindo = expandedTicket !== ticketId
@@ -300,7 +321,7 @@ export default function AtendimentoPage() {
       {/* Tickets Table */}
       {!loading && (
         <div className="glass-panel rounded-2xl overflow-hidden border-slate-800">
-          <table className="w-full text-left border-collapse">
+          <ResponsiveTable label="Atendimento" className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-900/80 text-slate-500 text-[10px] font-bold uppercase tracking-wider border-b border-slate-800">
                 <th className="p-4 w-8"></th>
@@ -333,13 +354,16 @@ export default function AtendimentoPage() {
                       } ${ticket.prioridade === 'urgente' ? 'border-l-2 border-l-red-500/50' : ''}`}
                     >
                       <td className="p-4">
+                        <button type="button" aria-label={`${isExpanded ? 'Fechar' : 'Abrir'} chamado ${ticket.id.slice(0, 8)}`} aria-expanded={isExpanded} className="p-2 rounded-lg text-purple-300 hover:bg-purple-500/10 flex items-center gap-2" onClick={event=>{event.stopPropagation();void abrirTicket(ticket.id)}}>
                         <motion.div
                           animate={{ rotate: isExpanded ? 180 : 0 }}
                           transition={{ duration: 0.2 }}
-                          className="text-slate-600"
+                          className="text-purple-300"
                         >
                           {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                         </motion.div>
+                        <span className="sm:sr-only text-xs font-semibold">{isExpanded?'Fechar chamado':'Abrir chamado'}</span>
+                        </button>
                       </td>
                       <td className="p-4 font-mono font-bold text-purple-400 text-xs">
                         {ticket.id.substring(0, 8)}
@@ -353,8 +377,8 @@ export default function AtendimentoPage() {
                           {pLabel}
                         </td>
                       )}
-                      <td className="p-4 text-slate-300 max-w-[300px]">
-                        <div className="truncate">{ticket.assunto}</div>
+                      <td className="admin-cell-wide p-4 text-slate-300 max-w-[300px]">
+                        <div className="sm:truncate">{ticket.assunto}</div>
                         {ticket.origem === 'ia' && (
                           <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 text-[9px] font-black uppercase">
@@ -402,6 +426,11 @@ export default function AtendimentoPage() {
                             className="overflow-hidden"
                           >
                             <div className="p-6 bg-slate-900/40 border-t border-slate-800/30 space-y-4">
+                              {['aberto', 'em_andamento'].includes(ticket.status) && (ticket.pedido_ref || /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(ticket.assunto)) && <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-4">
+                                <strong className="text-blue-300 text-sm">Recuperação do código de entrega</strong>
+                                <p className="text-slate-400 text-xs mt-2 mb-3">Somente Admin com acesso a Atendimento e Pedidos. Exige chamado aberto do participante e pedido pago, pronto ou em entrega. Não conclui entrega nem altera saldo.</p>
+                                <button type="button" onClick={() => void regenerarCodigo(ticket)} disabled={regenerando !== null} className="px-4 py-2 bg-blue-500/15 text-blue-300 border border-blue-500/30 rounded-lg text-xs font-bold">{regenerando === ticket.id ? 'Conferindo…' : 'Gerar novo código para o cliente'}</button>
+                              </div>}
                               {/* Verificação de recebedor: o atendente precisa
                                   sair daqui, gerar o link na Pagar.me e voltar
                                   para colar. Sem o atalho, ele procura o
@@ -629,7 +658,7 @@ export default function AtendimentoPage() {
                 </tr>
               )}
             </tbody>
-          </table>
+          </ResponsiveTable>
         </div>
       )}
     </div>

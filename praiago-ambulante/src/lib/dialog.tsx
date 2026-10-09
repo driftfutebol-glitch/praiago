@@ -76,9 +76,9 @@ export function promptDialog(input: string | Opts): Promise<string | null> {
 }
 
 const ACCENT = 'linear-gradient(135deg,#0ea5e9,#22c55e)'
-const CARD_BG = '#ffffff'
-const TITLE = '#0f172a'
-const TEXT = '#475569'
+const CARD_BG = 'var(--surface)'
+const TITLE = 'var(--ink-strong)'
+const TEXT = 'var(--muted)'
 
 export function DialogHost() {
   const [dlg, setDlg] = useState<DialogState | null>(current)
@@ -129,8 +129,8 @@ export function DialogHost() {
             onClick={e => e.stopPropagation()}
             style={{ width: '100%', maxWidth: 400, background: CARD_BG, borderRadius: 26, padding: 26, boxShadow: '0 30px 70px rgba(15,23,42,0.35)', position: 'relative' }}
           >
-            <button aria-label="Fechar" onClick={cancelar} style={{ position: 'absolute', top: 16, right: 16, width: 32, height: 32, border: 0, borderRadius: 10, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-              <X size={16} color="#94a3b8" />
+            <button aria-label="Fechar" onClick={cancelar} style={{ position: 'absolute', top: 16, right: 16, width: 32, height: 32, border: 0, borderRadius: 10, background: 'var(--surface-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+              <X size={16} color="var(--faint)" />
             </button>
 
             <div style={{ width: 52, height: 52, borderRadius: 18, background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
@@ -148,13 +148,13 @@ export function DialogHost() {
                 onChange={e => setValor(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') confirmar(); if (e.key === 'Escape') cancelar() }}
                 placeholder={dlg.placeholder}
-                style={{ width: '100%', boxSizing: 'border-box', marginTop: 16, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 14, padding: '13px 14px', fontSize: 15, fontWeight: 600, color: TITLE, outline: 'none' }}
+                style={{ width: '100%', boxSizing: 'border-box', marginTop: 16, background: 'var(--surface-soft)', border: '1px solid var(--line)', borderRadius: 14, padding: '13px 14px', fontSize: 15, fontWeight: 600, color: TITLE, outline: 'none' }}
               />
             )}
 
             <div style={{ display: 'flex', gap: 10, marginTop: 22 }}>
               {dlg.kind !== 'alert' && (
-                <button onClick={cancelar} style={{ flex: 1, border: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569', borderRadius: 14, padding: 14, fontSize: 15, fontWeight: 800, cursor: 'pointer' }}>
+                <button onClick={cancelar} style={{ flex: 1, border: '1px solid var(--line)', background: 'var(--surface-soft)', color: 'var(--muted)', borderRadius: 14, padding: 14, fontSize: 15, fontWeight: 800, cursor: 'pointer' }}>
                   {dlg.cancelText}
                 </button>
               )}

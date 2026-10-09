@@ -1,20 +1,43 @@
-import { useState } from 'react'
-import { Eye, EyeOff, LoaderCircle, LogIn, MailCheck, ShieldCheck, UserPlus } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { ChevronLeft, ChevronRight, Eye, EyeOff, ImagePlus, LoaderCircle, LogIn, MailCheck, ShieldCheck, UserPlus } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { login } from '../lib/auth'
 import { promptDialog } from '../lib/dialog'
 import { logSecurityEvent } from '../lib/securityAudit'
 import { origemDoCadastro } from '../lib/origemCadastro'
 import { supabase } from '../lib/supabase'
+import { BEACH_ZONES } from '../lib/praiagoZones'
+import { SELLER_PHOTO_BUCKET } from '../lib/sellerPhotos'
+import { SELLER_CATEGORIES, sellerCategory } from '../lib/sellerCategories'
+
+const SIGNUP_STEPS = ['Banca', 'Praia', 'Fotos', 'Conta'] as const
+type PhotoKind = 'perfil' | 'capa'
+
+function validatePhoto(file: File | null) {
+  if (!file) return 'Escolha uma imagem para continuar.'
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) return 'Use uma foto JPG, PNG ou WebP.'
+  if (file.size > 5 * 1024 * 1024) return 'Cada foto deve ter no máximo 5 MB.'
+  return null
+}
+
+function signupDraft(metadata: Record<string, unknown> | undefined) {
+  if (metadata?.role !== 'ambulante') return null
+  const nome = typeof metadata.nome === 'string' ? metadata.nome.trim() : ''
+  const categoria = typeof metadata.categoria === 'string' ? metadata.categoria : ''
+  const zona = typeof metadata.zona === 'string' ? metadata.zona : ''
+  const category = sellerCategory(categoria)
+  if (!nome || !category || !BEACH_ZONES.some(beach => beach.nome === zona)) return null
+  return { nome, categoria, emoji: category.emoji, zona }
+}
 
 const fieldStyle: React.CSSProperties = {
   width: '100%',
   minHeight: 46,
   padding: '11px 13px',
-  border: '1px solid #dfe6ed',
-  borderRadius: 8,
-  background: '#f8fafc',
-  color: '#132238',
+  border: '1px solid var(--line)',
+  borderRadius: 13,
+  background: 'var(--surface-soft)',
+  color: 'var(--ink)',
   outline: 0,
   fontSize: 14,
   fontWeight: 650,
@@ -23,7 +46,7 @@ const fieldStyle: React.CSSProperties = {
 const labelStyle: React.CSSProperties = {
   display: 'block',
   marginBottom: 6,
-  color: '#526178',
+  color: 'var(--muted)',
   fontSize: 11,
   lineHeight: 1.3,
   fontWeight: 850,
@@ -47,6 +70,70 @@ export default function LoginPage() {
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
   const [acceptedTerms, setAcceptedTerms] = useState(false)
+  const [signupStep, setSignupStep] = useState(0)
+  const [category, setCategory] = useState('')
+  const [beach, setBeach] = useState('')
+  const [profilePhoto, setProfilePhoto] = useState<File | null>(null)
+  const [coverPhoto, setCoverPhoto] = useState<File | null>(null)
+  const [profilePreview, setProfilePreview] = useState<string | null>(null)
+  const [coverPreview, setCoverPreview] = useState<string | null>(null)
+  const [pendingSignupUserId, setPendingSignupUserId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!profilePhoto) { setProfilePreview(null); return }
+    const url = URL.createObjectURL(profilePhoto)
+    setProfilePreview(url)
+    return () => URL.revokeObjectURL(url)
+  }, [profilePhoto])
+
+  useEffect(() => {
+    if (!coverPhoto) { setCoverPreview(null); return }
+    const url = URL.createObjectURL(coverPhoto)
+    setCoverPreview(url)
+    return () => URL.revokeObjectURL(url)
+  }, [coverPhoto])
+
+  function validateStep(step: number) {
+    if (step === 0) {
+      if (!name.trim()) return 'Informe o nome da banca.'
+      if (!sellerCategory(category)) return 'Selecione o que você vende na praia.'
+    }
+    if (step === 1 && !BEACH_ZONES.some(zone => zone.nome === beach)) return 'Selecione a praia principal de atuação.'
+    if (step === 2) {
+      if (validatePhoto(profilePhoto)) return 'Adicione uma foto de perfil em JPG, PNG ou WebP, com até 5 MB.'
+      if (validatePhoto(coverPhoto)) return 'Adicione um banner em JPG, PNG ou WebP, com até 5 MB.'
+    }
+    return null
+  }
+
+  function nextStep() {
+    const error = validateStep(signupStep)
+    if (error) { setMessage(error); return }
+    setMessage('')
+    setSignupStep(step => Math.min(step + 1, SIGNUP_STEPS.length - 1))
+  }
+
+  function choosePhoto(kind: PhotoKind, file?: File) {
+    if (!file) return
+    const error = validatePhoto(file)
+    if (error) { setMessage(error); return }
+    setMessage('')
+    if (kind === 'perfil') setProfilePhoto(file)
+    else setCoverPhoto(file)
+  }
+
+  async function uploadSignupPhoto(userId: string, kind: PhotoKind, file: File) {
+    const ext = file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg'
+    const path = `${userId}/${kind}-${Date.now()}-${crypto.randomUUID()}.${ext}`
+    const { error: uploadError } = await supabase.storage.from(SELLER_PHOTO_BUCKET).upload(path, file, { contentType: file.type, upsert: false })
+    if (uploadError) throw uploadError
+    const field = kind === 'perfil' ? 'foto_perfil_path' : 'foto_capa_path'
+    const { error: profileError } = await supabase.from('profiles').update({ [field]: path }).eq('id', userId)
+    if (profileError) {
+      await supabase.storage.from(SELLER_PHOTO_BUCKET).remove([path])
+      throw profileError
+    }
+  }
 
   const normalizedEmail = () => email.trim().toLowerCase()
 
@@ -102,6 +189,12 @@ export default function LoginPage() {
   }
 
   async function submit() {
+    if (tab === 'cadastro') {
+      for (let step = 0; step < SIGNUP_STEPS.length - 1; step++) {
+        const error = validateStep(step)
+        if (error) { setSignupStep(step); setMessage(error); return }
+      }
+    }
     const target = normalizedEmail()
     if (!/^\S+@\S+\.\S+$/.test(target)) {
       setMessage('Informe um e-mail válido.')
@@ -113,10 +206,6 @@ export default function LoginPage() {
     }
     if (tab === 'cadastro' && (password.length < 10 || !/[A-Za-z]/.test(password) || !/\d/.test(password))) {
       setMessage('Use pelo menos 10 caracteres, com letras e números.')
-      return
-    }
-    if (tab === 'cadastro' && !name.trim()) {
-      setMessage('Informe o nome da sua banca.')
       return
     }
     if (tab === 'cadastro' && !acceptedTerms) {
@@ -141,7 +230,7 @@ export default function LoginPage() {
         if (data.user) {
           const { data: profile } = await supabase
             .from('profiles')
-            .select('status,ban_motivo,nome,role,conta_demo')
+            .select('status,ban_motivo,nome,role,conta_demo,categoria,foto_perfil_path,foto_capa_path')
             .eq('id', data.user.id)
             .maybeSingle()
 
@@ -158,14 +247,14 @@ export default function LoginPage() {
 
           await logSecurityEvent('login_success', target, { user_id: data.user.id })
           login(data.user.id, target, profile?.nome || undefined, profile?.conta_demo === true)
-          navigate('/')
+          navigate(profile?.categoria && profile?.foto_perfil_path && profile?.foto_capa_path ? '/' : '/perfil')
         }
       } else {
         const { data, error } = await supabase.functions.invoke('cadastro', {
           body: {
             email: target,
             senha: password,
-            metadata: { nome: name, role: 'ambulante' },
+            metadata: { nome: name.trim(), role: 'ambulante', categoria: category, zona: beach },
             emailRedirectTo: `${window.location.origin}/`,
             origem: origemDoCadastro(),
           },
@@ -180,12 +269,14 @@ export default function LoginPage() {
           }
           throw new Error(errorMessage)
         }
-        const response = data as { error?: string } | null
+        const response = data as { error?: string; user_id?: string } | null
         if (response?.error) throw new Error(response.error)
+        if (!response?.user_id) throw new Error('Não foi possível identificar a conta criada. Tente novamente.')
         await logSecurityEvent('signup_created', target, { email_confirmation_required: true })
+        setPendingSignupUserId(response.user_id)
         setVerificationCode('')
         setVerificationEmail(target)
-        setMessage('Enviamos um código de 6 dígitos para o seu e-mail.')
+        setMessage('Enviamos um código de 6 dígitos. Confirme para enviar suas fotos.')
       }
     } catch (error) {
       let errorMessage = error instanceof Error ? error.message : 'Erro inesperado.'
@@ -198,27 +289,40 @@ export default function LoginPage() {
   }
 
   async function confirmSignup() {
-    if (!verificationEmail) return
-    if (verificationCode.replace(/\D/g, '').length < 6) {
-      setMessage('Digite o código de 6 dígitos enviado para o seu e-mail.')
+    if (!verificationEmail || !pendingSignupUserId) return
+    if (validatePhoto(profilePhoto) || validatePhoto(coverPhoto)) {
+      setMessage('Selecione novamente a foto do perfil e o banner para concluir o cadastro.')
       return
     }
     setLoading(true)
-    const { data, error } = await supabase.auth.verifyOtp({ email: verificationEmail, token: verificationCode.trim(), type: 'signup' })
-    setLoading(false)
-    if (error) {
-      setMessage('Código inválido ou expirado. Confira ou toque em Reenviar.')
-      return
-    }
-    if (data.user) {
-      const { data: profile } = await supabase.from('profiles').select('role,status,conta_demo').eq('id', data.user.id).maybeSingle()
-      if (profile?.role !== 'ambulante' || profile?.status === 'banido') {
-        await supabase.auth.signOut()
-        setMessage('Esta conta não pode acessar o aplicativo de ambulante.')
-        return
+    try {
+      const { data: current } = await supabase.auth.getUser()
+      let userId = current.user?.id
+      if (userId !== pendingSignupUserId) {
+        if (verificationCode.replace(/\D/g, '').length < 6) throw new Error('Digite o código de 6 dígitos enviado para o seu e-mail.')
+        const { data, error } = await supabase.auth.verifyOtp({ email: verificationEmail, token: verificationCode.trim(), type: 'signup' })
+        if (error || !data.user) throw new Error('Código inválido ou expirado. Confira ou toque em Reenviar.')
+        userId = data.user.id
       }
-      login(data.user.id, verificationEmail, name || undefined, profile?.conta_demo === true)
+      if (userId !== pendingSignupUserId) throw new Error('A conta confirmada não corresponde a este cadastro.')
+      const draft = signupDraft({ role: 'ambulante', nome: name, categoria: category, zona: beach })
+      if (!draft) throw new Error('Confira o nome, a categoria e a praia antes de concluir.')
+      const { error: profileError } = await supabase.from('profiles').update(draft).eq('id', userId)
+      if (profileError) throw new Error('E-mail confirmado, mas não foi possível salvar a banca. Tente novamente.')
+      const { data: existing, error: readError } = await supabase.from('profiles')
+        .select('role,status,conta_demo,foto_perfil_path,foto_capa_path').eq('id', userId).maybeSingle()
+      if (readError || existing?.role !== 'ambulante' || existing?.status === 'banido') throw new Error('Esta conta não pode acessar o aplicativo de ambulante.')
+      if (!existing.foto_perfil_path) await uploadSignupPhoto(userId, 'perfil', profilePhoto!)
+      if (!existing.foto_capa_path) await uploadSignupPhoto(userId, 'capa', coverPhoto!)
+      const { data: completed } = await supabase.from('profiles')
+        .select('foto_perfil_path,foto_capa_path').eq('id', userId).maybeSingle()
+      if (!completed?.foto_perfil_path || !completed?.foto_capa_path) throw new Error('Uma das fotos não foi salva. Tente enviar novamente.')
+      login(userId, verificationEmail, name.trim(), existing.conta_demo === true)
       navigate('/')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Não foi possível concluir. Tente novamente.')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -228,27 +332,44 @@ export default function LoginPage() {
     setMessage(error ? 'Não foi possível reenviar agora. Aguarde um minuto.' : 'Reenviamos o código para o seu e-mail.')
   }
 
+  function photoPicker() {
+    return <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.35fr)', gap: 10 }}>
+      {([
+        { kind: 'perfil' as const, title: 'Foto de perfil', file: profilePhoto, preview: profilePreview, ratio: '1 / 1' },
+        { kind: 'capa' as const, title: 'Banner da banca', file: coverPhoto, preview: coverPreview, ratio: '16 / 9' },
+      ]).map(item => <label key={item.kind} style={{ display: 'block', minWidth: 0, cursor: 'pointer' }}>
+        <span style={labelStyle}>{item.title} *</span>
+        <span style={{ display: 'grid', placeItems: 'center', overflow: 'hidden', aspectRatio: item.ratio, border: `1px ${item.file ? 'solid var(--success-line)' : 'dashed var(--line-strong)'}`, borderRadius: 14, background: 'var(--surface-soft)', color: 'var(--brand-blue)' }}>
+          {item.preview ? <img src={item.preview} alt={`Prévia de ${item.title.toLowerCase()}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <ImagePlus size={26} />}
+        </span>
+        <span style={{ display: 'block', marginTop: 6, color: 'var(--brand-blue)', fontSize: 11, fontWeight: 800 }}>{item.file ? 'Trocar foto' : 'Escolher foto'}</span>
+        <input type="file" accept="image/jpeg,image/png,image/webp" onChange={event => choosePhoto(item.kind, event.target.files?.[0])} style={{ position: 'absolute', width: 1, height: 1, opacity: 0 }} />
+      </label>)}
+    </div>
+  }
+
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '28px 18px', backgroundImage: 'linear-gradient(180deg, rgba(255,255,255,0.78) 0%, rgba(244,247,250,0.96) 48%, #f4f7fa 100%), url(/images/ambulante-beach-header-v1.webp)', backgroundPosition: 'center top', backgroundSize: 'cover', backgroundRepeat: 'no-repeat' }}>
-      <div style={{ width: '100%', maxWidth: 400 }}>
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '30px 18px', backgroundImage: 'var(--login-art), url(/images/ambulante-beach-header-v1.webp)', backgroundPosition: 'center top', backgroundSize: 'cover', backgroundRepeat: 'no-repeat' }}>
+      <div style={{ width: '100%', maxWidth: 440 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: 64, marginBottom: 18 }}>
           <div aria-label="PraiaGo" style={{ width: 150, height: 64, overflow: 'hidden', position: 'relative' }}>
             <img src="/praiago-logo-transparent.png" alt="PraiaGo" style={{ position: 'absolute', width: 238, height: 238, maxWidth: 'none', left: -58, top: -69, display: 'block' }} />
           </div>
-          <span style={{ border: '1px solid #cce9d8', borderRadius: 999, background: 'rgba(238,249,242,0.94)', color: '#148447', padding: '6px 9px', fontSize: 9, fontWeight: 850, textTransform: 'uppercase' }}>Ambulante</span>
+          <span style={{ border: '1px solid var(--success-line)', borderRadius: 999, background: 'var(--surface-green)', color: 'var(--success)', padding: '6px 9px', fontSize: 9, fontWeight: 850, textTransform: 'uppercase' }}>Ambulante</span>
         </div>
 
-        <section className="surface" style={{ padding: 20, boxShadow: '0 16px 36px rgba(23,45,74,0.13)' }}>
+        <section className="surface" style={{ padding: 24, borderRadius: 24, boxShadow: '0 18px 42px rgba(20,73,79,0.13)' }}>
           {verificationEmail ? (
             <div>
-              <div style={{ width: 46, height: 46, display: 'grid', placeItems: 'center', marginBottom: 14, borderRadius: 8, background: '#eaf6fa', color: '#008fc0' }}><MailCheck size={23} /></div>
-              <h1 style={{ margin: 0, color: '#132238', fontSize: 22, fontWeight: 900 }}>Confirme seu e-mail</h1>
-              <p style={{ margin: '6px 0 18px', color: '#617089', fontSize: 13, lineHeight: 1.45, fontWeight: 600 }}>Digite o código enviado para <strong style={{ color: '#40506a' }}>{verificationEmail}</strong>.</p>
+              <div style={{ width: 46, height: 46, display: 'grid', placeItems: 'center', marginBottom: 14, borderRadius: 8, background: 'var(--surface-blue)', color: 'var(--info)' }}><MailCheck size={23} /></div>
+              <h1 style={{ margin: 0, color: 'var(--ink-strong)', fontSize: 22, fontWeight: 900 }}>Confirme seu e-mail</h1>
+              <p style={{ margin: '6px 0 18px', color: 'var(--muted)', fontSize: 13, lineHeight: 1.45, fontWeight: 600 }}>Digite o código enviado para <strong style={{ color: 'var(--ink)' }}>{verificationEmail}</strong>.</p>
               <input inputMode="numeric" autoFocus value={verificationCode} onChange={event => setVerificationCode(event.target.value.replace(/\D/g, '').slice(0, 8))} onKeyDown={event => { if (event.key === 'Enter') void confirmSignup() }} placeholder="000000" aria-label="Código de verificação" style={{ ...fieldStyle, textAlign: 'center', fontSize: 24, fontWeight: 900 }} />
-              {message && <div style={{ marginTop: 10, color: isSuccessMessage(message) ? '#148447' : '#b42335', fontSize: 12, lineHeight: 1.4, fontWeight: 750 }}>{message}</div>}
+              <div style={{ marginTop: 15 }}>{photoPicker()}</div>
+              {message && <div style={{ marginTop: 10, color: isSuccessMessage(message) ? 'var(--success)' : 'var(--danger)', fontSize: 12, lineHeight: 1.4, fontWeight: 750 }}>{message}</div>}
               <button type="button" className="primary-button" disabled={loading} onClick={() => void confirmSignup()} style={{ width: '100%', marginTop: 14 }}>
                 {loading ? <LoaderCircle size={18} className="animate-spin-slow" /> : <MailCheck size={18} />}
-                Confirmar código
+                Confirmar e concluir cadastro
               </button>
               <div style={{ display: 'flex', justifyContent: 'center', gap: 13, marginTop: 10 }}>
                 <button type="button" className="text-command" onClick={() => void resendCode()}>Reenviar</button>
@@ -258,37 +379,66 @@ export default function LoginPage() {
                     "no option to return to the login screen once the
                     registration process started". Agora o rotulo diz o destino,
                     e a linha abaixo cobre o motivo. */}
-                <button type="button" className="text-command" onClick={() => { setVerificationEmail(null); setMessage('') }} style={{ color: '#617089' }}>Voltar ao login</button>
+                <button type="button" className="text-command" onClick={() => { setVerificationEmail(null); setMessage(''); setTab('entrar') }} style={{ color: 'var(--muted)' }}>Voltar ao login</button>
               </div>
-              <div style={{ marginTop: 8, textAlign: 'center', color: '#8494ab', fontSize: 11.5, lineHeight: 1.4, fontWeight: 650 }}>
+              <div style={{ marginTop: 8, textAlign: 'center', color: 'var(--muted)', fontSize: 11.5, lineHeight: 1.4, fontWeight: 650 }}>
                 Errou o e-mail? Volte ao login e cadastre de novo.
               </div>
             </div>
           ) : (
             <>
-              <div role="tablist" aria-label="Acesso" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginBottom: 18, padding: 4, borderRadius: 8, background: '#edf1f5' }}>
+              <div role="tablist" aria-label="Acesso" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginBottom: 20, padding: 4, borderRadius: 14, background: 'var(--surface-soft)' }}>
                 {(['entrar', 'cadastro'] as const).map(item => (
-                  <button type="button" role="tab" aria-selected={tab === item} key={item} onClick={() => { setTab(item); setMessage('') }} style={{ minHeight: 38, border: 0, borderRadius: 6, background: tab === item ? '#fff' : 'transparent', color: tab === item ? '#132238' : '#718096', boxShadow: tab === item ? '0 2px 7px rgba(23,45,74,0.09)' : 'none', fontSize: 12, fontWeight: 850, cursor: 'pointer' }}>
+                  <button type="button" role="tab" aria-selected={tab === item} key={item} onClick={() => { setTab(item); setMessage('') }} style={{ minHeight: 42, border: 0, borderRadius: 11, background: tab === item ? 'var(--surface)' : 'transparent', color: tab === item ? '#075e72' : 'var(--muted)', boxShadow: tab === item ? '0 3px 10px rgba(20,73,79,0.1)' : 'none', fontSize: 13, fontWeight: 850, cursor: 'pointer' }}>
                     {item === 'entrar' ? 'Entrar' : 'Criar conta'}
                   </button>
                 ))}
               </div>
 
-              <h1 style={{ margin: 0, color: '#132238', fontSize: 22, fontWeight: 900 }}>{tab === 'entrar' ? 'Acesse sua operação' : 'Cadastre sua banca'}</h1>
-              <p style={{ margin: '5px 0 18px', color: '#617089', fontSize: 12, lineHeight: 1.45, fontWeight: 600 }}>{tab === 'entrar' ? 'Gerencie produtos, pedidos e recebimentos.' : 'A conta será analisada antes da publicação.'}</p>
+              <h1 style={{ margin: 0, color: 'var(--ink)', fontSize: 25, fontWeight: 900 }}>{tab === 'entrar' ? 'Sua banca começa aqui' : 'Cadastre sua banca'}</h1>
+              <p style={{ margin: '6px 0 20px', color: 'var(--muted)', fontSize: 13, lineHeight: 1.5, fontWeight: 600 }}>{tab === 'entrar' ? 'Pedidos, cardápio e recebimentos no mesmo lugar.' : 'A conta será analisada antes da publicação.'}</p>
+
+              {tab === 'cadastro' && <div aria-label="Etapas do cadastro" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6, marginBottom: 19 }}>
+                {SIGNUP_STEPS.map((step, index) => <div key={step} aria-current={signupStep === index ? 'step' : undefined} style={{ minWidth: 0 }}>
+                  <div style={{ height: 5, borderRadius: 99, background: index <= signupStep ? '#087b79' : 'var(--line)' }} />
+                  <span style={{ display: 'block', marginTop: 5, color: signupStep === index ? '#075e72' : '#738890', fontSize: 10, fontWeight: 850 }}>{step}</span>
+                </div>)}
+              </div>}
 
               <div style={{ display: 'grid', gap: 13 }}>
-                {tab === 'cadastro' && (
+                {tab === 'cadastro' && signupStep === 0 && <>
                   <label>
                     <span style={labelStyle}>Nome da banca</span>
                     <input value={name} maxLength={80} onChange={event => setName(event.target.value)} placeholder="Nome que o cliente verá" style={fieldStyle} />
                   </label>
-                )}
-                <label>
+                  <label>
+                    <span style={labelStyle}>O que você vende principalmente? *</span>
+                    <select value={category} onChange={event => setCategory(event.target.value)} style={fieldStyle}>
+                      <option value="">Selecione sua especialidade</option>
+                      {SELLER_CATEGORIES.map(item => <option key={item.label} value={item.label}>{item.emoji} {item.label}</option>)}
+                    </select>
+                  </label>
+                  <p style={{ margin: 0, color: 'var(--muted)', fontSize: 12, lineHeight: 1.5 }}>Essa especialidade aparecerá no seu perfil e na busca do Cliente. Seu cardápio poderá ter outras categorias.</p>
+                </>}
+                {tab === 'cadastro' && signupStep === 1 && <>
+                  <label>
+                    <span style={labelStyle}>Praia principal de atuação *</span>
+                    <select value={beach} onChange={event => setBeach(event.target.value)} style={fieldStyle}>
+                      <option value="">Selecione a praia</option>
+                      {BEACH_ZONES.map(zone => <option key={zone.id} value={zone.nome}>{zone.nome}</option>)}
+                    </select>
+                  </label>
+                  <p style={{ margin: 0, color: 'var(--muted)', fontSize: 12, lineHeight: 1.5 }}>Atendimento na orla de Praia Grande. Quando você estiver online, o GPS mostrará sua posição e a zona atuais ao cliente.</p>
+                </>}
+                {tab === 'cadastro' && signupStep === 2 && <>
+                  {photoPicker()}
+                  <p style={{ margin: 0, color: 'var(--muted)', fontSize: 12, lineHeight: 1.5 }}>As duas fotos são obrigatórias. Use imagens reais da sua banca, em JPG, PNG ou WebP, com até 5 MB cada.</p>
+                </>}
+                {(tab === 'entrar' || signupStep === 3) && <label>
                   <span style={labelStyle}>E-mail</span>
                   <input type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="voce@exemplo.com" style={fieldStyle} />
-                </label>
-                <label>
+                </label>}
+                {(tab === 'entrar' || signupStep === 3) && <label>
                   <span style={labelStyle}>Senha</span>
                   <span style={{ display: 'block', position: 'relative' }}>
                     <input type={showPassword ? 'text' : 'password'} autoComplete={tab === 'entrar' ? 'current-password' : 'new-password'} value={password} onChange={event => setPassword(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void submit() }} placeholder="Sua senha" style={{ ...fieldStyle, paddingRight: 46 }} />
@@ -296,22 +446,23 @@ export default function LoginPage() {
                       {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
                   </span>
-                </label>
+                </label>}
 
-                {tab === 'cadastro' && (
-                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, padding: 11, border: `1px solid ${acceptedTerms ? '#9ed2b4' : '#dfe6ed'}`, borderRadius: 8, background: acceptedTerms ? '#f5fbf7' : '#f8fafc', cursor: 'pointer' }}>
+                {tab === 'cadastro' && signupStep === 3 && (
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, padding: 11, border: `1px solid ${acceptedTerms ? '#9ed2b4' : 'var(--line)'}`, borderRadius: 8, background: acceptedTerms ? 'var(--surface-green)' : 'var(--surface-soft)', cursor: 'pointer' }}>
                     <input type="checkbox" checked={acceptedTerms} onChange={event => setAcceptedTerms(event.target.checked)} style={{ width: 17, height: 17, flexShrink: 0, marginTop: 1, accentColor: '#18a957' }} />
-                    <span style={{ color: '#526178', fontSize: 11, lineHeight: 1.5, fontWeight: 600 }}>
-                      Li e aceito os <a href="https://www.praiago.com.br/termos.html" target="_blank" rel="noopener noreferrer" style={{ color: '#007fa6', fontWeight: 800 }}>Termos de Uso</a> e a <a href="https://www.praiago.com.br/privacidade.html" target="_blank" rel="noopener noreferrer" style={{ color: '#007fa6', fontWeight: 800 }}>Política de Privacidade</a>, incluindo o uso da localização durante o atendimento.
+                    <span style={{ color: 'var(--muted)', fontSize: 11, lineHeight: 1.5, fontWeight: 600 }}>
+                      Li e aceito os <a href="https://www.praiago.com.br/termos.html" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--info)', fontWeight: 800 }}>Termos de Uso</a> e a <a href="https://www.praiago.com.br/privacidade.html" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--info)', fontWeight: 800 }}>Política de Privacidade</a>, incluindo o uso da localização durante o atendimento.
                     </span>
                   </label>
                 )}
 
-                {message && <div role="status" style={{ color: isSuccessMessage(message) ? '#148447' : '#b42335', fontSize: 12, lineHeight: 1.4, fontWeight: 750 }}>{message}</div>}
+                {message && <div role="status" style={{ color: isSuccessMessage(message) ? 'var(--success)' : 'var(--danger)', fontSize: 12, lineHeight: 1.4, fontWeight: 750 }}>{message}</div>}
 
-                <button type="button" className="primary-button" disabled={loading} onClick={() => void submit()} style={{ width: '100%' }}>
-                  {loading ? <LoaderCircle size={18} className="animate-spin-slow" /> : tab === 'entrar' ? <LogIn size={18} /> : <UserPlus size={18} />}
-                  {loading ? 'Aguarde' : tab === 'entrar' ? 'Entrar' : 'Criar conta'}
+                {tab === 'cadastro' && signupStep > 0 && <button type="button" className="text-command" onClick={() => { setSignupStep(step => step - 1); setMessage('') }} style={{ justifySelf: 'start', display: 'flex', alignItems: 'center', gap: 6 }}><ChevronLeft size={15} /> Voltar uma etapa</button>}
+                <button type="button" className="primary-button" disabled={loading} onClick={() => tab === 'cadastro' && signupStep < SIGNUP_STEPS.length - 1 ? nextStep() : void submit()} style={{ width: '100%' }}>
+                  {loading ? <LoaderCircle size={18} className="animate-spin-slow" /> : tab === 'entrar' ? <LogIn size={18} /> : signupStep < SIGNUP_STEPS.length - 1 ? <ChevronRight size={18} /> : <UserPlus size={18} />}
+                  {loading ? 'Aguarde' : tab === 'entrar' ? 'Entrar' : signupStep < SIGNUP_STEPS.length - 1 ? 'Continuar' : 'Criar conta'}
                 </button>
 
                 {tab === 'entrar' && (
@@ -326,8 +477,8 @@ export default function LoginPage() {
           )}
         </section>
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: 14, color: '#526178', fontSize: 10, fontWeight: 700 }}>
-          <ShieldCheck size={14} color="#148447" />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: 14, color: 'var(--muted)', fontSize: 10, fontWeight: 700 }}>
+          <ShieldCheck size={14} color="var(--success)" />
           Acesso protegido e cadastro sujeito à aprovação.
         </div>
       </div>

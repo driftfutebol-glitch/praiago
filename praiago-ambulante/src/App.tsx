@@ -12,6 +12,8 @@ import AiChatbot from './components/AiChatbot'
 import PasswordRecoveryHandler from './components/PasswordRecoveryHandler'
 import { useGPS } from './hooks/useGPS'
 import { useOrderNotifications } from './hooks/useOrderNotifications'
+import { startPush, disconnectPush, recheckPushRegistration } from './lib/pushNotifications'
+import { probeSession } from '../../mobile/sessionGuard'
 
 const PUBLIC_ROUTES = ['/login']
 
@@ -27,7 +29,7 @@ const CarteiraPage = lazy(() => import('./pages/CarteiraPage'))
 
 function RouteLoading() {
   return (
-    <div style={{ minHeight: 240, display: 'grid', placeItems: 'center', color: '#008fc0' }} role="status" aria-label="Carregando tela">
+    <div style={{ minHeight: 240, display: 'grid', placeItems: 'center', color: 'var(--info)' }} role="status" aria-label="Carregando tela">
       <LoaderCircle size={24} className="animate-spin-slow" />
     </div>
   )
@@ -46,9 +48,9 @@ function LogoBar({ gpsStatus, foraDaArea, modoRevisao }: { gpsStatus: string; fo
         : isError
           ? 'Sem localizacao'
           : 'Localizando'
-  const statusColor = modoRevisao ? '#6d28d9' : isActive ? '#148447' : foraDaArea || isError ? '#b54708' : '#617089'
-  const statusBackground = modoRevisao ? '#f5f3ff' : isActive ? '#eef9f2' : foraDaArea || isError ? '#fff4e5' : '#edf1f5'
-  const statusBorder = modoRevisao ? '#c4b5fd' : isActive ? '#cce9d8' : foraDaArea || isError ? '#f4d39f' : '#dce3ea'
+  const statusColor = modoRevisao ? 'var(--purple)' : isActive ? 'var(--success)' : foraDaArea || isError ? 'var(--warning)' : 'var(--muted)'
+  const statusBackground = modoRevisao ? 'var(--surface-purple)' : isActive ? 'var(--surface-green)' : foraDaArea || isError ? 'var(--surface-amber)' : 'var(--surface-soft)'
+  const statusBorder = modoRevisao ? 'var(--purple-line)' : isActive ? 'var(--success-line)' : foraDaArea || isError ? 'var(--warning-line)' : 'var(--line)'
   return (
     <header style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -64,9 +66,8 @@ function LogoBar({ gpsStatus, foraDaArea, modoRevisao }: { gpsStatus: string; fo
       // valor muda por aparelho — no iPhone com entalhe da ~47px, no SE da 20,
       // e no Android da 0 — entao nao da para chutar um numero fixo.
       paddingTop: 'calc(8px + env(safe-area-inset-top))',
-      borderBottom: '1px solid #e7ecf1',
-      background: 'rgba(255,255,255,0.96)',
-      backdropFilter: 'blur(14px)',
+      borderBottom: '1px solid var(--line)',
+      background: 'var(--surface)',
       position: 'sticky', top: 0, zIndex: 60,
     }}>
       {/* Logo — mesma marca e mesmo recorte do app do cliente.
@@ -86,7 +87,7 @@ function LogoBar({ gpsStatus, foraDaArea, modoRevisao }: { gpsStatus: string; fo
             }}
           />
         </div>
-        <span style={{ border: '1px solid #cce9d8', borderRadius: 999, background: '#eef9f2', color: '#148447', padding: '4px 7px', fontSize: 9, lineHeight: 1, fontWeight: 850, textTransform: 'uppercase' }}>
+        <span className="ambulante-brand-badge" style={{ border: '1px solid var(--success-line)', borderRadius: 999, background: 'var(--surface-green)', color: 'var(--success)', padding: '4px 7px', fontSize: 9, lineHeight: 1, fontWeight: 850, textTransform: 'uppercase' }}>
           Ambulante
         </span>
       </div>
@@ -131,7 +132,7 @@ function GlobalOrderToast() {
           left: 14,
           right: 14,
           zIndex: 9999,
-          background: '#ffffff',
+          background: 'var(--surface)',
           border: '1px solid rgba(14,165,233,0.24)',
           borderRadius: 20,
           boxShadow: '0 18px 45px rgba(15,23,42,0.2)',
@@ -145,8 +146,8 @@ function GlobalOrderToast() {
           R$
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 900, color: '#0f172a' }}>Novo pedido recebido</div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#475569', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: 14, fontWeight: 900, color: 'var(--ink-strong)' }}>Novo pedido recebido</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {latestOrder.clienteNome} - R$ {latestOrder.total.toFixed(2).replace('.', ',')}
           </div>
         </div>
@@ -159,7 +160,7 @@ function GlobalOrderToast() {
         <button
           aria-label="Fechar aviso"
           onClick={dismissLatest}
-          style={{ border: 0, borderRadius: 12, background: '#f1f5f9', color: '#64748b', width: 34, height: 34, fontSize: 18, cursor: 'pointer' }}
+          style={{ border: 0, borderRadius: 12, background: 'var(--surface-soft)', color: 'var(--muted)', width: 34, height: 34, fontSize: 18, cursor: 'pointer' }}
         >
           x
         </button>
@@ -252,7 +253,7 @@ function GlobalAvisoToast() {
         right: 14,
         bottom: 96,
         zIndex: 9998,
-        background: '#ffffff',
+        background: 'var(--surface)',
         border: '1px solid rgba(34,197,94,0.24)',
         borderRadius: 20,
         boxShadow: '0 18px 45px rgba(15,23,42,0.18)',
@@ -264,12 +265,12 @@ function GlobalAvisoToast() {
     >
       <div style={{ width: 42, height: 42, borderRadius: 15, background: 'linear-gradient(135deg,#22c55e,#0ea5e9)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>!</div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14, color: '#0f172a', fontWeight: 900 }}>{aviso.titulo || 'Aviso PraiaGo'}</div>
-        <div style={{ fontSize: 12, color: '#475569', fontWeight: 650, lineHeight: 1.35, marginTop: 3 }}>
+        <div style={{ fontSize: 14, color: 'var(--ink-strong)', fontWeight: 900 }}>{aviso.titulo || 'Aviso PraiaGo'}</div>
+        <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 650, lineHeight: 1.35, marginTop: 3 }}>
           {aviso.mensagem}{aviso.cupom_codigo ? ` - Cupom ${aviso.cupom_codigo}` : ''}
         </div>
       </div>
-      <button onClick={() => setAviso(null)} style={{ border: 0, borderRadius: 12, background: '#f1f5f9', color: '#64748b', width: 32, height: 32, cursor: 'pointer' }}>x</button>
+      <button onClick={() => setAviso(null)} style={{ border: 0, borderRadius: 12, background: 'var(--surface-soft)', color: 'var(--muted)', width: 32, height: 32, cursor: 'pointer' }}>x</button>
     </motion.div>
   )
 }
@@ -296,14 +297,14 @@ function KycLockedPanel() {
   return (
     <div style={{ padding: 24 }}>
       <div style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: 18, padding: 18 }}>
-        <div style={{ fontSize: 18, fontWeight: 900, color: '#92400e', marginBottom: 6 }}>Verificação em análise</div>
-        <p style={{ margin: 0, color: '#92400e', fontSize: 14, lineHeight: 1.5, fontWeight: 600 }}>
+        <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--warning)', marginBottom: 6 }}>Verificação em análise</div>
+        <p style={{ margin: 0, color: 'var(--warning)', fontSize: 14, lineHeight: 1.5, fontWeight: 600 }}>
           Para vender na praia a gente precisa confirmar quem você é. Envie CPF,
           documento com foto, selfie e o local onde você atua no bloco acima.
           Enquanto a análise não termina, você não aparece no mapa e não
           consegue cadastrar produtos.
         </p>
-        <p style={{ margin: '10px 0 0', color: '#92400e', fontSize: 13.5, lineHeight: 1.5, fontWeight: 600, opacity: .9 }}>
+        <p style={{ margin: '10px 0 0', color: 'var(--warning)', fontSize: 13.5, lineHeight: 1.5, fontWeight: 600, opacity: .9 }}>
           A resposta chega neste mesmo aparelho. Você pode fechar o app — o
           envio não se perde.
         </p>
@@ -314,14 +315,14 @@ function KycLockedPanel() {
         onClick={sair}
         style={{
           width: '100%', marginTop: 16, padding: '13px 0', borderRadius: 14,
-          border: '1px solid #cbd5e1', background: '#fff', color: '#334155',
+          border: '1px solid var(--line-strong)', background: 'var(--surface)', color: 'var(--ink)',
           fontSize: 14.5, fontWeight: 800, cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
         }}
       >
         <LogOut size={17} /> Sair da conta
       </button>
-      <div style={{ marginTop: 8, textAlign: 'center', fontSize: 12.5, color: '#64748b', fontWeight: 600 }}>
+      <div style={{ marginTop: 8, textAlign: 'center', fontSize: 12.5, color: 'var(--muted)', fontWeight: 600 }}>
         Quer entrar com outra conta? Saia por aqui.
       </div>
     </div>
@@ -333,6 +334,17 @@ export default function App() {
   const navigate = useNavigate()
   const isPublic = PUBLIC_ROUTES.includes(location.pathname)
   const sessao = useSessao()
+  useEffect(() => {
+    // O React Router preserva a rolagem anterior por padrão. Na navegação
+    // móvel isso fazia Carteira/Perfil abrirem pela metade da página.
+    window.scrollTo({ top: 0, behavior: 'instant' })
+    document.querySelector('main.ambulante-main')?.scrollTo({ top: 0, behavior: 'instant' })
+  }, [location.pathname])
+  useEffect(()=>startPush(sessao?.id||null,id=>navigate('/pedidos?pedido='+id),()=>window.dispatchEvent(new Event('praiago:refresh-orders')),destination=>navigate(destination==='orders'?'/pedidos':'/')),[sessao?.id,navigate])
+  useEffect(()=>{const {data}=supabase.auth.onAuthStateChange(event=>{
+    if(event==='SIGNED_OUT')void disconnectPush()
+    else if(event==='SIGNED_IN'||event==='TOKEN_REFRESHED'||event==='INITIAL_SESSION')window.setTimeout(recheckPushRegistration,0)
+  });return()=>data.subscription.unsubscribe()},[])
   const [kycLocked, setKycLocked] = useState(false)
 
   // GPS ativo em todo o app — transmite posição em tempo real
@@ -373,20 +385,18 @@ export default function App() {
     // Conta APAGADA chega como erro do Supabase ("User from sub claim in JWT
     // does not exist"), nao como usuario nulo — entao caia no mesmo `return`
     // da falha de rede e o aparelho ficava logado para sempre numa conta que
-    // nao existe mais. A separacao e o codigo HTTP: 4xx e o servidor dizendo
-    // que o token nao vale; sem codigo e a rede que nao chegou la.
-    const respostaNegativa = (erro: unknown) => {
-      const status = (erro as { status?: number } | null)?.status
-      return typeof status === 'number' && status >= 400 && status < 500
-    }
-
+    // nao existe mais. Códigos explícitos de revogação são diferentes de
+    // falhas temporárias (inclusive HTTP 408/429), que preservam a sessão.
+    // Rate limit e falhas temporárias não são revogação. Token expirado
+    // passa por renovação e validação no servidor antes de encerrar o login.
+    let checking = false
     const checarStatus = async () => {
-      const { data: authData, error: erroAuth } = await supabase.auth.getUser()
-      if (erroAuth) {
-        if (respostaNegativa(erroAuth)) bloquearAcessoInvalido(null, undefined)
-        return
-      }
-      if (!authData.user) {
+      if (checking || !ativo) return
+      checking = true
+      try {
+      const auth = await probeSession(supabase.auth)
+      if (!ativo || auth.state === 'temporary') return
+      if (auth.state === 'invalid') {
         bloquearAcessoInvalido(null, undefined)
         return
       }
@@ -401,7 +411,8 @@ export default function App() {
         bloquearAcessoInvalido(null, undefined)
         return
       }
-      atualizarGate(data, authData.user.id)
+      atualizarGate(data, auth.userId)
+      } finally { checking = false }
     }
     checarStatus()
     const channel = supabase.channel(`ambulante_kyc_gate_${sessao.id}`)
@@ -415,11 +426,16 @@ export default function App() {
     const timer = window.setInterval(() => {
       if (document.visibilityState === 'visible') checarStatus()
     }, 300000)
+    const refreshVisible = () => { if (document.visibilityState === 'visible') void checarStatus() }
+    document.addEventListener('visibilitychange', refreshVisible)
+    window.addEventListener('online', refreshVisible)
 
     return () => {
       ativo = false
       supabase.removeChannel(channel)
       window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', refreshVisible)
+      window.removeEventListener('online', refreshVisible)
     }
   }, [sessao?.id, isPublic, navigate])
 
@@ -428,7 +444,7 @@ export default function App() {
 
   return (
     <div style={{
-      display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#f4f7fa',
+      display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--page-bg)',
       // Telas publicas (login, recuperar senha) nao tem o cabecalho que
       // absorve a folga do entalhe, entao a folga entra aqui. Nas outras
       // fica zero, senao a folga contaria duas vezes.
@@ -437,6 +453,9 @@ export default function App() {
       <PasswordRecoveryHandler />
       {!isPublic && <LogoBar gpsStatus={gpsStatus} foraDaArea={foraDaArea} modoRevisao={modoRevisao} />}
       {!isPublic && <VerificationBar />}
+      {/* A pendência de verificação permanece visível, mas não cobre pedidos,
+          produtos nem a navegação. O painel expandido continua flutuante. */}
+      {!isPublic && <ChamadoKycPanel />}
       {/* O espaco reservado aqui embaixo repete a conta da propria barra, em
           vez de um numero solto: ela tem 70px de altura e flutua a
           `max(10px, env(safe-area-inset-bottom))` do fim da tela (veja
@@ -445,13 +464,13 @@ export default function App() {
 
           O numero fixo de antes (82px) dava 2px de sobra no Android — perto
           demais de esconder conteudo se a barra mudasse de altura. */}
-      <main style={{
+      <main className="ambulante-main" style={{
         flex: 1, overflowY: 'auto', position: 'relative',
         paddingBottom: isPublic
           ? 0
           : 'calc(70px + max(10px, env(safe-area-inset-bottom)) + 16px)',
       }}>
-        {!isPublic && kycLocked ? (
+        {!isPublic && kycLocked && location.pathname !== '/perfil' ? (
           <KycLockedPanel />
         ) : (
           <Suspense fallback={<RouteLoading />}>
@@ -479,10 +498,6 @@ export default function App() {
           <GlobalAvisoToast />
         </AnimatePresence>
       )}
-      {/* Fora da trava do kycLocked de proposito: o chamado de verificacao e
-          exatamente o que tira o vendedor dessa trava. Esconde-lo ali seria
-          trancar a porta e guardar a chave do lado de dentro. */}
-      {!isPublic && <ChamadoKycPanel />}
       <DialogHost />
     </div>
   )

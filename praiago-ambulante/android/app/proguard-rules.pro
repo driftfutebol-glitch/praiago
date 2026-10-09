@@ -1,4 +1,12 @@
 # Add project specific ProGuard rules here.
+## Preserve the locally registered notification plugin and resource bridge.
+-keep class com.ferrazcode.praiago.notifications.** { *; }
+-keepattributes RuntimeVisibleAnnotations,RuntimeInvisibleAnnotations,AnnotationDefault
+-keep @interface com.getcapacitor.annotation.** { *; }
+-keep @interface com.getcapacitor.PluginMethod { *; }
+-keep @interface com.getcapacitor.NativePlugin { *; }
+-keep class com.getcapacitor.Plugin { *; }
+-keep class com.getcapacitor.PluginHandle { *; }
 # You can control the set of applied configuration files using the
 # proguardFiles setting in build.gradle.
 #

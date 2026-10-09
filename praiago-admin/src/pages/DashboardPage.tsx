@@ -1,190 +1,80 @@
-import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { useState, useEffect, useCallback, useRef, type CSSProperties } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { 
-  DollarSign, ShoppingBag, TrendingUp, Users, 
-  ShieldCheck, Headphones, Clock, AlertCircle 
-} from 'lucide-react'
+import { Activity, ShoppingBag, Users, WalletCards, ShieldCheck, RefreshCw, ArrowUpRight, ChevronRight, Sparkles, BarChart3 } from 'lucide-react'
+import { useAdminWorkspace } from '../components/AdminWorkspace'
+import { navigationIcons } from '../lib/navigationIcons'
+import { canAccessAdmin } from '../lib/adminNavigation'
+import { dashboardMetrics, dashboardWindow, formatMoney, type DashboardOrder } from '../lib/dashboardMetrics'
 
+type Summary={orders:number|null;active:number|null;users:number|null;recent:DashboardOrder[];periodCount:number|null;error:boolean;loadedAt:Date|null}
+const empty:Summary={orders:null,active:null,users:null,recent:[],periodCount:null,error:false,loadedAt:null}
 export default function DashboardPage() {
-  const [pedidos, setPedidos] = useState<any[]>([])
-  const [profiles, setProfiles] = useState(0)
-  const [pendingVerificacoes, setPendingVerificacoes] = useState(0)
-  const [openTickets, setOpenTickets] = useState(0)
-
-  useEffect(() => {
-    async function load() {
-      const { data: pData } = await supabase.from('pedidos').select('*')
-      if (pData) setPedidos(pData)
-      
-      const { count: profileCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true })
-      setProfiles(profileCount || 0)
-
-      // Pending verifications
-      const { count: verifCount } = await supabase
-        .from('verificacoes')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'pendente')
-      setPendingVerificacoes(verifCount || 0)
-
-      // Open tickets
-      const { count: ticketCount } = await supabase
-        .from('tickets')
-        .select('*', { count: 'exact', head: true })
-        .in('status', ['aberto', 'em_andamento'])
-      setOpenTickets(ticketCount || 0)
+  const {profile,destinations,counts,error:queueError,refresh:refreshQueues}=useAdminWorkspace()
+  const [summary,setSummary]=useState<Summary>(empty),[loading,setLoading]=useState(true)
+  const generation=useRef(0),inFlight=useRef(false)
+  const ordersAllowed=canAccessAdmin(profile,'pedidos'),financeAllowed=canAccessAdmin(profile,'financeiro'),usersAllowed=canAccessAdmin(profile,'usuarios')
+  const load=useCallback(async()=>{
+    if(inFlight.current)return
+    inFlight.current=true
+    const token=generation.current
+    setLoading(true)
+    const next:Summary={...empty}
+    const tasks:Promise<void>[]=[]
+    async function run(query:PromiseLike<{error:unknown;count?:number|null;data?:unknown}>,apply:(result:{count?:number|null;data?:unknown})=>void) {
+      try {const result=await query;if(result.error)next.error=true;else apply(result)}catch{next.error=true}
     }
-    load()
-
-    const channel = supabase.channel('admin_dash')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos' }, (payload) => {
-        if (payload.eventType === 'INSERT') {
-          setPedidos(prev => [...prev, payload.new])
-        } else if (payload.eventType === 'UPDATE') {
-          setPedidos(prev => prev.map(p => p.id === payload.new.id ? payload.new : p))
-        }
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'verificacoes' }, () => {
-        supabase.from('verificacoes').select('*', { count: 'exact', head: true }).eq('status', 'pendente')
-          .then(({ count }) => setPendingVerificacoes(count || 0))
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets' }, () => {
-        supabase.from('tickets').select('*', { count: 'exact', head: true }).in('status', ['aberto', 'em_andamento'])
-          .then(({ count }) => setOpenTickets(count || 0))
-      })
-      .subscribe()
-
-    return () => { supabase.removeChannel(channel) }
-  }, [])
-
-  const faturamento = pedidos.filter(p => p.status === 'entregue').reduce((acc, p) => acc + Number(p.total), 0)
-  const ativos = pedidos.filter(p => p.status !== 'entregue' && p.status !== 'cancelado').length
-
-  const stats = [
-    { label: 'Faturamento Total', value: `R$ ${faturamento.toFixed(2)}`, icon: DollarSign, color: 'text-green-400', bg: 'bg-green-500/10', glow: 'shadow-[0_0_20px_rgba(74,222,128,0.05)]' },
-    { label: 'Pedidos Ativos', value: ativos, icon: ActivityIcon, color: 'text-purple-400', bg: 'bg-purple-500/10', glow: 'shadow-[0_0_20px_rgba(168,85,247,0.05)]' },
-    { label: 'Pedidos Totais', value: pedidos.length, icon: ShoppingBag, color: 'text-blue-400', bg: 'bg-blue-500/10', glow: 'shadow-[0_0_20px_rgba(59,130,246,0.05)]' },
-    { label: 'Usuários Registrados', value: profiles, icon: Users, color: 'text-orange-400', bg: 'bg-orange-500/10', glow: 'shadow-[0_0_20px_rgba(251,146,60,0.05)]' },
-    { label: 'Verificações Pendentes', value: pendingVerificacoes, icon: ShieldCheck, color: 'text-amber-400', bg: 'bg-amber-500/10', glow: 'shadow-[0_0_20px_rgba(251,191,36,0.05)]' },
-    { label: 'Tickets Abertos', value: openTickets, icon: Headphones, color: 'text-pink-400', bg: 'bg-pink-500/10', glow: 'shadow-[0_0_20px_rgba(236,72,153,0.05)]' },
+    if(ordersAllowed) {
+      tasks.push(run(supabase.from('pedidos').select('id',{head:true,count:'exact'}),r=>{next.orders=r.count??null}))
+      tasks.push(run(supabase.from('pedidos').select('id',{head:true,count:'exact'}).not('status','in','(entregue,cancelado)'),r=>{next.active=r.count??null}))
+    }
+    if(ordersAllowed||financeAllowed) tasks.push(run(supabase.from('pedidos').select('id,created_at,status,total,cliente_nome,zona',{count:'exact'}).gte('created_at',dashboardWindow().start).order('created_at',{ascending:false}).limit(500),r=>{next.recent=(r.data||[]) as DashboardOrder[];next.periodCount=r.count??null}))
+    if(usersAllowed) tasks.push(run(supabase.from('profiles').select('id',{head:true,count:'exact'}),r=>{next.users=r.count??null}))
+    await Promise.all(tasks)
+    if(token===generation.current){next.loadedAt=new Date();setSummary(next);setLoading(false);inFlight.current=false}
+  },[ordersAllowed,financeAllowed,usersAllowed])
+  useEffect(()=>{
+    const epoch=generation.current+1;generation.current=epoch;inFlight.current=false
+    let timer:ReturnType<typeof setTimeout>|undefined
+    const schedule=()=>{if(document.visibilityState==='hidden')return;clearTimeout(timer);timer=setTimeout(()=>void load(),700)}
+    const channel=supabase.channel('admin_home_summary')
+    if(ordersAllowed||financeAllowed) channel.on('postgres_changes',{event:'*',schema:'public',table:'pedidos'},schedule)
+    if(usersAllowed)channel.on('postgres_changes',{event:'*',schema:'public',table:'profiles'},schedule)
+    if(ordersAllowed||financeAllowed||usersAllowed)channel.subscribe()
+    const interval=window.setInterval(schedule,60000)
+    const onVisible=()=>{if(document.visibilityState==='visible')void load()}
+    document.addEventListener('visibilitychange',onVisible);window.addEventListener('online',onVisible)
+    void load()
+    return()=>{generation.current++;clearTimeout(timer);window.clearInterval(interval);document.removeEventListener('visibilitychange',onVisible);window.removeEventListener('online',onVisible);void supabase.removeChannel(channel)}
+  },[load,ordersAllowed,financeAllowed,usersAllowed])
+  const metrics=dashboardMetrics(summary.recent,summary.loadedAt||new Date())
+  const limited=summary.periodCount!==null&&summary.periodCount>summary.recent.length
+  const moneyReady=summary.periodCount!==null&&metrics.missingTotals===0
+  const stats=[
+    ...(ordersAllowed?[{label:'Pedidos ativos',value:summary.active,description:'Aguardando conclusão',icon:Activity,color:'#bb87ff',to:'/pedidos'},{label:'Pedidos registrados',value:summary.orders,description:'Contagem total na base',icon:ShoppingBag,color:'#68bcff',to:'/pedidos'}]:[]),
+    ...(financeAllowed?[{label:limited?'Volume entregue · amostra':'Volume entregue · 7 dias',value:moneyReady?formatMoney(metrics.deliveredCents/100):null,description:limited?'Últimos 500 pedidos do período':'Total dos pedidos entregues, não saldo',icon:WalletCards,color:'#7be2b0',to:'/financeiro'}]:[]),
+    ...(usersAllowed?[{label:'Usuários cadastrados',value:summary.users,description:'Contagem total de perfis',icon:Users,color:'#f5c266',to:'/usuarios'}]:[])
   ]
-
-  return (
-    <div className="space-y-6">
-      <header className="mb-8">
-        <div className="flex items-center gap-3 mb-1">
-          <h1 className="text-3xl font-black text-slate-100 tracking-tight">Centro de Comando</h1>
-          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-green-500/10 text-green-400 rounded-full text-[10px] font-bold uppercase border border-green-500/15">
-            <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
-            Online
-          </div>
-        </div>
-        <p className="text-slate-400 font-medium">Visão global da operação PraiaGo — dados em tempo real.</p>
-      </header>
-
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {stats.map((s, i) => (
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }} 
-            animate={{ opacity: 1, y: 0 }} 
-            transition={{ delay: i * 0.08, duration: 0.4 }}
-            key={s.label} 
-            className={`glass-panel p-5 rounded-2xl flex items-center gap-4 border-slate-800 hover:border-slate-700/50 transition-all duration-300 ${s.glow}`}
-          >
-            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${s.bg}`}>
-              <s.icon size={22} className={s.color} />
-            </div>
-            <div>
-              <div className="text-[10px] font-bold text-slate-500 tracking-wider uppercase mb-0.5 font-mono">{s.label}</div>
-              <div className="text-2xl font-black text-slate-100 font-mono">{s.value}</div>
-            </div>
-          </motion.div>
-        ))}
-      </div>
-
-      {/* Alert Banners */}
-      {pendingVerificacoes > 0 && (
-        <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="flex items-center gap-3 p-4 bg-amber-500/5 border border-amber-500/15 rounded-xl"
-        >
-          <div className="w-8 h-8 bg-amber-500/15 rounded-lg flex items-center justify-center">
-            <Clock size={16} className="text-amber-400" />
-          </div>
-          <div className="flex-1">
-            <span className="text-sm font-bold text-amber-400">{pendingVerificacoes} verificação(ões) aguardando aprovação</span>
-            <span className="text-xs text-slate-500 ml-2">— acesse a seção Verificações para revisar</span>
-          </div>
-        </motion.div>
-      )}
-
-      {openTickets > 0 && (
-        <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.1 }}
-          className="flex items-center gap-3 p-4 bg-pink-500/5 border border-pink-500/15 rounded-xl"
-        >
-          <div className="w-8 h-8 bg-pink-500/15 rounded-lg flex items-center justify-center">
-            <AlertCircle size={16} className="text-pink-400" />
-          </div>
-          <div className="flex-1">
-            <span className="text-sm font-bold text-pink-400">{openTickets} ticket(s) de suporte aberto(s)</span>
-            <span className="text-xs text-slate-500 ml-2">— acesse o menu Atendimento para responder</span>
-          </div>
-        </motion.div>
-      )}
-
-      {/* Recent Activity */}
-      <div className="glass-panel rounded-2xl p-6 border-slate-800">
-        <h2 className="text-lg font-bold text-slate-100 mb-6 flex items-center gap-2">
-          <TrendingUp className="text-purple-400" size={20} /> 
-          Atividade Recente
-          <span className="text-xs text-slate-600 font-mono ml-2">(Últimos 5 Pedidos)</span>
-        </h2>
-        <div className="space-y-3">
-          {[...pedidos].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 5).map((p, i) => (
-            <motion.div
-              key={p.id}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.05 }}
-              className="flex justify-between items-center p-4 bg-slate-900/40 rounded-xl border border-slate-800/40 hover:border-slate-700/40 transition-all"
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-purple-400 font-mono font-bold text-xs bg-purple-500/10 px-2 py-1 rounded">
-                  {typeof p.id === 'string' ? p.id.substring(0, 8) : p.id}
-                </span>
-                <div>
-                  <span className="text-slate-200 font-bold text-sm">{p.cliente_nome}</span>
-                  <span className="text-slate-600 text-xs ml-2">em {p.zona}</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <span className="font-black text-green-400 font-mono text-sm">R$ {Number(p.total).toFixed(2)}</span>
-                <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase ${
-                  p.status === 'cancelado' ? 'bg-red-500/10 text-red-400 border border-red-500/15' : 
-                  p.status === 'entregue' ? 'bg-green-500/10 text-green-400 border border-green-500/15' : 
-                  'bg-blue-500/10 text-blue-400 border border-blue-500/15'
-                }`}>
-                  {p.status}
-                </span>
-              </div>
-            </motion.div>
-          ))}
-          {pedidos.length === 0 && (
-            <div className="text-center text-slate-500 py-8 font-bold text-sm">
-              Nenhum pedido registrado no banco ainda.
-            </div>
-          )}
-        </div>
-      </div>
+  const queues=destinations.filter(item=>['tickets','verificacoes','localizacoes','nomes'].includes(item.badge||''))
+  const shortcuts=destinations.filter(item=>['/pedidos','/usuarios','/financeiro','/atendimento/todas','/erros','/atualizacoes'].includes(item.to))
+  return <div className="space-y-6">
+    <header className="admin-hero">
+      <div><div className="admin-hero-eyebrow"><Sparkles size={14}/>Sua operação, em perspectiva</div><h1>Olá, {(profile.nome||'administrador').split(' ')[0]}.<br/>Vamos cuidar da PraiaGo?</h1><p>Acompanhe os pedidos, encontre o que precisa de atenção e acesse as ferramentas certas sem perder tempo.</p></div>
+      <div className="admin-hero-aside"><time>{new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'})}</time><button className="admin-secondary-button" disabled={loading} onClick={()=>{void load();void refreshQueues()}}><RefreshCw size={15}/>Atualizar visão</button><small>{loading?'Consultando dados…':summary.loadedAt?'Consultado às '+summary.loadedAt.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'Aguardando consulta'}</small></div>
+    </header>
+    {summary.error&&<p role="alert" className="admin-inline-warning">Alguns dados não puderam ser consultados. Os campos indisponíveis aparecem como “—”, não como zero. Tente atualizar.</p>}
+    {financeAllowed&&metrics.missingTotals>0&&<p role="alert" className="admin-inline-warning">O volume entregue está indisponível: {metrics.missingTotals} pedido(s) entregue(s) no período carregado não têm um total válido. Confira os registros no Financeiro.</p>}
+    {stats.length>0&&<div className="admin-metrics">{stats.map(stat=><Link key={stat.label} to={stat.to} className="admin-metric" style={{'--metric-color':stat.color} as CSSProperties}><div className="admin-metric-heading"><span className="admin-metric-icon"><stat.icon size={20}/></span>{stat.label}</div><strong className="admin-metric-value">{stat.value??'—'}</strong><small>{stat.description}</small></Link>)}</div>}
+    <div className="admin-home-columns">
+      {(ordersAllowed||financeAllowed)&&<section className="admin-section-card"><div className="admin-section-heading"><div><h2 className="flex items-center gap-2"><BarChart3 size={17} className="text-purple-400"/>Pedidos nos últimos 7 dias</h2><p>Volume diário de pedidos registrados · horário de Brasília</p></div>{ordersAllowed&&<Link to="/pedidos">Ver pedidos<ArrowUpRight size={14}/></Link>}</div>
+        {summary.periodCount===null?<p className="admin-empty">{loading?'Consultando atividade…':'Atividade indisponível. Atualize para tentar novamente.'}</p>:<><div className="admin-chart" role="img" aria-label={metrics.daily.map(day=>day.label+': '+day.count+' pedidos').join('; ')}>{metrics.daily.map(day=><div className="admin-chart-column" key={day.key}><b>{day.count}</b><div className="admin-chart-bar" style={{height:Math.max(2,day.count/metrics.maximum*112)+'px'}}/><small>{day.label}</small></div>)}</div><small className="admin-chart-note">{limited?'Amostra: últimos 500 de '+summary.periodCount+' pedidos do período. Os valores por dia não representam a totalidade.':'Todos os '+summary.periodCount+' pedidos do período. Pedidos cancelados também fazem parte do volume de entradas.'}</small></>}
+      </section>}
+      <section className="admin-section-card"><div className="admin-section-heading"><div><h2 className="flex items-center gap-2"><ShieldCheck size={17} className="text-purple-400"/>Precisa de atenção</h2><p>As filas disponíveis para sua conta</p></div></div>{queueError&&<p className="admin-inline-warning" role="alert">Algumas filas estão indisponíveis. Atualize os contadores.</p>}{queues.map(item=><Link className="admin-pending-row" to={item.to} key={item.to}><span><strong>{item.label}</strong><small>{item.description}</small></span><b>{item.badge?counts[item.badge]??'—':'—'}</b><ChevronRight size={16}/></Link>)}{queues.length===0&&<p className="admin-empty">Não há filas liberadas para esta conta.</p>}<p className="admin-chart-note">Nada é aprovado automaticamente. Abra a fila para analisar cada solicitação.</p></section>
     </div>
-  )
-}
-
-function ActivityIcon(props: any) {
-  return <TrendingUp {...props} />
+    <section className="admin-section-card"><div className="admin-section-heading"><div><h2>Acesso rápido</h2><p>Menos procura, mais clareza para resolver.</p></div></div><div className="admin-shortcuts">{shortcuts.map(item=>{const Icon=navigationIcons[item.icon]||Activity;return <Link to={item.to} className="admin-shortcut" key={item.to}><Icon size={21}/><strong>{item.label}</strong><small>{item.description}</small></Link>})}</div></section>
+    {ordersAllowed&&<section className="admin-section-card"><div className="admin-section-heading"><div><h2>Pedidos recentes</h2><p>Últimos 5 pedidos dentro do período de 7 dias</p></div><Link to="/pedidos">Ver todos<ArrowUpRight size={14}/></Link></div>
+      {summary.recent.slice(0,5).map(order=><div className="admin-recent-order" key={order.id}><div><code>#{order.id.slice(0,8)}</code><div><strong>{order.cliente_nome||'Cliente'}</strong><small className="block">{order.zona||'Localização não informada'}</small></div></div><div><strong>{financeAllowed&&Number.isFinite(Number(order.total))?formatMoney(Number(order.total)):'Pedido recebido'}</strong><span className="admin-status-pill" data-status={order.status}>{order.status.replaceAll('_',' ')}</span></div></div>)}
+      {summary.recent.length===0&&<p className="admin-empty">{loading?'Carregando pedidos…':summary.periodCount===null?'Não foi possível consultar os pedidos.':'Nenhum pedido registrado neste período.'}</p>}
+    </section>}
+  </div>
 }

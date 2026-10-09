@@ -142,6 +142,8 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
       <AnimatePresence>
         {!isOpen && (
           <motion.button
+            type="button"
+            aria-label="Abrir assistente PraiaGo"
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0, opacity: 0 }}
@@ -155,21 +157,21 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
               // estava em 80px fixos: ficava POR CIMA da barra, tapando o
               // ultimo destino. Agora a conta acompanha a propria barra.
               bottom: 'calc(70px + max(10px, env(safe-area-inset-bottom)) + 12px)',
-              right: 24,
-              width: 64,
-              height: 64,
-              borderRadius: 32,
-              background: 'linear-gradient(135deg, #10b981, #059669)',
+              right: 19,
+              width: 52,
+              height: 52,
+              borderRadius: 18,
+              background: 'linear-gradient(135deg, #0c908d, #159568)',
               border: 'none',
-              boxShadow: '0 10px 25px rgba(16,185,129,0.5)',
+              boxShadow: '0 8px 22px rgba(8,111,112,0.28)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
-              zIndex: 9999
+              zIndex: 1100
             }}
           >
-            <MessageCircle size={32} color="#fff" />
+            <MessageCircle size={25} color="#fff" />
           </motion.button>
         )}
       </AnimatePresence>
@@ -191,7 +193,7 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
               height: 'min(500px, 70dvh)',
               maxHeight: '80dvh',
               borderRadius: 24,
-              background: 'rgba(255,255,255,0.92)',
+              background: 'var(--overlay-surface)',
               backdropFilter: 'blur(20px)',
               border: '1px solid rgba(0,0,0,0.08)',
               boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
@@ -217,7 +219,7 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
                   <Bot size={20} color="#fff" />
                 </div>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#0f172a' }}>Suporte PraiaGo</h3>
+                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: 'var(--ink-strong)' }}>Suporte PraiaGo</h3>
                   <span style={{ fontSize: 12, color: '#4ade80', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
                     <div style={{ width: 6, height: 6, borderRadius: 3, background: '#4ade80', boxShadow: '0 0 5px #4ade80' }} />
                     Online
@@ -228,7 +230,7 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
                 onClick={() => setIsOpen(false)}
                 style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4 }}
               >
-                <X size={24} color="#94a3b8" />
+                <X size={24} color="var(--faint)" />
               </button>
             </div>
 
@@ -242,7 +244,7 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
                     borderBottomLeftRadius: msg.role === 'bot' ? 4 : 20,
                     borderBottomRightRadius: msg.role === 'user' ? 4 : 20,
                     background: msg.role === 'bot' ? 'rgba(0,0,0,0.05)' : '#10b981',
-                    color: msg.role === 'bot' ? '#0f172a' : '#fff',
+                    color: msg.role === 'bot' ? 'var(--ink-strong)' : '#fff',
                     fontSize: 14,
                     lineHeight: 1.5,
                     border: msg.role === 'bot' ? '1px solid rgba(0,0,0,0.08)' : 'none'
@@ -258,7 +260,7 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
               <div style={{ padding: '0 20px 10px', display: 'flex', gap: 8, overflowX: 'auto' }} className="hide-scrollbar">
                 <button
                   onClick={() => setInput('Radar não funciona')}
-                  style={{ whiteSpace: 'nowrap', padding: '6px 12px', borderRadius: 12, background: 'rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.08)', color: '#334155', fontSize: 12, cursor: 'pointer' }}
+                  style={{ whiteSpace: 'nowrap', padding: '6px 12px', borderRadius: 12, background: 'rgba(0,0,0,0.05)', border: '1px solid rgba(0,0,0,0.08)', color: 'var(--ink)', fontSize: 12, cursor: 'pointer' }}
                 >
                   Radar não funciona
                 </button>
@@ -281,8 +283,8 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
                 disabled={loading}
                 style={{
                   flex: 1, padding: '12px 16px', borderRadius: 16,
-                  background: '#f1f5f9', border: '1px solid rgba(0,0,0,0.08)',
-                  color: '#0f172a', fontSize: 14, outline: 'none'
+                  background: 'var(--surface-soft)', border: '1px solid rgba(0,0,0,0.08)',
+                  color: 'var(--ink-strong)', fontSize: 14, outline: 'none'
                 }}
               />
               <button
@@ -295,7 +297,7 @@ Nunca invente dados. Se o usuário quiser falar com um humano, mande digitar "su
                   cursor: input.trim() && !loading ? 'pointer' : 'default', transition: 'background 0.2s'
                 }}
               >
-                {loading ? <Loader2 size={20} color="#fff" style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={20} color={input.trim() ? '#fff' : '#64748b'} />}
+                {loading ? <Loader2 size={20} color="#fff" style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={20} color={input.trim() ? '#fff' : 'var(--muted)'} />}
               </button>
             </form>
           </motion.div>

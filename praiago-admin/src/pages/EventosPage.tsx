@@ -6,10 +6,11 @@ import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import {
   CalendarDays, Plus, Trash2, Star, Eye, EyeOff, Loader2, MapPin, Ticket, Sun, Sunset, Moon, MoonStar, X, Bot, ExternalLink,
-  CheckCircle2, Clock3, ShoppingCart, Send, PauseCircle,
+  CheckCircle2, Clock3, ShoppingCart, Send, PauseCircle, RefreshCw, AlertTriangle, Activity,
 } from 'lucide-react'
 
 type EventoStatus = 'pendente' | 'ativo' | 'inativo'
+type PrecoSituacao = 'a_confirmar' | 'gratuito' | 'pago'
 
 interface Evento {
   id: string
@@ -23,6 +24,8 @@ interface Evento {
   lat: number | null
   lng: number | null
   preco: number
+  preco_situacao?: PrecoSituacao
+  preco_verificado_em?: string | null
   categoria: string | null
   emoji: string | null
   destaque: boolean
@@ -44,6 +47,8 @@ type TicketLot = {
   markup_percent_credito: number
   preco_venda_credito: number
   lote_ordem: number | null
+  lote_grupo?: string | null
+  pausado_admin?: boolean
   estoque_disponivel: number | null
   status: 'pendente_aprovacao' | 'disponivel' | 'pausado' | 'esgotado'
   fonte_url: string | null
@@ -79,6 +84,22 @@ type TicketRefund = {
   })[] | null
 }
 
+type CrawlerRun = {
+  id: string
+  version: string
+  status: 'rodando' | 'concluido' | 'falhou'
+  started_at: string
+  finished_at: string | null
+  stats: {
+    modo?: 'novos' | 'precos'
+    inseridos?: number
+    ingressos_salvos?: number
+    revalidacao?: { revalidados?: number; encerrados?: number; sem_preco?: number }
+    fontes_resultado?: { fonte: string; ok: boolean; eventos: number; tempo_ms: number }[]
+  } | null
+  errors: { fonte?: string; erro: string }[] | null
+}
+
 const PERIODOS = [
   { id: 'manha', label: 'Manhã', icon: Sun },
   { id: 'tarde', label: 'Tarde', icon: Sunset },
@@ -88,7 +109,7 @@ const PERIODOS = [
 
 const vazio = {
   titulo: '', periodo: 'noite' as const, data: '', hora: '', local_nome: '',
-  endereco: '', lat: '', lng: '', preco: '0', categoria: 'Festa', emoji: '🎉', destaque: false,
+  endereco: '', lat: '', lng: '', preco: '0', preco_situacao: 'a_confirmar' as PrecoSituacao, categoria: 'Festa', emoji: '🎉', destaque: false,
 }
 
 function hojeSpIso() {
@@ -110,7 +131,12 @@ export default function EventosPage() {
   const [showForm, setShowForm] = useState(false)
   const [erro, setErro] = useState('')
   const [cacando, setCacando] = useState(false)
+  const [revalidando, setRevalidando] = useState(false)
   const [cacaMsg, setCacaMsg] = useState('')
+  const [runs, setRuns] = useState<CrawlerRun[]>([])
+  const [fontesTeste, setFontesTeste] = useState<{ fonte: string; ok: boolean; http?: number; tempo_ms: number; erro?: string }[]>([])
+  const [testandoFontes, setTestandoFontes] = useState(false)
+  const [filtro, setFiltro] = useState<'todos' | 'pendentes' | 'preco' | 'repetidos'>('todos')
 
   async function cacarEventos() {
     setCacando(true); setCacaMsg('')
@@ -122,18 +148,36 @@ export default function EventosPage() {
     setCacando(false)
     if (error) { setCacaMsg('Não deu pra iniciar o robô: ' + error.message); return }
     setCacaMsg('🤖 Robô rodando em segundo plano — os eventos e ingressos aparecem aqui em até ~2 min.')
-    setTimeout(() => { void carregar() }, 75000)
-    setTimeout(() => setCacaMsg(''), 90000)
+    setTimeout(() => { void carregar() }, 15000)
+    setTimeout(() => { void carregar() }, 90000)
+  }
+
+  async function testarFontes() {
+    setTestandoFontes(true); setCacaMsg('')
+    const { data, error } = await supabase.functions.invoke('caca-eventos', { body: { acao: 'diagnostico' } })
+    setTestandoFontes(false)
+    if (error) { setCacaMsg(`Falha ao testar fontes: ${error.message}`); return }
+    setFontesTeste(Array.isArray(data?.fontes) ? data.fontes : [])
+  }
+
+  async function revalidarPrecos() {
+    setRevalidando(true); setCacaMsg('')
+    const { error } = await supabase.rpc('rodar_robo_eventos_precos')
+    setRevalidando(false)
+    if (error) { setCacaMsg(`Não deu para iniciar a rechecagem: ${error.message}`); return }
+    setCacaMsg('Rechecagem de preços e lotes iniciada em segundo plano. Atualize o painel para ver a conclusão.')
+    setTimeout(() => { void carregar() }, 15000)
+    setTimeout(() => { void carregar() }, 90000)
   }
 
   const carregar = useCallback(async () => {
     const hoje = hojeSpIso()
     // (removido) NAO chamar a edge function a cada load — virava tempestade de
     // chamadas com o realtime. A limpeza/ciclo de vida roda no cron horario.
-    const [{ data }, { data: pedidos }, { data: reembolsos }] = await Promise.all([
+    const [{ data }, { data: pedidos }, { data: reembolsos }, { data: rodadas }] = await Promise.all([
       supabase
         .from('eventos')
-        .select('*, event_ticket_lots(id,nome,preco_origem,markup_percent,preco_venda,markup_percent_credito,preco_venda_credito,lote_ordem,estoque_disponivel,status,fonte_url)')
+        .select('*, event_ticket_lots(id,nome,preco_origem,markup_percent,preco_venda,markup_percent_credito,preco_venda_credito,lote_ordem,lote_grupo,pausado_admin,estoque_disponivel,status,fonte_url)')
         .neq('status', 'inativo')
         .or(`data.is.null,data.gte.${hoje}`)
         .order('created_at', { ascending: false }),
@@ -149,23 +193,28 @@ export default function EventosPage() {
         .in('status', ['pendente_admin', 'aprovado', 'processando'])
         .order('created_at', { ascending: false })
         .limit(30),
+      supabase.from('event_crawler_runs').select('id,version,status,started_at,finished_at,stats,errors').order('started_at', { ascending: false }).limit(5),
     ])
     setEventos((data as Evento[]) ?? [])
     setOrders((pedidos as TicketOrder[]) ?? [])
     setRefunds((reembolsos as TicketRefund[]) ?? [])
+    setRuns((rodadas as CrawlerRun[]) ?? [])
     setLoading(false)
   }, [])
 
   useEffect(() => {
     carregar()
+    const timer = window.setInterval(() => { void carregar() }, 30000)
     const ch = supabase.channel('admin_eventos')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'eventos' }, () => carregar())
       .subscribe()
-    return () => { supabase.removeChannel(ch) }
+    return () => { window.clearInterval(timer); supabase.removeChannel(ch) }
   }, [carregar])
 
   async function criar() {
     if (!form.titulo.trim()) { setErro('Informe o título do evento.'); return }
+    if (form.preco_situacao === 'pago' && !(Number(form.preco) > 0)) { setErro('Informe um preço maior que zero para evento pago.'); return }
+    if (form.preco_situacao !== 'pago' && Number(form.preco) > 0) { setErro('Preço positivo exige a opção Pago.'); return }
     setErro(''); setSalvando(true)
     const { error } = await supabase.from('eventos').insert({
       titulo: form.titulo.trim(),
@@ -177,10 +226,12 @@ export default function EventosPage() {
       lat: form.lat ? Number(form.lat) : null,
       lng: form.lng ? Number(form.lng) : null,
       preco: Number(form.preco) || 0,
+      preco_situacao: form.preco_situacao,
+      preco_verificado_em: form.preco_situacao === 'a_confirmar' ? null : new Date().toISOString(),
       categoria: form.categoria || null,
       emoji: form.emoji || '🎉',
       destaque: form.destaque,
-      status: 'ativo',
+      status: form.preco_situacao === 'a_confirmar' ? 'pendente' : 'ativo',
       fonte: 'admin',
     })
     setSalvando(false)
@@ -194,13 +245,31 @@ export default function EventosPage() {
   }
 
   async function aprovar(id: string) {
+    const precoEvento = eventos.find(ev => ev.id === id)
+    if (precoEvento && Number(precoEvento.preco) <= 0 && precoEvento.preco_situacao !== 'gratuito') {
+      await alertDialog({ title: 'Confirme o preço', message: 'Este evento ainda não tem valor confirmado. Use “Revisar preço” antes de publicar, para o app antigo não mostrar “Grátis” por engano.', tone: 'danger' })
+      return
+    }
     const { error } = await supabase.from('eventos').update({ status: 'ativo' }).eq('id', id)
     if (!error) {
-      await supabase
-        .from('event_ticket_lots')
-        .update({ status: 'disponivel' })
-        .eq('evento_id', id)
-        .eq('status', 'pendente_aprovacao')
+      const evento = eventos.find(ev => ev.id === id)
+      const grupos = new Map<string, TicketLot[]>()
+      const precosVigentes = (evento?.event_ticket_lots || []).filter(l => l.status === 'disponivel').map(l => Number(l.preco_venda)).filter(v => v > 0)
+      for (const lote of evento?.event_ticket_lots || []) {
+        const key = lote.lote_grupo || lote.nome
+        grupos.set(key, [...(grupos.get(key) || []), lote])
+      }
+      for (const lotes of grupos.values()) {
+        const pendentes = lotes.filter(l => l.status === 'pendente_aprovacao' && !l.pausado_admin && l.estoque_disponivel !== 0 && Number(l.preco_origem) > 0)
+          .sort((a, b) => (a.lote_ordem ?? 999) - (b.lote_ordem ?? 999))
+        const jaVigente = lotes.some(l => l.status === 'disponivel')
+        for (const [index, lote] of pendentes.entries()) {
+          const vigente = !jaVigente && index === 0
+          await supabase.from('event_ticket_lots').update({ status: vigente ? 'disponivel' : 'pausado', pausado_admin: false, aprovado_admin: true }).eq('id', lote.id)
+          if (vigente && Number(lote.preco_venda) > 0) precosVigentes.push(Number(lote.preco_venda))
+        }
+      }
+      if (precosVigentes.length) await supabase.from('eventos').update({ preco: Math.min(...precosVigentes), preco_situacao: 'pago', preco_verificado_em: new Date().toISOString() }).eq('id', id)
     }
     carregar()
   }
@@ -225,6 +294,7 @@ export default function EventosPage() {
       estoque_total: estoque,
       estoque_disponivel: estoque,
       status: ev.status === 'ativo' ? 'disponivel' : 'pendente_aprovacao',
+      aprovado_admin: ev.status === 'ativo',
       fonte_url: ev.fonte_url || null,
       criado_por: 'admin',
       metadata: { criado_no_admin: true },
@@ -233,11 +303,43 @@ export default function EventosPage() {
     else carregar()
   }
 
-  async function alternarLote(lote: TicketLot) {
-    const novo = lote.status === 'disponivel' ? 'pausado' : 'disponivel'
-    const { error } = await supabase.from('event_ticket_lots').update({ status: novo }).eq('id', lote.id)
+  async function alternarLote(ev: Evento, lote: TicketLot) {
+    const pausar = lote.status === 'disponivel'
+    const anteriorVigente = (ev.event_ticket_lots || []).some(outro =>
+      outro.id !== lote.id && outro.status === 'disponivel'
+      && (outro.lote_grupo || outro.nome) === (lote.lote_grupo || lote.nome)
+      && outro.lote_ordem != null && lote.lote_ordem != null && outro.lote_ordem < lote.lote_ordem)
+    const novo = pausar ? 'pausado' : anteriorVigente ? 'pausado' : 'disponivel'
+    const { error } = await supabase.from('event_ticket_lots').update({ status: novo, pausado_admin: pausar, aprovado_admin: true }).eq('id', lote.id)
     if (error) alertDialog({ title: 'Erro', message: error.message, tone: 'danger' })
     else carregar()
+  }
+
+  async function revisarPreco(ev: Evento) {
+    const resposta = await promptDialog({
+      title: 'Verificar preço do evento',
+      message: 'Digite o valor em R$ para Pago, 0 para Gratuito confirmado ou ? quando a fonte não comprova o preço. Confira a fonte antes de salvar.',
+      defaultValue: ev.preco_situacao === 'a_confirmar' ? '?' : String(ev.preco),
+      confirmText: 'Salvar verificação',
+    })
+    if (resposta == null) return
+    const valor = resposta.trim()
+    const preco = Number(valor.replace(',', '.'))
+    const possuiLotePago = (ev.event_ticket_lots || []).some(l => Number(l.preco_origem) > 0)
+    if (valor !== '?' && (!Number.isFinite(preco) || preco < 0)) {
+      await alertDialog({ title: 'Valor inválido', message: 'Use um valor positivo, 0 ou ?.', tone: 'danger' }); return
+    }
+    if ((valor === '?' || preco === 0) && possuiLotePago) {
+      await alertDialog({ title: 'Há ingressos pagos', message: 'Este evento possui lotes com preço positivo. Revise os lotes antes de classificá-lo como gratuito ou desconhecido.', tone: 'danger' }); return
+    }
+    const situacao: PrecoSituacao = valor === '?' ? 'a_confirmar' : preco === 0 ? 'gratuito' : 'pago'
+    const { error } = await supabase.from('eventos').update({
+      preco: situacao === 'pago' ? preco : 0,
+      preco_situacao: situacao,
+      preco_verificado_em: situacao === 'a_confirmar' ? null : new Date().toISOString(),
+    }).eq('id', ev.id)
+    if (error) await alertDialog({ title: 'Erro', message: error.message, tone: 'danger' })
+    else void carregar()
   }
 
   async function marcarEntregue(orderId: string) {
@@ -284,12 +386,25 @@ export default function EventosPage() {
 
   const set = (k: keyof typeof vazio, v: string | boolean) => setForm(f => ({ ...f, [k]: v }))
   const pendentes = eventos.filter(ev => ev.status === 'pendente').length
+  const semPreco = eventos.filter(ev => !ev.preco_situacao || ev.preco_situacao === 'a_confirmar').length
+  const contagemTitulos = new Map<string, number>()
+  for (const ev of eventos) {
+    const chave = `${ev.titulo.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}|${ev.data || ''}`
+    contagemTitulos.set(chave, (contagemTitulos.get(chave) || 0) + 1)
+  }
+  const possiveisRepetidos = eventos.filter(ev => {
+    const chave = `${ev.titulo.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()}|${ev.data || ''}`
+    return (contagemTitulos.get(chave) || 0) > 1
+  })
+  const eventosFiltrados = filtro === 'pendentes' ? eventos.filter(ev => ev.status === 'pendente')
+    : filtro === 'preco' ? eventos.filter(ev => !ev.preco_situacao || ev.preco_situacao === 'a_confirmar')
+      : filtro === 'repetidos' ? possiveisRepetidos : eventos
   const pedidosPendentes = orders.filter(o => o.status === 'entrega_pendente')
   const reembolsosPendentes = refunds.filter(r => ['pendente_admin', 'aprovado', 'processando'].includes(r.status))
 
   return (
     <div className="space-y-6">
-      <header className="flex items-center justify-between">
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-purple-500/15 rounded-lg flex items-center justify-center border border-purple-500/20">
             <CalendarDays size={22} className="text-purple-400" />
@@ -301,9 +416,15 @@ export default function EventosPage() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button onClick={cacarEventos} disabled={cacando} className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 rounded-xl font-bold text-sm hover:bg-emerald-500/25 transition-all disabled:opacity-50">
             {cacando ? <Loader2 size={16} className="animate-spin" /> : <Bot size={16} />} {cacando ? 'Caçando...' : 'Caçar eventos'}
+          </button>
+          <button onClick={revalidarPrecos} disabled={revalidando} className="flex items-center gap-2 px-4 py-2.5 bg-amber-500/10 text-amber-300 border border-amber-500/25 rounded-xl font-bold text-sm hover:bg-amber-500/20 transition-all disabled:opacity-50">
+            {revalidando ? <Loader2 size={16} className="animate-spin" /> : <Ticket size={16} />} Revalidar preços
+          </button>
+          <button onClick={testarFontes} disabled={testandoFontes} className="flex items-center gap-2 px-4 py-2.5 bg-cyan-500/10 text-cyan-300 border border-cyan-500/25 rounded-xl font-bold text-sm hover:bg-cyan-500/20 transition-all disabled:opacity-50">
+            {testandoFontes ? <Loader2 size={16} className="animate-spin" /> : <Activity size={16} />} Testar fontes
           </button>
           <button onClick={() => setShowForm(v => !v)} className="flex items-center gap-2 px-4 py-2.5 bg-purple-500/15 text-purple-300 border border-purple-500/30 rounded-xl font-bold text-sm hover:bg-purple-500/25 transition-all">
             {showForm ? <X size={16} /> : <Plus size={16} />} {showForm ? 'Fechar' : 'Novo evento'}
@@ -316,6 +437,42 @@ export default function EventosPage() {
           <Bot size={15} /> {cacaMsg}
         </div>
       )}
+
+      <section className="glass-panel rounded-2xl p-5 border border-purple-500/20 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-black text-slate-100 flex items-center gap-2"><Bot size={18} className="text-purple-300" /> Caça Eventos v5</h2>
+            <p className="text-xs text-slate-400 mt-1">Praia Grande · descoberta 2× ao dia · preços/lotes a cada 4 horas · aprovação administrativa</p>
+          </div>
+          <button onClick={() => void carregar()} className="text-xs font-bold text-slate-300 flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-800/60 hover:bg-slate-700/60"><RefreshCw size={13} /> Atualizar painel</button>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+          {([
+            ['todos', 'Eventos', eventos.length],
+            ['pendentes', 'Aguardando aprovação', pendentes],
+            ['preco', 'Preço a confirmar', semPreco],
+            ['repetidos', 'Possíveis repetidos', possiveisRepetidos.length],
+          ] as const).map(([id, label, count]) => (
+            <button key={id} onClick={() => setFiltro(id)} className={`rounded-xl border p-3 text-left transition-all ${filtro === id ? 'bg-purple-500/15 border-purple-500/45' : 'bg-slate-950/35 border-slate-800/70 hover:border-slate-600'}`}>
+              <span className="block text-xl font-black text-slate-100">{count}</span><span className="text-[11px] text-slate-400 font-semibold">{label}</span>
+            </button>
+          ))}
+        </div>
+        {runs[0] && <div className="rounded-xl border border-slate-800/70 bg-slate-950/35 p-3 text-xs text-slate-300 space-y-1">
+          <div className="font-bold flex flex-wrap items-center gap-2">
+            <span className={runs[0].status === 'falhou' ? 'text-red-400' : runs[0].status === 'rodando' ? 'text-amber-300' : 'text-emerald-300'}>
+              Última rodada: {runs[0].status} · {runs[0].version} · {runs[0].stats?.modo === 'precos' ? 'preços/lotes' : 'descoberta'}
+            </span>
+            <span className="text-slate-500">{new Date(runs[0].started_at).toLocaleString('pt-BR')}</span>
+          </div>
+          <div>{runs[0].stats?.inseridos ?? 0} eventos novos · {runs[0].stats?.ingressos_salvos ?? 0} lotes conferidos · {runs[0].stats?.revalidacao?.revalidados ?? 0} eventos revalidados</div>
+          {(runs[0].stats?.fontes_resultado || []).map(fonte => <div key={fonte.fonte} className={fonte.ok ? 'text-slate-400' : 'text-red-300'}>{fonte.ok ? '✓' : '!'} {fonte.fonte}: {fonte.eventos} candidatos · {(fonte.tempo_ms / 1000).toFixed(1)}s</div>)}
+          {(runs[0].errors || []).map((erro, index) => <div key={index} className="text-red-300">{erro.fonte || 'Robô'}: {erro.erro}</div>)}
+        </div>}
+        {fontesTeste.length > 0 && <div className="grid sm:grid-cols-3 gap-2">{fontesTeste.map(fonte => <div key={fonte.fonte} className={`rounded-lg border px-3 py-2 text-xs ${fonte.ok ? 'border-emerald-500/25 text-emerald-300 bg-emerald-500/5' : 'border-red-500/25 text-red-300 bg-red-500/5'}`}>
+          <div className="font-bold">{fonte.ok ? 'Conectada' : 'Falha'} · {fonte.fonte}</div><div className="opacity-80">{fonte.http ? `HTTP ${fonte.http} · ` : ''}{(fonte.tempo_ms / 1000).toFixed(1)}s{fonte.erro ? ` · ${fonte.erro}` : ''}</div>
+        </div>)}</div>}
+      </section>
 
       {pedidosPendentes.length > 0 && (
         <section className="glass-panel rounded-2xl p-5 border border-emerald-500/20">
@@ -437,7 +594,12 @@ export default function EventosPage() {
                 <Field label="Endereço" full><input value={form.endereco} onChange={e => set('endereco', e.target.value)} placeholder="Av. da Praia, 100" className={inp} /></Field>
                 <Field label="Latitude"><input value={form.lat} onChange={e => set('lat', e.target.value)} placeholder="-24.0060" className={inp} /></Field>
                 <Field label="Longitude"><input value={form.lng} onChange={e => set('lng', e.target.value)} placeholder="-46.4140" className={inp} /></Field>
-                <Field label="Preço (R$) · 0 = grátis"><input type="number" value={form.preco} onChange={e => set('preco', e.target.value)} className={inp} /></Field>
+                <Field label="Situação do preço">
+                  <select value={form.preco_situacao} onChange={e => set('preco_situacao', e.target.value)} className={inp}>
+                    <option value="a_confirmar">A confirmar</option><option value="gratuito">Gratuito confirmado</option><option value="pago">Pago</option>
+                  </select>
+                </Field>
+                <Field label="Preço (R$) · apenas se pago"><input type="number" min="0" step="0.01" value={form.preco} onChange={e => set('preco', e.target.value)} className={inp} /></Field>
               </div>
               <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
                 <input type="checkbox" checked={form.destaque} onChange={e => set('destaque', e.target.checked)} className="accent-purple-500" /> Marcar como destaque
@@ -454,15 +616,15 @@ export default function EventosPage() {
       {/* Lista */}
       {loading ? (
         <div className="flex justify-center py-16"><Loader2 size={28} className="text-purple-400 animate-spin" /></div>
-      ) : eventos.length === 0 ? (
+      ) : eventosFiltrados.length === 0 ? (
         <div className="glass-panel rounded-2xl p-12 text-center border-slate-800">
           <CalendarDays size={36} className="text-slate-700 mx-auto mb-3" />
-          <p className="text-slate-400 font-bold">Nenhum evento cadastrado</p>
-          <p className="text-slate-600 text-sm">Crie o primeiro evento — ele aparece na hora no app dos clientes.</p>
+          <p className="text-slate-400 font-bold">Nenhum evento neste filtro</p>
+          <p className="text-slate-600 text-sm">Selecione outro filtro ou aguarde a próxima rodada do robô.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {eventos.map(ev => {
+          {eventosFiltrados.map(ev => {
             const per = PERIODOS.find(p => p.id === ev.periodo)
             const PerIcon = per?.icon ?? Moon
             const lotes = [...(ev.event_ticket_lots || [])].sort((a, b) => Number(a.preco_venda) - Number(b.preco_venda))
@@ -501,7 +663,10 @@ export default function EventosPage() {
                       <span className="flex items-center gap-1"><PerIcon size={12} />{per?.label}</span>
                       {ev.data && <span>{format(new Date(ev.data + 'T00:00:00'), 'dd/MM', { locale: ptBR })}{ev.hora ? ` · ${ev.hora}` : ''}</span>}
                       {ev.local_nome && <span className="flex items-center gap-1 truncate"><MapPin size={12} />{ev.local_nome}</span>}
-                      <span className="flex items-center gap-1 text-amber-400"><Ticket size={12} />{ev.preco > 0 ? fmtMoney(ev.preco) : 'Grátis'}</span>
+                      <span className={`flex items-center gap-1 ${ev.preco_situacao === 'a_confirmar' || !ev.preco_situacao ? 'text-amber-300' : 'text-emerald-300'}`}>
+                        {ev.preco_situacao === 'a_confirmar' || !ev.preco_situacao ? <AlertTriangle size={12} /> : <Ticket size={12} />}
+                        {ev.preco_situacao === 'gratuito' ? 'Gratuito confirmado' : ev.preco_situacao === 'pago' ? ev.preco > 0 ? fmtMoney(ev.preco) : 'Pago · valor na fonte' : 'Preço a confirmar'}
+                      </span>
                     </div>
                     {(ev.descricao_curta || ev.descricao) && (
                       <p className="text-xs text-slate-500 mt-3 line-clamp-2">
@@ -509,6 +674,10 @@ export default function EventosPage() {
                       </p>
                     )}
                   </div>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                  <span>{ev.preco_verificado_em ? `Preço verificado em ${new Date(ev.preco_verificado_em).toLocaleString('pt-BR')}` : 'Preço ainda sem comprovação'}</span>
+                  <button onClick={() => void revisarPreco(ev)} className="font-bold text-amber-300 hover:text-amber-200">Revisar preço</button>
                 </div>
                 <div className="mt-4 pt-4 border-t border-slate-800/50 space-y-2">
                   <div className="flex items-center justify-between gap-2">
@@ -530,7 +699,7 @@ export default function EventosPage() {
                               {lote.nome}
                               {lote.lote_ordem != null && (
                                 <span className="ml-1.5 text-[10px] font-bold text-sky-300">
-                                  {lote.lote_ordem === 0 ? 'promocional' : `${lote.lote_ordem}º lote`}
+                              {lote.lote_ordem === 0 ? 'promocional' : `${lote.lote_ordem}º lote`}
                                 </span>
                               )}
                             </div>
@@ -546,11 +715,11 @@ export default function EventosPage() {
                                 ? 'bg-amber-500/10 text-amber-300'
                                 : 'bg-slate-800/70 text-slate-400'
                           }`}>
-                            {lote.status === 'pendente_aprovacao' ? 'Pendente' : lote.status}
+                            {lote.pausado_admin ? 'Pausa admin' : lote.status === 'pendente_aprovacao' ? 'Pendente' : lote.status}
                           </span>
-                          <button onClick={() => alternarLote(lote)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800/70 text-slate-300 hover:bg-slate-700 transition-all">
-                            {lote.status === 'disponivel' ? <><PauseCircle size={12} /> Pausar</> : <><CheckCircle2 size={12} /> Liberar</>}
-                          </button>
+                           {lote.status !== 'esgotado' && <button onClick={() => alternarLote(ev, lote)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800/70 text-slate-300 hover:bg-slate-700 transition-all">
+                             {lote.status === 'disponivel' ? <><PauseCircle size={12} /> Pausar</> : <><CheckCircle2 size={12} /> Liberar/fila</>}
+                           </button>}
                         </div>
                       ))}
                     </div>
@@ -562,9 +731,9 @@ export default function EventosPage() {
                       <CheckCircle2 size={13} /> Aprovar
                     </button>
                   )}
-                  <button onClick={() => toggle(ev.id, 'status', ev.status)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 transition-all">
+                  {ev.status !== 'pendente' && <button onClick={() => toggle(ev.id, 'status', ev.status)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 transition-all">
                     {ev.status === 'ativo' ? <><Eye size={13} /> Ativo</> : <><EyeOff size={13} /> Oculto</>}
-                  </button>
+                  </button>}
                   <button onClick={() => toggle(ev.id, 'destaque', ev.destaque)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${ev.destaque ? 'bg-amber-500/15 text-amber-400' : 'bg-slate-800/50 text-slate-400 hover:bg-slate-700/50'}`}>
                     <Star size={13} /> Destaque
                   </button>

@@ -26,11 +26,11 @@ type Lancamento = { id: string; tipo: string; valor: number; status: string; cre
 const brl = (v: number) => (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
 const STATUS_SAQUE: Record<string, { label: string; cor: string }> = {
-  solicitado: { label: 'Solicitado', cor: '#f59e0b' },
+  solicitado: { label: 'Solicitado', cor: 'var(--warning)' },
   processando: { label: 'Processando', cor: '#0ea5e9' },
   pago: { label: 'Pago', cor: '#16a34a' },
-  falhou: { label: 'Falhou', cor: '#ef4444' },
-  cancelado: { label: 'Cancelado', cor: '#94a3b8' },
+  falhou: { label: 'Falhou', cor: 'var(--danger)' },
+  cancelado: { label: 'Cancelado', cor: 'var(--faint)' },
 }
 const TIPO_LABEL: Record<string, string> = {
   repasse_vendedor: 'Venda (seu líquido)', taxa_plataforma: 'Comissão Praia Go',
@@ -127,7 +127,7 @@ export default function CarteiraPage() {
     carregar()
   }
 
-  const cardBase: React.CSSProperties = { borderRadius: 8, padding: 16, border: '1px solid #dfe6ed', boxShadow: 'none' }
+  const cardBase: React.CSSProperties = { borderRadius: 19, padding: 17, border: '1px solid var(--line)', boxShadow: 'none' }
 
   return (
     <div className="page-shell">
@@ -143,17 +143,17 @@ export default function CarteiraPage() {
 
       <div>
         {/* Saldo disponível + saque */}
-        <motion.div initial={{ y: 16, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="glass-panel" style={{ ...cardBase, marginBottom: 14, textAlign: 'center' }}>
-          <div style={{ fontSize: 12, fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1 }}>Saldo disponível pra saque</div>
-          <div style={{ fontSize: 34, fontWeight: 900, color: '#16a34a', margin: '4px 0 6px' }}>{loading ? '—' : brl(esp?.saldo_disponivel ?? 0)}</div>
-          <div style={{ fontSize: 12.5, color: '#64748b', fontWeight: 600, marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-            <Clock size={13} /> Pendente (liberando): <strong style={{ color: '#0f172a' }}>{brl(esp?.saldo_pendente ?? 0)}</strong>
+        <motion.div initial={{ y: 16, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="glass-panel" style={{ ...cardBase, marginBottom: 17, padding: 22, textAlign: 'center', background: 'linear-gradient(145deg,var(--surface-green),var(--surface) 74%)', borderColor: 'var(--success-line)' }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1 }}>Saldo disponível pra saque</div>
+          <div style={{ fontSize: 34, fontWeight: 900, color: 'var(--success)', margin: '4px 0 6px' }}>{loading ? '—' : brl(esp?.saldo_disponivel ?? 0)}</div>
+          <div style={{ fontSize: 12.5, color: 'var(--muted)', fontWeight: 600, marginBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <Clock size={13} /> Pendente (liberando): <strong style={{ color: 'var(--ink-strong)' }}>{brl(esp?.saldo_pendente ?? 0)}</strong>
           </div>
           <button onClick={solicitarSaque} disabled={sacando || loading} className="primary-button" style={{ width: '100%' }}>
             {sacando ? <Loader2 size={18} className="animate-spin-slow" /> : <ArrowDownToLine size={18} />} Sacar pra minha conta
           </button>
           {!temConta && !loading && (
-            <div style={{ marginTop: 10, fontSize: 12, color: '#b45309', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <div style={{ marginTop: 10, fontSize: 12, color: 'var(--warning)', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
               <AlertCircle size={13} /> Cadastre sua conta bancária abaixo pra poder sacar
             </div>
           )}
@@ -162,18 +162,18 @@ export default function CarteiraPage() {
               esperando o prazo. Mostra o desconto antes de o vendedor decidir —
               taxa que so aparece depois de clicar e o que gera reclamacao. */}
           {previa?.ativo && (previa.antecipavel ?? 0) > 0 && (
-            <div style={{ marginTop: 12, background: '#fffaf2', border: '1px solid #f4d39f', borderRadius: 8, padding: 13, textAlign: 'left' }}>
-              <div style={{ fontSize: 12.5, fontWeight: 900, color: '#b45309', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ marginTop: 12, background: 'var(--surface-amber)', border: '1px solid var(--warning-line)', borderRadius: 8, padding: 13, textAlign: 'left' }}>
+              <div style={{ fontSize: 12.5, fontWeight: 900, color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: 6 }}>
                 <Zap size={14} /> Receber agora, sem esperar
               </div>
-              <div style={{ fontSize: 12.5, color: '#475569', fontWeight: 600, marginTop: 6, lineHeight: 1.5 }}>
+              <div style={{ fontSize: 12.5, color: 'var(--muted)', fontWeight: 600, marginTop: 6, lineHeight: 1.5 }}>
                 Você tem <strong>{brl(previa.antecipavel)}</strong> de pedidos entregues aguardando o prazo.
                 Antecipando, a taxa é de {previa.taxa_percent}% ({brl(previa.taxa_valor)}) e você fica com{' '}
-                <strong style={{ color: '#0f172a' }}>{brl(previa.receberia)}</strong>.
+                <strong style={{ color: 'var(--ink-strong)' }}>{brl(previa.receberia)}</strong>.
               </div>
               <button
                 onClick={() => anteciparSaldo('rapido')} disabled={antecipando}
-                style={{ width: '100%', minHeight: 44, marginTop: 10, border: 'none', borderRadius: 8, padding: 10, fontSize: 13, fontWeight: 900, color: '#fff', background: '#b54708', cursor: antecipando ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                style={{ width: '100%', minHeight: 44, marginTop: 10, border: 'none', borderRadius: 8, padding: 10, fontSize: 13, fontWeight: 900, color: '#fff', background: 'var(--warning-solid)', cursor: antecipando ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
               >
                 {antecipando ? <Loader2 size={16} className="animate-spin-slow" /> : <Zap size={16} />}
                 Antecipar {brl(previa.antecipavel)}
@@ -183,14 +183,14 @@ export default function CarteiraPage() {
 
           {/* Credito tem prazo (e taxa) proprios: o gateway so libera em D+30. */}
           {previa?.credito_ativo && (previa.antecipavel_credito ?? 0) > 0 && (
-            <div style={{ marginTop: 10, background: '#f8f6fc', border: '1px solid #d7cbed', borderRadius: 8, padding: 13, textAlign: 'left' }}>
-              <div style={{ fontSize: 12.5, fontWeight: 900, color: '#7c3aed', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ marginTop: 10, background: 'var(--surface-purple)', border: '1px solid var(--purple-line)', borderRadius: 8, padding: 13, textAlign: 'left' }}>
+              <div style={{ fontSize: 12.5, fontWeight: 900, color: 'var(--purple)', display: 'flex', alignItems: 'center', gap: 6 }}>
                 <Zap size={14} /> Antecipar vendas no cartão de crédito
               </div>
-              <div style={{ fontSize: 12.5, color: '#475569', fontWeight: 600, marginTop: 6, lineHeight: 1.5 }}>
+              <div style={{ fontSize: 12.5, color: 'var(--muted)', fontWeight: 600, marginTop: 6, lineHeight: 1.5 }}>
                 Venda no crédito só cai em 30 dias. Você tem <strong>{brl(previa.antecipavel_credito)}</strong> nesse prazo —
                 antecipando, a taxa é de {previa.taxa_percent_credito}% ({brl(previa.taxa_valor_credito)}) e você fica com{' '}
-                <strong style={{ color: '#0f172a' }}>{brl(previa.receberia_credito)}</strong>.
+                <strong style={{ color: 'var(--ink-strong)' }}>{brl(previa.receberia_credito)}</strong>.
               </div>
               <button
                 onClick={() => anteciparSaldo('credito')} disabled={antecipando}
@@ -219,8 +219,8 @@ export default function CarteiraPage() {
           ].map(({ icon: Icon, label, v, cor }) => (
             <div key={label} className="glass-panel" style={{ ...cardBase, padding: 14 }}>
               <Icon size={16} color={cor} />
-              <div style={{ fontSize: 18, fontWeight: 900, color: '#0f172a', marginTop: 6 }}>{loading ? '—' : brl(v)}</div>
-              <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>{label}</div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--ink-strong)', marginTop: 6 }}>{loading ? '—' : brl(v)}</div>
+              <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600 }}>{label}</div>
             </div>
           ))}
         </div>
@@ -228,22 +228,22 @@ export default function CarteiraPage() {
         {esp?.proxima_liquidacao && (
           <div className="glass-panel" style={{ ...cardBase, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
             <Clock size={16} color="#0ea5e9" />
-            <span style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>Próxima liberação prevista: <strong style={{ color: '#0f172a' }}>{new Date(esp.proxima_liquidacao).toLocaleDateString('pt-BR')}</strong></span>
+            <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 600 }}>Próxima liberação prevista: <strong style={{ color: 'var(--ink-strong)' }}>{new Date(esp.proxima_liquidacao).toLocaleDateString('pt-BR')}</strong></span>
           </div>
         )}
 
         {/* Extrato */}
         <div className="glass-panel" style={{ ...cardBase, marginBottom: 14 }}>
-          <div style={{ fontSize: 12, fontWeight: 900, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>Extrato</div>
-          {loading ? <div style={{ color: '#94a3b8', fontSize: 13 }}>Carregando…</div>
-            : extrato.length === 0 ? <div style={{ color: '#94a3b8', fontSize: 13 }}>Sem lançamentos ainda.</div>
+          <div style={{ fontSize: 12, fontWeight: 900, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>Extrato</div>
+          {loading ? <div style={{ color: 'var(--faint)', fontSize: 13 }}>Carregando…</div>
+            : extrato.length === 0 ? <div style={{ color: 'var(--faint)', fontSize: 13 }}>Sem lançamentos ainda.</div>
             : extrato.map(l => (
               <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
                 <div>
-                  <div style={{ fontSize: 13.5, fontWeight: 700, color: '#0f172a' }}>{TIPO_LABEL[l.tipo] || l.tipo}</div>
-                  <div style={{ fontSize: 11, color: '#94a3b8' }}>{new Date(l.created_at).toLocaleDateString('pt-BR')} · {l.status}</div>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--ink-strong)' }}>{TIPO_LABEL[l.tipo] || l.tipo}</div>
+                  <div style={{ fontSize: 11, color: 'var(--faint)' }}>{new Date(l.created_at).toLocaleDateString('pt-BR')} · {l.status}</div>
                 </div>
-                <div style={{ fontSize: 14, fontWeight: 800, color: ['saque', 'estorno', 'chargeback', 'taxa_plataforma', 'taxa_provedor'].includes(l.tipo) ? '#ef4444' : '#16a34a' }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: ['saque', 'estorno', 'chargeback', 'taxa_plataforma', 'taxa_provedor'].includes(l.tipo) ? 'var(--danger)' : 'var(--success)' }}>
                   {['saque', 'estorno', 'chargeback', 'taxa_plataforma', 'taxa_provedor'].includes(l.tipo) ? '−' : '+'}{brl(l.valor)}
                 </div>
               </div>
@@ -253,16 +253,16 @@ export default function CarteiraPage() {
         {/* Saques */}
         {saques.length > 0 && (
           <div className="glass-panel" style={{ ...cardBase }}>
-            <div style={{ fontSize: 12, fontWeight: 900, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>Meus saques</div>
+            <div style={{ fontSize: 12, fontWeight: 900, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>Meus saques</div>
             {saques.map(s => {
-              const st = STATUS_SAQUE[s.status] || { label: s.status, cor: '#94a3b8' }
+              const st = STATUS_SAQUE[s.status] || { label: s.status, cor: 'var(--faint)' }
               return (
                 <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>{brl(s.valor)}</div>
-                    <div style={{ fontSize: 11, color: '#94a3b8' }}>{new Date(s.created_at).toLocaleDateString('pt-BR')}</div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--ink-strong)' }}>{brl(s.valor)}</div>
+                    <div style={{ fontSize: 11, color: 'var(--faint)' }}>{new Date(s.created_at).toLocaleDateString('pt-BR')}</div>
                   </div>
-                  <span style={{ fontSize: 11, fontWeight: 800, color: st.cor, background: `${st.cor}18`, borderRadius: 10, padding: '4px 10px' }}>{st.label}</span>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: st.cor, background: `color-mix(in srgb, ${st.cor} 12%, var(--surface))`, borderRadius: 10, padding: '4px 10px' }}>{st.label}</span>
                 </div>
               )
             })}

@@ -1,39 +1,35 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense, type ReactNode } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Bell, X } from 'lucide-react'
 import { supabase } from './lib/supabase'
 import LoginPage from './pages/LoginPage'
-import DashboardPage from './pages/DashboardPage'
-import PedidosPage from './pages/PedidosPage'
-import UsuariosPage from './pages/UsuariosPage'
-import ExclusoesPage from './pages/ExclusoesPage'
-import VerificacoesPage from './pages/VerificacoesPage'
-import LiberacaoSaquePage from './pages/LiberacaoSaquePage'
-import AtendimentoPage from './pages/AtendimentoPage'
-import ErrorsPage from './pages/ErrorsPage'
-import EventosPage from './pages/EventosPage'
-import CuponsPage from './pages/CuponsPage'
-import PromocoesPage from './pages/PromocoesPage'
-import FinanceiroPage from './pages/FinanceiroPage'
-import TrocaContaPage from './pages/TrocaContaPage'
-import TrocaNomePage from './pages/TrocaNomePage'
-import CadastrosEventoPage from './pages/CadastrosEventoPage'
-import AdminsPage from './pages/AdminsPage'
-import TestersPage from './pages/TestersPage'
-import NovosUsuariosPage from './pages/NovosUsuariosPage'
-import LocalizacoesPage from './pages/LocalizacoesPage'
-import Sidebar from './components/Sidebar'
+const DashboardPage = lazy(() => import('./pages/DashboardPage'))
+const PedidosPage = lazy(() => import('./pages/PedidosPage'))
+const UsuariosPage = lazy(() => import('./pages/UsuariosPage'))
+const ExclusoesPage = lazy(() => import('./pages/ExclusoesPage'))
+const VerificacoesPage = lazy(() => import('./pages/VerificacoesPage'))
+const LiberacaoSaquePage = lazy(() => import('./pages/LiberacaoSaquePage'))
+const AtendimentoPage = lazy(() => import('./pages/AtendimentoPage'))
+const ErrorsPage = lazy(() => import('./pages/ErrorsPage'))
+const EventosPage = lazy(() => import('./pages/EventosPage'))
+const CuponsPage = lazy(() => import('./pages/CuponsPage'))
+const PromocoesPage = lazy(() => import('./pages/PromocoesPage'))
+const FinanceiroPage = lazy(() => import('./pages/FinanceiroPage'))
+const TrocaContaPage = lazy(() => import('./pages/TrocaContaPage'))
+const TrocaNomePage = lazy(() => import('./pages/TrocaNomePage'))
+const CadastrosEventoPage = lazy(() => import('./pages/CadastrosEventoPage'))
+const AdminsPage = lazy(() => import('./pages/AdminsPage'))
+const AtualizacoesPage = lazy(() => import('./pages/AtualizacoesPage'))
+const TestersPage = lazy(() => import('./pages/TestersPage'))
+const NovosUsuariosPage = lazy(() => import('./pages/NovosUsuariosPage'))
+const LocalizacoesPage = lazy(() => import('./pages/LocalizacoesPage'))
+import AdminShell from './components/AdminShell'
+import { allowedDestinations, canAccessAdmin, type AdminProfile } from './lib/adminNavigation'
 import PasswordRecoveryHandler from './components/PasswordRecoveryHandler'
 import { DialogHost } from './lib/dialog'
 
-export type PerfilAdmin = {
-  id: string
-  nome: string | null
-  email: string | null
-  role: string
-  permissions: string[] | null
-}
+export type PerfilAdmin = AdminProfile
 
 function NotificationSystem() {
   const [notifications, setNotifications] = useState<any[]>([])
@@ -150,7 +146,7 @@ function NotificationSystem() {
   }, [])
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
+    <div className="admin-toasts fixed z-50 flex flex-col gap-2 pointer-events-none" aria-live="polite">
       <AnimatePresence>
         {notifications.map(n => (
           <motion.div
@@ -158,7 +154,7 @@ function NotificationSystem() {
             initial={{ opacity: 0, y: 20, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9, x: 20 }}
-            className="pointer-events-auto bg-slate-900 border border-indigo-500/30 p-4 rounded-xl shadow-2xl shadow-indigo-500/20 flex items-start gap-4 min-w-[300px]"
+            className="pointer-events-auto bg-slate-900 border border-indigo-500/30 p-4 rounded-xl shadow-2xl shadow-indigo-500/20 flex items-start gap-4 min-w-0"
           >
             <div className="bg-indigo-500/20 p-2 rounded-lg text-indigo-400">
               <Bell size={20} />
@@ -168,7 +164,7 @@ function NotificationSystem() {
               <p className="text-slate-400 text-xs mt-1">{n.texto}</p>
               <p className="text-slate-500 text-xs mt-1">De: {n.origem}</p>
             </div>
-            <button onClick={() => setNotifications(prev => prev.filter(t => (t._toastId || t.id) !== (n._toastId || n.id)))} className="text-slate-500 hover:text-white transition-colors cursor-pointer">
+            <button aria-label="Fechar notificação" onClick={() => setNotifications(prev => prev.filter(t => (t._toastId || t.id) !== (n._toastId || n.id)))} className="text-slate-500 hover:text-white transition-colors cursor-pointer">
               <X size={16} />
             </button>
           </motion.div>
@@ -267,18 +263,16 @@ export default function App() {
     return <div className="flex h-screen items-center justify-center bg-slate-950 text-slate-400 font-bold">Carregando painel...</div>
   }
 
-  // #4: permissão por seção também nas ROTAS (não só no menu) — bloqueia acesso por URL.
-  const isSys = perfil?.role === 'sysadmin'
-  const podeVer = (secao: string) => isSys || !perfil?.permissions || perfil.permissions.includes(secao)
-  const guard = (secao: string, el: React.ReactNode) => (podeVer(secao) ? el : <Navigate to="/" replace />)
+  const fallback = allowedDestinations(perfil)[0]?.to
+  const denied = fallback ? <Navigate to={fallback} replace /> : <div className="glass-panel rounded-2xl p-6"><h1 className="text-xl font-bold">Nenhuma seção liberada</h1><p className="mt-2 text-slate-400">Peça ao administrador responsável para revisar suas permissões.</p></div>
+  const guard = (section: string, element: ReactNode, ownerOnly = false) => canAccessAdmin(perfil, section, ownerOnly) ? element : denied
 
   return (
     <BrowserRouter>
       <PasswordRecoveryHandler />
-      <div className="flex h-screen overflow-hidden">
-        <Sidebar onLogout={sairAdmin} perfil={perfil} />
-        <main className="flex-1 overflow-y-auto bg-slate-950 p-8 relative">
-          <NotificationSystem />
+      <AdminShell profile={perfil} onLogout={sairAdmin}>
+        <NotificationSystem />
+        <Suspense fallback={<div className="admin-loading" role="status">Carregando esta seção…</div>}>
           <Routes>
             <Route path="/" element={guard('dashboard', <DashboardPage />)} />
             <Route path="/pedidos" element={guard('pedidos', <PedidosPage />)} />
@@ -302,11 +296,12 @@ export default function App() {
             <Route path="/financeiro" element={guard('financeiro', <FinanceiroPage />)} />
             <Route path="/troca-conta" element={guard('financeiro', <TrocaContaPage />)} />
             <Route path="/erros" element={guard('erros', <ErrorsPage />)} />
-            <Route path="/admins" element={perfil?.role === 'sysadmin' ? <AdminsPage /> : <Navigate to="/" replace />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="/admins" element={guard('admins', <AdminsPage />, true)} />
+            <Route path="/atualizacoes" element={guard('atualizacoes', <AtualizacoesPage />, true)} />
+            <Route path="*" element={denied} />
           </Routes>
-        </main>
-      </div>
+        </Suspense>
+      </AdminShell>
       <DialogHost />
     </BrowserRouter>
   )

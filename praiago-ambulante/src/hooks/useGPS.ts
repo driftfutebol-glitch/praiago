@@ -57,6 +57,8 @@ export function useGPS() {
   const watchId = useRef<number | null>(null)
   const channel = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const nome = useRef('Ambulante')
+  const categoria = useRef('Ambulante')
+  const emoji = useRef('🥥')
   const lastGPS = useRef<GPSData | null>(null)
 
   async function publishPosition(g: GPSData, aberto = isOnline()) {
@@ -85,8 +87,8 @@ export function useGPS() {
         payload: {
           id,
           nome: nomeAtual,
-          emoji: '🥥',
-          categoria: 'Ambulante',
+          emoji: emoji.current,
+          categoria: categoria.current,
           lat: realmenteAberto ? posicaoEfetiva.lat : 0,
           lng: realmenteAberto ? posicaoEfetiva.lng : 0,
           accuracy: realmenteAberto ? posicaoEfetiva.accuracy : 0,
@@ -120,12 +122,29 @@ export function useGPS() {
 
     channel.current = getGpsChannel()
     supabase.auth.getUser()
-      .then(({ data }) => { nome.current = (data.user?.user_metadata?.nome as string) || 'Ambulante' })
+      .then(async ({ data }) => {
+        nome.current = (data.user?.user_metadata?.nome as string) || 'Ambulante'
+        categoria.current = (data.user?.user_metadata?.categoria as string) || 'Ambulante'
+        if (!data.user?.id) return
+        const { data: profile } = await supabase.from('profiles').select('nome,categoria,emoji').eq('id', data.user.id).maybeSingle()
+        if (profile?.nome) nome.current = profile.nome
+        if (profile?.categoria) categoria.current = profile.categoria
+        if (profile?.emoji) emoji.current = profile.emoji
+      })
       .catch(() => {})
+
+    const onCategoryChange = (event: Event) => {
+      const detail = (event as CustomEvent<{ label: string; emoji: string }>).detail
+      if (!detail?.label) return
+      categoria.current = detail.label
+      emoji.current = detail.emoji
+    }
+    window.addEventListener('praiago:amb-category-change', onCategoryChange)
 
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
       setStatus('error')
       setError('Localização não suportada neste dispositivo')
+      window.removeEventListener('praiago:amb-category-change', onCategoryChange)
       return
     }
     setStatus('requesting')
@@ -214,6 +233,7 @@ export function useGPS() {
       if (watchId.current != null) navigator.geolocation.clearWatch(watchId.current)
       // o canal de GPS é singleton e fica vivo pro app inteiro — não remover aqui
       window.removeEventListener(ONLINE_EVENT, onOnlineChange)
+      window.removeEventListener('praiago:amb-category-change', onCategoryChange)
     }
   }, [sessaoReativa?.id, sessaoReativa?.contaDemo])
 

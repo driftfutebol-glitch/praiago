@@ -26,9 +26,9 @@ export default function CenaPraia({
     >
       <defs>
         <linearGradient id="prg-ceu" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#e0f2fe" />
-          <stop offset="55%" stopColor="#f0f9ff" />
-          <stop offset="100%" stopColor="#ffffff" />
+          <stop offset="0%" stopColor="var(--pg-surface-alt)" />
+          <stop offset="55%" stopColor="var(--pg-surface-alt)" />
+          <stop offset="100%" stopColor="var(--pg-surface)" />
         </linearGradient>
         <linearGradient id="prg-mar" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#7dd3fc" />
@@ -94,7 +94,7 @@ export default function CenaPraia({
       <circle cx="352" cy="44" r="17" fill="#fcd34d" opacity="0.9" />
 
       {/* Máscara de esvanecimento pela esquerda */}
-      <rect x="0" y="0" width="420" height="190" fill="#ffffff" mask="url(#prg-mascara)" opacity="0.92" />
+      <rect x="0" y="0" width="420" height="190" fill="var(--pg-surface)" mask="url(#prg-mascara)" opacity="0.92" />
     </svg>
   )
 }
